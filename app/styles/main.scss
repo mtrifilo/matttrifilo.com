@@ -184,11 +184,15 @@ p {
   }
 
   .projects {
-    min-height: 80rem;
+    min-height: 100rem;
   }
 
   .email {
     font-size: 8rem !important;
+  }
+
+  .contact {
+    max-height: 60rem;
   }
 }
 // ===========================
@@ -228,7 +232,7 @@ p {
   }
 
   .projects {
-    min-height: 80rem;
+    min-height: 100rem;
   }
 }
 
