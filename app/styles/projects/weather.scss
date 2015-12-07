@@ -1,0 +1,60 @@
+//******* GLOBAL *******//
+
+[ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
+  display: none !important;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  background: url(http://i.imgur.com/ZOGR9pr.jpg) no-repeat center center fixed;
+  background-size: cover;
+  text-shadow: 2px 2px 5px #333;
+  color: #111;
+}
+//******* FONTS *******//
+
+@font-face {
+  font-family: 'weather-icons';
+  src: url('https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.9/font/weathericons-regular-webfont.eot?#iefix') format('embedded-opentype'),
+       url('https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.9/font/weathericons-regular-webfont.woff2') format('woff2'),
+       url('https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.9/font/weathericons-regular-webfont.woff') format('woff'),
+       url('https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.9/font/weathericons-regular-webfont.ttf') format('truetype');
+
+}
+
+//******* Weather Styles *******//
+.weather {
+  max-width: 30rem;
+}
+
+.city {
+  font-size: 4em;
+}
+
+.temp-box h1,
+.wx-brief,
+.hi-low,
+.wx-description {
+  text-align: center;
+}
+
+.temperature {
+    font-size: 6em;
+}
+
+.wx-icon {
+  font-family: 'weather-icons';
+  font-size: 5rem;
+}
+
+.hi-low {
+  font-size: 1.5em;
+}
+
+.hi-low-col {
+  position: relative;
+  margin-right: 4rem;
+}
