@@ -7,7 +7,7 @@ var browserSync = require('browser-sync');
 var reload = browserSync.reload;
 
 gulp.task('styles', function () {
-  return gulp.src('app/styles/main.scss')
+  return gulp.src(['app/styles/main.scss','app/styles/projects/*.scss'])
     .pipe($.sourcemaps.init())
     .pipe($.sass({
       outputStyle: 'nested', // libsass doesn't support expanded yet
@@ -22,6 +22,14 @@ gulp.task('styles', function () {
     .pipe(gulp.dest('.tmp/styles'))
     .pipe(reload({stream: true}));
 });
+
+// This task handles the project .scss files for the individual apps
+/*gulp.task('projectStyles', function() {
+  return gulp.src('app/styles/projects/*.scss')
+    .pipe($.sass().on('error', sass.logError))
+    .pipe(gulp.dest('.tmp/styles'))
+    .pipe(reload({stream: true}));
+}); */
 
 gulp.task('jshint', function () {
   return gulp.src('app/scripts/**/*.js')
