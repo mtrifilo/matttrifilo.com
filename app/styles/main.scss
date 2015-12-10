@@ -70,8 +70,9 @@ p {
 // ===========================
 // Nav Styles
 // ===========================
-.brand {
+.brand-matt {
   font-size: 1.9rem;
+  text-shadow: none !important; // other text-shadow rules are bleeding over during minification
 }
 
 .nav-main {
@@ -173,12 +174,23 @@ p {
   }
 }
 
+.page {
+
+#Projects,
+#About,
+#Contact {
+  text-shadow: none !important; // other text shadow rules are bleeding over during minification
+}
+
+
+}
+
 // ===========================
 // MOBILE
 // ===========================
 @media (max-width: 650px) {
 
- .home-text {
+  .home-text {
     font-size: 3rem;
   }
 
@@ -228,7 +240,7 @@ p {
 // ===========================
 @media (min-width: 651px) and (max-width: 980px) {
 
-    .social-icon li i {
+  .social-icon li i {
     //display: none;
     font-size: 1rem;
   }
@@ -241,7 +253,7 @@ p {
     font-size: 1.4rem;
   }
 
-    .mobile-hook {
+  .mobile-hook {
     text-align: center;
   }
 
