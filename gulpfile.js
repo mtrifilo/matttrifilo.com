@@ -1,135 +1,115 @@
-/*global -$ */
 'use strict';
-// generated on 2015-09-30 using generator-gulp-webapp 0.3.0
-var gulp = require('gulp');
-var $ = require('gulp-load-plugins')();
-var browserSync = require('browser-sync');
-var reload = browserSync.reload;
 
-gulp.task('styles', function () {
-  return gulp.src(['app/styles/main.scss','app/styles/projects/*.scss'])
-    .pipe($.sourcemaps.init())
-    .pipe($.sass({
-      outputStyle: 'nested', // libsass doesn't support expanded yet
-      precision: 10,
-      includePaths: ['.'],
-      onError: console.error.bind(console, 'Sass error:')
-    }))
-    .pipe($.postcss([
-      require('autoprefixer-core')({browsers: ['last 1 version']})
-    ]))
-    .pipe($.sourcemaps.write())
-    .pipe(gulp.dest('.tmp/styles'))
-    .pipe(reload({stream: true}));
+var gulp        = require('gulp');
+var	gutil       = require('gulp-util');
+var	eslint      = require('gulp-eslint');
+var	sass        = require('gulp-sass');
+var	babel       = require('gulp-babel');
+var	sourcemaps  = require('gulp-sourcemaps');
+var	concat      = require('gulp-concat');
+var	uglify      = require('gulp-uglify');
+var	browserSync = require('browser-sync').create();
+var	del         = require('del');
+var Server      = require('karma').Server;
+
+var source = {
+	html: 'source/*.html',
+	js: 'source/js/*.js',
+	scss: 'source/scss/**/*.scss',
+	img: ['source/img/*.{png,gif,jpg}', 'source/*.ico']
+};
+
+var dest = {
+	root: 'public',
+	js: 'public/js',
+	css: 'public/css',
+	img: 'public/img'
+};
+
+gulp.task('default', ['build-dev']);
+gulp.task('build-dev', ['html', 'sass', 'js', 'img']);
+
+gulp.task('clean', function() {
+	return del([dest.root]);
 });
 
-// This task handles the project .scss files for the individual apps
-/*gulp.task('projectStyles', function() {
-  return gulp.src('app/styles/projects/*.scss')
-    .pipe($.sass().on('error', sass.logError))
-    .pipe(gulp.dest('.tmp/styles'))
-    .pipe(reload({stream: true}));
-}); */
-
-gulp.task('jshint', function () {
-  return gulp.src('app/scripts/**/*.js')
-    .pipe(reload({stream: true, once: true}))
-    .pipe($.jshint())
-    .pipe($.jshint.reporter('jshint-stylish'))
-    .pipe($.if(!browserSync.active, $.jshint.reporter('fail')));
+gulp.task('eslint', function() {
+	return gulp.src(source.js)
+		.pipe(eslint({
+			"extends": "eslint:recommended",
+			"env": {
+				"browser": true
+			},
+			"parserOptions": {
+						"ecmaVersion": 6,
+						"sourceType": "module",
+						"ecmaFeatures": {
+						"jsx": true
+					}
+			},
+			"rules": {
+				"semi": 2
+			}
+		}))
+		.pipe(eslint.format());
 });
 
-gulp.task('html', ['styles'], function () {
-  var assets = $.useref.assets({searchPath: ['.tmp', 'app', '.']});
-
-  return gulp.src('app/*.html')
-    .pipe(assets)
-    .pipe($.if('*.js', $.uglify()))
-    .pipe($.if('*.css', $.csso()))
-    .pipe(assets.restore())
-    .pipe($.useref())
-    .pipe($.if('*.html', $.minifyHtml({conditionals: true, loose: true})))
-    .pipe(gulp.dest('dist'));
+gulp.task('js',function() {
+	return gulp.src(source.js)
+		.pipe(sourcemaps.init())
+			.pipe(babel({
+				presets: ['es2015']
+			}))
+			.pipe(concat('bundle.js'))
+			//.pipe(uglify())
+		.pipe(sourcemaps.write())
+		.pipe(gulp.dest(dest.js))
+		.pipe(browserSync.stream());
 });
 
-gulp.task('images', function () {
-  return gulp.src('app/images/**/*')
-    .pipe($.cache($.imagemin({
-      progressive: true,
-      interlaced: true,
-      // don't remove IDs from SVGs, they are often used
-      // as hooks for embedding and styling
-      svgoPlugins: [{cleanupIDs: false}]
-    })))
-    .pipe(gulp.dest('dist/images'));
+gulp.task('sass', function() {
+	return gulp.src(source.scss)
+		.pipe(sourcemaps.init())
+			.pipe(sass())
+		.pipe(sourcemaps.write())
+		.pipe(gulp.dest(dest.css))
+		.pipe(browserSync.stream());
 });
 
-gulp.task('fonts', function () {
-  return gulp.src(require('main-bower-files')({
-    filter: '**/*.{eot,svg,ttf,woff,woff2}'
-  }).concat('app/fonts/**/*'))
-    .pipe(gulp.dest('.tmp/fonts'))
-    .pipe(gulp.dest('dist/fonts'));
+gulp.task('html', function() {
+	return gulp.src(source.html)
+		.pipe(gulp.dest(dest.root))
+		.pipe(browserSync.stream());
 });
 
-gulp.task('extras', function () {
-  return gulp.src([
-    'app/*.*',
-    '!app/*.html'
-  ], {
-    dot: true
-  }).pipe(gulp.dest('dist'));
+gulp.task('img', function() {
+	return gulp.src(source.img)
+		.pipe(gulp.dest(dest.img))
+		.pipe(browserSync.stream());
 });
 
-gulp.task('clean', require('del').bind(null, ['.tmp', 'dist']));
+gulp.task('serve', ['build-dev'], function() {
 
-gulp.task('serve', ['styles', 'fonts'], function () {
-  browserSync({
-    notify: false,
-    port: 9000,
-    server: {
-      baseDir: ['.tmp', 'app'],
-      routes: {
-        '/bower_components': 'bower_components'
-      }
-    }
-  });
+	browserSync.init({
+		server: {
+			baseDir: "./public"
+		}
+	});
 
-  // watch for changes
-  gulp.watch([
-    'app/*.html',
-    'app/scripts/**/*.js',
-    'app/images/**/*',
-    '.tmp/fonts/**/*'
-  ]).on('change', reload);
-
-  gulp.watch('app/styles/**/*.scss', ['styles']);
-  gulp.watch('app/fonts/**/*', ['fonts']);
-  gulp.watch('bower.json', ['wiredep', 'fonts']);
+	gulp.watch(source.scss, ['sass']);
+	gulp.watch(source.js, ['js']);
+	gulp.watch(source.html, ['html']);
 });
 
-// inject bower components
-gulp.task('wiredep', function () {
-  var wiredep = require('wiredep').stream;
-
-  gulp.src('app/styles/*.scss')
-    .pipe(wiredep({
-      ignorePath: /^(\.\.\/)+/
-    }))
-    .pipe(gulp.dest('app/styles'));
-
-  gulp.src('app/*.html')
-    .pipe(wiredep({
-      exclude: ['bootstrap-sass-official'],
-      ignorePath: /^(\.\.\/)*\.\./
-    }))
-    .pipe(gulp.dest('app'));
+gulp.task('test', function (done) {
+	new Server({
+		configFile: __dirname + '/karma.conf.js',
+		singleRun: true
+	}, done).start();
 });
 
-gulp.task('build', [/*'jshint',*/'html', 'images', 'fonts', 'extras'], function () {
-  return gulp.src('dist/**/*').pipe($.size({title: 'build', gzip: true}));
-});
-
-gulp.task('default', ['clean'], function () {
-  gulp.start('build');
+gulp.task('tdd', function (done) {
+	new Server({
+		configFile: __dirname + '/karma.conf.js'
+	}, done).start();
 });

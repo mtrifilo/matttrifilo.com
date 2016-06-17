@@ -1,0 +1,312 @@
+@import url(https://fonts.googleapis.com/css?family=Roboto);
+@import url(https://fonts.googleapis.com/css?family=Source+Sans+Pro);
+
+$font-size: 16px;
+$primary-font: 'Source Sans Pro';
+$alt-font: 'Roboto';
+
+$link-color: #777;
+
+// ===========================
+// Global Styles
+// ===========================
+html {
+	font-size: $font-size;
+}
+
+body {
+	margin-top: 50px;
+	margin-bottom: 0;
+	font-family: $primary-font;
+	background-color: #AFE9CC;
+
+	.alt-font {
+		font-family: $alt-font;
+	}
+}
+
+a {
+	transition: all 0.2s ease;
+}
+
+.container-fluid {
+	padding-left: 0;
+	padding-right: 0;
+	padding-bottom: 0;
+	margin-bottom: 0;
+}
+
+h1 {
+	font-size: 4rem;
+}
+
+h2 {
+	font-size: 3rem;
+	margin: 0;
+}
+
+h3 {
+	font-size: 2rem;
+}
+
+p {
+	font-size: 1rem;
+}
+
+// ===========================
+// Nav Styles
+// ===========================
+
+.brand-matt {
+	font-size: 1.9rem;
+	text-shadow: none !important; // other text-shadow rules are bleeding over during minification
+}
+
+.nav-main {
+	background: radial-gradient(#f8f8f8, #eee);
+	box-shadow: 2px 2px 10px #888;
+}
+
+.nav-links {
+	font-size: 1.7rem;
+	text-shadow: 1px 1px 1px #ccc;
+
+	i {
+		font-size: 1.8rem;
+		margin-top: -.2rem;
+		padding: 0;
+	}
+}
+
+.social-icon {
+	display: inline-block;
+}
+
+// ===========================
+// Page Styles
+// ===========================
+
+.page {
+	min-height: 52rem;
+}
+
+.page-title {
+	padding-top: 5rem;
+}
+
+// === Home ===
+
+#Home {
+	padding: 10rem;
+	background-color: desaturate(#aec, 10);
+
+	a,
+	a:active,
+	a:visited {
+		color: #333;
+		border-bottom: .03rem solid $link-color;
+		text-decoration: none;
+	}
+
+	a:hover {
+		color: #fff;
+		text-shadow: 2px 8px 25px #555;
+	}
+}
+
+.home-text {
+	font-size: 8rem;
+	color: rgba(50,100,170, 0.8);
+	text-shadow: 2px 3px 5px desaturate(#aec, 10), 0 0 0 #000, 2px 3px 5px desaturate(#aec, 10);
+}
+
+// === Projects ===
+
+.projects {
+	background-color: desaturate(#2be, 25);
+	padding-bottom: 58rem;
+
+	.project-cells {
+		margin: 8rem auto 2rem auto;
+		height: 16rem;
+		width: 80%;
+	}
+}
+
+.project-card {
+	margin-bottom: 3rem;
+
+	a,
+	a:active,
+	a:visited {
+		color: inherit;
+		border-bottom: .03rem solid $link-color;
+		text-decoration: none;
+	}
+
+	a:hover {
+		color: #ddd;
+		text-shadow: 2px 8px 25px #555;
+	}
+}
+
+.project-link:hover {
+	transition: all 0.15s linear;
+	box-shadow: 2px 8px 25px #222;
+}
+
+//#Blog {
+  //background-color: desaturate(#c44,10);
+//}
+
+// === About ===
+
+#About {
+	background-color: desaturate(#FF9,20);
+	padding-bottom: 5rem;
+
+	.about-inner {
+		margin: 5rem auto 0 auto;
+		width: 80%;
+	}
+}
+
+// === Contact ===
+
+#Contact {
+	background-color: desaturate(#aec, 10);
+	.big-text {
+		font-size: 30rem;
+	}
+
+	a {
+		text-decoration: none;
+	}
+
+	.email {
+		font-size: 30rem;
+	}
+}
+
+.page {
+
+	#Projects,
+	#About,
+	#Contact {
+		text-shadow: none !important; // other text shadow rules are bleeding over during minification
+	}
+}
+
+// ===========================
+// MOBILE
+// ===========================
+@media (max-width: 650px) {
+
+	.home-text {
+		font-size: 3rem;
+	}
+
+	.social-icon {
+		display: none;
+	}
+
+	.navbar-header {
+    	display: none;
+	}
+
+	.mobile-hook {
+    	text-align: center;
+	}
+
+	.mobile-hook li {
+		display: inline-block;
+		font-size: 1rem;
+	}
+
+	.page {
+		min-height: 30rem;
+	}
+
+	.home {
+		min-height: 35rem;
+	}
+
+	#Home {
+		padding: 10rem 0rem 10rem 0rem;
+	}
+
+	.projects {
+		min-height: 210rem;
+	}
+
+	.email {
+		font-size: 8rem !important;
+	}
+
+	.contact {
+		max-height: 40rem;
+	}
+}
+// ===========================
+// Tablets
+// ===========================
+@media (min-width: 651px) and (max-width: 980px) {
+
+	.social-icon li i {
+    	//display: none;
+		font-size: 1rem;
+	}
+
+	.navbar-header {
+    	//display: none;
+	}
+
+	.brand {
+		font-size: 1.4rem;
+	}
+
+	.mobile-hook {
+		text-align: center;
+	}
+
+	.mobile-hook li {
+		display: inline-block;
+		font-size: 1rem;
+	}
+
+	.mobile-hook .social-icon li {
+		display: inline-block;
+		font-size: 1rem;
+	}
+
+	.home-text {
+		font-size: 5.1rem;
+	}
+
+	.projects {
+		min-height: 212rem;
+	}
+
+	.project-card p {
+		padding: 0 10rem 0 10rem;
+		margin-bottom: 1rem;
+	}
+
+
+}
+
+// ==========================
+// Removes brand header in this range
+// to fix a layout bug in the nav
+// bar.
+// ==========================
+@media (min-width: 651px) and (max-width: 770px) {
+	.navbar-header {
+		display: none;
+	}
+
+	.home {
+		padding-left: 80px !important;
+		padding-right: 80px !important;
+	}
+}
