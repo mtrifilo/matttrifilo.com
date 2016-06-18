@@ -11,6 +11,7 @@ var	uglify      = require('gulp-uglify');
 var	browserSync = require('browser-sync').create();
 var	del         = require('del');
 var Server      = require('karma').Server;
+var nodemon     = require('gulp-nodemon');
 
 var source = {
 	html: 'source/*.html',
@@ -88,17 +89,23 @@ gulp.task('img', function() {
 		.pipe(browserSync.stream());
 });
 
-gulp.task('serve', ['build-dev'], function() {
+gulp.task('serve', ['build-dev', 'nodemon'], function () {
 
-	browserSync.init({
-		server: {
-			baseDir: "./public"
-		}
-	});
+    browserSync.init(null, {
+        proxy: "http://localhost:4000"
+    });
 
-	gulp.watch(source.scss, ['sass']);
-	gulp.watch(source.js, ['js']);
-	gulp.watch(source.html, ['html']);
+    gulp.watch(source.scss, ['sass']);
+    gulp.watch(source.js, ['js']);
+    gulp.watch(source.html, ['html']);
+    gulp.watch(source.img, ['img']);
+});
+
+gulp.task('nodemon', function () {
+    nodemon({ 
+        script: 'server.js',
+        watch: ['server.js', 'source/js/app.js']
+    });
 });
 
 gulp.task('test', function (done) {
