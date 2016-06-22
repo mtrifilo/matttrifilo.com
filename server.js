@@ -7,8 +7,6 @@ app.use(compression());
 
 app.use('/', express.static(__dirname + '/public'));
 
-app.use('/projects/weather', express.static(__dirname + '/projects/FCC-weather/public'));
-
 app.get('/test', (req, res) => {
     res.end('<h1>IT WORKS!</h1>');
 });
