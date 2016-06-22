@@ -1,0 +1,8 @@
+'use strict';
+
+console.log('hello world!');
+
+var time = 100;
+
+$('p').fadeOut(time).fadeIn(100);
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbImFwcC5qcyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiOztBQUFBLFFBQVEsR0FBUixDQUFZLGNBQVo7O0FBRUEsSUFBTSxPQUFPLEdBQWI7O0FBRUEsRUFBRSxHQUFGLEVBQU8sT0FBUCxDQUFlLElBQWYsRUFBcUIsTUFBckIsQ0FBNEIsR0FBNUIiLCJmaWxlIjoiYnVuZGxlLmpzIiwic291cmNlc0NvbnRlbnQiOlsiY29uc29sZS5sb2coJ2hlbGxvIHdvcmxkIScpO1xuXG5jb25zdCB0aW1lID0gMTAwO1xuXG4kKCdwJykuZmFkZU91dCh0aW1lKS5mYWRlSW4oMTAwKTsiXSwic291cmNlUm9vdCI6Ii9zb3VyY2UvIn0=
