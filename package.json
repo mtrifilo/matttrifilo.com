@@ -30,6 +30,7 @@
     "karma-mocha-reporter": "^2.0.3"
   },
   "dependencies": {
+    "compression": "^1.6.2",
     "express": "^4.14.0"
   }
 }
