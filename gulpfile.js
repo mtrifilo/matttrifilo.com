@@ -17,7 +17,7 @@ var source = {
 	html: 'source/*.html',
 	js: 'source/js/*.js',
 	scss: 'source/scss/**/*.scss',
-	img: ['source/img/*.{png,gif,jpg}', 'source/*.ico']
+	img: ['source/img/*.{png,gif,jpg}', 'source/img/projects/*.{png,gif,jpg}', 'source/*.ico']
 };
 
 var dest = {
