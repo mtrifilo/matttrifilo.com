@@ -5,7 +5,7 @@ $font-size: 16px;
 $primary-font: 'Source Sans Pro';
 $alt-font: 'Roboto';
 
-$link-color: #777;
+$link-color: #0CE;
 
 // ===========================
 // Global Styles
@@ -104,7 +104,7 @@ p {
     a:active,
     a:visited {
         color: #333;
-        border-bottom: .03rem solid $link-color;
+        border-bottom: .03rem solid #222;
         text-decoration: none;
     }
 
@@ -122,46 +122,117 @@ p {
 
 // === Projects ===
 
-
-
 .projects {
+    color: #EEE;
+    min-height: 25rem;
+    margin: 0;
     background-color: desaturate(#2be, 25);
-    padding-bottom: 58rem;
 
-    .project-cells {
-        margin: 8rem auto 2rem auto;
-        height: 20rem;
-        width: 80%;
+
+    h1 {
+        margin: 0;
     }
+
+    img {
+        margin-top: 3.5rem;
+        border-radius: 2%;
+    }
+
+    .thumbnail {
+        max-width: 35rem;
+        background-color: #222;
+        margin: 3rem auto;
+    }
+
+    .thumbnail-row {
+        padding: 0 4rem;
+    }
+
+    //  a,
+    //  a:active,
+    //  a:visited {
+    //     color: $link-color;
+    //     border-bottom: .03rem solid $link-color;
+    //     text-decoration: none;
+    //     line-height: 1.5rem;
+    // }
+
+    // a:hover {
+    //     color: #FFF;
+    //     text-shadow: 2px 8px 25px #555;
+    // }    
+
 }
 
-.project-card {
-    margin-bottom: 3rem;
-
-    a,
-    a:active,
-    a:visited {
-        color: inherit;
-        border-bottom: .03rem solid $link-color;
+.project-title-link {
+     a,
+     a:active,
+     a:visited {
+        color: $link-color;
+        border-bottom: .03rem solid #555;
         text-decoration: none;
         line-height: 1.5rem;
     }
+}
 
+.project-title-link {
     a:hover {
-        color: #ddd;
+        color: #FFF;
         text-shadow: 2px 8px 25px #555;
-    }
-
-    p {
-        margin-bottom: 2rem;
-        font-size: 1.4em;
-    }
+    } 
 }
 
-.project-link:hover {
-    transition: all 0.06s linear;
-    box-shadow: 2px 8px 25px #222;
+
+.text-pad {
+    padding: 0 2rem;
 }
+
+.sub-heading {
+    font-size: .9em;
+}
+
+.thumbnail-description {
+    margin: 3rem 0;
+}
+
+// .projects {
+//     background-color: desaturate(#2be, 25);
+//     padding-bottom: 58rem;
+
+//     .project-cells {
+//         margin: 8rem auto 2rem auto;
+//         height: 20rem;
+//         width: 80%;
+//     }
+// }
+
+// .project-card {
+//     margin-bottom: 3rem;
+
+//     a,
+//     a:active,
+//     a:visited {
+//         color: inherit;
+//         border-bottom: .03rem solid $link-color;
+//         text-decoration: none;
+//         line-height: 1.5rem;
+//     }
+
+//     a:hover {
+//         color: #ddd;
+//         text-shadow: 2px 8px 25px #555;
+//     }
+
+//     p {
+//         margin-bottom: 2rem;
+//         font-size: 1.4em;
+//     }
+// }
+
+// .project-link:hover {
+//     transition: all 0.06s linear;
+//     box-shadow: 2px 8px 25px #222;
+// }
 
 //#Blog {
   //background-color: desaturate(#c44,10);
@@ -251,10 +322,6 @@ p {
         //height: 10rem;
     }
 
-    .projects {
-        min-height: 228rem;
-    }
-
     .email {
         font-size: 8rem !important;
     }
@@ -299,16 +366,6 @@ p {
         font-size: 5.1rem;
     }
 
-    .projects {
-        min-height: 226rem;
-    }
-
-    .project-card p {
-        padding: 0 10rem 0 10rem;
-        margin-bottom: 1rem;
-    }
-
-
 }
 
 // ==========================
@@ -326,40 +383,4 @@ p {
         padding-right: 80px !important;
     }
 
-    .projects {
-        min-height: 240rem;
-    }
-}
-
-// Fixes row overflow issue in the project cards
-
-@media (max-width: 350px) {
-    .projects {
-        min-height: 236rem;
-    }
-}
-
-@media (min-width: 351px) and (max-width: 380px) {
-    .projects {
-        min-height: 232rem;
-    }
-}
-
-@media (min-width: 381px) and (max-width: 436px) {
-    .projects {
-        min-height: 228rem;
-    }
-}
-
-@media (min-width: 437px) and (max-width: 650px) {
-    .projects {
-        min-height: 220rem;
-    }
-}
-
-
-@media (min-width: 680px) and (max-width: 770px) {
-    .projects {
-        min-height: 235rem;
-    }
 }
