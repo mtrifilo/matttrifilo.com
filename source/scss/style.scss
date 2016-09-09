@@ -128,10 +128,15 @@ p {
     margin: 0;
     background-color: desaturate(#2be, 25);
 
-    .page-title {
+    .page-title, .project-collection-type, .project-collection-description {
         color: #333;
     }
 
+    .heroku-note {
+        margin: 2rem auto 0;
+        text-align: left;
+        max-width: 40rem;
+    }
 
     h1 {
         margin: 0;

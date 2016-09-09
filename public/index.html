@@ -78,6 +78,8 @@
                 <h2 class="text-center page-title">Projects</h2>
 
                 <!-- Project Cards **************************************************-->
+                <h3 class="text-center page-title">Front End</h3>
+                <h4 class="text-center project-collection-description">Client-side applications powered by various frameworks, libraries and APIs.</h4>                
                 <div class="row thumbnail-row">
                     
                     <div class="col-md-4">
@@ -137,7 +139,7 @@
                             <a href="http://s.codepen.io/dprsky/debug/QyBYGG"><img src="/img/spiffywikipedia.jpg" alt="Spiffy Wikipedia"></a>
                             <div class="caption"></div>
                                 <h3 class="text-center project-title-link"><a href="http://s.codepen.io/dprsky/debug/QyBYGG">Spiffy Wikipedia</a></h3>
-                                <h4 class="text-center sub-heading">React, ES2015, Babel, Bootstrap Material, SCSS</h4>
+                                <h4 class="text-center sub-heading">ReactJS, ES2015, Babel, Bootstrap Material, SCSS</h4>
                                 <p class="text-pad thumbnail-description">A Wikipedia search engine. This involved learning Wikipedia's complex API to put the nessesary params together to get the data I was looking for--just simple query results in this case.
                                 </p>
                                 <p class="text-pad project-link-buttons"><a href="http://codepen.io/dprsky/pen/QyBYGG" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="http://s.codepen.io/dprsky/debug/QyBYGG" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
@@ -184,7 +186,84 @@
                         </div>
                     </div>                
                     
-                </div>          
+                </div> 
+<!-- API rows -->
+                <h3 class="text-center project-collection-type">Back End</h3>
+                <h4 class="text-center project-collection-description">API projects powered by NodeJS and Express 4.</h4>
+                <h4 class="text-center project-collection-description heroku-note">
+                    <i class="fa fa-moon-o" aria-hidden="true"></i><i> NOTE: The following projects are hosted on Heroku, so the servers are likely sleeping. It may take a moment for them to wake up.</i>
+                </h4>
+
+                <div class="row thumbnail-row">
+
+                    <div class="col-md-4">
+                        <div class="thumbnail">
+                            <a href="https://itxchy-image-search.herokuapp.com/"><img src="/img/node.png" alt="NodeJS"></a>
+                            <div class="caption"></div>
+                                <h3 class="text-center project-title-link"><a href="https://itxchy-image-search.herokuapp.com/">Image Search Abstraction Layer</a></h3>
+                                <h4 class="text-center sub-heading">NodeJS, Express 4, MongoDB, Mongoose</h4>
+                                <p class="text-pad thumbnail-description">
+                                    Search Imgur for images, and get the results in JSON. Pagination is avaiable. 
+                                </p>
+                                <p class="text-pad project-link-buttons"><a href="https://github.com/itxchy/fcc-image-search-abstraction-layer" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="https://itxchy-image-search.herokuapp.com/" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
+                        </div>
+                    </div>                     
+                    
+                    <div class="col-md-4">
+                        <div class="thumbnail">
+                            <a href="https://itxchy-url-shortener.herokuapp.com/"><img src="/img/node.png" alt="NodeJS"></a>
+                            <div class="caption"></div>
+                                <h3 class="text-center project-title-link"><a href="https://itxchy-url-shortener.herokuapp.com/">URL Shortener Microservice</a></h3>
+                                <h4 class="text-center sub-heading">NodeJS, Express 4, MongoDB, Mongoose</h4>
+                                <p class="text-pad thumbnail-description">Pass a lengthy URL to this API, and get back a shorter one&mdash;served as JSON.
+                                </p>
+                                <p class="text-pad project-link-buttons"><a href="https://github.com/itxchy/url-shortener-microservice" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="https://itxchy-url-shortener.herokuapp.com/" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="thumbnail">
+                            <a href="https://itxchy-file-metadata.herokuapp.com/"><img src="/img/node.png" alt="NodeJS"></a>
+                            <div class="caption"></div>
+                                <h3 class="text-center project-title-link"><a href="https://itxchy-file-metadata.herokuapp.com/">File Metadata Microservice</a></h3>
+                                <h4 class="text-center sub-heading">NodeJS, Express 4, Multer</h4>
+                                <p class="text-pad thumbnail-description">Upload a file to the server, and you'll get a JSON response of the file size.
+                                </p>
+                                <p class="text-pad project-link-buttons"><a href="https://github.com/itxchy/fcc-file-metadata-microservice" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="https://itxchy-file-metadata.herokuapp.com/" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
+                        </div>
+                    </div>                                
+
+                </div>
+
+                <div class="row thumbnail-row">
+
+                    <div class="col-md-6">
+                        <div class="thumbnail">
+                            <a href="https://itxchy-timestamp-microservice.herokuapp.com/"><img src="/img/node.png" alt="NodeJS"></a>
+                            <div class="caption"></div>
+                                <h3 class="text-center project-title-link"><a href="https://itxchy-timestamp-microservice.herokuapp.com/">Timestamp Microservice</a></h3>
+                                <h4 class="text-center sub-heading">NodeJS, Express 4</h4>
+                                <p class="text-pad thumbnail-description">
+                                    A simple API that will convert Unix timecode (in seconds) to a natural date, or the other way around. Both formats will be returned in a JSON object, as long as the request is valid.
+                                </p>
+                                <p class="text-pad project-link-buttons"><a href="https://github.com/itxchy/fcc-timestamp-microservice" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="https://itxchy-timestamp-microservice.herokuapp.com/" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
+                        </div>
+                    </div>                     
+                    
+                    <div class="col-md-6">
+                        <div class="thumbnail">
+                            <a href="https://itxchy-request-header-parser.herokuapp.com/"><img src="/img/node.png" alt="NodeJS"></a>
+                            <div class="caption"></div>
+                                <h3 class="text-center project-title-link"><a href="https://itxchy-request-header-parser.herokuapp.com/">Request Header Parser Microservice</a></h3>
+                                <h4 class="text-center sub-heading">NodeJS, Express 4</h4>
+                                <p class="text-pad thumbnail-description">Any request will return a JSON object of the client's IP address, language, and operating system.
+                                </p>
+                                <p class="text-pad project-link-buttons"><a href="https://github.com/itxchy/fcc-request-header-parser-microservice" class="btn btn-primary" role="button"><i class="fa fa-github"></i> Source Code & Docs</a> <a href="https://itxchy-request-header-parser.herokuapp.com/" class="btn btn-default" role="button"><i class="fa fa-globe"></i> Demo</a></p>
+                        </div>
+                    </div>                               
+
+                </div>
+
                 <!-- /Project Cards *************************************************-->
             </section>
 
