@@ -76,11 +76,21 @@
             <section class="page projects" id="Projects">
                 <a name="projects"></a>
                 <h2 class="text-center page-title">Projects</h2>
+                
+                <div class="project-filter">
+                    <div class="project-filter-button-container">
+                        <div class="btn-group btn-group-justified project-filter-buttons" role="group">
+                            <a class="btn btn-default active" id="show-all" role="button">All</a>
+                            <a class="btn btn-default" id="show-front-end" role="button">Front End</a>
+                            <a class="btn btn-default" id="show-back-end" role="button">Back End</a>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Project Cards **************************************************-->
-                <h3 class="text-center page-title">Front End</h3>
-                <h4 class="text-center project-collection-description">Client-side applications powered by various frameworks, libraries and APIs.</h4>                
-                <div class="row thumbnail-row">
+                <h3 class="text-center project-type-title front-end">Front End</h3>
+                <h4 class="text-center project-collection-description front-end">Client-side applications powered by various frameworks, libraries and APIs.</h4>                
+                <div class="row thumbnail-row front-end">
                     
                     <div class="col-md-4">
                         <div class="thumbnail">
@@ -120,7 +130,7 @@
 
                 </div>
 
-                <div class="row thumbnail-row">
+                <div class="row thumbnail-row front-end">
 
                     <div class="col-md-4">
                         <div class="thumbnail">
@@ -160,7 +170,7 @@
 
                 </div>
 
-                <div class="row thumbnail-row">
+                <div class="row thumbnail-row front-end">
 
                     <div class="col-md-6">
                         <div class="thumbnail">
@@ -188,13 +198,13 @@
                     
                 </div> 
 <!-- API rows -->
-                <h3 class="text-center project-collection-type">Back End</h3>
-                <h4 class="text-center project-collection-description">API projects powered by NodeJS and Express 4.</h4>
-                <h4 class="text-center project-collection-description heroku-note">
+                <h3 class="text-center project-collection-type back-end">Back End</h3>
+                <h4 class="text-center project-collection-description back-end">API projects powered by NodeJS and Express 4.</h4>
+                <h4 class="text-center project-collection-description back-end heroku-note">
                     <i class="fa fa-moon-o" aria-hidden="true"></i><i> NOTE: The following projects are hosted on Heroku, so the servers are likely sleeping. It may take a moment for them to wake up.</i>
                 </h4>
 
-                <div class="row thumbnail-row">
+                <div class="row thumbnail-row back-end">
 
                     <div class="col-md-4">
                         <div class="thumbnail">
@@ -235,7 +245,7 @@
 
                 </div>
 
-                <div class="row thumbnail-row">
+                <div class="row thumbnail-row back-end">
 
                     <div class="col-md-6">
                         <div class="thumbnail">

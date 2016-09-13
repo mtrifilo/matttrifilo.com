@@ -128,8 +128,12 @@ p {
     margin: 0;
     background-color: desaturate(#2be, 25);
 
-    .page-title, .project-collection-type, .project-collection-description {
+    .page-title, .project-type-title, .project-collection-type, .project-collection-description {
         color: #333;
+    }
+
+    .project-filter {
+        padding: 4rem 8rem;
     }
 
     .heroku-note {
