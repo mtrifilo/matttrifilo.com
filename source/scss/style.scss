@@ -132,10 +132,6 @@ p {
         color: #333;
     }
 
-    .project-filter {
-        padding: 4rem 8rem;
-    }
-
     .heroku-note {
         margin: 2rem auto 0;
         text-align: left;
@@ -363,6 +359,15 @@ p {
     .contact {
         max-height: 40rem;
     }
+
+    .project-filter {
+        padding: 4rem .3rem;
+        font-size: .65em;
+    }
+
+    .heroku-note {
+        margin: 2rem 1rem !important;
+    }
 }
 // ===========================
 // Tablets
@@ -400,6 +405,10 @@ p {
         font-size: 5.1rem;
     }
 
+    .project-filter {
+        padding: 4rem 0;
+    }
+
 }
 
 // ==========================
@@ -417,4 +426,21 @@ p {
         padding-right: 80px !important;
     }
 
+    .project-filter {
+        padding: 4rem 4rem;
+        font-size: .6em;
+    }
+
+}
+
+@media (min-width: 771px) and (max-width: 1000px) {
+    .project-filter {
+        padding: 4rem 4rem;
+    }
+}
+
+@media (min-width: 1000px) {
+    .project-filter {
+        padding: 4rem 8rem;
+    }
 }
