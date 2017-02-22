@@ -140,7 +140,7 @@ gulp.task('serve', ['build-dev', 'nodemon'], function () {
     gulp.watch(source.img, ['img']);
 });
 
-gulp.task('serve:prod', ['build-prod', 'nodemon'], function () {
+gulp.task('serve:prod', ['build-prod', 'nodemon-prod'], function () {
 
     browserSync.init(null, {
         proxy: "http://localhost:4000"
@@ -156,6 +156,14 @@ gulp.task('nodemon', function () {
     nodemon({ 
         script: 'server.js',
         watch: ['server.js', 'source/js/app.js']
+    });
+});
+
+gulp.task('nodemon-prod', function () {
+    nodemon({ 
+        script: 'server.js',
+        watch: ['server.js', 'source/js/app.js'],
+        env: { 'NODE_ENV': 'production'}
     });
 });
 
