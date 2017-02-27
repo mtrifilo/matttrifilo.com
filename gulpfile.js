@@ -32,7 +32,7 @@ var dest = {
 
 gulp.task('default', ['build-dev']);
 gulp.task('build-dev', ['html', 'sass', 'js', 'img']);
-gulp.task('build-prod', ['html-prod', 'sass-prod', 'js-prod', 'img-prod'])
+gulp.task('build-prod', ['html-prod', 'sass-prod', 'js-prod', 'img'])
 
 gulp.task('clean', function() {
 	return del([dest.root]);
@@ -118,7 +118,7 @@ gulp.task('img', function() {
 		.pipe(browserSync.stream());
 });
 
-gulp.task('img-prod', function() {
+gulp.task('img-optim', function() {
 	return gulp.src(source.img)
 		.pipe(image({
 			jpegRecompress: false,
@@ -149,7 +149,7 @@ gulp.task('serve:prod', ['build-prod', 'nodemon-prod'], function () {
     gulp.watch(source.scss, ['sass-prod']);
     gulp.watch(source.js, ['js-prod']);
     gulp.watch(source.html, ['html-prod']);
-    gulp.watch(source.img, ['img-prod']);
+    gulp.watch(source.img, ['img']);
 });
 
 gulp.task('nodemon', function () {
