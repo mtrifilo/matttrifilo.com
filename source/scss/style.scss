@@ -208,6 +208,23 @@ p {
     } 
 }
 
+.project-link {
+     a,
+     a:active,
+     a:visited {
+        color: $link-color;
+        border-bottom: .03rem solid #555;
+        text-decoration: none;
+    }
+}
+
+.project-link {
+    a:hover {
+        color: #FFF;
+        text-shadow: 2px 8px 12px #555;
+    } 
+}
+
 
 .text-pad {
     padding: 0 2rem;
