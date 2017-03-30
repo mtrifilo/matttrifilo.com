@@ -11,9 +11,7 @@ app.get('/resume', (req, res) => {
     res.sendFile(path.join(__dirname + '/resume.html'));
 });
 
-app.get('/spotify', (req, res) => {
-    res.sendFile(path.join(__dirname + '/projects/spotify-discovery/build/index.html'));
-});
+app.use('/spotify', express.static(__dirname + '/projects/spotify-discovery/build/'));
 
 app.listen(4000, () => {
     console.log('Express app listening on port 4000!');
