@@ -4,7 +4,9 @@
   "description": "Matt Trifilo's portfolio website.",
   "main": "source/index.html",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:prod": "gulp build-prod",
+    "serve": "gulp serve"
   },
   "author": "Matt Trifilo",
   "license": "MIT",

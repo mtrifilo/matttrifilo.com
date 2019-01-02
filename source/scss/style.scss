@@ -1,7 +1,7 @@
 @import url(https://fonts.googleapis.com/css?family=Roboto);
 @import url(https://fonts.googleapis.com/css?family=Source+Sans+Pro);
 
-$font-size: 16px;
+$gp: 16px;
 $primary-font: 'Source Sans Pro';
 $alt-font: 'Roboto';
 
@@ -11,29 +11,24 @@ $link-color: #0CE;
 // Global Styles
 // ===========================
 html {
-    font-size: $font-size;
+    font-size: $gp;
 }
 
 body {
-    margin-top: 50px;
-    margin-bottom: 0;
+    margin-top: $gp * 2;
+    margin-left: $gp;
     font-family: $primary-font;
-    background-color: #AFE9CC;
-
-    .alt-font {
-        font-family: $alt-font;
-    }
+    color: #EEE;
+    background-color: rgb(61, 61, 61);
 }
 
 a {
     transition: all 0.06s ease;
 }
 
-.container-fluid {
-    padding-left: 0;
-    padding-right: 0;
-    padding-bottom: 0;
-    margin-bottom: 0;
+a:hover {
+    color: #23527c;
+    text-decoration: none;
 }
 
 h1 {
@@ -41,8 +36,8 @@ h1 {
 }
 
 h2 {
-    font-size: 3rem;
-    margin: 0;
+    font-size: 2rem;
+    margin-top: $gp * 3;
 }
 
 h3 {
@@ -53,411 +48,41 @@ p {
     font-size: 1rem;
 }
 
-// ===========================
-// Nav Styles
-// ===========================
-
-.brand-matt {
-    font-size: 1.9rem;
-    text-shadow: none !important; // other text-shadow rules are bleeding over during minification
+.emoji {
+    margin-left: $gp * 10;
+    font-size: $gp * 10;
 }
 
-.nav-main {
-    background: radial-gradient(#f8f8f8, #eee);
-    box-shadow: 2px 2px 10px #888;
+.github-link {
+    margin-top: 0;
 }
 
-.nav-links {
-    font-size: 1.7rem;
-    text-shadow: 1px 1px 1px #ccc;
-
-    i {
-        font-size: 1.8rem;
-        margin-top: -.2rem;
-        padding: 0;
-    }
-}
-
-.social-icon {
-    display: inline-block;
-}
-
-// ===========================
-// Page Styles
-// ===========================
-
-.page {
-    min-height: 52rem;
-}
-
-.page-title {
-    padding-top: 5rem;
-}
-
-// === Home ===
-
-#Home {
-    padding: 10rem;
-    background-color: desaturate(#aec, 10);
-
-    a,
-    a:active,
-    a:visited {
-        color: #333;
-        border-bottom: .03rem solid #222;
-        text-decoration: none;
-    }
-
-    a:hover {
-        color: #fff;
-        text-shadow: 2px 8px 25px #555;
-    }
-}
-
-.home-text {
-    font-size: 8rem;
-    color: rgba(50,100,170, 0.8);
-    text-shadow: 2px 3px 5px desaturate(#aec, 10), 0 0 0 #000, 2px 3px 5px desaturate(#aec, 10);
-}
-
-// === Projects ===
-
-.projects {
-    color: #EEE;
-    min-height: 25rem;
-    margin: 0;
-    background-color: desaturate(#2be, 25);
-
-    .page-title, .project-type-title, .project-collection-type, .project-collection-description {
-        color: #333;
-    }
-
-    .heroku-note {
-        margin: 2rem auto 0;
-        text-align: left;
-        max-width: 40rem;
-    }
-
-    h1 {
-        margin: 0;
-    }
-
-    img {
-        margin-top: 3.5rem;
-        border-radius: 2%;
-    }
-
-    .img-shield {
-        margin-top: 0
-    }
-
-    .thumbnail {
-        max-width: 35rem;
-        background-color: #222;
-        margin: 3rem auto;
-    }
-
-    .thumbnail-row {
-        padding: 0 4rem;
-    }
-
-    .project-button {
-        margin-top: .6rem;
-    }
-
-    .demo-button {
-        margin-left: .2rem;
-    }
-
-    //  a,
-    //  a:active,
-    //  a:visited {
-    //     color: $link-color;
-    //     border-bottom: .03rem solid $link-color;
-    //     text-decoration: none;
-    //     line-height: 1.5rem;
-    // }
-
-    // a:hover {
-    //     color: #FFF;
-    //     text-shadow: 2px 8px 25px #555;
-    // }    
-
-}
-
-.project-filter-buttons {
-    a {
-        font-size: 2em;
-    }
-}
-.project-title-link {
-     a,
-     a:active,
-     a:visited {
-        color: $link-color;
-        border-bottom: .03rem solid #555;
-        text-decoration: none;
-        line-height: 1.5rem;
-    }
-}
-
-.project-title-link {
-    a:hover {
-        color: #FFF;
-        text-shadow: 2px 8px 25px #555;
-    } 
-}
-
-.project-link {
-     a,
-     a:active,
-     a:visited {
-        color: $link-color;
-        border-bottom: .03rem solid #555;
-        text-decoration: none;
-    }
-}
-
-.project-link {
-    a:hover {
-        color: #FFF;
-        text-shadow: 2px 8px 12px #555;
-    } 
-}
-
-
-.text-pad {
-    padding: 0 2rem;
-}
-
-.project-link-buttons {
-    margin-bottom: 2rem;
-}
-
-.sub-heading {
-    font-size: .9em;
-}
-
-.thumbnail-description {
-    margin: 2.5rem 0;
-}
-
-// .projects {
-//     background-color: desaturate(#2be, 25);
-//     padding-bottom: 58rem;
-
-//     .project-cells {
-//         margin: 8rem auto 2rem auto;
-//         height: 20rem;
-//         width: 80%;
-//     }
-// }
-
-// .project-card {
-//     margin-bottom: 3rem;
-
-//     a,
-//     a:active,
-//     a:visited {
-//         color: inherit;
-//         border-bottom: .03rem solid $link-color;
-//         text-decoration: none;
-//         line-height: 1.5rem;
-//     }
-
-//     a:hover {
-//         color: #ddd;
-//         text-shadow: 2px 8px 25px #555;
-//     }
-
-//     p {
-//         margin-bottom: 2rem;
-//         font-size: 1.4em;
-//     }
-// }
-
-// .project-link:hover {
-//     transition: all 0.06s linear;
-//     box-shadow: 2px 8px 25px #222;
-// }
-
-//#Blog {
-  //background-color: desaturate(#c44,10);
-//}
-
-// === About ===
-
-#About {
-    background-color: desaturate(#FF9,20);
-    padding-bottom: 5rem;
-
-    .about-inner {
-        margin: 5rem auto 0 auto;
-        width: 80%;
-    }
-}
-
-// === Contact ===
-
-#Contact {
-    background-color: desaturate(#aec, 10);
-    .big-text {
-        font-size: 30rem;
-    }
-
-    a {
-        text-decoration: none;
-    }
-
-    .email {
-        font-size: 30rem;
-    }
-}
-
-.page {
-
-    #Projects,
-    #About,
-    #Contact {
-        text-shadow: none !important; // other text shadow rules are bleeding over during minification
-    }
-}
-
-@media (max-width: 350px) {
-    #home {
-        min-height: 10rem;
-        padding: 0;
-    }
-}
-
-// ===========================
-// MOBILE
-// ===========================
 @media (max-width: 650px) {
-
-    .home-text {
-        font-size: 3rem;
+    h1 {
+        font-size: $gp * 2;
     }
-
-    .social-icon {
-        display: none;
+    
+    h2 {
+        font-size: $gp;
+        margin-top: $gp;
     }
-
-    .navbar-header {
-        display: none;
+    
+    h3 {
+        font-size: 2rem;
     }
-
-    .mobile-hook {
-        text-align: center;
-    }
-
-    .mobile-hook li {
-        display: inline-block;
+    
+    p {
         font-size: 1rem;
     }
 
-    .page {
-        min-height: 30rem;
+    .emoji-wrapper {
+        display: flex;
+        justify-content: center;
     }
 
-    .home {
-        min-height: 35rem;
-    }
-
-    #Home {
-        padding: 5rem 0rem 10rem 0rem;
-        //height: 10rem;
-    }
-
-    .email {
-        font-size: 8rem !important;
-    }
-
-    .contact {
-        max-height: 40rem;
-    }
-
-    .project-filter {
-        padding: 4rem .3rem;
-        font-size: .65em;
-    }
-
-    .heroku-note {
-        margin: 2rem 1rem !important;
-    }
-}
-// ===========================
-// Tablets
-// ===========================
-@media (min-width: 651px) and (max-width: 992px) {
-
-    .social-icon li i {
-        //display: none;
-        font-size: 1rem;
-    }
-
-    .navbar-header {
-        //display: none;
-    }
-
-    .brand {
-        font-size: 1.4rem;
-    }
-
-    .mobile-hook {
-        text-align: center;
-    }
-
-    .mobile-hook li {
-        display: inline-block;
-        font-size: 1rem;
-    }
-
-    .mobile-hook .social-icon li {
-        display: inline-block;
-        font-size: 1rem;
-    }
-
-    .home-text {
-        font-size: 5.1rem;
-    }
-
-    .project-filter {
-        padding: 4rem 0;
-    }
-
-}
-
-// ==========================
-// Removes brand header in this range
-// to fix a layout bug in the nav
-// bar.
-// ==========================
-@media (min-width: 651px) and (max-width: 770px) {
-    .navbar-header {
-        display: none;
-    }
-
-    .home {
-        padding-left: 80px !important;
-        padding-right: 80px !important;
-    }
-
-    .project-filter {
-        padding: 4rem 4rem;
-        font-size: .6em;
-    }
-
-}
-
-@media (min-width: 771px) and (max-width: 1000px) {
-    .project-filter {
-        padding: 4rem 4rem;
-    }
-}
-
-@media (min-width: 1000px) {
-    .project-filter {
-        padding: 4rem 8rem;
+    .emoji {
+        margin-left: 0;
+        margin-right: $gp;
+        font-size: $gp * 10;
     }
 }
