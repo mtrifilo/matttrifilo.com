@@ -3,5 +3,11 @@
   "version": "3.0.0",
   "main": "index.js",
   "repository": "git@github.com:mtrifilo/matttrifilo.com.git",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "dev": "parcel src/index.html -p 3000"
+  },
+  "devDependencies": {
+    "typescript": "^3.9.6"
+  }
 }
