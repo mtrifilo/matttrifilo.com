@@ -5,7 +5,8 @@
   "repository": "git@github.com:mtrifilo/matttrifilo.com.git",
   "license": "MIT",
   "scripts": {
-    "dev": "parcel src/index.html -p 3000"
+    "dev": "parcel src/index.html -p 3000",
+    "build": "parcel build src/index.html"
   },
   "devDependencies": {
     "typescript": "^3.9.6"
