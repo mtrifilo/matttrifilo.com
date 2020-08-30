@@ -30,3 +30,27 @@ h2 {
 h3 {
     font-size: 2em;
 }
+
+p {
+    font-size: 1em;
+    line-height: normal;
+    margin-bottom: 1rem;
+}
+
+a {
+    border-bottom: 1px solid;
+    cursor: pointer;
+    color: black;
+}
+
+a:visited {
+    border-bottom: 1px solid;
+    cursor: pointer;
+    color: black;
+}
+
+a:any-link {
+    border-bottom: 1px solid;
+    cursor: pointer;
+    text-decoration: none;
+}
