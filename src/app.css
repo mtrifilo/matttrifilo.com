@@ -1,0 +1,29 @@
+.app_layout {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    margin: 2rem;
+}
+
+.app_header {
+    width: 600px;
+    margin-bottom: 1rem;
+}
+
+.app_nav {
+    margin-bottom: 1.3rem;
+}
+
+.app_nav a {
+    margin-right: 1rem;
+    border-bottom: 1px solid;
+    cursor: pointer;
+}
+
+@media (max-width: 600px) {
+    .app_layout {
+        flex-direction: column;
+        align-items: flex-start;
+
+    }
+}
