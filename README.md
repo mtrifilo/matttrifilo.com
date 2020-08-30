@@ -1,3 +1,3 @@
 # MattTrifilo.com
 
-A portfolio site for Matt Trifilo. Take a look around.
+You can do anything at Matttrifilocom. The only limit is yourself.

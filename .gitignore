@@ -1,3 +1,4 @@
-.eslintrc.json
 node_modules
-projects/*
+.cache
+dist
+.DS_Store
