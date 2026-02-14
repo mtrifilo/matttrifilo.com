@@ -1,3 +1,3 @@
 # MattTrifilo.com
 
-You can do anything at Matttrifilocom. The only limit is yourself.
+You can do anything at Matttrifilo.com. The only limit is yourself.
