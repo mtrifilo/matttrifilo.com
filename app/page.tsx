@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { getAllBlogPosts } from '@/lib/blog'
 
@@ -19,20 +20,32 @@ export default function Home() {
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
         {/* Hero */}
         <section className="mb-16 hero-glow">
-          <h1
-            className="font-bold mb-2"
-            style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
-          >
-            Matt Trifilo
-          </h1>
-          <p className="text-xl text-muted-foreground mb-1">
-            Software Engineering Leader
-          </p>
-          <p className="text-xl text-muted-foreground mb-4">Agentic Engineer</p>
-          <p className="text-base leading-relaxed text-foreground/90 max-w-2xl">
+          <div className="flex items-center gap-6">
+            <Image
+              src="/profile.jpg"
+              alt="Matt Trifilo in Sedona, Arizona"
+              width={120}
+              height={120}
+              className="rounded-full flex-shrink-0"
+              priority
+            />
+            <div>
+              <h1
+                className="font-bold mb-1"
+                style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
+              >
+                Matt Trifilo
+              </h1>
+              <p className="text-xl text-muted-foreground mb-0.5">
+                Software Engineering Leader
+              </p>
+              <p className="text-xl text-muted-foreground">Agentic Engineer</p>
+            </div>
+          </div>
+          <p className="text-base leading-relaxed text-foreground/90 max-w-2xl mt-6">
             I build software products, and level up teams.
           </p>
-          <div className="flex items-center gap-4 mt-6">
+          <div className="flex items-center gap-4 mt-4">
             <Link
               href="https://github.com/mtrifilo"
               target="_blank"
