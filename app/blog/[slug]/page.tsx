@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
       url: `/blog/${slug}`,
       images: [
         {
-          url: '/og-image-v2.jpg',
+          url: '/og-image-v3.jpg',
           width: 1200,
           height: 630,
           alt: cleanTitle,
