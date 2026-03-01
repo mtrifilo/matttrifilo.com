@@ -1,8 +1,6 @@
 ---
-title: 'The End of the Software Developer Role. A Message of Hope.'
+title: "The End of the Software Developer Role.\nA Message of Hope."
 date: '2026-03-01'
-categories:
-  - Meta
 description: 'Welcome to my new blog. A fresh start for writing about software, technology, and the craft of engineering.'
 ---
 

@@ -73,7 +73,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               className="font-bold leading-tight mb-3"
               style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
             >
-              {post.frontmatter.title}
+              {post.frontmatter.title.split('\n').map((line: string, i: number, arr: string[]) => (
+                <span key={i}>
+                  {line}
+                  {i < arr.length - 1 && <br />}
+                </span>
+              ))}
             </h1>
 
             <div className="text-sm text-muted-foreground flex flex-wrap gap-2 items-center">
