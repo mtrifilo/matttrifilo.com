@@ -108,7 +108,7 @@ export default function BooksPage() {
                 {category.books.map((book) => (
                   <li
                     key={book.title}
-                    className="pl-4 border-l-2 border-border"
+                    className=""
                   >
                     <Link
                       href={book.url}
