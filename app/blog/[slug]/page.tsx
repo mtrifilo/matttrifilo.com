@@ -22,14 +22,16 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
     return { title: 'Post Not Found' }
   }
 
+  const cleanTitle = post.frontmatter.title.replace(/\n/g, ' ')
+
   return {
-    title: post.frontmatter.title,
+    title: cleanTitle,
     description: post.frontmatter.description || post.excerpt,
     alternates: {
       canonical: `https://matttrifilo.com/blog/${slug}`,
     },
     openGraph: {
-      title: post.frontmatter.title,
+      title: cleanTitle,
       description: post.frontmatter.description || post.excerpt,
       type: 'article',
       publishedTime: post.frontmatter.date,

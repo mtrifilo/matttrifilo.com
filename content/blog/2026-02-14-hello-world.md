@@ -1,7 +1,7 @@
 ---
 title: "The End of the Software Developer Role.\nA Message of Hope."
 date: '2026-03-01'
-description: 'Welcome to my new blog. A fresh start for writing about software, technology, and the craft of engineering.'
+description: 'The End of the Software Developer Role. A Message of Hope.'
 ---
 
 We are deep in an inflection point like I've never experienced before. The closest comparison I can remember is when the [personal computer](https://medium.com/@madmedic11671/behind-the-spots-the-story-of-gateway-computers-ce3263bcd07f) became affordable to the middle class in the late 90's.
