@@ -6,7 +6,7 @@ description: 'The End of the Software Developer Role. A Message of Hope.'
 
 We are deep in an inflection point like I've never experienced before. The closest comparison I can remember is when the [personal computer](https://medium.com/@madmedic11671/behind-the-spots-the-story-of-gateway-computers-ce3263bcd07f) became affordable to the middle class in the late 90's.
 
-I'll never forget when my Mom drove middle school me to three libraries around Milwaukee's suburbs to find the books I needed for homework, because my classmates had gotten there first, and checked-out all of them. [I wrote that paper with a pencil. On paper. ](https://www.youtube.com/watch?v=q8L86Z8YgeQ)
+I'll never forget when my Mom drove middle school me to three libraries around Milwaukee's suburbs to find the books I needed for homework, because my classmates had gotten there first, and checked out all of them. [I wrote that paper with a pencil. On paper.](https://www.youtube.com/watch?v=q8L86Z8YgeQ)
 
 I had used computers before at school for Computer Class, where we played [Oregon Trail](https://oregontrail.ws/games/the-oregon-trail/), [Number Munchers](https://classicreload.com/number-munchers.html), and learned to type, but I never knew of actual software that wasn't for middle school kids.
 
@@ -18,7 +18,7 @@ As I grew older and [fell in love with music](https://wfmu.org/), I found that c
 
 We now have LLMs that can automate most information work, and a lot of physical work too. Not "one day", right now. The transition has already started, and will escalate. Computer use has been dominating AI discussions lately, but consider what [Waymo](https://waymo.com/) is doing right now to [Uber](https://www.uber.com/us/en/u/waymo-on-uber/) and [Lyft](https://investor.lyft.com/news-events/press-releases/detail/89/lyft-and-waymo-launch-partnership-to-expand-autonomous-mobility-to-nashville). Amazon warehouses have [fleets of AI robots](https://www.aboutamazon.com/news/operations/new-robots-amazon-fulfillment-agentic-ai). Drones are [delivering packages](https://smartdev.com/ai-and-autonomous-drones-transforming-delivery-and-transportation/). You may have seen [robots delivering food](https://www.starship.xyz/) in your neighborhood.
 
-This sea change includes most software implementation work, which was my primary role for the first two+ years of my career. "Implementation" is the key word, since these models have been trained on the majority of implementation detail work that is common for most applications. Most enterprise software has common, repeatable patterns. A data layer, service layer, adaptors for many consumers, and UI's to allow end users to use the system in a delightful way.
+This sea change includes most software implementation work, which was my primary role for the first two+ years of my career. "Implementation" is the key word, since these models have been trained on the majority of implementation detail work that is common for most applications. Most enterprise software has common, repeatable patterns. A data layer, service layer, adaptors for many consumers, and UIs to allow end users to use the system in a delightful way.
 
 # The complexity varies, but the patterns repeat.
 
@@ -26,7 +26,7 @@ Most of this data plumbing and composition has been solved, and implemented, mil
 
 All publicly available code is likely in the training of every major LLM. Soon, the free, small, open source models that [can run on a laptop](https://venturebeat.com/technology/alibabas-new-open-source-qwen3-5-medium-models-offer-sonnet-4-5-performance) will be as capable as the State Of The Art models of today. Claude Opus 4.6 High Effort, and GPT-5.3 Codex High and Extra High. I bet this will happen before 2027, and I bet these models will be running locally on our phones in a few years.
 
-On the Monday before the US's Thanksgiving holiday three months ago, November 24th 2025, Anthropic made an announcement that became the moment software engineering would change forever. [Enter Opus 4.5](https://x.com/claudeai/status/1993030546243699119).
+On the Monday before the US's Thanksgiving holiday three months ago, November 24th, 2025, Anthropic made an announcement that became the moment software engineering would change forever. [Enter Opus 4.5](https://x.com/claudeai/status/1993030546243699119).
 
 Everyone knew this moment was coming, but no one knew how or when. Now we know, and it has already happened.
 
@@ -34,11 +34,11 @@ The [benchmarks](https://x.com/claudeai/status/1993030546243699119) were fine. B
 
 # In this case, Anthropic was [absolutely right](https://github.com/anthropics/claude-code/issues/3382).
 
-In my own experience trying Opus 4.5, it was immediately my new go-to for coding. It would just work, and work elegantly for coding areas that Sonnet 4.5 failed at. I started giving Opus larger function tasks in one prompt. Then complete unit test suites for a new [Java](https://aws.amazon.com/what-is/java/) and [JavaScript](https://deno.com/blog/deno-v-oracle) files. Then a complete Python backend microservice for an AI feature POC. Then a complete backend SDK generation and implementation spanning multiple modules with auth for that new microservice.
+In my own experience trying Opus 4.5, it was immediately my new go-to for coding. It would just work, and work elegantly for coding areas that Sonnet 4.5 failed at. I started giving Opus larger function tasks in one prompt. Then complete unit test suites for new [Java](https://aws.amazon.com/what-is/java/) and [JavaScript](https://deno.com/blog/deno-v-oracle) files. Then a complete Python backend microservice for an AI feature POC. Then a complete backend SDK generation and implementation spanning multiple modules with auth for that new microservice.
 
 While these weren't "one-shot" implementations, I was able to build out not just features, but small systems with a few Opus sessions within a few hours that would have taken me multiple days or even weeks pre-AI. It was difficult to find the limits of Opus 4.5, though it did reveal its imperfections eventually.
 
-Opus 4.5 was very good at unblocking itself, so it would go off the rails at times if you didn't monitor what it's doing. Instead of reworking a failed terminal command, it would try writing a small python application as a workaround. It would miss obvious, important details that other models would catch easily. It was very token hungry, and could eat up all its context before writing its plan doc. All of those limitations were easily solved by managing context intentionally.
+Opus 4.5 was very good at unblocking itself, so it would go off the rails at times if you didn't monitor what it was doing. Instead of reworking a failed terminal command, it would try writing a small python application as a workaround. It would miss obvious, important details that other models would catch easily. It was very token hungry, and could eat up all its context before writing its plan doc. All of those limitations were easily solved by managing context intentionally.
 
 After getting to know the model well, I learned exactly how to scope tasks for Opus, just like how I scope tasks for myself and other human engineers depending on their level and skillset.
 
