@@ -65,7 +65,7 @@ export default function Home() {
               <Linkedin className="h-5 w-5" />
             </Link>
             <Link
-              href="mailto:matt@matttrifilo.com"
+              href="mailto:hi@matttrifilo.com"
               className="text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Email"
             >
