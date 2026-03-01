@@ -36,6 +36,14 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
       type: 'article',
       publishedTime: post.frontmatter.date,
       url: `/blog/${slug}`,
+      images: [
+        {
+          url: '/og-image.jpg',
+          width: 1200,
+          height: 630,
+          alt: cleanTitle,
+        },
+      ],
     },
   }
 }
