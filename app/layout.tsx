@@ -7,6 +7,7 @@ import Nav from '@/app/nav'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generatePersonSchema } from '@/lib/seo/jsonld'
 import { HexBackground } from '@/components/background/HexBackground'
+import { Analytics } from '@vercel/analytics/react'
 
 export const viewport: Viewport = {
   themeColor: [
@@ -68,6 +69,7 @@ export default function RootLayout({
             <Footer />
           </div>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   )
