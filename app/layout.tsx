@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     siteName: 'Matt Trifilo',
     images: [
       {
-        url: '/og-image.jpg',
+        url: '/og-image-v2.jpg',
         width: 1200,
         height: 630,
         alt: 'Matt Trifilo',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-image.jpg'],
+    images: ['/og-image-v2.jpg'],
   },
 }
 
