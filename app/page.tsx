@@ -88,9 +88,6 @@ export default function Home() {
                   <p className="text-sm text-muted-foreground mt-1">
                     {formatDate(post.date)}
                   </p>
-                  <p className="mt-2 text-foreground/90 leading-relaxed">
-                    {post.excerpt}
-                  </p>
                 </article>
               ))}
             </div>

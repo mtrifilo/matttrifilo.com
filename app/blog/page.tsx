@@ -56,16 +56,6 @@ export default function BlogPage() {
                 {formatDate(post.date)}
               </div>
 
-              <div className="mt-3 leading-relaxed text-foreground/90">
-                {post.excerpt}
-              </div>
-
-              <Link
-                href={`/blog/${post.slug}`}
-                className="inline-block mt-3 px-3 py-1 text-xs border border-border rounded hover:bg-muted transition-colors"
-              >
-                read more
-              </Link>
             </article>
           ))}
 

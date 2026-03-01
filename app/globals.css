@@ -211,23 +211,6 @@ nav[data-scrolled='true'] {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
 }
 
-/* Blog article hover */
-.blog-article {
-  transition: background-color 200ms;
-  border-radius: 0.5rem;
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
-  margin-left: -0.75rem;
-  margin-right: -0.75rem;
-}
-
-.blog-article:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-}
-
-.dark .blog-article:hover {
-  background-color: rgba(255, 255, 255, 0.03);
-}
 
 /* Tactile button feedback */
 [data-slot='button']:active {

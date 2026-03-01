@@ -6,6 +6,7 @@ import { ThemeProvider, Footer } from '@/components/layout'
 import Nav from '@/app/nav'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generatePersonSchema } from '@/lib/seo/jsonld'
+import { HexBackground } from '@/components/background/HexBackground'
 
 export const viewport: Viewport = {
   themeColor: [
@@ -60,7 +61,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex flex-col min-h-screen">
+          <HexBackground />
+          <div className="flex flex-col min-h-screen relative z-10">
             <Nav />
             <main className="flex-1">{children}</main>
             <Footer />
