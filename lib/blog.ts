@@ -9,14 +9,13 @@ const BLOG_CONTENT_PATH = path.join(process.cwd(), 'content', 'blog')
  * Get all blog post slugs for static generation
  */
 export function getBlogSlugs(): string[] {
-  try {
-    const files = fs.readdirSync(BLOG_CONTENT_PATH)
-    return files
-      .filter(file => file.endsWith('.md') && !file.startsWith('_'))
-      .map(file => file.replace(/\.md$/, ''))
-  } catch {
-    return []
-  }
+  // A missing or unreadable content directory is a build misconfiguration,
+  // not "no posts yet", so let readdirSync throw (consistent with
+  // getBlogPost, which also fails loudly on authoring errors).
+  return fs
+    .readdirSync(BLOG_CONTENT_PATH)
+    .filter(file => file.endsWith('.md') && !file.startsWith('_'))
+    .map(file => file.replace(/\.md$/, ''))
 }
 
 /**
@@ -33,37 +32,45 @@ function extractExcerpt(content: string, maxLength = 200): string {
   return text
 }
 
+const FRONTMATTER_DATE_LINE = /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m
+const FRONTMATTER_BLOCK = /^---\r?\n([\s\S]*?)\r?\n---/
+
 /**
- * YAML parses an unquoted `date: 2026-03-01` into a JS Date (UTC midnight),
- * while a quoted one stays a string. Everything downstream (formatDate,
- * <time dateTime>, JSON-LD datePublished) expects the `YYYY-MM-DD` string
- * the author wrote, so normalize here at the boundary.
- *
- * Only a pure calendar date is accepted. A value with a time of day or an
- * offset has no single correct calendar day (it would shift by timezone),
- * and a missing date cannot be sorted or displayed, so both fail loudly
- * at build time instead of rendering "Invalid Date" or the wrong day.
+ * The raw text between the opening and closing `---` fences, or '' when
+ * the file has no frontmatter. Sliced from the file ourselves rather than
+ * read from gray-matter's `.matter` field, which is not reliably populated
+ * on its internal cache-hit path.
  */
-export function normalizeFrontmatterDate(value: unknown, source: string): string {
-  if (value instanceof Date) {
-    const isMidnightUtc =
-      value.getUTCHours() === 0 &&
-      value.getUTCMinutes() === 0 &&
-      value.getUTCSeconds() === 0 &&
-      value.getUTCMilliseconds() === 0
-    if (!isMidnightUtc) {
-      throw new Error(
-        `${source}: frontmatter date must be a plain YYYY-MM-DD (got ${value.toISOString()})`
-      )
-    }
-    return value.toISOString().slice(0, 10)
+export function rawFrontmatterBlock(fileContents: string): string {
+  const match = FRONTMATTER_BLOCK.exec(fileContents)
+  return match ? match[1] : ''
+}
+
+/**
+ * Reads the post date from the raw frontmatter text and returns it as the
+ * `YYYY-MM-DD` string the author wrote.
+ *
+ * The parsed YAML value is deliberately not used: YAML turns an unquoted
+ * `date: 2026-03-01` into a JS Date, and a timestamp with an offset or a
+ * typo like `2026-02-30` becomes a Date on a different calendar day with
+ * no trace of the original text. Validating the source line is the only
+ * way to guarantee the date on the page is the one in the file. Anything
+ * that is not a plain, real calendar date fails the build with the file
+ * name rather than rendering "Invalid Date" or the wrong day.
+ */
+export function parseFrontmatterDate(rawFrontmatter: string, source: string): string {
+  const match = FRONTMATTER_DATE_LINE.exec(rawFrontmatter)
+  if (!match) {
+    throw new Error(
+      `${source}: frontmatter needs a plain "date: YYYY-MM-DD" line (no time, no offset)`
+    )
   }
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value
+  const value = match[1]
+  const roundTrip = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(roundTrip.getTime()) || roundTrip.toISOString().slice(0, 10) !== value) {
+    throw new Error(`${source}: frontmatter date is not a real calendar date (got ${value})`)
   }
-  throw new Error(
-    `${source}: frontmatter date must be a plain YYYY-MM-DD (got ${JSON.stringify(value)})`
-  )
+  return value
 }
 
 /**
@@ -80,18 +87,19 @@ export function getBlogPost(slug: string): BlogPost | null {
   }
 
   const fileContents = fs.readFileSync(filePath, 'utf8')
-  const { data, content } = matter(fileContents)
+  const parsed = matter(fileContents)
+  const source = path.relative(process.cwd(), filePath)
 
   const frontmatter: BlogPostFrontmatter = {
-    ...(data as Omit<BlogPostFrontmatter, 'date'>),
-    date: normalizeFrontmatterDate(data.date, `content/blog/${slug}.md`),
+    ...(parsed.data as Omit<BlogPostFrontmatter, 'date'>),
+    date: parseFrontmatterDate(rawFrontmatterBlock(fileContents), source),
   }
 
   return {
     slug,
     frontmatter,
-    content,
-    excerpt: extractExcerpt(content),
+    content: parsed.content,
+    excerpt: extractExcerpt(parsed.content),
   }
 }
 

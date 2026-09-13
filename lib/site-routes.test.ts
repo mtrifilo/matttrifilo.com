@@ -8,15 +8,21 @@ import { siteRoutes } from './site-routes'
 const BASE = 'https://matttrifilo.com'
 const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
 
-/** Every static route in app/ (a page.tsx with no dynamic segment). */
+/**
+ * Every static route in app/ (a page.tsx with no dynamic segment), using the
+ * App Router folder conventions: `[param]` is dynamic (covered by the blog
+ * test), `(group)` and `@slot` add no URL segment, `_private` is never a route.
+ */
 function staticRoutesOnDisk(): string[] {
   const appDir = path.join(process.cwd(), 'app')
   const routes: string[] = []
   const walk = (dir: string, segments: string[]) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('[')) continue // dynamic: covered separately
-        walk(path.join(dir, entry.name), [...segments, entry.name])
+        const name = entry.name
+        if (name.startsWith('[') || name.startsWith('_')) continue
+        const addsSegment = !(name.startsWith('(') || name.startsWith('@'))
+        walk(path.join(dir, name), addsSegment ? [...segments, name] : segments)
       } else if (entry.name === 'page.tsx') {
         routes.push(segments.length === 0 ? '/' : `/${segments.join('/')}`)
       }
@@ -30,7 +36,9 @@ describe('siteRoutes', () => {
   test('lists exactly the static pages that exist in app/', () => {
     // Fails when a page.tsx is added without a siteRoutes entry (the way
     // /books went missing from the sitemap), or when a route is listed
-    // that has no page.
+    // that has no page. siteRoutes also drives the nav; a page that should
+    // exist but stay out of the nav sets `hideFromNav` rather than being
+    // left out of this list.
     const listed = siteRoutes.map(r => r.href).sort()
     expect(listed).toEqual(staticRoutesOnDisk())
   })

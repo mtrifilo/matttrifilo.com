@@ -18,7 +18,9 @@ import { siteRoutes } from '@/lib/site-routes'
 
 // Shared with the sitemap so a new page cannot be added to one and
 // forgotten in the other.
-const navLinks = siteRoutes.map(({ href, label }) => ({ href, label }))
+const navLinks = siteRoutes
+  .filter(route => !route.hideFromNav)
+  .map(({ href, label }) => ({ href, label }))
 
 export default function Nav() {
   const [open, setOpen] = useState(false)
