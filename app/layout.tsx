@@ -19,7 +19,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://matttrifilo.com'),
   title: {
-    default: 'Matt Trifilo | Software Engineer',
+    default: 'Matt Trifilo | Engineering Leader & Agentic Engineer',
     template: '%s | Matt Trifilo',
   },
   description:

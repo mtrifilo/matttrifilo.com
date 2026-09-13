@@ -28,7 +28,7 @@ export function generatePersonSchema(): PersonSchema {
     '@type': 'Person',
     name: 'Matt Trifilo',
     url: 'https://matttrifilo.com',
-    jobTitle: 'Software Engineer',
+    jobTitle: 'Engineering Leader & Agentic Engineer',
     sameAs: [
       'https://github.com/mtrifilo',
       'https://linkedin.com/in/matttrifilo',

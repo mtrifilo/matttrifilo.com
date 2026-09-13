@@ -165,6 +165,37 @@
   }
 }
 
+/*
+ * Honeycomb treatment C — gutters (MTC-25).
+ * The canvas is fixed to the viewport, so 50% is the viewport centre, which
+ * is where the 48rem (max-w-3xl) content column sits. The column is veiled
+ * to 8% with a 2rem soft edge on each side; the gutters show the full
+ * field. Below md there are no gutters, so the mask is off and the field
+ * stays full-bleed at the base brightness set in hex-renderer.ts.
+ */
+@media (min-width: 48rem) {
+  .hex-canvas {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0,
+      black calc(50% - 26rem),
+      rgba(0, 0, 0, 0.08) calc(50% - 24rem),
+      rgba(0, 0, 0, 0.08) calc(50% + 24rem),
+      black calc(50% + 26rem),
+      black 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      black 0,
+      black calc(50% - 26rem),
+      rgba(0, 0, 0, 0.08) calc(50% - 24rem),
+      rgba(0, 0, 0, 0.08) calc(50% + 24rem),
+      black calc(50% + 26rem),
+      black 100%
+    );
+  }
+}
+
 /* Nav blur-on-scroll */
 nav[data-scrolled='true'] {
   backdrop-filter: blur(12px);

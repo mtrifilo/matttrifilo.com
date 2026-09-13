@@ -150,7 +150,7 @@ export function HexBackground() {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 z-0 pointer-events-none"
+      className="hex-canvas fixed inset-0 z-0 pointer-events-none"
       aria-hidden="true"
     />
   )

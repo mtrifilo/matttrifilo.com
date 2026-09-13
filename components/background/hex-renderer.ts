@@ -46,8 +46,14 @@ const MOUSE_INFLUENCE_RADIUS = 180
 const WAVE_RING_WIDTH = 50
 const WAVE_SPEED = 350 // px per second
 const SHIMMER_PERIOD = 10000 // ms
-const MAX_OPACITY_DARK = 0.15
-const MAX_OPACITY_LIGHT = 0.08
+// Brightness floor and ceiling for a cell's stroke alpha. Raised in Sep
+// 2026 (from 0.03/0.15 dark, 0.02/0.08 light) when the field moved to the
+// gutters (treatment C, MTC-25): the reading column is veiled by a CSS
+// mask, so the visible field can be a real lattice instead of texture.
+const BASE_BRIGHTNESS_DARK = 0.07
+const BASE_BRIGHTNESS_LIGHT = 0.05
+const MAX_OPACITY_DARK = 0.22
+const MAX_OPACITY_LIGHT = 0.14
 
 function easeOutQuad(t: number): number {
   return t * (2 - t)
@@ -168,7 +174,7 @@ export function renderFrame(
     }
 
     // Combined brightness
-    const baseBrightness = isDark ? 0.03 : 0.02
+    const baseBrightness = isDark ? BASE_BRIGHTNESS_DARK : BASE_BRIGHTNESS_LIGHT
     let brightness = baseBrightness + shimmer + mouseInfluence * 0.12 + waveInfluence * 0.15
     brightness = Math.min(brightness, maxOpacity)
 
