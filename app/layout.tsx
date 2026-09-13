@@ -29,18 +29,10 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     siteName: 'Matt Trifilo',
-    images: [
-      {
-        url: '/og-image-v3.jpg',
-        width: 1200,
-        height: 630,
-        alt: 'Matt Trifilo',
-      },
-    ],
+    // Images come from app/opengraph-image.tsx and app/twitter-image.tsx.
   },
   twitter: {
     card: 'summary_large_image',
-    images: ['/og-image-v3.jpg'],
   },
 }
 

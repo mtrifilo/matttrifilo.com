@@ -42,7 +42,7 @@
 
 ## Phase 6: Polish & Deploy
 - [x] Favicon (default from create-next-app, replace with custom later)
-- [ ] Default OG image (public/og-image.jpg) — needs design asset
+- [x] Default OG image — generated at build by `app/opengraph-image.tsx` (MTC-28)
 - [x] Test build: `bun run build` — all routes compile, static blog generated
 - [x] Verify: all pages render, blog generates, sitemap/robots work, titles correct
 - [ ] Deploy to Vercel
