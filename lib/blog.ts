@@ -38,10 +38,32 @@ function extractExcerpt(content: string, maxLength = 200): string {
  * while a quoted one stays a string. Everything downstream (formatDate,
  * <time dateTime>, JSON-LD datePublished) expects the `YYYY-MM-DD` string
  * the author wrote, so normalize here at the boundary.
+ *
+ * Only a pure calendar date is accepted. A value with a time of day or an
+ * offset has no single correct calendar day (it would shift by timezone),
+ * and a missing date cannot be sorted or displayed, so both fail loudly
+ * at build time instead of rendering "Invalid Date" or the wrong day.
  */
-function normalizeFrontmatterDate(value: unknown): string {
-  if (value instanceof Date) return value.toISOString().slice(0, 10)
-  return String(value ?? '')
+export function normalizeFrontmatterDate(value: unknown, source: string): string {
+  if (value instanceof Date) {
+    const isMidnightUtc =
+      value.getUTCHours() === 0 &&
+      value.getUTCMinutes() === 0 &&
+      value.getUTCSeconds() === 0 &&
+      value.getUTCMilliseconds() === 0
+    if (!isMidnightUtc) {
+      throw new Error(
+        `${source}: frontmatter date must be a plain YYYY-MM-DD (got ${value.toISOString()})`
+      )
+    }
+    return value.toISOString().slice(0, 10)
+  }
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value
+  }
+  throw new Error(
+    `${source}: frontmatter date must be a plain YYYY-MM-DD (got ${JSON.stringify(value)})`
+  )
 }
 
 /**
@@ -50,27 +72,26 @@ function normalizeFrontmatterDate(value: unknown): string {
 export function getBlogPost(slug: string): BlogPost | null {
   const filePath = path.join(BLOG_CONTENT_PATH, `${slug}.md`)
 
-  try {
-    if (!fs.existsSync(filePath)) {
-      return null
-    }
-
-    const fileContents = fs.readFileSync(filePath, 'utf8')
-    const { data, content } = matter(fileContents)
-
-    const frontmatter: BlogPostFrontmatter = {
-      ...(data as Omit<BlogPostFrontmatter, 'date'>),
-      date: normalizeFrontmatterDate(data.date),
-    }
-
-    return {
-      slug,
-      frontmatter,
-      content,
-      excerpt: extractExcerpt(content),
-    }
-  } catch {
+  // A missing file is "no such post" and callers 404. Anything after this
+  // point (unreadable file, bad YAML, bad date) is an authoring error and
+  // is allowed to throw so `next build` fails with the file name.
+  if (!fs.existsSync(filePath)) {
     return null
+  }
+
+  const fileContents = fs.readFileSync(filePath, 'utf8')
+  const { data, content } = matter(fileContents)
+
+  const frontmatter: BlogPostFrontmatter = {
+    ...(data as Omit<BlogPostFrontmatter, 'date'>),
+    date: normalizeFrontmatterDate(data.date, `content/blog/${slug}.md`),
+  }
+
+  return {
+    slug,
+    frontmatter,
+    content,
+    excerpt: extractExcerpt(content),
   }
 }
 

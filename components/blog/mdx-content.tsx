@@ -2,6 +2,12 @@ import { MDXRemote } from 'next-mdx-remote/rsc'
 
 type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>
 
+// `#####` and `######` both land here (see the note below), so they share
+// one definition rather than two copies that could drift apart.
+const DeepestHeading = (props: HeadingProps) => (
+  <h6 className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2" {...props} />
+)
+
 // The page title is the only <h1> on a post page, so every markdown
 // heading is demoted one level: `#` renders as <h2>, `##` as <h3>, and so
 // on down to `#####` as <h6>. `######` has nowhere left to go and stays
@@ -20,12 +26,8 @@ const components = {
   h4: (props: HeadingProps) => (
     <h5 className="text-base font-semibold mt-4 mb-2" {...props} />
   ),
-  h5: (props: HeadingProps) => (
-    <h6 className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2" {...props} />
-  ),
-  h6: (props: HeadingProps) => (
-    <h6 className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2" {...props} />
-  ),
+  h5: DeepestHeading,
+  h6: DeepestHeading,
   p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
     <p className="my-4 leading-relaxed" {...props} />
   ),
