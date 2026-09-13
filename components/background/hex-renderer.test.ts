@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import path from 'path'
 import {
@@ -6,14 +6,18 @@ import {
   HEX_COLORS,
   HEX_RENDER_PALETTES,
   IDLE_AFTER_MS,
+  IDLE_FRAME_INTERVAL_MS,
   VEIL_QUERY,
+  createFrameScheduler,
   createRenderPalette,
   generateHexGrid,
+  nextFrameMode,
   parseRgba,
   renderFrame,
   shouldIdle,
   strokeColor,
   updateWave,
+  type FrameMode,
   type HexColorPalette,
   type HexWaveState,
 } from './hex-renderer'
@@ -57,30 +61,6 @@ describe('brightness levels', () => {
 })
 
 describe('palette precomputation', () => {
-  test('createRenderPalette reads each colour string exactly once', () => {
-    const reads: Record<string, number> = {}
-    const counting = {} as HexColorPalette
-    for (const key of [
-      'baseStroke',
-      'hoverStroke',
-      'brightStroke',
-      'waveFill',
-      'innerHex',
-    ] as const) {
-      reads[key] = 0
-      Object.defineProperty(counting, key, {
-        get() {
-          reads[key]++
-          return HEX_COLORS.dark[key]
-        },
-      })
-    }
-
-    createRenderPalette(counting)
-
-    expect(Object.values(reads)).toEqual([1, 1, 1, 1, 1])
-  })
-
   test('strokes become numbers; fills stay strings the canvas takes verbatim', () => {
     const palette = createRenderPalette(HEX_COLORS.light)
     expect(palette.base).toEqual({ r: 15, g: 23, b: 43 })
@@ -90,14 +70,11 @@ describe('palette precomputation', () => {
     expect(palette.innerHex).toBe(HEX_COLORS.light.innerHex)
   })
 
-  test('both themes are parsed once at module load, so a theme swap re-parses nothing', () => {
+  test('both themes are precomputed, so a theme swap re-parses nothing', () => {
     for (const theme of ['light', 'dark'] as const) {
       expect(HEX_RENDER_PALETTES[theme]).toEqual(
         createRenderPalette(HEX_COLORS[theme])
       )
-      // Reading the constant twice yields the same object: switching themes
-      // in the loop is a property lookup, never a re-parse.
-      expect(HEX_RENDER_PALETTES[theme]).toBe(HEX_RENDER_PALETTES[theme])
     }
   })
 })
@@ -207,6 +184,213 @@ describe('idle policy', () => {
   })
 })
 
+describe('nextFrameMode', () => {
+  test('draws every frame while the reader is driving something', () => {
+    expect(nextFrameMode(false, false)).toBe('raf')
+  })
+
+  test('drops to the slow cadence when idle, rather than stopping', () => {
+    expect(nextFrameMode(true, false)).toBe('slow')
+  })
+
+  test('parks under reduced motion, idle or not', () => {
+    expect(nextFrameMode(true, true)).toBe('parked')
+    expect(nextFrameMode(false, true)).toBe('parked')
+  })
+
+  test('the idle cadence samples the shimmer well above flicker', () => {
+    // The shimmer is the only thing moving at the idle rate; it wants enough
+    // samples per 10s cycle to read as a drift rather than a step.
+    expect(10_000 / IDLE_FRAME_INTERVAL_MS).toBeGreaterThanOrEqual(20)
+    // ...and few enough to be a real saving over 60 fps.
+    expect(IDLE_FRAME_INTERVAL_MS).toBeGreaterThanOrEqual(100)
+  })
+})
+
+describe('frame scheduler', () => {
+  /** A fake host with hand-driven rAF and timers, so nothing is timing-dependent. */
+  function createHarness(drawFrame: (now: number, dt: number) => FrameMode) {
+    let nextHandle = 1
+    let clock = 1000
+    const frames = new Map<number, (now: number) => void>()
+    const timers = new Map<number, { run: () => void; delayMs: number }>()
+    const cancelled: string[] = []
+
+    const scheduler = createFrameScheduler({
+      requestFrame(callback) {
+        const handle = nextHandle++
+        frames.set(handle, callback)
+        return handle
+      },
+      cancelFrame(handle) {
+        cancelled.push(`raf:${handle}`)
+        frames.delete(handle)
+      },
+      setTimer(callback, delayMs) {
+        const handle = nextHandle++
+        timers.set(handle, { run: callback, delayMs })
+        return handle
+      },
+      clearTimer(handle) {
+        cancelled.push(`timer:${handle}`)
+        timers.delete(handle)
+      },
+      now: () => clock,
+      drawFrame,
+    })
+
+    return {
+      scheduler,
+      cancelled,
+      advance: (ms: number) => {
+        clock += ms
+      },
+      pendingFrames: () => frames.size,
+      pendingTimers: () => timers.size,
+      timerDelays: () => [...timers.values()].map((t) => t.delayMs),
+      /** Run whatever is scheduled, rAF first. */
+      runNext() {
+        const frame = [...frames.entries()][0]
+        if (frame) {
+          frames.delete(frame[0])
+          frame[1](clock)
+          return
+        }
+        const timer = [...timers.entries()][0]
+        if (!timer) throw new Error('nothing scheduled')
+        timers.delete(timer[0])
+        timer[1].run()
+      },
+    }
+  }
+
+  test('starts parked and wakes to full rate', () => {
+    const h = createHarness(() => 'raf')
+    expect(h.scheduler.mode()).toBe('parked')
+    h.scheduler.wake()
+    expect(h.scheduler.mode()).toBe('raf')
+    expect(h.pendingFrames()).toBe(1)
+  })
+
+  test('an idle frame reschedules on the slow timer, not on rAF', () => {
+    const h = createHarness(() => 'slow')
+    h.scheduler.wake()
+    h.runNext()
+    expect(h.scheduler.mode()).toBe('slow')
+    expect(h.pendingFrames()).toBe(0)
+    expect(h.timerDelays()).toEqual([IDLE_FRAME_INTERVAL_MS])
+  })
+
+  test('the slow cadence keeps drawing, so the shimmer never freezes', () => {
+    let drawn = 0
+    const h = createHarness(() => {
+      drawn++
+      return 'slow'
+    })
+    h.scheduler.wake()
+    for (let i = 0; i < 4; i++) {
+      h.advance(IDLE_FRAME_INTERVAL_MS)
+      h.runNext()
+    }
+    expect(drawn).toBe(4)
+    expect(h.scheduler.mode()).toBe('slow')
+  })
+
+  test('waking out of the slow cadence cancels its timer', () => {
+    const h = createHarness(() => 'slow')
+    h.scheduler.wake()
+    h.runNext()
+    expect(h.pendingTimers()).toBe(1)
+
+    h.scheduler.wake()
+    expect(h.scheduler.mode()).toBe('raf')
+    expect(h.pendingTimers()).toBe(0)
+    expect(h.pendingFrames()).toBe(1)
+    expect(h.cancelled.some((c) => c.startsWith('timer:'))).toBe(true)
+  })
+
+  test('a parked frame schedules nothing at all', () => {
+    const h = createHarness(() => 'parked')
+    h.scheduler.wake()
+    h.runNext()
+    expect(h.scheduler.mode()).toBe('parked')
+    expect(h.pendingFrames()).toBe(0)
+    expect(h.pendingTimers()).toBe(0)
+  })
+
+  /**
+   * A harness whose drawFrame re-enters wake(), the way a synchronously
+   * dispatched contextrestored or visibilitychange would.
+   */
+  function createSelfWakingHarness(mode: FrameMode) {
+    const reentrant: { wake?: () => void } = {}
+    const harness = createHarness(() => {
+      reentrant.wake!()
+      return mode
+    })
+    reentrant.wake = harness.scheduler.wake
+    return harness
+  }
+
+  test('a wake() from inside a frame does not double-schedule', () => {
+    const h = createSelfWakingHarness('raf')
+    h.scheduler.wake()
+    h.runNext()
+    // A second scheduled callback would orphan the first handle, leaving it
+    // uncancellable and running past unmount.
+    expect(h.pendingFrames() + h.pendingTimers()).toBe(1)
+  })
+
+  test('a wake() from inside a frame beats a park or a slowdown', () => {
+    for (const mode of ['parked', 'slow'] as const) {
+      const h = createSelfWakingHarness(mode)
+      h.scheduler.wake()
+      h.runNext()
+      expect(h.scheduler.mode()).toBe('raf')
+      expect(h.pendingFrames()).toBe(1)
+      expect(h.pendingTimers()).toBe(0)
+    }
+  })
+
+  test('stop() cancels whichever mechanism is armed', () => {
+    for (const mode of ['raf', 'slow'] as const) {
+      const h = createHarness(() => mode)
+      h.scheduler.wake()
+      h.runNext()
+      h.scheduler.stop()
+      expect(h.scheduler.mode()).toBe('parked')
+      expect(h.pendingFrames()).toBe(0)
+      expect(h.pendingTimers()).toBe(0)
+    }
+  })
+
+  test('a long gap is capped, so a resumed loop cannot jump the wave', () => {
+    const deltas: number[] = []
+    const h = createHarness((_now, dt) => {
+      deltas.push(dt)
+      return 'raf'
+    })
+    h.scheduler.wake()
+    h.advance(60_000)
+    h.runNext()
+    expect(deltas[0]).toBeLessThanOrEqual(0.1)
+  })
+
+  test('waking after a park restarts the clock rather than carrying the gap', () => {
+    const deltas: number[] = []
+    const h = createHarness((_now, dt) => {
+      deltas.push(dt)
+      return 'parked'
+    })
+    h.scheduler.wake()
+    h.runNext()
+    h.advance(60_000)
+    h.scheduler.wake()
+    h.runNext()
+    expect(deltas[1]).toBe(0)
+  })
+})
+
 describe('wave lifetime', () => {
   function newWave(radius: number): HexWaveState {
     return { active: true, originX: 0, originY: 0, radius, startTime: 0 }
@@ -233,15 +417,6 @@ describe('wave lifetime', () => {
 })
 
 describe('renderFrame canvas work', () => {
-  const realWindow = (globalThis as { window?: unknown }).window
-
-  beforeAll(() => {
-    ;(globalThis as { window?: unknown }).window = { devicePixelRatio: 1 }
-  })
-  afterAll(() => {
-    ;(globalThis as { window?: unknown }).window = realWindow
-  })
-
   function createMockContext(width: number, height: number) {
     const counts = {
       save: 0,
@@ -253,6 +428,7 @@ describe('renderFrame canvas work', () => {
       strokeStyleReads: 0,
     }
     const strokeWrites: string[] = []
+    const cleared: number[] = []
     let strokeStyle = '#000000'
 
     const ctx = {
@@ -268,7 +444,9 @@ describe('renderFrame canvas work', () => {
         strokeStyle = value
         strokeWrites.push(value)
       },
-      clearRect() {},
+      clearRect(x: number, y: number, w: number, h: number) {
+        cleared.push(x, y, w, h)
+      },
       save() {
         counts.save++
       },
@@ -297,6 +475,7 @@ describe('renderFrame canvas work', () => {
       ctx: ctx as unknown as CanvasRenderingContext2D,
       counts,
       strokeWrites,
+      cleared,
     }
   }
 
@@ -315,18 +494,37 @@ describe('renderFrame canvas work', () => {
     mouse: { x: number; y: number },
     wave: HexWaveState = { ...idleWave }
   ) {
-    renderFrame(
-      mock.ctx,
-      generateHexGrid(400, 300),
+    renderFrame({
+      ctx: mock.ctx,
+      grid: generateHexGrid(400, 300),
       mouse,
-      0,
-      HEX_RENDER_PALETTES.dark,
+      time: 0,
+      palette: HEX_RENDER_PALETTES.dark,
       wave,
-      1 / 60,
-      false,
-      levels
-    )
+      dt: 1 / 60,
+      reducedMotion: false,
+      levels,
+      dpr: 1,
+    })
   }
+
+  test('clears using the dpr it was handed, not a global one', () => {
+    const mock = createMockContext(800, 600)
+    renderFrame({
+      ctx: mock.ctx,
+      grid: [],
+      mouse: offCanvas,
+      time: 0,
+      palette: HEX_RENDER_PALETTES.dark,
+      wave: { ...idleWave },
+      dt: 0,
+      reducedMotion: false,
+      levels,
+      dpr: 2,
+    })
+    // 800x600 bitmap at dpr 2 is a 400x300 CSS box.
+    expect(mock.cleared).toEqual([0, 0, 400, 300])
+  })
 
   test('never reads back ctx.strokeStyle — the regex round-trip is gone', () => {
     const mock = createMockContext(400, 300)

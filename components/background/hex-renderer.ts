@@ -1,5 +1,8 @@
 // Pure rendering engine for the hexagonal background effect.
-// No React or DOM dependencies — only Canvas2D drawing and math.
+// No React, no window, no globals — only the Canvas2D context it is handed,
+// maths, and the frame-scheduling policy below. Everything environmental
+// (device pixel ratio, media queries, event wiring) is the component's job
+// and arrives as an argument.
 
 export interface HexCell {
   cx: number
@@ -146,17 +149,29 @@ export const BRIGHTNESS = {
 } as const satisfies Record<string, Record<'light' | 'dark', BrightnessLevels>>
 
 /**
- * How long the pointer may sit still on the canvas before the field is
- * treated as idle and the loop stops.
+ * How long the pointer may sit still on the canvas before the field counts
+ * as idle and the loop drops to IDLE_FRAME_INTERVAL_MS.
  *
  * Two seconds: long enough that ordinary pauses while reading or reaching
- * for the scroll wheel do not stop and restart the loop dozens of times a
- * minute, short enough that CPU is back at zero almost as soon as the
- * reader settles on the page. Resuming costs one animation frame, so a
- * "premature" idle is imperceptible — the only thing a paused frame gives
- * up is the ambient shimmer, whose amplitude is +/-0.012 alpha.
+ * for the scroll wheel do not flip the loop between rates dozens of times a
+ * minute, short enough that the cost drops almost as soon as the reader
+ * settles on the page. Coming back costs one animation frame, so an early
+ * drop to the idle rate is imperceptible.
  */
 export const IDLE_AFTER_MS = 2000
+
+/**
+ * Frame interval used while the field is idle — about 4 fps.
+ *
+ * The only thing still moving when idle is the ambient shimmer, a sine with
+ * a SHIMMER_PERIOD (10s) cycle, so 250ms gives it 40 samples per period:
+ * far denser than the eye needs for a gradient that drifts by 0.024 alpha
+ * over ten seconds, and 1/15th of the frames a full-rate loop would spend
+ * on it. Dropping the loop entirely would be cheaper still, but it freezes
+ * the field for anyone who never moves a pointer — touch readers, keyboard
+ * readers — which is most of the time the background is on screen.
+ */
+export const IDLE_FRAME_INTERVAL_MS = 250
 
 export interface IdleInput {
   /** True while a wave is still expanding across the grid. */
@@ -169,19 +184,142 @@ export interface IdleInput {
 }
 
 /**
- * Whether the frame just drawn is the last one needed until something wakes
- * the loop. Every input that can change a pixel is either in here or is a
- * discrete event (theme, resize, veil breakpoint) that wakes the loop
- * directly.
+ * Whether the field is idle: nothing the reader is driving is animating, so
+ * only the ambient shimmer is left to draw.
  *
- * Reduced motion is checked first and on its own: it disables the shimmer,
- * the pointer glow and the wave, so the frame is static no matter what the
- * pointer or a still-flagged wave are doing.
+ * This is not "stop" — see nextFrameMode, which turns idle into a slow
+ * cadence rather than a halt. Reduced motion is checked first and on its
+ * own because it disables the shimmer, the pointer glow and the wave alike,
+ * making the frame genuinely static whatever the pointer or a still-flagged
+ * wave are doing.
  */
 export function shouldIdle(state: IdleInput): boolean {
   if (state.reducedMotion) return true
   if (state.waveActive) return false
   return !state.pointerOnCanvas || state.msSincePointerMove >= IDLE_AFTER_MS
+}
+
+export type FrameMode = 'raf' | 'slow' | 'parked'
+
+/**
+ * How the loop should keep going after the frame it just drew.
+ *
+ *   raf    — something the reader is driving is moving; draw every frame.
+ *   slow   — only the shimmer is moving; draw every IDLE_FRAME_INTERVAL_MS.
+ *   parked — nothing can move at all; draw nothing until woken.
+ *
+ * Only reduced motion parks, and it parks unconditionally: with the
+ * shimmer, glow and wave all suppressed, every further frame would be a
+ * pixel-for-pixel repeat of this one.
+ */
+export function nextFrameMode(idle: boolean, reducedMotion: boolean): FrameMode {
+  if (reducedMotion) return 'parked'
+  return idle ? 'slow' : 'raf'
+}
+
+/** Cap on a single frame's delta, so a long gap cannot jump the wave. */
+const MAX_FRAME_DT_MS = 100
+
+export interface FrameSchedulerHost {
+  requestFrame: (callback: (now: number) => void) => number
+  cancelFrame: (handle: number) => void
+  setTimer: (callback: () => void, delayMs: number) => number
+  clearTimer: (handle: number) => void
+  /** Monotonic clock on the same time origin as requestFrame's timestamps. */
+  now: () => number
+  /** Draw one frame and say how the loop should continue afterwards. */
+  drawFrame: (now: number, dt: number) => FrameMode
+}
+
+export interface FrameScheduler {
+  /** Return to full rate, from either the slow cadence or a full park. */
+  wake: () => void
+  /** Cancel whatever is scheduled. The scheduler can still be woken after. */
+  stop: () => void
+  /** What is currently scheduled, for tests and diagnostics. */
+  mode: () => FrameMode
+}
+
+/** What is scheduled right now; null is the parked state. */
+type PendingFrame = { kind: 'raf' | 'slow'; handle: number } | null
+
+/**
+ * Owns how often frames happen, separately from what a frame draws. One
+ * `pending` record is the single source of truth for "running": it says both
+ * whether something is scheduled and which mechanism has to be cancelled,
+ * so the two handles can never disagree or leak past each other.
+ *
+ * Three invariants, each of which has a test:
+ *
+ *   - A wake() re-entered from inside drawFrame never schedules a second
+ *     loop. That would orphan the in-flight handle, leaving it uncancellable
+ *     and running past unmount.
+ *   - A wake() that arrives during a frame still wins: the frame it asked
+ *     for has not been drawn yet, so the loop continues at full rate even
+ *     when drawFrame asked to slow down or park.
+ *   - Switching rates cancels the old mechanism before arming the new one,
+ *     so waking out of the slow cadence never leaves its timer behind.
+ */
+export function createFrameScheduler(host: FrameSchedulerHost): FrameScheduler {
+  let pending: PendingFrame = null
+  let lastTime = host.now()
+  let inFrame = false
+  let wokenDuringFrame = false
+
+  function schedule(kind: 'raf' | 'slow'): void {
+    pending =
+      kind === 'raf'
+        ? { kind, handle: host.requestFrame(tick) }
+        : {
+            kind,
+            handle: host.setTimer(
+              () => tick(host.now()),
+              IDLE_FRAME_INTERVAL_MS
+            ),
+          }
+  }
+
+  function cancelPending(): void {
+    if (!pending) return
+    if (pending.kind === 'raf') host.cancelFrame(pending.handle)
+    else host.clearTimer(pending.handle)
+    pending = null
+  }
+
+  function tick(now: number): void {
+    inFrame = true
+    wokenDuringFrame = false
+    const dt = Math.min(now - lastTime, MAX_FRAME_DT_MS) / 1000
+    lastTime = now
+
+    const mode = host.drawFrame(now, dt)
+
+    inFrame = false
+    // The frame this handle stood for has now run; nothing left to cancel.
+    pending = null
+
+    if (wokenDuringFrame) schedule('raf')
+    else if (mode !== 'parked') schedule(mode)
+  }
+
+  return {
+    wake() {
+      wokenDuringFrame = true
+      // Inside a frame, tick honours wokenDuringFrame when it reschedules.
+      if (inFrame) return
+      if (pending?.kind === 'raf') return
+      // Either parked, or a slow frame is waiting on a timer we no longer
+      // want: drop it and go back to full rate now.
+      cancelPending()
+      // Restart the clock: the loop may have been parked for minutes, and
+      // the stale timestamp would hand the next frame a dt that only the
+      // cap above saves it from.
+      lastTime = host.now()
+      schedule('raf')
+    },
+    stop: cancelPending,
+    mode: () => pending?.kind ?? 'parked',
+  }
 }
 
 function easeOutQuad(t: number): number {
@@ -263,21 +401,44 @@ export function updateWave(wave: HexWaveState, dt: number): void {
   }
 }
 
-export function renderFrame(
-  ctx: CanvasRenderingContext2D,
-  grid: HexCell[],
-  mouse: { x: number; y: number },
-  time: number,
-  palette: HexRenderPalette,
-  wave: HexWaveState,
-  dt: number,
-  reducedMotion: boolean,
+export interface HexFrameInput {
+  ctx: CanvasRenderingContext2D
+  grid: HexCell[]
+  /** Pointer position in CSS pixels; far off-canvas when there is none. */
+  mouse: { x: number; y: number }
+  /** Timestamp in ms, driving the ambient shimmer. */
+  time: number
+  palette: HexRenderPalette
+  wave: HexWaveState
+  /** Seconds since the previous frame. */
+  dt: number
+  reducedMotion: boolean
   levels: BrightnessLevels
-): void {
-  const { width, height } = ctx.canvas
-  const dpr = Math.min(window.devicePixelRatio, 2)
-  const w = width / dpr
-  const h = height / dpr
+  /**
+   * The device pixel ratio the caller baked into ctx's transform when it
+   * sized the bitmap. Passed in rather than re-read from the window so that
+   * clearRect below cannot disagree with the transform actually in force —
+   * a window dragged to a display with a different ratio changes
+   * devicePixelRatio long before the canvas is resized to match.
+   */
+  dpr: number
+}
+
+export function renderFrame(frame: HexFrameInput): void {
+  const {
+    ctx,
+    grid,
+    mouse,
+    time,
+    palette,
+    wave,
+    dt,
+    reducedMotion,
+    levels,
+    dpr,
+  } = frame
+  const w = ctx.canvas.width / dpr
+  const h = ctx.canvas.height / dpr
 
   ctx.clearRect(0, 0, w, h)
 
