@@ -13,3 +13,12 @@ export function formatDate(isoDate: string): string {
     timeZone: 'UTC',
   })
 }
+
+/** "March 2026" from an ISO timestamp, in UTC so the month never shifts. */
+export function formatMonthYear(isoTimestamp: string): string {
+  return new Date(isoTimestamp).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}

@@ -36,3 +36,8 @@ jobs:
           # Reproduces the timezone bug formatDate guards against.
           TZ: America/Phoenix
       - run: bun run build
+        env:
+          # Authenticated GitHub API requests for the /open-source build-time
+          # fetch; the workflow token has public read access and avoids the
+          # shared-IP unauthenticated rate limit.
+          GITHUB_TOKEN: ${{ github.token }}

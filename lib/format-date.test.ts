@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { formatDate } from './format-date'
+import { formatDate, formatMonthYear } from './format-date'
 
 describe('formatDate', () => {
   test('renders the calendar date the author wrote, regardless of process timezone', () => {
@@ -10,5 +10,12 @@ describe('formatDate', () => {
 
   test('handles the last day of a year', () => {
     expect(formatDate('2025-12-31')).toBe('December 31, 2025')
+  })
+})
+
+describe('formatMonthYear', () => {
+  test('is timezone-stable', () => {
+    // 00:30 UTC on March 1 is still February 28 in Phoenix.
+    expect(formatMonthYear('2026-03-01T00:30:00Z')).toBe('March 2026')
   })
 })

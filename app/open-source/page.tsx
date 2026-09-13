@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Star } from 'lucide-react'
 import { openSourceRepos } from '@/content/open-source'
-import { formatMonthYear, getOpenSourceProjects } from '@/lib/github'
+import { formatMonthYear } from '@/lib/format-date'
+import { getOpenSourceProjects } from '@/lib/github'
 
 export const metadata: Metadata = {
   title: 'Open Source',
@@ -21,6 +22,19 @@ export default async function OpenSourcePage() {
         >
           Open Source
         </h1>
+
+        {projects.length === 0 ? (
+          <p className="text-muted-foreground">
+            Nothing to show yet. See{' '}
+            <a
+              href="https://github.com/mtrifilo"
+              className="text-primary underline underline-offset-2"
+            >
+              github.com/mtrifilo
+            </a>
+            .
+          </p>
+        ) : null}
 
         <ul className="space-y-6">
           {projects.map((project, i) => (
@@ -44,7 +58,8 @@ export default async function OpenSourcePage() {
               </p>
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 {project.language ? <span>{project.language}</span> : null}
-                {project.stars !== null ? (
+                {/* Hidden at zero, as GitHub's own repo cards do. */}
+                {project.stars ? (
                   <span className="flex items-center gap-1 tabular-nums">
                     <Star className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">Stars:</span>

@@ -1,24 +1,42 @@
 /**
- * Projects shown on /open-source, in display order. Add a GitHub repo here
- * and it appears on the next deploy; description, language, stars and
- * last-push date are fetched from GitHub at build time (lib/github.ts).
+ * Projects shown on /open-source, in display order.
  *
- * `summary` is the fallback description used when the GitHub API is
- * unavailable at build time or the repo has no description.
+ * Content conventions in this repo: prose lives as markdown under
+ * content/<type>/ (blog posts); structured lists live as typed modules in
+ * content/ (this file); app/*\/page.tsx renders and holds no data.
+ *
+ * What is live vs curated: `summary` is the description shown on the page,
+ * so the copy is reviewed here rather than pulled unedited from GitHub. If
+ * it is omitted, GitHub's repository description is used. Language, stars,
+ * last-push date and homepage are always fetched from GitHub at build time
+ * (lib/github.ts) and refresh on deploy (at most once an hour).
+ *
+ * A repo that GitHub reports as missing (deleted, renamed without redirect,
+ * or made private) is left off the page and logged at build time; remove or
+ * fix its entry here.
+ *
+ * Rate limits: unauthenticated GitHub requests are limited per egress IP,
+ * which Vercel builds share with other tenants. Set GITHUB_TOKEN in the
+ * Vercel project's build environment (any token with public read access)
+ * so metadata cannot silently drop out of a deploy. CI already passes its
+ * workflow token.
  */
 export interface CuratedRepo {
-  /** "owner/name" as it appears on GitHub. */
-  repo: `${string}/${string}`
-  summary: string
+  owner: string
+  name: string
+  /** Reviewed one-line description. Falls back to GitHub's when omitted. */
+  summary?: string
 }
 
 export const openSourceRepos: readonly CuratedRepo[] = [
   {
-    repo: 'mtrifilo/decant',
+    owner: 'mtrifilo',
+    name: 'decant',
     summary: 'CLI to transform your clipboard into markdown for LLM context.',
   },
   {
-    repo: 'mtrifilo/psychic-homily-web',
+    owner: 'mtrifilo',
+    name: 'psychic-homily-web',
     summary:
       'A website to document and amplify new music releases, shows, and cultural events from Arizona musicians and beyond.',
   },
