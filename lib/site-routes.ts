@@ -37,6 +37,12 @@ export const siteRoutes: readonly SiteRoute[] = [
     priority: 0.6,
   },
   {
+    href: '/resume',
+    label: 'Résumé',
+    changeFrequency: 'yearly',
+    priority: 0.5,
+  },
+  {
     href: '/contact',
     label: 'Contact',
     changeFrequency: 'yearly',
