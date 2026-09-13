@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local issue-tracker CLI config
 .linear.toml
+
+# Claude Code agent worktrees (nested checkouts, never part of the site)
+.claude/worktrees/

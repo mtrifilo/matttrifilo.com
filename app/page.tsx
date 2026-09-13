@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { getAllBlogPosts } from '@/lib/blog'
 import { formatDate } from '@/lib/format-date'
-import { JOB_TITLE } from '@/lib/seo/identity'
+import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
 
 export default function Home() {
   const recentPosts = getAllBlogPosts().slice(0, 3)
@@ -20,7 +20,7 @@ export default function Home() {
           </h1>
           <p className="text-xl text-muted-foreground">{JOB_TITLE}</p>
           <p className="text-base leading-relaxed text-foreground/90 max-w-2xl mt-6">
-            I build software products, and level up teams.
+            {TAGLINE}
           </p>
           <div className="flex items-center gap-4 mt-4">
             <Link
