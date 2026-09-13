@@ -69,7 +69,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 - **AI engineering:** Claude Code, Cursor, agentic workflows and orchestration, MCP, Gemini / Vertex AI, RAG, Promptfoo evals, prompt and context engineering
 - **Languages and frameworks:** Java, Python, TypeScript, Go · Spring Boot, Micronaut, Flask, FastAPI · Vue.js, React, GraphQL
 - **Infrastructure:** Google Cloud (GKE, Cloud Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions, CircleCI, Google Cloud Operations, OpsGenie
-- **Email infrastructure:** KumoMTA, MTA operations, DKIM/SPF, IP warm-up, deliverability, compliance
+- **Email infrastructure:** MTA operations, DKIM/SPF, IP warm-up, deliverability, compliance
 
 ## Education
 
