@@ -4,6 +4,7 @@ import { MDXContent } from '@/components/blog/mdx-content'
 import Link from 'next/link'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generateBlogPostingSchema } from '@/lib/seo/jsonld'
+import { formatDate } from '@/lib/format-date'
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
@@ -48,15 +49,6 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
   }
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
-
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params
   const post = getBlogPost(slug)
@@ -92,7 +84,9 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             </h1>
 
             <div className="text-sm text-muted-foreground flex flex-wrap gap-2 items-center">
-              <time>{formatDate(post.frontmatter.date)}</time>
+              <time dateTime={post.frontmatter.date}>
+                {formatDate(post.frontmatter.date)}
+              </time>
 
               {post.frontmatter.categories &&
                 post.frontmatter.categories.length > 0 && (

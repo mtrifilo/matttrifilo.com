@@ -14,13 +14,13 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { siteRoutes } from '@/lib/site-routes'
 
-const navLinks = [
-  { href: '/', label: 'Home' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/books', label: 'Recommended Books' },
-  { href: '/contact', label: 'Contact' },
-]
+// Shared with the sitemap so a new page cannot be added to one and
+// forgotten in the other.
+const navLinks = siteRoutes
+  .filter(route => !route.hideFromNav)
+  .map(({ href, label }) => ({ href, label }))
 
 export default function Nav() {
   const [open, setOpen] = useState(false)

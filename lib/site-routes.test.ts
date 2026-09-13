@@ -1,0 +1,61 @@
+import { describe, expect, test } from 'bun:test'
+import fs from 'fs'
+import path from 'path'
+import sitemap from '@/app/sitemap'
+import { getBlogSlugs } from './blog'
+import { siteRoutes } from './site-routes'
+
+const BASE = 'https://matttrifilo.com'
+const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
+
+/**
+ * Every static route in app/ (a page.tsx with no dynamic segment), using the
+ * App Router folder conventions: `[param]` is dynamic (covered by the blog
+ * test), `(group)` and `@slot` add no URL segment, `_private` is never a route.
+ */
+function staticRoutesOnDisk(): string[] {
+  const appDir = path.join(process.cwd(), 'app')
+  const routes: string[] = []
+  const walk = (dir: string, segments: string[]) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        const name = entry.name
+        if (name.startsWith('[') || name.startsWith('_')) continue
+        const addsSegment = !(name.startsWith('(') || name.startsWith('@'))
+        walk(path.join(dir, name), addsSegment ? [...segments, name] : segments)
+      } else if (/^page\.(tsx|ts|jsx|js|mdx)$/.test(entry.name)) {
+        routes.push(segments.length === 0 ? '/' : `/${segments.join('/')}`)
+      }
+    }
+  }
+  walk(appDir, [])
+  // A parallel-route slot can contribute a page at the same URL as its
+  // parent; the route exists once, so report it once.
+  return [...new Set(routes)].sort()
+}
+
+describe('siteRoutes', () => {
+  test('lists exactly the static pages that exist in app/', () => {
+    // Fails when a page.tsx is added without a siteRoutes entry (the way
+    // /books went missing from the sitemap), or when a route is listed
+    // that has no page. siteRoutes also drives the nav; a page that should
+    // exist but stay out of the nav sets `hideFromNav` rather than being
+    // left out of this list.
+    const listed = siteRoutes.map(r => r.href).sort()
+    expect(listed).toEqual(staticRoutesOnDisk())
+  })
+})
+
+describe('sitemap', () => {
+  test('includes every static route', () => {
+    const urls = new Set(sitemap().map(entry => entry.url))
+    for (const route of siteRoutes) expect(urls.has(toUrl(route.href))).toBe(true)
+  })
+
+  test('includes every blog post on disk', () => {
+    const slugs = getBlogSlugs()
+    expect(slugs.length).toBeGreaterThan(0)
+    const urls = new Set(sitemap().map(entry => entry.url))
+    for (const slug of slugs) expect(urls.has(`${BASE}/blog/${slug}`)).toBe(true)
+  })
+})
