@@ -14,6 +14,10 @@ describe('rawFrontmatterBlock', () => {
   test('returns empty when there is no frontmatter', () => {
     expect(rawFrontmatterBlock('Just a body.')).toBe('')
   })
+  test('tolerates a BOM and trailing whitespace on the opening fence', () => {
+    expect(rawFrontmatterBlock('\uFEFF---\ndate: 2026-03-01\n---\nBody')).toBe('date: 2026-03-01')
+    expect(rawFrontmatterBlock('--- \t\ndate: 2026-03-01\n---\nBody')).toBe('date: 2026-03-01')
+  })
 })
 
 describe('parseFrontmatterDate', () => {
@@ -37,6 +41,11 @@ describe('parseFrontmatterDate', () => {
     expect(() => parseFrontmatterDate(raw('date: 2026-02-30'), 'x.md')).toThrow(/not a real calendar date/)
     expect(() => parseFrontmatterDate(raw("date: '2026-13-45'"), 'x.md')).toThrow(/not a real calendar date/)
     expect(() => parseFrontmatterDate(raw("date: '2026-31-01'"), 'x.md')).toThrow(/not a real calendar date/)
+  })
+
+  test('distinguishes a missing block from a missing date line', () => {
+    expect(() => parseFrontmatterDate('', 'x.md')).toThrow(/no frontmatter block/)
+    expect(() => parseFrontmatterDate(raw('title: x'), 'x.md')).toThrow(/needs a plain "date: YYYY-MM-DD"/)
   })
 
   test('rejects a missing or malformed date', () => {

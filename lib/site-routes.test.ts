@@ -23,13 +23,15 @@ function staticRoutesOnDisk(): string[] {
         if (name.startsWith('[') || name.startsWith('_')) continue
         const addsSegment = !(name.startsWith('(') || name.startsWith('@'))
         walk(path.join(dir, name), addsSegment ? [...segments, name] : segments)
-      } else if (entry.name === 'page.tsx') {
+      } else if (/^page\.(tsx|ts|jsx|js|mdx)$/.test(entry.name)) {
         routes.push(segments.length === 0 ? '/' : `/${segments.join('/')}`)
       }
     }
   }
   walk(appDir, [])
-  return routes.sort()
+  // A parallel-route slot can contribute a page at the same URL as its
+  // parent; the route exists once, so report it once.
+  return [...new Set(routes)].sort()
 }
 
 describe('siteRoutes', () => {

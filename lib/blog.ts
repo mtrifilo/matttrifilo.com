@@ -33,7 +33,9 @@ function extractExcerpt(content: string, maxLength = 200): string {
 }
 
 const FRONTMATTER_DATE_LINE = /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m
-const FRONTMATTER_BLOCK = /^---\r?\n([\s\S]*?)\r?\n---/
+// Tolerates a UTF-8 BOM and trailing whitespace on the opening fence, as
+// gray-matter does, so a valid post is never rejected for either.
+const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---/
 
 /**
  * The raw text between the opening and closing `---` fences, or '' when
@@ -59,6 +61,9 @@ export function rawFrontmatterBlock(fileContents: string): string {
  * name rather than rendering "Invalid Date" or the wrong day.
  */
 export function parseFrontmatterDate(rawFrontmatter: string, source: string): string {
+  if (rawFrontmatter.trim() === '') {
+    throw new Error(`${source}: no frontmatter block found (expected --- fences at the top)`)
+  }
   const match = FRONTMATTER_DATE_LINE.exec(rawFrontmatter)
   if (!match) {
     throw new Error(
