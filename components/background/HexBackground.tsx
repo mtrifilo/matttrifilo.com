@@ -5,7 +5,8 @@ import { useTheme } from 'next-themes'
 import {
   generateHexGrid,
   renderFrame,
-  HEX_COLORS,
+  shouldIdle,
+  HEX_RENDER_PALETTES,
   BRIGHTNESS,
   VEIL_QUERY,
   type HexCell,
@@ -17,6 +18,7 @@ export function HexBackground() {
   const { resolvedTheme } = useTheme()
   const mouseRef = useRef({ x: -1000, y: -1000 })
   const lastMoveTime = useRef(0)
+  const pointerOnCanvasRef = useRef(false)
   const gridRef = useRef<HexCell[]>([])
   const waveRef = useRef<HexWaveState>({
     active: false,
@@ -25,7 +27,9 @@ export function HexBackground() {
     radius: 0,
     startTime: 0,
   })
-  const rafId = useRef(0)
+  // Set by the animation effect; lets the other effects and listeners restart
+  // a loop that has parked itself (see the idle policy below).
+  const wakeRef = useRef<(() => void) | null>(null)
   const mountedRef = useRef(false)
   const reducedMotionRef = useRef(false)
   const veiledRef = useRef(false)
@@ -39,6 +43,8 @@ export function HexBackground() {
   // it to a committed render.
   useEffect(() => {
     themeRef.current = resolvedTheme
+    // A parked loop would otherwise keep showing the old theme's palette.
+    wakeRef.current?.()
   }, [resolvedTheme])
 
   // The canvas box is sized by CSS (fixed inset-0, w-full h-full) so it
@@ -72,6 +78,7 @@ export function HexBackground() {
     reducedMotionRef.current = motionQuery.matches
     const onMotionChange = (e: MediaQueryListEvent) => {
       reducedMotionRef.current = e.matches
+      wake()
     }
     motionQuery.addEventListener('change', onMotionChange)
 
@@ -81,6 +88,7 @@ export function HexBackground() {
     veiledRef.current = veilQuery.matches
     const onVeilChange = (e: MediaQueryListEvent) => {
       veiledRef.current = e.matches
+      wake()
     }
     veilQuery.addEventListener('change', onVeilChange)
 
@@ -102,6 +110,8 @@ export function HexBackground() {
 
     // Mouse tracking (throttled, no re-renders)
     const onPointerMove = (e: PointerEvent) => {
+      pointerOnCanvasRef.current = true
+      wake()
       const now = performance.now()
       if (now - lastMoveTime.current < 16) return
       lastMoveTime.current = now
@@ -110,7 +120,10 @@ export function HexBackground() {
 
     // Reset mouse when it leaves the window
     const onPointerLeave = () => {
+      pointerOnCanvasRef.current = false
       mouseRef.current = { x: -1000, y: -1000 }
+      // One more frame so a glow left under the departing pointer is erased.
+      wake()
     }
 
     window.addEventListener('pointermove', onPointerMove, { passive: true })
@@ -124,6 +137,8 @@ export function HexBackground() {
         if (!canvas) return
         const result = setupCanvas(canvas)
         ctx = result.ctx
+        // Resizing the bitmap clears it, so a parked loop must redraw.
+        wake()
       }, 150)
     })
     // Observe the canvas itself: it is CSS-sized to the viewport, so this
@@ -131,15 +146,31 @@ export function HexBackground() {
     // content height would not.
     ro.observe(canvas)
 
-    // Animation loop
+    // Animation loop.
+    //
+    // Idle policy: this background is mounted in the root layout, so a loop
+    // that runs forever burns battery on every page for a shimmer nobody is
+    // looking at. Instead the loop parks itself — no rAF scheduled, no
+    // timers, idle cost genuinely zero — as soon as the frame it just drew
+    // is the last one that can differ (shouldIdle). Everything that can
+    // change a pixel afterwards is a discrete event, and each of those calls
+    // wake(): pointer move and leave, theme change, viewport resize, and the
+    // reduced-motion and veil breakpoints.
+    //
+    // rafId is the single source of truth for "running": 0 means parked.
+    let rafId = 0
     let lastTime = performance.now()
+
     const loop = (now: number) => {
+      rafId = 0
       if (!ctx) return
       const dt = Math.min((now - lastTime) / 1000, 0.1) // cap dt to avoid jumps
       lastTime = now
 
       const isDark = themeRef.current === 'dark'
-      const palette = isDark ? HEX_COLORS.dark : HEX_COLORS.light
+      const palette = isDark
+        ? HEX_RENDER_PALETTES.dark
+        : HEX_RENDER_PALETTES.light
       const levels = (
         veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed
       )[isDark ? 'dark' : 'light']
@@ -156,13 +187,29 @@ export function HexBackground() {
         levels
       )
 
-      rafId.current = requestAnimationFrame(loop)
+      const park = shouldIdle({
+        waveActive: waveRef.current.active,
+        pointerOnCanvas: pointerOnCanvasRef.current,
+        msSincePointerMove: now - lastMoveTime.current,
+        reducedMotion: reducedMotionRef.current,
+      })
+      if (!park) rafId = requestAnimationFrame(loop)
     }
 
-    rafId.current = requestAnimationFrame(loop)
+    function wake() {
+      if (rafId !== 0) return
+      // Restart the clock: a parked loop may have been out for minutes, and
+      // the stale timestamp would hand the next frame a huge dt.
+      lastTime = performance.now()
+      rafId = requestAnimationFrame(loop)
+    }
+
+    wakeRef.current = wake
+    rafId = requestAnimationFrame(loop)
 
     return () => {
-      cancelAnimationFrame(rafId.current)
+      wakeRef.current = null
+      cancelAnimationFrame(rafId)
       ro.disconnect()
       clearTimeout(resizeTimer)
       window.removeEventListener('pointermove', onPointerMove)
