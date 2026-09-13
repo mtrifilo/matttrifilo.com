@@ -247,14 +247,16 @@ nav[data-scrolled='true'] {
 
 /* Contact card hover — dark mode glow */
 .contact-card {
-  transition: border-color 200ms, box-shadow 200ms, background-color 200ms;
+  transition:
+    border-color 200ms,
+    box-shadow 200ms,
+    background-color 200ms;
 }
 
 .dark .contact-card:hover {
   border-color: rgba(59, 130, 246, 0.3);
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
 }
-
 
 /* Tactile button feedback */
 [data-slot='button']:active {

@@ -10,7 +10,11 @@ describe('Person schema', () => {
 
 describe('BlogPosting schema', () => {
   test('carries the post date and canonical URL', () => {
-    const schema = generateBlogPostingSchema({ title: 'T', date: '2026-03-01', slug: 'my-post' })
+    const schema = generateBlogPostingSchema({
+      title: 'T',
+      date: '2026-03-01',
+      slug: 'my-post',
+    })
     expect(schema.datePublished).toBe('2026-03-01')
     expect(schema.url).toBe('https://matttrifilo.com/blog/my-post')
   })

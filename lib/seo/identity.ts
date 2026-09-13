@@ -5,4 +5,3 @@
  * separately — see MTC-28.)
  */
 export const JOB_TITLE = 'Engineering Leader & Agentic Engineer'
-export const SITE_NAME = 'Matt Trifilo'

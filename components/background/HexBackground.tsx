@@ -7,14 +7,10 @@ import {
   renderFrame,
   HEX_COLORS,
   BRIGHTNESS,
+  VEIL_QUERY,
   type HexCell,
   type HexWaveState,
 } from './hex-renderer'
-
-// Must match the media query on `.hex-canvas` in globals.css: the width at
-// which the reading column has ~4rem of real gutter on each side, so the
-// mask (and the brighter field) only engage where gutters exist.
-const VEIL_QUERY = '(min-width: 56rem)'
 
 export function HexBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -130,7 +126,10 @@ export function HexBackground() {
         ctx = result.ctx
       }, 150)
     })
-    ro.observe(document.documentElement)
+    // Observe the canvas itself: it is CSS-sized to the viewport, so this
+    // also fires on height-only changes (devtools docking) where <html>'s
+    // content height would not.
+    ro.observe(canvas)
 
     // Animation loop
     let lastTime = performance.now()
@@ -141,7 +140,9 @@ export function HexBackground() {
 
       const isDark = themeRef.current === 'dark'
       const palette = isDark ? HEX_COLORS.dark : HEX_COLORS.light
-      const levels = (veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed)[isDark ? 'dark' : 'light']
+      const levels = (
+        veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed
+      )[isDark ? 'dark' : 'light']
 
       renderFrame(
         ctx,
@@ -152,8 +153,7 @@ export function HexBackground() {
         waveRef.current,
         dt,
         reducedMotionRef.current,
-        isDark,
-        levels,
+        levels
       )
 
       rafId.current = requestAnimationFrame(loop)
