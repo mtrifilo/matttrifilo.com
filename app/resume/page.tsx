@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { JOB_TITLE } from '@/lib/seo/identity'
 
 export const metadata: Metadata = {
@@ -9,10 +10,12 @@ export const metadata: Metadata = {
 }
 
 /**
- * The PDF in public/ is rendered from the Markdown résumé source (outside
- * this repo) with the phone number and personal email removed; the public
- * contact is the site address. Replace the file to update; keep the name so
- * shared links stay valid.
+ * The PDF in public/ is a redacted export of the private Markdown résumé:
+ * regenerate it with `scripts/render-resume.sh <path-to-.md>`, which strips
+ * the phone number, swaps the personal email for the site address, and
+ * prints via headless Chrome. lib/resume-pdf.test.ts asserts the published
+ * file stays clean and stays two pages. Keep the filename so shared links
+ * survive updates.
  */
 const RESUME_PDF = '/Matt-Trifilo-Resume.pdf'
 
@@ -36,13 +39,12 @@ export default function ResumePage() {
           </a>
           .
         </p>
-        <a
-          href={RESUME_PDF}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground transition-colors"
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          Download the PDF
-        </a>
+        <Button asChild variant="outline">
+          <a href={RESUME_PDF} download="Matt-Trifilo-Resume.pdf">
+            <Download aria-hidden="true" />
+            Download the PDF
+          </a>
+        </Button>
       </div>
     </div>
   )

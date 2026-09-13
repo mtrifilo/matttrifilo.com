@@ -51,13 +51,14 @@ export default function Nav() {
         </Link>
 
         {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center gap-1">
+        {/* Six links no longer fit beside the brand at md (768px); switch at lg. */}
+        <div className="hidden lg:flex items-center gap-1">
           {navLinks.map(link => (
             <Link
               key={link.href}
               href={link.href}
               className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted/50 hover:text-primary transition-colors',
+                'px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap hover:bg-muted/50 hover:text-primary transition-colors',
                 pathname === link.href && 'bg-muted/50 text-primary'
               )}
             >
@@ -72,7 +73,7 @@ export default function Nav() {
 
         {/* Mobile Menu */}
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild className="md:hidden">
+          <SheetTrigger asChild className="lg:hidden">
             <Button variant="ghost" size="icon" aria-label="Open menu">
               <Menu className="h-5 w-5" />
             </Button>
