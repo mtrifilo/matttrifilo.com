@@ -16,12 +16,12 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 
 **Manager, Product Engineering, Email Reliability · May 2025 – present**
 
-*Team and delivery*
+#### Team and delivery
 
 - Manage 5 direct reports: 3 engineers, Thryv's Postmaster for all Keap products, and an email-compliance analyst. Hired 2 in 2025 who became high performers within months; zero voluntary attrition as manager.
 - Accountable for sending, deliverability, and compliance at up to 1B emails/month at 99.9%+ uptime. Partner with Product to set priorities and business commitments against capacity, staffing, and technical feasibility.
 
-*AI enablement*
+#### AI enablement
 
 - Cut median lead time to production from 9 days to 2.3 and nearly tripled merged PRs/week (10 to 28) by leading the team's adoption of human-reviewed AI coding agents and independent deploys; open customer-defect backlog fell from 28 to 12 and review volume rose ~3x.
 - Ran the company's Claude Code pilot (late 2025); results informed the org-wide decision to adopt Claude Code and Cursor as primary AI tooling for ~50 engineers.
@@ -29,7 +29,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 - Built a team-scoped agent orchestrator (Symphony) that opens PRs for CVE tickets the moment they are created, running the team's security-ticket skill with full service context: 17 PRs across 7 services, ~80% hands-free, in month one.
 - Wrote the governance for Thryv's Claude Code plugin marketplace; the team's marketplace (16 plugins, 130 merged PRs in 8 weeks) became the company template.
 
-*Platform and operations*
+#### Platform and operations
 
 - Moved all 9 team microservices (Java/Micronaut, Python, Go) off the weekly release train onto independent, gated production deploys, finishing in 9 weeks, 4 months ahead of schedule. Any engineer can now ship to production as soon as end-to-end, contract, load, and manual readiness tests pass. Encoded the org's readiness standard in a reusable agent plugin so every service is prepared the same way.
 - Forecast monthly sending volume through 2026 for the annual MTA license renewal (quoted at +48%); matched the vendor's own reporting within ~1% and closed at my recommended tier, roughly flat year over year.

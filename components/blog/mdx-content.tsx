@@ -2,13 +2,15 @@ import { MDXRemote } from 'next-mdx-remote/rsc'
 
 type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>
 
-// `#####` and `######` both land here (see the note below), so they share
-// one definition rather than two copies that could drift apart.
+// `####` and below all render as small uppercase labels. At that depth a
+// heading marks a sub-group within a section (the résumé's "Team and
+// delivery" bullets, say) rather than a title in its own right, and one
+// shared definition keeps the three levels from drifting apart.
+const labelHeadingClass =
+  'text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2'
+
 const DeepestHeading = (props: HeadingProps) => (
-  <h6
-    className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2"
-    {...props}
-  />
+  <h6 className={labelHeadingClass} {...props} />
 )
 
 // The page title is the only <h1> on a post page, so every markdown
@@ -26,9 +28,7 @@ const components = {
   h3: (props: HeadingProps) => (
     <h4 className="text-lg font-semibold mt-4 mb-2" {...props} />
   ),
-  h4: (props: HeadingProps) => (
-    <h5 className="text-base font-semibold mt-4 mb-2" {...props} />
-  ),
+  h4: (props: HeadingProps) => <h5 className={labelHeadingClass} {...props} />,
   h5: DeepestHeading,
   h6: DeepestHeading,
   p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
@@ -51,11 +51,13 @@ const components = {
     )
   },
   ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc list-inside my-4 space-y-1" {...props} />
+    <ul className="list-disc pl-6 my-4 space-y-2.5" {...props} />
   ),
   ol: (props: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal list-inside my-4 space-y-1" {...props} />
+    <ol className="list-decimal pl-6 my-4 space-y-2.5" {...props} />
   ),
+  // Markers sit outside the text block (the default) so a wrapped bullet's
+  // continuation lines align under its first word instead of under the dot.
   li: (props: React.HTMLAttributes<HTMLLIElement>) => (
     <li className="leading-relaxed" {...props} />
   ),
