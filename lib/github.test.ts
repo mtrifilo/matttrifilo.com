@@ -61,7 +61,7 @@ describe('toProject', () => {
 describe('safeHttpUrl', () => {
   test('keeps absolute http(s) URLs and drops everything else', () => {
     expect(safeHttpUrl('https://psychichomily.com')).toBe(
-      'https://psychichomily.com/'
+      'https://psychichomily.com'
     )
     expect(safeHttpUrl(' http://example.com/x ')).toBe('http://example.com/x')
     expect(safeHttpUrl('https://x.com')).toBe('https://x.com')
