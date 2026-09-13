@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 const contactLinks = [
   {
-    href: 'mailto:hi@matttrifilo.com',
-    label: 'hi@matttrifilo.com',
+    href: 'mailto:matt.trifilo@gmail.com',
+    label: 'matt.trifilo@gmail.com',
     icon: Mail,
     description: 'Send me an email',
   },

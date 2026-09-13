@@ -9,12 +9,11 @@ const md = fs.readFileSync(
 )
 
 describe('content/resume.md (published copy)', () => {
-  test('is redacted: no phone number, no personal email, no street address', () => {
+  test('is redacted: no phone number, no street address, only the public contact address', () => {
     expect(md).not.toMatch(/\d{3}[-. ()]*\d{3}[-. ()]*\d{4}/)
     expect(md).not.toMatch(/\+1[ -]?\d/)
-    expect(md).not.toMatch(/gmail|yahoo|hotmail|outlook|icloud|proton/i)
     const addresses = [...new Set(md.match(/[\w.+-]+@[\w.-]+\.\w+/g) ?? [])]
-    expect(addresses).toEqual(['hi@matttrifilo.com'])
+    expect(addresses).toEqual(['matt.trifilo@gmail.com'])
     expect(md).not.toMatch(/\b\d{5}(-\d{4})?\b/) // ZIP
     expect(md).not.toMatch(/\b\d+ [A-Z][a-z]+ (St|Ave|Rd|Blvd|Dr|Ln|Way|Ct)\b/) // street
   })
@@ -33,10 +32,10 @@ describe('linkify', () => {
   test('links emails and the allowlisted hosts, leaves headings and existing links alone', () => {
     expect(
       linkify(
-        'hi@matttrifilo.com · linkedin.com/in/matttrifilo · matttrifilo.com'
+        'matt.trifilo@gmail.com · linkedin.com/in/matttrifilo · matttrifilo.com'
       )
     ).toBe(
-      '[hi@matttrifilo.com](mailto:hi@matttrifilo.com) · [linkedin.com/in/matttrifilo](https://linkedin.com/in/matttrifilo) · [matttrifilo.com](https://matttrifilo.com)'
+      '[matt.trifilo@gmail.com](mailto:matt.trifilo@gmail.com) · [linkedin.com/in/matttrifilo](https://linkedin.com/in/matttrifilo) · [matttrifilo.com](https://matttrifilo.com)'
     )
     expect(linkify('Psychic Homily (psychichomily.com): site')).toBe(
       'Psychic Homily ([psychichomily.com](https://psychichomily.com)): site'

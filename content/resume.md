@@ -2,7 +2,7 @@
 
 **Hands-on Engineering Manager · Email infrastructure at scale · AI-agent enablement**
 Phoenix, AZ · Open to relocation (Chicago preferred) · In-office, hybrid, or remote (US)
-hi@matttrifilo.com · linkedin.com/in/matttrifilo · github.com/mtrifilo · matttrifilo.com
+matt.trifilo@gmail.com · linkedin.com/in/matttrifilo · github.com/mtrifilo · matttrifilo.com
 
 Engineering manager for Thryv's Email Reliability team, which owns email sending end to end for all Keap products: user-facing features, compliance operations, and 24/7 on-call as an Email Service Provider sending up to 1B messages a month. Nine years on Keap products; still ships code daily. In 2026 led the team's move to AI coding agents (human review on every change) and to independent deploys. Result: merged PRs per week rose from 10 to 28 and median lead time to production fell from 9 days to 2.3.
 

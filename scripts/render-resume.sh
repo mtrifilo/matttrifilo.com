@@ -5,9 +5,9 @@
 #   scripts/render-resume.sh /path/to/matt-trifilo-resume-em.md
 #
 # The source lives outside this repo (docs/career/assets/resume) next to its
-# md2html.py. The source contains a phone number and a personal email; this
-# script strips the phone and swaps the email for the site address, refuses
-# to write anything if a phone/personal-email shape survives, renders the
+# md2html.py. The source contains a phone number; this script strips it,
+# refuses to write anything if a phone shape survives or any address other
+# than the public contact (matt.trifilo@gmail.com) is present, renders the
 # PDF, writes both artifacts only after both succeeded, and then runs the
 # tests that guard the published copies.
 #
@@ -28,18 +28,16 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 [ -x "$CHROME" ] || { echo "Chrome not found at $CHROME" >&2; exit 1; }
 
 sed -E \
-  -e 's/matt\.trifilo@gmail\.com · [0-9]{3}-[0-9]{3}-[0-9]{4} · /hi@matttrifilo.com · /' \
   -e 's/ · [0-9]{3}-[0-9]{3}-[0-9]{4}//; s/[0-9]{3}-[0-9]{3}-[0-9]{4} · //' \
-  -e 's/matt\.trifilo@gmail\.com/hi@matttrifilo.com/g' \
   "$SRC" > "$TMP/resume.md"
 
-# Guards are deliberately broader than the sed above (any separator, any
-# case, any personal-mail provider) and mirror lib/resume.test.ts.
-if grep -Eqi '[0-9]{3}[-. ()]*[0-9]{3}[-. ()]*[0-9]{4}|\+1[ -]?[0-9]|gmail|yahoo|hotmail|outlook|icloud|proton|matt\.trifilo@' "$TMP/resume.md"; then
-  echo "refusing: a phone number or personal email shape survived redaction" >&2; exit 1
+# Guards are deliberately broader than the sed above (any separator) and
+# mirror lib/resume.test.ts.
+if grep -Eqi '[0-9]{3}[-. ()]*[0-9]{3}[-. ()]*[0-9]{4}|\+1[ -]?[0-9]' "$TMP/resume.md"; then
+  echo "refusing: a phone number shape survived redaction" >&2; exit 1
 fi
-if grep -Eio '[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}' "$TMP/resume.md" | sort -u | grep -qv '^hi@matttrifilo\.com$'; then
-  echo "refusing: an email address other than hi@matttrifilo.com is present" >&2; exit 1
+if grep -Eio '[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}' "$TMP/resume.md" | sort -u | grep -qv '^matt\.trifilo@gmail\.com$'; then
+  echo "refusing: an email address other than matt.trifilo@gmail.com is present" >&2; exit 1
 fi
 
 python3 "$SRC_DIR/md2html.py" "$TMP/resume.md" "$TMP/resume.html"

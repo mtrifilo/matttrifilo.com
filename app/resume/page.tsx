@@ -14,8 +14,7 @@ export const metadata: Metadata = {
 /**
  * The PDF in public/ is a redacted export of the private Markdown résumé:
  * regenerate it with `scripts/render-resume.sh <path-to-.md>`, which strips
- * the phone number, swaps the personal email for the site address, and
- * prints via headless Chrome. lib/resume-pdf.test.ts asserts the published
+ * the phone number and prints via headless Chrome. lib/resume-pdf.test.ts asserts the published
  * file stays clean and stays two pages. Keep the filename so shared links
  * survive updates.
  */
@@ -36,7 +35,7 @@ export default function ResumePage() {
         <p className="text-muted-foreground mb-8 max-w-2xl leading-relaxed">
           Full résumé below, or download the two-page PDF. Questions?{' '}
           <a
-            href="mailto:hi@matttrifilo.com"
+            href="mailto:matt.trifilo@gmail.com"
             className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
           >
             Email me
