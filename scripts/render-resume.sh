@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regenerates public/Matt-Trifilo-Resume.pdf from the private Markdown source.
+# Regenerates public/Matt-Trifilo-Resume.pdf and content/resume.md from the
+# private Markdown source.
 #
 #   scripts/render-resume.sh /path/to/matt-trifilo-resume-em.md
 #
@@ -10,7 +11,9 @@
 set -euo pipefail
 SRC="${1:?path to the résumé .md}"
 SRC_DIR="$(cd "$(dirname "$SRC")" && pwd)"
-OUT="$(cd "$(dirname "$0")/.." && pwd)/public/Matt-Trifilo-Resume.pdf"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="$ROOT/public/Matt-Trifilo-Resume.pdf"
+MD_OUT="$ROOT/content/resume.md"
 TMP="$(mktemp -d)"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
@@ -24,8 +27,10 @@ if grep -Eq '[0-9]{3}-[0-9]{3}-[0-9]{4}|gmail' "$TMP/resume.md"; then
   echo "refusing: phone number or gmail address still present after redaction" >&2; exit 1
 fi
 
+cp "$TMP/resume.md" "$MD_OUT"
 python3 "$SRC_DIR/md2html.py" "$TMP/resume.md" "$TMP/resume.html"
 "$CHROME" --headless=new --disable-gpu --no-pdf-header-footer \
   --print-to-pdf="$OUT" "file://$TMP/resume.html" 2>/dev/null
 echo "wrote $OUT"
-echo "now run: bun test lib/resume-pdf.test.ts"
+echo "wrote $MD_OUT (rendered as HTML on /resume)"
+echo "now run: bun test lib/resume-pdf.test.ts lib/resume.test.ts"

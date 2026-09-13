@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { JOB_TITLE } from '@/lib/seo/identity'
+import { MDXContent } from '@/components/blog/mdx-content'
+import { getResumeMarkdown } from '@/lib/resume'
 
 export const metadata: Metadata = {
   title: 'Résumé',
@@ -20,6 +22,8 @@ export const metadata: Metadata = {
 const RESUME_PDF = '/Matt-Trifilo-Resume.pdf'
 
 export default function ResumePage() {
+  const markdown = getResumeMarkdown()
+
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
@@ -30,7 +34,8 @@ export default function ResumePage() {
           Résumé
         </h1>
         <p className="text-muted-foreground mb-8 max-w-2xl leading-relaxed">
-          {JOB_TITLE}. Two pages, PDF. For anything not covered there,{' '}
+          {JOB_TITLE}. The full résumé is below, or as a two-page PDF. For
+          anything not covered,{' '}
           <a
             href="mailto:hi@matttrifilo.com"
             className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
@@ -45,6 +50,11 @@ export default function ResumePage() {
             Download the PDF
           </a>
         </Button>
+
+        {/* Same Markdown the PDF is rendered from; see scripts/render-resume.sh. */}
+        <article className="mt-12 border-t border-border pt-8 text-base leading-relaxed">
+          <MDXContent source={markdown} />
+        </article>
       </div>
     </div>
   )
