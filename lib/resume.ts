@@ -7,7 +7,9 @@ const RESUME_MD = path.join(process.cwd(), 'content', 'resume.md')
  * The résumé Markdown as published: a redacted copy written by
  * scripts/render-resume.sh from the private source. Emails and known domains
  * become links here (the PDF pipeline does the same in md2html.py), so the
- * repo copy stays plain text that both outputs can share.
+ * repo copy stays plain text that both outputs can share. Heading levels
+ * carry meaning (`####` role, `#####` sub-group label); the contract is
+ * spelled out in scripts/render-resume.sh.
  */
 export function getResumeMarkdown(): string {
   return linkify(hardBreaks(fs.readFileSync(RESUME_MD, 'utf8')))

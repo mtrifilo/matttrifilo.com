@@ -10,6 +10,13 @@
 # to write anything if a phone/personal-email shape survives, renders the
 # PDF, writes both artifacts only after both succeeded, and then runs the
 # tests that guard the published copies.
+#
+# Heading contract shared by both outputs: `#` name, `##` section, `###`
+# employer, `####` role line, `#####` sub-group label within a role. The
+# private md2html.py styles h4 as a bold run-in title and h5 as a small
+# uppercase label; components/blog/mdx-content.tsx does the same on the
+# site (one level deeper after its demotion), and lib/resume-pdf.test.ts
+# asserts every heading survives into the PDF.
 set -euo pipefail
 SRC="${1:?path to the résumé .md}"
 SRC_DIR="$(cd "$(dirname "$SRC")" && pwd)"

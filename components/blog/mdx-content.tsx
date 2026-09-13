@@ -2,10 +2,15 @@ import { MDXRemote } from 'next-mdx-remote/rsc'
 
 type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>
 
-// `####` and below all render as small uppercase labels. At that depth a
-// heading marks a sub-group within a section (the résumé's "Team and
-// delivery" bullets, say) rather than a title in its own right, and one
-// shared definition keeps the three levels from drifting apart.
+// Every markdown heading is demoted one level: the page title is the only
+// <h1>, so `#` renders as <h2>, `##` as <h3>, `###` as <h4>, `####` as
+// <h5>, and `#####` and `######` both land on <h6>. Authors keep writing
+// `#` for top-level sections; the outline never skips a level.
+//
+// `#####` and `######` render as small uppercase labels rather than titles:
+// at that depth a heading marks a sub-group within a section (the résumé's
+// "Team and delivery" bullets under a role, say). One shared definition
+// keeps the two from drifting apart.
 const labelHeadingClass =
   'text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2'
 
@@ -13,11 +18,6 @@ const DeepestHeading = (props: HeadingProps) => (
   <h6 className={labelHeadingClass} {...props} />
 )
 
-// The page title is the only <h1> on a post page, so every markdown
-// heading is demoted one level: `#` renders as <h2>, `##` as <h3>, and so
-// on down to `#####` as <h6>. `######` has nowhere left to go and stays
-// <h6>, styled the same. Authors can keep writing `#` for top-level
-// sections; the outline never skips a level.
 const components = {
   h1: (props: HeadingProps) => (
     <h2 className="text-2xl font-bold mt-6 mb-4" {...props} />
@@ -28,7 +28,12 @@ const components = {
   h3: (props: HeadingProps) => (
     <h4 className="text-lg font-semibold mt-4 mb-2" {...props} />
   ),
-  h4: (props: HeadingProps) => <h5 className={labelHeadingClass} {...props} />,
+  // `####` is a run-in title such as a résumé role line: body size, bold,
+  // and a larger top margin than the labels beneath it so the gap between
+  // two roles reads wider than the gap between a role's sub-groups.
+  h4: (props: HeadingProps) => (
+    <h5 className="text-base font-semibold mt-8 mb-2" {...props} />
+  ),
   h5: DeepestHeading,
   h6: DeepestHeading,
   p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
@@ -50,14 +55,16 @@ const components = {
       />
     )
   },
+  // Preflight zeroes list padding, so `pl-6` (not the browser default) is
+  // what gives wrapped bullets a hanging indent. Markers stay outside the
+  // text block: do not add `list-inside`, or continuation lines run back
+  // under the dot.
   ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
     <ul className="list-disc pl-6 my-4 space-y-2.5" {...props} />
   ),
   ol: (props: React.HTMLAttributes<HTMLOListElement>) => (
     <ol className="list-decimal pl-6 my-4 space-y-2.5" {...props} />
   ),
-  // Markers sit outside the text block (the default) so a wrapped bullet's
-  // continuation lines align under its first word instead of under the dot.
   li: (props: React.HTMLAttributes<HTMLLIElement>) => (
     <li className="leading-relaxed" {...props} />
   ),

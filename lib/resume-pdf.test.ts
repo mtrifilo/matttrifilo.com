@@ -48,13 +48,29 @@ describe('public résumé PDF', () => {
   test('was rendered from the same content/resume.md the page renders', () => {
     // extractPdfText drops the space at each line wrap, so compare with all
     // whitespace and Markdown punctuation removed.
-    const squash = (s: string) => s.replace(/[*_`#[\]()\s·•—–-]/g, '')
+    // Heading labels are uppercased by CSS in the PDF, so compare
+    // case-insensitively as well.
+    const squash = (s: string) =>
+      s.replace(/[*_`#[\]()\s·•—–-]/g, '').toLowerCase()
     const pdfText = squash(text)
     for (const line of md.split('\n')) {
       const n = squash(line)
       if (n.length < 40) continue
       expect(pdfText).toContain(n)
     }
+  })
+
+  test('carries every heading, including the role and sub-group lines', () => {
+    // Short lines escape the length floor above, and the pipeline's h4/h5
+    // support lives in a script outside this repo, so check headings
+    // explicitly: a regenerated PDF must not drop them or print them raw.
+    const headings = md.split('\n').filter(line => /^#{1,6} /.test(line))
+    expect(headings.length).toBeGreaterThan(8)
+    const lower = text.toLowerCase()
+    for (const heading of headings) {
+      expect(lower).toContain(heading.replace(/^#+ /, '').toLowerCase())
+    }
+    expect(text).not.toMatch(/^#+ /m)
   })
 
   test('is the two pages the /resume page promises', () => {
