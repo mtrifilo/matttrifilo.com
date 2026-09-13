@@ -34,13 +34,12 @@ export default function ResumePage() {
           Résumé
         </h1>
         <p className="text-muted-foreground mb-8 max-w-2xl leading-relaxed">
-          {JOB_TITLE}. The full résumé is below, or as a two-page PDF. For
-          anything not covered,{' '}
+          Full résumé below, or download the two-page PDF. Questions?{' '}
           <a
             href="mailto:hi@matttrifilo.com"
             className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
           >
-            email me
+            Email me
           </a>
           .
         </p>
