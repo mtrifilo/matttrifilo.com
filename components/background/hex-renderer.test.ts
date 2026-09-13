@@ -108,9 +108,9 @@ describe('strokeColor', () => {
       for (let i = 0; i <= 20; i++) {
         const colorT = i / 20
         const brightness = BRIGHTNESS.veiled[theme].base + colorT * 0.1
-        expect(strokeColor(HEX_RENDER_PALETTES[theme], colorT, brightness)).toBe(
-          legacyStrokeColor(HEX_COLORS[theme], colorT, brightness)
-        )
+        expect(
+          strokeColor(HEX_RENDER_PALETTES[theme], colorT, brightness)
+        ).toBe(legacyStrokeColor(HEX_COLORS[theme], colorT, brightness))
       }
     }
   })
@@ -247,7 +247,7 @@ describe('frame scheduler', () => {
       },
       pendingFrames: () => frames.size,
       pendingTimers: () => timers.size,
-      timerDelays: () => [...timers.values()].map((t) => t.delayMs),
+      timerDelays: () => [...timers.values()].map(t => t.delayMs),
       /** Run whatever is scheduled, rAF first. */
       runNext() {
         const frame = [...frames.entries()][0]
@@ -306,7 +306,7 @@ describe('frame scheduler', () => {
     expect(h.scheduler.mode()).toBe('raf')
     expect(h.pendingTimers()).toBe(0)
     expect(h.pendingFrames()).toBe(1)
-    expect(h.cancelled.some((c) => c.startsWith('timer:'))).toBe(true)
+    expect(h.cancelled.some(c => c.startsWith('timer:'))).toBe(true)
   })
 
   test('a parked frame schedules nothing at all', () => {
@@ -362,6 +362,20 @@ describe('frame scheduler', () => {
       expect(h.pendingFrames()).toBe(0)
       expect(h.pendingTimers()).toBe(0)
     }
+  })
+
+  test('a stop() from inside a frame is honoured: nothing is rescheduled', () => {
+    let scheduler: ReturnType<typeof createHarness>['scheduler'] | null = null
+    const h = createHarness(() => {
+      scheduler?.stop()
+      return 'raf'
+    })
+    scheduler = h.scheduler
+    h.scheduler.wake()
+    h.runNext()
+    expect(h.scheduler.mode()).toBe('parked')
+    expect(h.pendingFrames()).toBe(0)
+    expect(h.pendingTimers()).toBe(0)
   })
 
   test('a long gap is capped, so a resumed loop cannot jump the wave', () => {

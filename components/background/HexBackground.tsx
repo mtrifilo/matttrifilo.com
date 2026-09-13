@@ -105,10 +105,10 @@ export function HexBackground() {
     //      purges 2D bitmaps for backgrounded tabs, and a bfcache restore
     //      or a lost-then-restored context hands back a blank canvas)
     const scheduler = createFrameScheduler({
-      requestFrame: (callback) => requestAnimationFrame(callback),
-      cancelFrame: (handle) => cancelAnimationFrame(handle),
+      requestFrame: callback => requestAnimationFrame(callback),
+      cancelFrame: handle => cancelAnimationFrame(handle),
       setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-      clearTimer: (handle) => window.clearTimeout(handle),
+      clearTimer: handle => window.clearTimeout(handle),
       now: () => performance.now(),
       drawFrame: (now, dt) => {
         if (!ctx) return 'parked'
@@ -157,6 +157,9 @@ export function HexBackground() {
       // than painting a glow where the pointer used to be.
       pointerOnCanvasRef.current = false
       mouseRef.current = { x: -1000, y: -1000 }
+      // updateWave is skipped under reduced motion, so a wave left active
+      // here would play, months late, the moment the preference turns off.
+      if (e.matches) waveRef.current.active = false
       wake()
     }
     motionQuery.addEventListener('change', onMotionChange)
@@ -171,8 +174,9 @@ export function HexBackground() {
     }
     veilQuery.addEventListener('change', onVeilChange)
 
-    // Fire entrance wave on first mount
-    if (!mountedRef.current) {
+    // Fire entrance wave on first mount (not under reduced motion: it would
+    // sit unplayed until the preference changed)
+    if (!mountedRef.current && !motionQuery.matches) {
       mountedRef.current = true
       waveRef.current = {
         active: true,
@@ -221,7 +225,6 @@ export function HexBackground() {
     document.addEventListener('pointerleave', onPointerLeave)
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pageshow', wake)
-    canvas.addEventListener('contextrestored', wake)
 
     // Rebuild the bitmap and grid, coalescing bursts of resize events.
     let resizeTimer: ReturnType<typeof setTimeout>
@@ -235,6 +238,11 @@ export function HexBackground() {
         wake()
       }, 150)
     }
+
+    // A restored 2D context comes back in its default state: the bitmap
+    // keeps its size but the dpr transform is gone, so a plain repaint would
+    // draw at 1x into the top-left corner. Re-run setup, which also wakes.
+    canvas.addEventListener('contextrestored', scheduleCanvasSetup)
 
     const ro = new ResizeObserver(scheduleCanvasSetup)
     // Observe the canvas itself: it is CSS-sized to the viewport, so this
@@ -274,7 +282,7 @@ export function HexBackground() {
       document.removeEventListener('pointerleave', onPointerLeave)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pageshow', wake)
-      canvas.removeEventListener('contextrestored', wake)
+      canvas.removeEventListener('contextrestored', scheduleCanvasSetup)
       motionQuery.removeEventListener('change', onMotionChange)
       veilQuery.removeEventListener('change', onVeilChange)
     }

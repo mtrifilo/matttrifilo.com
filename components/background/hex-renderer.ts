@@ -84,7 +84,9 @@ function strokeRgb(color: string): HexRgb {
 }
 
 /** Parse one theme's colour strings into the numeric form renderFrame wants. */
-export function createRenderPalette(palette: HexColorPalette): HexRenderPalette {
+export function createRenderPalette(
+  palette: HexColorPalette
+): HexRenderPalette {
   return {
     base: strokeRgb(palette.baseStroke),
     hover: strokeRgb(palette.hoverStroke),
@@ -212,7 +214,10 @@ export type FrameMode = 'raf' | 'slow' | 'parked'
  * shimmer, glow and wave all suppressed, every further frame would be a
  * pixel-for-pixel repeat of this one.
  */
-export function nextFrameMode(idle: boolean, reducedMotion: boolean): FrameMode {
+export function nextFrameMode(
+  idle: boolean,
+  reducedMotion: boolean
+): FrameMode {
   if (reducedMotion) return 'parked'
   return idle ? 'slow' : 'raf'
 }
@@ -259,12 +264,15 @@ type PendingFrame = { kind: 'raf' | 'slow'; handle: number } | null
  *     when drawFrame asked to slow down or park.
  *   - Switching rates cancels the old mechanism before arming the new one,
  *     so waking out of the slow cadence never leaves its timer behind.
+ *   - A stop() re-entered from inside drawFrame is honoured: the frame does
+ *     not reschedule itself on the way out.
  */
 export function createFrameScheduler(host: FrameSchedulerHost): FrameScheduler {
   let pending: PendingFrame = null
   let lastTime = host.now()
   let inFrame = false
   let wokenDuringFrame = false
+  let stoppedDuringFrame = false
 
   function schedule(kind: 'raf' | 'slow'): void {
     pending =
@@ -289,6 +297,7 @@ export function createFrameScheduler(host: FrameSchedulerHost): FrameScheduler {
   function tick(now: number): void {
     inFrame = true
     wokenDuringFrame = false
+    stoppedDuringFrame = false
     const dt = Math.min(now - lastTime, MAX_FRAME_DT_MS) / 1000
     lastTime = now
 
@@ -298,6 +307,8 @@ export function createFrameScheduler(host: FrameSchedulerHost): FrameScheduler {
     // The frame this handle stood for has now run; nothing left to cancel.
     pending = null
 
+    // A stop() from inside the frame outranks both the wake and the mode.
+    if (stoppedDuringFrame) return
     if (wokenDuringFrame) schedule('raf')
     else if (mode !== 'parked') schedule(mode)
   }
@@ -317,7 +328,10 @@ export function createFrameScheduler(host: FrameSchedulerHost): FrameScheduler {
       lastTime = host.now()
       schedule('raf')
     },
-    stop: cancelPending,
+    stop() {
+      stoppedDuringFrame = true
+      cancelPending()
+    },
     mode: () => pending?.kind ?? 'parked',
   }
 }
