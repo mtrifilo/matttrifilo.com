@@ -5,7 +5,10 @@ type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>
 // `#####` and `######` both land here (see the note below), so they share
 // one definition rather than two copies that could drift apart.
 const DeepestHeading = (props: HeadingProps) => (
-  <h6 className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2" {...props} />
+  <h6
+    className="text-sm font-semibold uppercase tracking-wide mt-4 mb-2"
+    {...props}
+  />
 )
 
 // The page title is the only <h1> on a post page, so every markdown
@@ -31,14 +34,22 @@ const components = {
   p: (props: React.HTMLAttributes<HTMLParagraphElement>) => (
     <p className="my-4 leading-relaxed" {...props} />
   ),
-  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a
-      className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
-      target={props.href?.startsWith('http') ? '_blank' : undefined}
-      rel={props.href?.startsWith('http') ? 'noopener noreferrer' : undefined}
-      {...props}
-    />
-  ),
+  a: (props: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+    // Off-site links open in a new tab; the site's own absolute URLs and
+    // relative links stay in this tab.
+    const external =
+      !!props.href &&
+      /^https?:\/\//.test(props.href) &&
+      !/^https?:\/\/(www\.)?matttrifilo\.com/.test(props.href)
+    return (
+      <a
+        className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
+        target={external ? '_blank' : undefined}
+        rel={external ? 'noopener noreferrer' : undefined}
+        {...props}
+      />
+    )
+  },
   ul: (props: React.HTMLAttributes<HTMLUListElement>) => (
     <ul className="list-disc list-inside my-4 space-y-1" {...props} />
   ),
