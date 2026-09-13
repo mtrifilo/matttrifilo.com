@@ -1,8 +1,6 @@
 /**
  * Geometry for the honeycomb that backs the social card. Kept as pure
- * string-building so it can be unit-tested without an image renderer and so
- * the card's look lives in one place, next to the site's own hex grid
- * constants (components/background/hex-renderer.ts uses the same radius).
+ * string-building so it can be unit-tested without an image renderer.
  */
 export interface HoneycombOptions {
   width: number

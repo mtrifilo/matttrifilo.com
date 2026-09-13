@@ -1,3 +1,4 @@
+import { getBlogSlugs } from '@/lib/blog'
 import { OG_ALT, OG_SIZE, renderOgCard } from '@/lib/og/card'
 
 // A post page overrides `openGraph` (title, type, url), and Next replaces
@@ -9,6 +10,13 @@ import { OG_ALT, OG_SIZE, renderOgCard } from '@/lib/og/card'
 export const alt = OG_ALT
 export const size = OG_SIZE
 export const contentType = 'image/png'
+
+// Without this the image route is rendered on demand in a function,
+// where the font files under node_modules are not guaranteed to be
+// traced. With it the cards prerender at build, like the page itself.
+export function generateStaticParams() {
+  return getBlogSlugs().map(slug => ({ slug }))
+}
 
 export default function Image() {
   return renderOgCard()

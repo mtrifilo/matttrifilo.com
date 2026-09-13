@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { JOB_TITLE } from '@/lib/seo/identity'
+import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
 import { honeycombDataUrl } from './honeycomb'
 
 /**
@@ -13,10 +13,12 @@ import { honeycombDataUrl } from './honeycomb'
 export const OG_SIZE = { width: 1200, height: 630 }
 export const OG_ALT = `Matt Trifilo, ${JOB_TITLE}`
 
-const TAGLINE = 'I build software products, and level up teams.'
 const DOMAIN = 'matttrifilo.com'
 
-// Dark-theme site tokens (app/globals.css .dark) and the hex grid's radius.
+// Dark-theme site tokens (app/globals.css .dark). HEX_RADIUS mirrors the
+// canvas grid's radius in components/background/hex-renderer.ts; it is a
+// separate literal on purpose so this build-time module never imports
+// the browser renderer.
 const BACKGROUND = '#0a0e1a'
 const FOREGROUND = '#f8fafc'
 const MUTED = '#94a3b8'
@@ -24,7 +26,8 @@ const ACCENT = '#60a5fa'
 const HEX_RADIUS = 40
 
 // Geist is the site typeface; the npm package ships static TTFs the image
-// renderer can consume (it cannot read woff2).
+// renderer can consume (it cannot read woff2). dist/fonts is not in the
+// package's exports map, so lib/og/card.test.ts asserts the files exist.
 const GEIST_DIR = join(
   process.cwd(),
   'node_modules/geist/dist/fonts/geist-sans'
