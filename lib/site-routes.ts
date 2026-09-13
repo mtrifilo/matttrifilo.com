@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next'
 
-type ChangeFrequency = NonNullable<MetadataRoute.Sitemap[number]['changeFrequency']>
+type ChangeFrequency = NonNullable<
+  MetadataRoute.Sitemap[number]['changeFrequency']
+>
 
 export interface SiteRoute {
   href: string
@@ -22,6 +24,16 @@ export interface SiteRoute {
 export const siteRoutes: readonly SiteRoute[] = [
   { href: '/', label: 'Home', changeFrequency: 'monthly', priority: 1 },
   { href: '/blog', label: 'Blog', changeFrequency: 'weekly', priority: 0.8 },
-  { href: '/books', label: 'Recommended Books', changeFrequency: 'monthly', priority: 0.6 },
-  { href: '/contact', label: 'Contact', changeFrequency: 'yearly', priority: 0.5 },
+  {
+    href: '/books',
+    label: 'Recommended Books',
+    changeFrequency: 'monthly',
+    priority: 0.6,
+  },
+  {
+    href: '/contact',
+    label: 'Contact',
+    changeFrequency: 'yearly',
+    priority: 0.5,
+  },
 ]

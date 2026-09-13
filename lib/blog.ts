@@ -32,7 +32,8 @@ function extractExcerpt(content: string, maxLength = 200): string {
   return text
 }
 
-const FRONTMATTER_DATE_LINE = /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m
+const FRONTMATTER_DATE_LINE =
+  /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m
 // Tolerates a UTF-8 BOM and trailing whitespace on the opening fence, as
 // gray-matter does, so a valid post is never rejected for either.
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---/
@@ -60,9 +61,14 @@ export function rawFrontmatterBlock(fileContents: string): string {
  * that is not a plain, real calendar date fails the build with the file
  * name rather than rendering "Invalid Date" or the wrong day.
  */
-export function parseFrontmatterDate(rawFrontmatter: string, source: string): string {
+export function parseFrontmatterDate(
+  rawFrontmatter: string,
+  source: string
+): string {
   if (rawFrontmatter.trim() === '') {
-    throw new Error(`${source}: no frontmatter block found (expected --- fences at the top)`)
+    throw new Error(
+      `${source}: no frontmatter block found (expected --- fences at the top)`
+    )
   }
   const match = FRONTMATTER_DATE_LINE.exec(rawFrontmatter)
   if (!match) {
@@ -72,8 +78,13 @@ export function parseFrontmatterDate(rawFrontmatter: string, source: string): st
   }
   const value = match[1]
   const roundTrip = new Date(`${value}T00:00:00Z`)
-  if (Number.isNaN(roundTrip.getTime()) || roundTrip.toISOString().slice(0, 10) !== value) {
-    throw new Error(`${source}: frontmatter date is not a real calendar date (got ${value})`)
+  if (
+    Number.isNaN(roundTrip.getTime()) ||
+    roundTrip.toISOString().slice(0, 10) !== value
+  ) {
+    throw new Error(
+      `${source}: frontmatter date is not a real calendar date (got ${value})`
+    )
   }
   return value
 }
@@ -129,9 +140,7 @@ export function getAllBlogPosts(): BlogPostMeta[] {
     })
   }
 
-  posts.sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  )
+  posts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
   return posts
 }

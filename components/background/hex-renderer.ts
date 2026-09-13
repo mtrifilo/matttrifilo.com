@@ -24,6 +24,9 @@ export interface HexColorPalette {
   innerHex: string
 }
 
+// Note: the alpha channel of these strokes is ignored. renderFrame overrides
+// stroke alpha with the computed per-cell brightness (see BRIGHTNESS); only
+// the RGB components are used, blended between base/hover/bright.
 export const HEX_COLORS = {
   dark: {
     baseStroke: 'rgba(96, 165, 250, 0.03)',
@@ -46,8 +49,38 @@ const MOUSE_INFLUENCE_RADIUS = 180
 const WAVE_RING_WIDTH = 50
 const WAVE_SPEED = 350 // px per second
 const SHIMMER_PERIOD = 10000 // ms
-const MAX_OPACITY_DARK = 0.15
-const MAX_OPACITY_LIGHT = 0.08
+/**
+ * Viewport width at which the reading column (48rem) has ~4rem of real
+ * gutter per side. Above it globals.css masks the column and the field uses
+ * BRIGHTNESS.veiled; below it the field is full-bleed at BRIGHTNESS.fullBleed.
+ * lib tests assert the CSS media query matches this string.
+ */
+export const VEIL_QUERY = '(min-width: 56rem)'
+
+export interface BrightnessLevels {
+  /** Stroke alpha floor for an idle cell. */
+  base: number
+  /** Stroke alpha ceiling under pointer glow / wave. */
+  max: number
+}
+
+/**
+ * Per-cell stroke alpha range. `veiled` is used on viewports wide enough to
+ * have gutters beside the reading column, where a CSS mask hides the field
+ * behind the text (treatment C, MTC-25) and the gutters can carry a real
+ * lattice. `fullBleed` is the original, fainter range used where the field
+ * sits directly under text (narrow viewports, no mask).
+ */
+export const BRIGHTNESS = {
+  veiled: {
+    light: { base: 0.05, max: 0.14 },
+    dark: { base: 0.07, max: 0.22 },
+  },
+  fullBleed: {
+    light: { base: 0.02, max: 0.08 },
+    dark: { base: 0.03, max: 0.15 },
+  },
+} as const satisfies Record<string, Record<'light' | 'dark', BrightnessLevels>>
 
 function easeOutQuad(t: number): number {
   return t * (2 - t)
@@ -58,8 +91,14 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 function lerpColor(
-  r1: number, g1: number, b1: number, a1: number,
-  r2: number, g2: number, b2: number, a2: number,
+  r1: number,
+  g1: number,
+  b1: number,
+  a1: number,
+  r2: number,
+  g2: number,
+  b2: number,
+  a2: number,
   t: number
 ): string {
   return `rgba(${Math.round(lerp(r1, r2, t))}, ${Math.round(lerp(g1, g2, t))}, ${Math.round(lerp(b1, b2, t))}, ${lerp(a1, a2, t).toFixed(3)})`
@@ -79,7 +118,8 @@ export function generateHexGrid(width: number, height: number): HexCell[] {
   for (let col = -1; col < cols; col++) {
     for (let row = -1; row < rows; row++) {
       const cx = col * horizSpacing - padding
-      const cy = row * vertSpacing + (col % 2 === 1 ? vertSpacing / 2 : 0) - padding
+      const cy =
+        row * vertSpacing + (col % 2 === 1 ? vertSpacing / 2 : 0) - padding
       cells.push({ cx, cy, col, row })
     }
   }
@@ -87,7 +127,12 @@ export function generateHexGrid(width: number, height: number): HexCell[] {
   return cells
 }
 
-function drawHexPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number) {
+function drawHexPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number
+) {
   ctx.beginPath()
   for (let i = 0; i < 6; i++) {
     const angle = (Math.PI / 3) * i
@@ -117,7 +162,7 @@ export function renderFrame(
   wave: HexWaveState,
   dt: number,
   reducedMotion: boolean,
-  isDark: boolean,
+  levels: BrightnessLevels
 ): void {
   const { width, height } = ctx.canvas
   const dpr = Math.min(window.devicePixelRatio, 2)
@@ -130,7 +175,7 @@ export function renderFrame(
     updateWave(wave, dt)
   }
 
-  const maxOpacity = isDark ? MAX_OPACITY_DARK : MAX_OPACITY_LIGHT
+  const maxOpacity = levels.max
 
   for (let i = 0; i < grid.length; i++) {
     const hex = grid[i]
@@ -138,7 +183,12 @@ export function renderFrame(
     // Ambient shimmer — slow diagonal sine wave
     let shimmer = 0
     if (!reducedMotion) {
-      shimmer = Math.sin(time / SHIMMER_PERIOD * Math.PI * 2 + (hex.cx + hex.cy) * 0.003) * 0.012 + 0.012
+      shimmer =
+        Math.sin(
+          (time / SHIMMER_PERIOD) * Math.PI * 2 + (hex.cx + hex.cy) * 0.003
+        ) *
+          0.012 +
+        0.012
     }
 
     // Mouse proximity influence
@@ -168,15 +218,19 @@ export function renderFrame(
     }
 
     // Combined brightness
-    const baseBrightness = isDark ? 0.03 : 0.02
-    let brightness = baseBrightness + shimmer + mouseInfluence * 0.12 + waveInfluence * 0.15
+    const baseBrightness = levels.base
+    let brightness =
+      baseBrightness + shimmer + mouseInfluence * 0.12 + waveInfluence * 0.15
     brightness = Math.min(brightness, maxOpacity)
 
     // Skip nearly invisible hexagons for performance
     if (brightness < 0.01) continue
 
     // Interpolation factor for color (0 = base, 1 = bright)
-    const colorT = Math.min(1, (brightness - baseBrightness) / (maxOpacity - baseBrightness))
+    const colorT = Math.min(
+      1,
+      (brightness - baseBrightness) / (maxOpacity - baseBrightness)
+    )
 
     // Scale effect
     const scale = 1 + mouseInfluence * 0.02 + waveInfluence * 0.01
@@ -197,7 +251,7 @@ export function renderFrame(
     ctx.strokeStyle = lerpColor(
       ...parseRgba(palette.baseStroke),
       ...parseRgba(colorT > 0.5 ? palette.brightStroke : palette.hoverStroke),
-      colorT,
+      colorT
     )
     // Override alpha with computed brightness
     const strokeParts = ctx.strokeStyle.match(/[\d.]+/g)

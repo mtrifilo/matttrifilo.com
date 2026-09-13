@@ -49,13 +49,15 @@ describe('siteRoutes', () => {
 describe('sitemap', () => {
   test('includes every static route', () => {
     const urls = new Set(sitemap().map(entry => entry.url))
-    for (const route of siteRoutes) expect(urls.has(toUrl(route.href))).toBe(true)
+    for (const route of siteRoutes)
+      expect(urls.has(toUrl(route.href))).toBe(true)
   })
 
   test('includes every blog post on disk', () => {
     const slugs = getBlogSlugs()
     expect(slugs.length).toBeGreaterThan(0)
     const urls = new Set(sitemap().map(entry => entry.url))
-    for (const slug of slugs) expect(urls.has(`${BASE}/blog/${slug}`)).toBe(true)
+    for (const slug of slugs)
+      expect(urls.has(`${BASE}/blog/${slug}`)).toBe(true)
   })
 })

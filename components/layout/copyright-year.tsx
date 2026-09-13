@@ -17,7 +17,15 @@ const getClientYear = () => new Date().getFullYear()
  * This must be a prop: a module-level constant in a 'use client' file is
  * evaluated again in the browser and would just be the client's year.
  */
-export function CopyrightYear({ prerenderedYear }: { prerenderedYear: number }) {
-  const year = useSyncExternalStore(subscribe, getClientYear, () => prerenderedYear)
+export function CopyrightYear({
+  prerenderedYear,
+}: {
+  prerenderedYear: number
+}) {
+  const year = useSyncExternalStore(
+    subscribe,
+    getClientYear,
+    () => prerenderedYear
+  )
   return <>{year}</>
 }
