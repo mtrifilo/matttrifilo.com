@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getAllBlogPosts } from '@/lib/blog'
+import { formatDate } from '@/lib/format-date'
 
 export const metadata = {
   title: 'Blog',
@@ -12,15 +13,6 @@ export const metadata = {
     url: '/blog',
     type: 'website',
   },
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
 }
 
 export default function BlogPage() {

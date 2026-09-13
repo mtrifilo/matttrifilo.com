@@ -1,14 +1,15 @@
 import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
+import { CopyrightYear } from './copyright-year'
 
 export default function Footer() {
-  const currentYear = new Date().getFullYear()
-
   return (
     <footer className="w-full border-t border-border/30 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <p>&copy; {currentYear} Matt Trifilo</p>
+          <p>
+            &copy; <CopyrightYear /> Matt Trifilo
+          </p>
           <nav className="flex items-center gap-4">
             <Link
               href="https://github.com/mtrifilo"

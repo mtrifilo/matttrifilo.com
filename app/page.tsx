@@ -2,15 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { getAllBlogPosts } from '@/lib/blog'
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
+import { formatDate } from '@/lib/format-date'
 
 export default function Home() {
   const recentPosts = getAllBlogPosts().slice(0, 3)

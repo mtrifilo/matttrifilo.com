@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import {
   generateHexGrid,
@@ -11,7 +11,6 @@ import {
 } from './hex-renderer'
 
 export function HexBackground() {
-  const [mounted, setMounted] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { resolvedTheme } = useTheme()
   const mouseRef = useRef({ x: -1000, y: -1000 })
@@ -29,8 +28,12 @@ export function HexBackground() {
   const reducedMotionRef = useRef(false)
   const themeRef = useRef<string | undefined>(undefined)
 
-  // Keep theme ref in sync without triggering effect re-runs
-  themeRef.current = resolvedTheme
+  // Keep theme ref in sync without re-running the animation effect.
+  // Written in an effect (not during render) so the rAF loop reads the
+  // latest theme lazily without React treating it as render state.
+  useEffect(() => {
+    themeRef.current = resolvedTheme
+  }, [resolvedTheme])
 
   const setupCanvas = useCallback((canvas: HTMLCanvasElement) => {
     const dpr = Math.min(window.devicePixelRatio, 2)
@@ -48,12 +51,9 @@ export function HexBackground() {
     return { width, height, ctx }
   }, [])
 
+  // The canvas element renders identically on server and client, so no
+  // mount gate is needed; everything window-dependent lives in this effect.
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (!mounted) return
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -142,9 +142,7 @@ export function HexBackground() {
       document.removeEventListener('pointerleave', onPointerLeave)
       motionQuery.removeEventListener('change', onMotionChange)
     }
-  }, [mounted, setupCanvas])
-
-  if (!mounted) return null
+  }, [setupCanvas])
 
   return (
     <canvas

@@ -7,10 +7,13 @@ import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 
 export function ModeToggle() {
-  const { theme, setTheme } = useTheme()
+  // `theme` is 'system' by default, so comparing it would leave a
+  // system-dark user stuck on the first click. `resolvedTheme` is what
+  // is actually on screen.
+  const { resolvedTheme, setTheme } = useTheme()
 
   const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
   }
 
   return (
