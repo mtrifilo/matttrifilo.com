@@ -87,7 +87,9 @@ describe('fetchRepo (network failures never throw)', () => {
   })
 
   const stub = (impl: () => Promise<Response>) =>
-    spyOn(globalThis, 'fetch').mockImplementation(impl)
+    spyOn(globalThis, 'fetch').mockImplementation(
+      impl as unknown as typeof fetch
+    )
 
   test('404 → missing', async () => {
     stub(async () => new Response('', { status: 404 }))

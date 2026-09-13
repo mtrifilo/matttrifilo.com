@@ -81,7 +81,9 @@ export default async function OpenSourcePage() {
                     rel="noopener noreferrer"
                     className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary transition-colors"
                   >
-                    {project.homepage.replace(/^https?:\/\//, '')}
+                    {project.homepage
+                      .replace(/^https?:\/\//, '')
+                      .replace(/\/$/, '')}
                   </a>
                 ) : null}
               </p>
