@@ -24,6 +24,9 @@ export interface HexColorPalette {
   innerHex: string
 }
 
+// Note: the alpha channel of these strokes is ignored. renderFrame overrides
+// stroke alpha with the computed per-cell brightness (see BRIGHTNESS); only
+// the RGB components are used, blended between base/hover/bright.
 export const HEX_COLORS = {
   dark: {
     baseStroke: 'rgba(96, 165, 250, 0.03)',
@@ -46,14 +49,30 @@ const MOUSE_INFLUENCE_RADIUS = 180
 const WAVE_RING_WIDTH = 50
 const WAVE_SPEED = 350 // px per second
 const SHIMMER_PERIOD = 10000 // ms
-// Brightness floor and ceiling for a cell's stroke alpha. Raised in Sep
-// 2026 (from 0.03/0.15 dark, 0.02/0.08 light) when the field moved to the
-// gutters (treatment C, MTC-25): the reading column is veiled by a CSS
-// mask, so the visible field can be a real lattice instead of texture.
-const BASE_BRIGHTNESS_DARK = 0.07
-const BASE_BRIGHTNESS_LIGHT = 0.05
-const MAX_OPACITY_DARK = 0.22
-const MAX_OPACITY_LIGHT = 0.14
+export interface BrightnessLevels {
+  /** Stroke alpha floor for an idle cell. */
+  base: number
+  /** Stroke alpha ceiling under pointer glow / wave. */
+  max: number
+}
+
+/**
+ * Per-cell stroke alpha range. `veiled` is used on viewports wide enough to
+ * have gutters beside the reading column, where a CSS mask hides the field
+ * behind the text (treatment C, MTC-25) and the gutters can carry a real
+ * lattice. `fullBleed` is the original, fainter range used where the field
+ * sits directly under text (narrow viewports, no mask).
+ */
+export const BRIGHTNESS = {
+  veiled: {
+    light: { base: 0.05, max: 0.14 },
+    dark: { base: 0.07, max: 0.22 },
+  },
+  fullBleed: {
+    light: { base: 0.02, max: 0.08 },
+    dark: { base: 0.03, max: 0.15 },
+  },
+} as const satisfies Record<string, Record<'light' | 'dark', BrightnessLevels>>
 
 function easeOutQuad(t: number): number {
   return t * (2 - t)
@@ -124,6 +143,7 @@ export function renderFrame(
   dt: number,
   reducedMotion: boolean,
   isDark: boolean,
+  levels: BrightnessLevels,
 ): void {
   const { width, height } = ctx.canvas
   const dpr = Math.min(window.devicePixelRatio, 2)
@@ -136,7 +156,7 @@ export function renderFrame(
     updateWave(wave, dt)
   }
 
-  const maxOpacity = isDark ? MAX_OPACITY_DARK : MAX_OPACITY_LIGHT
+  const maxOpacity = levels.max
 
   for (let i = 0; i < grid.length; i++) {
     const hex = grid[i]
@@ -174,7 +194,7 @@ export function renderFrame(
     }
 
     // Combined brightness
-    const baseBrightness = isDark ? BASE_BRIGHTNESS_DARK : BASE_BRIGHTNESS_LIGHT
+    const baseBrightness = levels.base
     let brightness = baseBrightness + shimmer + mouseInfluence * 0.12 + waveInfluence * 0.15
     brightness = Math.min(brightness, maxOpacity)
 

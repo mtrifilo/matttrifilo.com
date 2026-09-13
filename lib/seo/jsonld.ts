@@ -1,3 +1,5 @@
+import { JOB_TITLE } from './identity'
+
 export interface PersonSchema {
   '@context': 'https://schema.org'
   '@type': 'Person'
@@ -28,7 +30,7 @@ export function generatePersonSchema(): PersonSchema {
     '@type': 'Person',
     name: 'Matt Trifilo',
     url: 'https://matttrifilo.com',
-    jobTitle: 'Engineering Leader & Agentic Engineer',
+    jobTitle: JOB_TITLE,
     sameAs: [
       'https://github.com/mtrifilo',
       'https://linkedin.com/in/matttrifilo',

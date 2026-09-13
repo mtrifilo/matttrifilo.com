@@ -167,30 +167,43 @@
 
 /*
  * Honeycomb treatment C — gutters (MTC-25).
- * The canvas is fixed to the viewport, so 50% is the viewport centre, which
- * is where the 48rem (max-w-3xl) content column sits. The column is veiled
- * to 8% with a 2rem soft edge on each side; the gutters show the full
- * field. Below md there are no gutters, so the mask is off and the field
- * stays full-bleed at the base brightness set in hex-renderer.ts.
+ *
+ * The canvas box equals the viewport (fixed inset-0, w-full h-full; the
+ * bitmap is sized from clientWidth, never window.innerWidth), so 50% here is
+ * the same centre the max-w-3xl content column is centred on. The column is
+ * veiled to 8% with a soft edge on each side; the gutters show the full
+ * field.
+ *
+ * Breakpoint: the mask is only useful once gutters exist. At 48rem (md) the
+ * column already fills the viewport and calc(50% - 26rem) goes negative,
+ * which would clamp the whole canvas to the veil. 56rem = column (48rem)
+ * + 2 × 4rem of real gutter. HexBackground.tsx reads the same query to
+ * switch the field to its brighter range; below it the field stays
+ * full-bleed at the original faint alpha.
  */
-@media (min-width: 48rem) {
+:root {
+  --reading-column: 48rem; /* keep equal to max-w-3xl used by every page */
+  --veil-edge: 2rem;
+}
+
+@media (min-width: 56rem) {
   .hex-canvas {
     -webkit-mask-image: linear-gradient(
       to right,
       black 0,
-      black calc(50% - 26rem),
-      rgba(0, 0, 0, 0.08) calc(50% - 24rem),
-      rgba(0, 0, 0, 0.08) calc(50% + 24rem),
-      black calc(50% + 26rem),
+      black calc(50% - var(--reading-column) / 2 - var(--veil-edge)),
+      rgba(0, 0, 0, 0.08) calc(50% - var(--reading-column) / 2),
+      rgba(0, 0, 0, 0.08) calc(50% + var(--reading-column) / 2),
+      black calc(50% + var(--reading-column) / 2 + var(--veil-edge)),
       black 100%
     );
     mask-image: linear-gradient(
       to right,
       black 0,
-      black calc(50% - 26rem),
-      rgba(0, 0, 0, 0.08) calc(50% - 24rem),
-      rgba(0, 0, 0, 0.08) calc(50% + 24rem),
-      black calc(50% + 26rem),
+      black calc(50% - var(--reading-column) / 2 - var(--veil-edge)),
+      rgba(0, 0, 0, 0.08) calc(50% - var(--reading-column) / 2),
+      rgba(0, 0, 0, 0.08) calc(50% + var(--reading-column) / 2),
+      black calc(50% + var(--reading-column) / 2 + var(--veil-edge)),
       black 100%
     );
   }

@@ -9,7 +9,10 @@ export default function Footer() {
 
   return (
     <footer className="w-full border-t border-border/30 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Same width as the reading column so the footer sits inside the
+          veiled area rather than over the full-brightness gutters (light-mode
+          muted text over the lattice dipped below AA contrast). */}
+      <div className="max-w-3xl mx-auto px-4 md:px-8 py-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p>
             &copy; <CopyrightYear prerenderedYear={prerenderedYear} /> Matt

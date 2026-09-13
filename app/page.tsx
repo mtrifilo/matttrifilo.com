@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { getAllBlogPosts } from '@/lib/blog'
 import { formatDate } from '@/lib/format-date'
+import { JOB_TITLE } from '@/lib/seo/identity'
 
 export default function Home() {
   const recentPosts = getAllBlogPosts().slice(0, 3)
@@ -11,17 +12,13 @@ export default function Home() {
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
         {/* Hero */}
         <section className="mb-16 hero-glow">
-          <div>
-            <h1
-              className="font-bold mb-1"
-              style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
-            >
-              Matt Trifilo
-            </h1>
-            <p className="text-xl text-muted-foreground">
-              Engineering Leader &amp; Agentic Engineer
-            </p>
-          </div>
+          <h1
+            className="font-bold mb-1"
+            style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
+          >
+            Matt Trifilo
+          </h1>
+          <p className="text-xl text-muted-foreground">{JOB_TITLE}</p>
           <p className="text-base leading-relaxed text-foreground/90 max-w-2xl mt-6">
             I build software products, and level up teams.
           </p>

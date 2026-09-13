@@ -6,9 +6,15 @@ import {
   generateHexGrid,
   renderFrame,
   HEX_COLORS,
+  BRIGHTNESS,
   type HexCell,
   type HexWaveState,
 } from './hex-renderer'
+
+// Must match the media query on `.hex-canvas` in globals.css: the width at
+// which the reading column has ~4rem of real gutter on each side, so the
+// mask (and the brighter field) only engage where gutters exist.
+const VEIL_QUERY = '(min-width: 56rem)'
 
 export function HexBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -26,6 +32,7 @@ export function HexBackground() {
   const rafId = useRef(0)
   const mountedRef = useRef(false)
   const reducedMotionRef = useRef(false)
+  const veiledRef = useRef(false)
   const themeRef = useRef<string | undefined>(undefined)
 
   // Keep the theme in a ref so the animation effect below does not have
@@ -38,14 +45,18 @@ export function HexBackground() {
     themeRef.current = resolvedTheme
   }, [resolvedTheme])
 
+  // The canvas box is sized by CSS (fixed inset-0, w-full h-full) so it
+  // always equals the viewport, even mid-resize and regardless of scrollbar
+  // width; only the bitmap and the grid are (debounced) recomputed here.
+  // Sizing the box from window.innerWidth would leave the mask's 50%
+  // detached from the content column during a drag and offset by half a
+  // classic scrollbar.
   const setupCanvas = useCallback((canvas: HTMLCanvasElement) => {
     const dpr = Math.min(window.devicePixelRatio, 2)
-    const width = window.innerWidth
-    const height = window.innerHeight
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
     canvas.width = width * dpr
     canvas.height = height * dpr
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
     const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -68,15 +79,26 @@ export function HexBackground() {
     }
     motionQuery.addEventListener('change', onMotionChange)
 
-    let { ctx } = setupCanvas(canvas)
+    // Track whether the reading column is veiled (see globals.css) so the
+    // field uses the brighter range only where the mask is active.
+    const veilQuery = window.matchMedia(VEIL_QUERY)
+    veiledRef.current = veilQuery.matches
+    const onVeilChange = (e: MediaQueryListEvent) => {
+      veiledRef.current = e.matches
+    }
+    veilQuery.addEventListener('change', onVeilChange)
+
+    const initial = setupCanvas(canvas)
+    let ctx = initial.ctx
+    const { width, height } = initial
 
     // Fire entrance wave on first mount
     if (!mountedRef.current) {
       mountedRef.current = true
       waveRef.current = {
         active: true,
-        originX: window.innerWidth / 2,
-        originY: window.innerHeight / 2,
+        originX: width / 2,
+        originY: height / 2,
         radius: 0,
         startTime: performance.now(),
       }
@@ -119,6 +141,7 @@ export function HexBackground() {
 
       const isDark = themeRef.current === 'dark'
       const palette = isDark ? HEX_COLORS.dark : HEX_COLORS.light
+      const levels = (veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed)[isDark ? 'dark' : 'light']
 
       renderFrame(
         ctx,
@@ -130,6 +153,7 @@ export function HexBackground() {
         dt,
         reducedMotionRef.current,
         isDark,
+        levels,
       )
 
       rafId.current = requestAnimationFrame(loop)
@@ -144,13 +168,14 @@ export function HexBackground() {
       window.removeEventListener('pointermove', onPointerMove)
       document.removeEventListener('pointerleave', onPointerLeave)
       motionQuery.removeEventListener('change', onMotionChange)
+      veilQuery.removeEventListener('change', onVeilChange)
     }
   }, [setupCanvas])
 
   return (
     <canvas
       ref={canvasRef}
-      className="hex-canvas fixed inset-0 z-0 pointer-events-none"
+      className="hex-canvas fixed inset-0 z-0 h-full w-full pointer-events-none"
       aria-hidden="true"
     />
   )

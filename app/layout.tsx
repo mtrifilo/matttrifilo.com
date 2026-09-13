@@ -6,6 +6,7 @@ import { ThemeProvider, Footer } from '@/components/layout'
 import Nav from '@/app/nav'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generatePersonSchema } from '@/lib/seo/jsonld'
+import { JOB_TITLE } from '@/lib/seo/identity'
 import { HexBackground } from '@/components/background/HexBackground'
 import { Analytics } from '@vercel/analytics/react'
 
@@ -19,11 +20,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://matttrifilo.com'),
   title: {
-    default: 'Matt Trifilo | Engineering Leader & Agentic Engineer',
+    default: `Matt Trifilo | ${JOB_TITLE}`,
     template: '%s | Matt Trifilo',
   },
   description:
-    'Software engineer building for the web. Blog posts about software development, technology, and engineering.',
+    'Engineering leader and agentic engineer. Blog posts about software development, technology, and engineering.',
   openGraph: {
     type: 'website',
     locale: 'en_US',
