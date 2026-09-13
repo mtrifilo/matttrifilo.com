@@ -5,6 +5,8 @@ import path from 'path'
 // The card reads Geist's static TTFs from inside the geist package, a path
 // its exports map does not promise. A dependency bump that moves them
 // should fail here, not as an ENOENT during the Vercel build.
+// The path is repeated here rather than imported: importing card.tsx would
+// pull next/og into bun test. Keep it in step with GEIST_DIR in card.tsx.
 describe('social card fonts', () => {
   test('the Geist TTFs the renderer reads are present', () => {
     const dir = path.join(

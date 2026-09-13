@@ -18,6 +18,9 @@ export function generateStaticParams() {
   return getBlogSlugs().map(slug => ({ slug }))
 }
 
+// Unknown slugs 404 like the page does, instead of rendering on demand.
+export const dynamicParams = false
+
 export default function Image() {
   return renderOgCard()
 }
