@@ -28,9 +28,9 @@ const components = {
   h3: (props: HeadingProps) => (
     <h4 className="text-lg font-semibold mt-4 mb-2" {...props} />
   ),
-  // `####` is a run-in title such as a résumé role line: body size, bold,
-  // and a larger top margin than the labels beneath it so the gap between
-  // two roles reads wider than the gap between a role's sub-groups.
+  // `####` is a title such as a résumé role line: bold at body size, on
+  // its own line, with a larger top margin than the labels beneath it so
+  // the gap between two roles reads wider than a role's sub-group gaps.
   h4: (props: HeadingProps) => (
     <h5 className="text-base font-semibold mt-8 mb-2" {...props} />
   ),

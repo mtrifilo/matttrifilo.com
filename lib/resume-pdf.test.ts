@@ -70,7 +70,9 @@ describe('public résumé PDF', () => {
     for (const heading of headings) {
       expect(lower).toContain(heading.replace(/^#+ /, '').toLowerCase())
     }
-    expect(text).not.toMatch(/^#+ /m)
+    // Extracted text is one line per page, so a line-anchored check would
+    // never fire; the PDF text contains no `#` at all when rendering works.
+    expect(text).not.toContain('#')
   })
 
   test('is the two pages the /resume page promises', () => {

@@ -13,7 +13,7 @@
 #
 # Heading contract shared by both outputs: `#` name, `##` section, `###`
 # employer, `####` role line, `#####` sub-group label within a role. The
-# private md2html.py styles h4 as a bold run-in title and h5 as a small
+# private md2html.py styles h4 bold at body size and h5 as a small
 # uppercase label; components/blog/mdx-content.tsx does the same on the
 # site (one level deeper after its demotion), and lib/resume-pdf.test.ts
 # asserts every heading survives into the PDF.
