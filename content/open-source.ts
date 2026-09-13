@@ -9,17 +9,18 @@
  * so the copy is reviewed here rather than pulled unedited from GitHub. If
  * it is omitted, GitHub's repository description is used. Language, stars,
  * last-push date and homepage are always fetched from GitHub at build time
- * (lib/github.ts) and refresh on deploy (at most once an hour).
+ * (lib/github.ts). The page is regenerated on deploy and then at most once
+ * an hour on Vercel, so the numbers stay reasonably fresh between deploys.
  *
  * A repo that GitHub reports as missing (deleted, renamed without redirect,
  * or made private) is left off the page and logged at build time; remove or
  * fix its entry here.
  *
  * Rate limits: unauthenticated GitHub requests are limited per egress IP,
- * which Vercel builds share with other tenants. Set GITHUB_TOKEN in the
- * Vercel project's build environment (any token with public read access)
- * so metadata cannot silently drop out of a deploy. CI already passes its
- * workflow token.
+ * which Vercel shares with other tenants. Set GITHUB_TOKEN in the Vercel
+ * project's Production environment (it applies to builds and to the hourly
+ * regeneration; any token with public read access) so metadata cannot
+ * silently drop out. CI already passes its workflow token.
  */
 export interface CuratedRepo {
   owner: string

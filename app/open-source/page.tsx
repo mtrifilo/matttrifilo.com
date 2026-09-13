@@ -53,9 +53,11 @@ export default async function OpenSourcePage() {
                   {project.name}
                 </a>
               </h2>
-              <p className="mt-2 leading-relaxed text-foreground/90">
-                {project.description}
-              </p>
+              {project.description ? (
+                <p className="mt-2 leading-relaxed text-foreground/90">
+                  {project.description}
+                </p>
+              ) : null}
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 {project.language ? <span>{project.language}</span> : null}
                 {/* Hidden at zero, as GitHub's own repo cards do. */}

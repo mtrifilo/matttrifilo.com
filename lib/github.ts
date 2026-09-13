@@ -38,14 +38,17 @@ const FETCH_TIMEOUT_MS = 5000
 export const repoSlug = (r: Pick<CuratedRepo, 'owner' | 'name'>) =>
   `${r.owner}/${r.name}`
 
-/** Keep only absolute http(s) URLs; GitHub's homepage field is free text. */
+/**
+ * Keep only absolute http(s) URLs; GitHub's homepage field is free text.
+ * Returns the author's trimmed text rather than url.href so "https://x.com"
+ * is not normalised to "https://x.com/".
+ */
 export function safeHttpUrl(value: string | null | undefined): string | null {
   if (!value) return null
+  const trimmed = value.trim()
   try {
-    const url = new URL(value.trim())
-    return url.protocol === 'http:' || url.protocol === 'https:'
-      ? url.href
-      : null
+    const { protocol } = new URL(trimmed)
+    return protocol === 'http:' || protocol === 'https:' ? trimmed : null
   } catch {
     return null
   }
@@ -97,8 +100,9 @@ export function toProject(
  * dedupes within a build while guaranteeing fresh data on any later deploy.
  *
  * Failures never throw: a GitHub outage degrades the page to curated text
- * rather than breaking a deploy. They are logged so the build output shows
- * which repos were affected.
+ * rather than breaking a deploy. They are logged so the build output (or,
+ * for the hourly regeneration on Vercel, the runtime logs) shows which
+ * repos were affected.
  */
 export async function fetchRepo(repo: string): Promise<RepoFetchResult> {
   const headers: Record<string, string> = {

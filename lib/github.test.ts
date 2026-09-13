@@ -64,6 +64,7 @@ describe('safeHttpUrl', () => {
       'https://psychichomily.com/'
     )
     expect(safeHttpUrl(' http://example.com/x ')).toBe('http://example.com/x')
+    expect(safeHttpUrl('https://x.com')).toBe('https://x.com')
     expect(safeHttpUrl('psychichomily.com')).toBeNull()
     expect(safeHttpUrl('javascript:alert(1)')).toBeNull()
     expect(safeHttpUrl('')).toBeNull()
