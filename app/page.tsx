@@ -79,7 +79,7 @@ export default function Home() {
               {recentPosts.map((post, i) => (
                 <article
                   key={post.slug}
-                  className="blog-article animate-fade-in-up border-b border-border pb-6 last:border-0"
+                  className="animate-fade-in-up border-b border-border pb-6 last:border-0"
                   style={{ '--index': i } as React.CSSProperties}
                 >
                   <h3 className="text-lg font-medium leading-tight">

@@ -3,12 +3,17 @@ import { Github, Linkedin, Mail } from 'lucide-react'
 import { CopyrightYear } from './copyright-year'
 
 export default function Footer() {
+  // Server component: evaluated at build time, so this is the year that
+  // ends up in the static HTML. CopyrightYear corrects it on the client.
+  const prerenderedYear = new Date().getFullYear()
+
   return (
     <footer className="w-full border-t border-border/30 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p>
-            &copy; <CopyrightYear /> Matt Trifilo
+            &copy; <CopyrightYear prerenderedYear={prerenderedYear} /> Matt
+            Trifilo
           </p>
           <nav className="flex items-center gap-4">
             <Link

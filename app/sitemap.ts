@@ -1,18 +1,18 @@
 import type { MetadataRoute } from 'next'
 import { getBlogSlugs } from '@/lib/blog'
+import { siteRoutes } from '@/lib/site-routes'
+
+const baseUrl = 'https://matttrifilo.com'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://matttrifilo.com'
+  const staticPages: MetadataRoute.Sitemap = siteRoutes.map(route => ({
+    url: route.href === '/' ? baseUrl : `${baseUrl}${route.href}`,
+    lastModified: new Date(),
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  }))
 
-  const staticPages: MetadataRoute.Sitemap = [
-    { url: baseUrl, lastModified: new Date(), changeFrequency: 'monthly', priority: 1 },
-    { url: `${baseUrl}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
-    { url: `${baseUrl}/books`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${baseUrl}/contact`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.5 },
-  ]
-
-  const blogSlugs = getBlogSlugs()
-  const blogPages: MetadataRoute.Sitemap = blogSlugs.map(slug => ({
+  const blogPages: MetadataRoute.Sitemap = getBlogSlugs().map(slug => ({
     url: `${baseUrl}/blog/${slug}`,
     lastModified: new Date(),
     changeFrequency: 'monthly',

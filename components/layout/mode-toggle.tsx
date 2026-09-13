@@ -13,6 +13,11 @@ export function ModeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
 
   const toggleTheme = () => {
+    // Undefined until next-themes has resolved on the client; ignore a
+    // click that arrives before then rather than guessing a direction.
+    // The Sun/Moon icons are CSS-driven (dark: variants), so no mount
+    // gate is needed to avoid an icon flash.
+    if (!resolvedTheme) return
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
   }
 

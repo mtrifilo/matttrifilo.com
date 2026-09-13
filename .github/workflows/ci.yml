@@ -5,15 +5,31 @@ on:
   push:
     branches: [main]
 
+# Nothing in this job needs to write to the repo. Keep the token read-only
+# so a compromised dependency running during install/build cannot push.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          bun-version: latest
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          # Match the Bun that wrote bun.lock. Bump deliberately.
+          bun-version: 1.3.3
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
+      - run: bun test
+        env:
+          # Reproduces the timezone bug formatDate guards against.
+          TZ: America/Phoenix
       - run: bun run build

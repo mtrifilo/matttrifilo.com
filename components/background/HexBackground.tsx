@@ -28,9 +28,12 @@ export function HexBackground() {
   const reducedMotionRef = useRef(false)
   const themeRef = useRef<string | undefined>(undefined)
 
-  // Keep theme ref in sync without re-running the animation effect.
-  // Written in an effect (not during render) so the rAF loop reads the
-  // latest theme lazily without React treating it as render state.
+  // Keep the theme in a ref so the animation effect below does not have
+  // to re-run (and restart the entrance wave) on every theme change.
+  // Refs must not be written during render: under concurrent rendering a
+  // render can be discarded or replayed, which would leave the ref
+  // pointing at a commit that never happened. Writing in an effect ties
+  // it to a committed render.
   useEffect(() => {
     themeRef.current = resolvedTheme
   }, [resolvedTheme])

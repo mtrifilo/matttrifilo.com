@@ -32,7 +32,7 @@ export default function BlogPage() {
           {posts.map((post, i) => (
             <article
               key={post.slug}
-              className="blog-article animate-fade-in-up border-b border-border pb-6 mt-6 first:mt-0"
+              className="animate-fade-in-up border-b border-border pb-6 mt-6 first:mt-0"
               style={{ '--index': i } as React.CSSProperties}
             >
               <h2 className="text-xl font-semibold leading-tight">

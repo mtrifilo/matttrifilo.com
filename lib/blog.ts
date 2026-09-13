@@ -34,6 +34,17 @@ function extractExcerpt(content: string, maxLength = 200): string {
 }
 
 /**
+ * YAML parses an unquoted `date: 2026-03-01` into a JS Date (UTC midnight),
+ * while a quoted one stays a string. Everything downstream (formatDate,
+ * <time dateTime>, JSON-LD datePublished) expects the `YYYY-MM-DD` string
+ * the author wrote, so normalize here at the boundary.
+ */
+function normalizeFrontmatterDate(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value ?? '')
+}
+
+/**
  * Get a single blog post by slug
  */
 export function getBlogPost(slug: string): BlogPost | null {
@@ -47,7 +58,10 @@ export function getBlogPost(slug: string): BlogPost | null {
     const fileContents = fs.readFileSync(filePath, 'utf8')
     const { data, content } = matter(fileContents)
 
-    const frontmatter = data as BlogPostFrontmatter
+    const frontmatter: BlogPostFrontmatter = {
+      ...(data as Omit<BlogPostFrontmatter, 'date'>),
+      date: normalizeFrontmatterDate(data.date),
+    }
 
     return {
       slug,
