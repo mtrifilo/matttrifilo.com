@@ -25,6 +25,12 @@ export const siteRoutes: readonly SiteRoute[] = [
   { href: '/', label: 'Home', changeFrequency: 'monthly', priority: 1 },
   { href: '/blog', label: 'Blog', changeFrequency: 'weekly', priority: 0.8 },
   {
+    href: '/open-source',
+    label: 'Open Source',
+    changeFrequency: 'monthly',
+    priority: 0.6,
+  },
+  {
     href: '/books',
     label: 'Recommended Books',
     changeFrequency: 'monthly',
