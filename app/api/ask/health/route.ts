@@ -16,7 +16,10 @@ export async function GET() {
     const result = await generateText({
       model: getVertex()(GEMINI_MODEL),
       prompt: 'Reply with the single word: ok',
-      maxOutputTokens: 1,
+      // Gemini 3.x spends output budget on reasoning first; turn it off and
+      // leave a few tokens so a word actually comes back.
+      maxOutputTokens: 8,
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
     })
     return Response.json({
       ok: true,
