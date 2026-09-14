@@ -31,7 +31,8 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 
 ##### Platform and operations
 
-- Moved all 9 team microservices (Java/Micronaut, Python, Go) off the weekly release train onto independent, gated production deploys, finishing in 9 weeks, 4 months ahead of schedule. Any engineer can now ship to production as soon as end-to-end, contract, load, and manual readiness tests pass. Encoded the org's readiness standard in a reusable agent plugin so every service is prepared the same way.
+- Moved all 9 team microservices (Java/Micronaut, Python, Go) off the weekly release train onto independent, gated production deploys, finishing in 9 weeks, 4 months ahead of schedule. Any engineer can now ship to production as soon as end-to-end, contract, load, and manual readiness tests pass.
+- Own Email Reliability's 24/7 on-call program and take shifts in it; accountable for response, and serve as escalation lead for unacknowledged alerts. Separately, in the Engineering Manager rotation, back up the org's Incident Commander on P0/P1s. Built an on-call agent plugin (triage, mitigation, incident and runbook docs) and a weekly handoff skill for the incoming operator.
 - Forecast monthly sending volume through 2026 for the annual MTA license renewal (quoted at +48%); matched the vendor's own reporting within ~1% and closed at my recommended tier, roughly flat year over year.
 
 #### Software Engineer III / Tech Lead (player-coach), Email Reliability · Jul 2022 – May 2025
@@ -69,7 +70,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 - **AI engineering:** Claude Code, Cursor, agentic workflows and orchestration, MCP, Gemini / Vertex AI, RAG, Promptfoo evals, prompt and context engineering
 - **Languages and frameworks:** Java, Python, TypeScript, Go · Spring Boot, Micronaut, Flask, FastAPI · Vue.js, React, GraphQL
 - **Infrastructure:** Google Cloud (GKE, Cloud Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions, CircleCI, Google Cloud Operations, OpsGenie
-- **Email infrastructure:** KumoMTA, MTA operations, DKIM/SPF, IP warm-up, deliverability, compliance
+- **Email infrastructure:** MTA operations, DKIM/SPF, IP warm-up, deliverability, compliance
 
 ## Education
 
