@@ -48,7 +48,9 @@ let vertex: ReturnType<typeof createVertex> | undefined
 export function getVertex() {
   vertex ??= createVertex({
     project: env('GCP_PROJECT_ID'),
-    location: 'us-central1',
+    // Gemini 3.x is served from the global endpoint; us-central1 returned
+    // "model not found" for this project on the first preview.
+    location: 'global',
     googleAuthOptions: {
       authClient: createAuthClient(),
       projectId: env('GCP_PROJECT_ID'),
