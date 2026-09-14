@@ -11,12 +11,12 @@
 import path from 'path'
 import { loadKnowledgeBase, KNOWLEDGE_TOKEN_CEILING } from '../lib/knowledge'
 
-// Leading "./" so bun test treats it as a path rather than a name filter.
-const GUARD_TEST = `.${path.sep}${path.join(
-  'lib',
-  'knowledge',
-  'knowledge.test.ts'
-)}`
+// Leading "./" so bun test treats these as paths rather than name filters.
+const GUARD_TESTS = [
+  path.join('lib', 'knowledge', 'knowledge.test.ts'),
+  path.join('scripts', 'knowledge-denylist-check.test.ts'),
+  path.join('scripts', 'new-blog-post.test.ts'),
+].map(file => `.${path.sep}${file}`)
 
 const base = loadKnowledgeBase()
 
@@ -33,11 +33,11 @@ const headroom = KNOWLEDGE_TOKEN_CEILING - base.tokenEstimate
 const used = ((base.tokenEstimate / KNOWLEDGE_TOKEN_CEILING) * 100).toFixed(1)
 console.log(`headroom:        ~${headroom} tokens (${used}% of ceiling used)`)
 console.log(`built at:        ${base.builtAt}`)
-console.log(`\nrunning guards in ${GUARD_TEST}\n`)
+console.log(`\nrunning guards in ${GUARD_TESTS.join(' ')}\n`)
 
 // Spawned rather than imported so the guards keep running as ordinary bun
 // tests in CI, with one definition of what the knowledge base may contain.
-const guards = Bun.spawnSync(['bun', 'test', GUARD_TEST], {
+const guards = Bun.spawnSync(['bun', 'test', ...GUARD_TESTS], {
   stdout: 'inherit',
   stderr: 'inherit',
 })

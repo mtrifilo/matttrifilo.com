@@ -27,20 +27,43 @@ const base = buildKnowledgeBase()
 const built = base.text
 
 /**
- * The text with URLs removed: markdown link targets and any bare http(s)
- * URL, including the ones in the section wrapper.
+ * Characters that are invisible in an editor but split a word for any
+ * regex: soft hyphen, zero-width space/non-joiner/joiner, word joiner and
+ * a stray BOM. A soft hyphen in the middle of "runway" reads as one
+ * word to a person and to a model, and as two to /\brunway\b/.
+ */
+const INVISIBLE = /[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g
+
+/** Matt's own site: the one host whose URLs are his words, not a citation. */
+const OWN_HOST = /^https?:\/\/(?:www\.)?matttrifilo\.com(?=[/?#]|$)/i
+
+/**
+ * Unpacks an own-domain URL into the words inside it, so a phrase hidden
+ * in a path or query string is still scanned. A third-party URL is dropped
+ * instead: its slug is someone else's copy, and news URLs routinely carry
+ * guard words ("...block-layoffs-ai-mandates...") and digit runs that look
+ * like phone numbers while saying nothing about Matt.
+ */
+function unpackUrl(url: string): string {
+  if (!OWN_HOST.test(url)) return ''
+  return ` ${url.replace(/^https?:\/\//, '').replace(/[/._~?#&=+-]+/g, ' ')} `
+}
+
+/**
+ * The view the word-shaped guards run against: invisible characters
+ * removed, compatibility-normalised so look-alike glyphs cannot smuggle a
+ * word past a regex, and URLs resolved by unpackUrl above.
  *
- * Patterns that describe *prose* are checked against this view. A public
- * URL is a citation to someone else's page, and its slug and query string
- * routinely contain digit runs and words that mean nothing about Matt —
- * a news URL with "layoffs" in it, a status id that looks like a phone
- * number. Checking prose against prose keeps those from either failing the
- * build or, worse, training everyone to loosen the patterns. Guards that
- * are about leaked contact details (addresses, TODOs, amounts) still run
- * against the full text.
+ * Guards about leaked contact details and placeholders (email addresses,
+ * amounts, TODO) still run against the full built text, where nothing is
+ * removed at all.
  */
 function prose(text: string): string {
-  return text.replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, '')
+  return text
+    .normalize('NFKC')
+    .replace(INVISIBLE, '')
+    .replace(/\]\(([^)]*)\)/g, (_m, url: string) => `]${unpackUrl(url)}`)
+    .replace(/https?:\/\/\S+/g, url => unpackUrl(url))
 }
 
 /**
@@ -94,7 +117,38 @@ const FORBIDDEN_WORDS: readonly string[] = [
   'KumoMTA',
 ]
 
+/**
+ * Numbers allowed to appear in projects.md or career-timeline.md without
+ * appearing in content/resume.md, in the style of
+ * REVIEWED_PUBLIC_PHRASES: a literal token, and a comment saying where it
+ * comes from and why the résumé is not its source.
+ *
+ * Empty on purpose today — every figure in the derived files is the
+ * résumé's. Keep it that way if you can: a figure with no source on a
+ * public page is a figure nobody can check.
+ */
+const FIGURES_NOT_IN_RESUME: readonly string[] = []
+
 const PUBLIC_CONTACT = 'matt.trifilo@gmail.com'
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Whole-word, case-insensitive containment for a term that may contain
+ * regex metacharacters and may not begin or end with a word character.
+ *
+ * `\b` is defined against `\w`, so it silently does the wrong thing at a
+ * punctuated edge: `\b401(k)\b` never matches (and would throw as an
+ * unescaped pattern), and `\bC++\b` is a syntax error. Escaping the term
+ * and bounding it with `(?<![\w-])`/`(?![\w-])` instead means the boundary
+ * is "not in the middle of another word", which is what the guard means.
+ * Hyphens count as part of a word here, which is why unpackUrl splits an
+ * own-domain slug on them: "…/no-runway-left" is scanned as three words,
+ * not skipped as one.
+ */
+function containsWord(text: string, term: string): boolean {
+  return new RegExp(`(?<![\\w-])${escapeRegExp(term)}(?![\\w-])`, 'i').test(text)
+}
 
 describe('knowledge base content guards', () => {
   test('positive control: the guards are running against real text', () => {
@@ -126,14 +180,50 @@ describe('knowledge base content guards', () => {
   })
 
   test('contains none of the forbidden words', () => {
-    const hits = FORBIDDEN_WORDS.filter(word =>
-      new RegExp(`\\b${word}\\b`, 'i').test(proseText)
-    )
+    const hits = FORBIDDEN_WORDS.filter(word => containsWord(proseText, word))
     expect(hits).toEqual([])
+  })
+
+  test('the word matcher handles punctuated and metacharacter terms', () => {
+    // A term like "401(k)" or "C++" is exactly the kind a future denylist
+    // entry would use; `\b…\b` fails open on the first and throws on the
+    // second, so the guard would go quiet without anyone noticing.
+    expect(containsWord('his 401(k) is vested', '401(k)')).toBe(true)
+    expect(containsWord('they use C++ here', 'C++')).toBe(true)
+    expect(containsWord('comp band review', 'comp band')).toBe(true)
+    expect(containsWord('SALARY band', 'salary')).toBe(true)
+    // …and does not fire inside a longer word.
+    expect(containsWord('the runwayside cafe', 'runway')).toBe(false)
+    expect(containsWord('401(k)s everywhere', '401(k)')).toBe(false)
   })
 
   test('contains no TODO placeholder', () => {
     expect(built).not.toMatch(/\bTODO\b/)
+    expect(prose(built)).not.toMatch(/\bTODO\b/)
+  })
+
+  test('the prose view unpacks own URLs and drops third-party ones', () => {
+    // Words hidden in a matttrifilo.com path must still be scanned; a
+    // citation to someone else's page must not be.
+    const own = prose('see [post](https://matttrifilo.com/blog/my-severance)')
+    expect(containsWord(own, 'severance')).toBe(true)
+    const theirs = prose('see [news](https://example.com/block-layoffs-2026)')
+    expect(containsWord(theirs, 'layoffs')).toBe(false)
+    // …and an invisible character in the middle of a word does not hide it.
+    expect(containsWord(prose('sal\u200Bary band'), 'salary')).toBe(true)
+    expect(containsWord(prose('\uFF53alary band'), 'salary')).toBe(true)
+  })
+
+  test('contains no invisible characters that would defeat the guards', () => {
+    // A soft hyphen or zero-width space inside a guard word is invisible to
+    // a reader and to the model, and splits the word for every regex above.
+    // prose() strips them before matching; this asserts they are not in the
+    // published text at all, so the stripping is a backstop and not the
+    // only thing standing between a hidden word and the prompt.
+    const found = [...new Set(built.match(INVISIBLE) ?? [])].map(c =>
+      `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
+    )
+    expect(found).toEqual([])
   })
 
   test('drops the unanswered FAQ questions entirely', () => {
@@ -219,6 +309,27 @@ describe('knowledge base structure', () => {
   })
 })
 
+/**
+ * What to do when a post has no knowledge twin. scripts/new-blog-post.ts
+ * writes both files, so this only fires for a post added by hand — and
+ * then the fix is a copy-paste rather than a hunt through the loader.
+ */
+function missingTwinMessage(slug: string): string {
+  return [
+    `content/blog/${slug}.md has no content/knowledge/blog-${slug}.md.`,
+    'Create it with this frontmatter, then paste the post body below it',
+    'with the post\'s own frontmatter removed:',
+    '',
+    '---',
+    `id: 'blog-${slug}'`,
+    "title: '<the post title, on one line>'",
+    `url: 'https://matttrifilo.com/blog/${slug}'`,
+    "source: 'blog'",
+    "updated: '<the post date, YYYY-MM-DD>'",
+    '---',
+  ].join('\n')
+}
+
 describe('knowledge base stays in sync with its public sources', () => {
   const sectionText = (id: string) => {
     const section = base.sections.find(s => s.id === id)
@@ -248,17 +359,42 @@ describe('knowledge base stays in sync with its public sources', () => {
     for (const slug of slugs) {
       const post = fs.readFileSync(path.join(blogDir, `${slug}.md`), 'utf8')
       const body = post.replace(
-        /^﻿?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n/,
+        /^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n/,
         ''
       )
       const section = base.sections.find(s => s.id === `blog-${slug}`)
-      expect(section, `content/blog/${slug}.md has no knowledge file`).toBeDefined()
+      expect(section, missingTwinMessage(slug)).toBeDefined()
       expect(section!.source).toBe('blog')
       expect(section!.url).toBe(`https://matttrifilo.com/blog/${slug}`)
       expect(section!.text).toBe(body.trim())
       // Frontmatter stripped: the post's own YAML must not be in the text.
       expect(section!.text).not.toContain('description:')
     }
+  })
+
+  test('every figure in the derived files comes from the résumé', () => {
+    // projects.md and career-timeline.md restate the résumé in Matt's
+    // third person. They repeat around twenty of its numbers, and a
+    // regeneration of content/resume.md would otherwise leave stale
+    // figures sitting next to fresh ones with a green suite.
+    const published = fs.readFileSync(
+      path.join(process.cwd(), 'content', 'resume.md'),
+      'utf8'
+    )
+    // Trailing sentence punctuation is not part of a figure: "late 2025,"
+    // and "Cyber Monday 2025." are both the number 2025.
+    const figures = (text: string) =>
+      (text.match(/\d[\d.,]*[%MKx+]?/g) ?? []).map(f => f.replace(/[.,]+$/, ''))
+    const fromResume = new Set(figures(published))
+    const stale: string[] = []
+    for (const id of ['projects', 'career-timeline']) {
+      for (const figure of figures(sectionText(id))) {
+        if (fromResume.has(figure)) continue
+        if (FIGURES_NOT_IN_RESUME.includes(figure)) continue
+        stale.push(`${id}: ${figure}`)
+      }
+    }
+    expect(stale).toEqual([])
   })
 
   test('every curated open-source project is described', () => {
@@ -321,6 +457,54 @@ describe('knowledge base build', () => {
 
   test('refuses a section it does not know where to order', () => {
     expect(() => buildFixture({ name: 'talks.md' })).toThrow(/unknown section/)
+  })
+
+  test('answering one FAQ question emits only the answer', () => {
+    // The state faq.md reaches the first time Matt writes something: one
+    // answer, seven placeholders, and authoring notes in the file. The
+    // section must carry the answer and nothing about the build process.
+    const answered = buildFixture({
+      name: 'faq.md',
+      source: 'faq',
+      body: [
+        '# FAQ',
+        '',
+        'Matt writes these answers himself.',
+        '',
+        '<!--',
+        'Replace the TODO (Matt) line under a question to publish it.',
+        '-->',
+        '',
+        "## What does Matt's team own?",
+        '',
+        'Email sending end to end for all Keap products.',
+        '',
+        '## How does he use AI coding agents?',
+        '',
+        'TODO (Matt)',
+      ].join('\n'),
+    })
+
+    const faq = answered.sections.find(s => s.id === 'faq')
+    expect(faq).toBeDefined()
+    expect(faq!.text).toContain('Email sending end to end')
+    expect(faq!.text).toContain("## What does Matt's team own?")
+    expect(faq!.text).toContain('Matt writes these answers himself.')
+    // No placeholder, no dropped question, no authoring prose.
+    expect(faq!.text).not.toMatch(/\bTODO\b/)
+    expect(faq!.text).not.toContain('How does he use AI coding agents?')
+    expect(faq!.text).not.toContain('Replace the')
+    expect(answered.text).not.toMatch(/\bTODO\b/)
+    expect(answered.text).not.toContain('<!--')
+  })
+
+  test('drops a section whose intro is still a placeholder', () => {
+    // An intro is no more publishable than a question while it says TODO,
+    // and a knowledge base with nothing left in it fails loudly rather
+    // than handing the model an empty prompt.
+    expect(() =>
+      buildFixture({ name: 'projects.md', body: 'TODO (Matt)' })
+    ).toThrow(/nothing to read/)
   })
 })
 

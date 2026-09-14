@@ -189,6 +189,32 @@ function isRealDate(value: string): boolean {
 
 const trimEnd = (text: string) => text.replace(/\s+$/, '')
 
+/**
+ * Removes HTML comments before anything else looks at the body.
+ *
+ * A knowledge file has two audiences: the model, and whoever is editing
+ * the file. Notes for the editor — "replace the TODO line below", "keep
+ * this in Matt's voice" — are instructions about the authoring process,
+ * and sending them to the model is both noise and a way for stray `TODO`
+ * text to reach the prompt. Anything inside `<!-- -->` is for the editor
+ * and never leaves the repo. The denylist check still greps the raw file,
+ * so a comment is not a place to hide something private.
+ */
+function stripComments(body: string): string {
+  return body.replace(/<!--[\s\S]*?-->[ \t]*\r?\n?/g, '')
+}
+
+/**
+ * True when a body is something Matt actually wrote, rather than empty or
+ * still a `TODO` placeholder. Applied to the lead-in text as well as to
+ * each `##` block: a file's intro is no more publishable than its
+ * questions while it still says TODO.
+ */
+function isAnswered(body: string): boolean {
+  const trimmed = body.trim()
+  return trimmed !== '' && !UNANSWERED.test(trimmed)
+}
+
 /** Everything before the first `##` heading, then one entry per heading. */
 function splitBlocks(body: string): { intro: string; blocks: Block[] } {
   const lines = body.split(/\r?\n/)
@@ -232,12 +258,10 @@ function readKnowledgeFile(
     )
   }
   const frontmatter = parseFrontmatter(match[1], source)
-  const body = contents.slice(match[0].length)
+  const body = stripComments(contents.slice(match[0].length))
 
   const { intro, blocks } = splitBlocks(body)
-  const answered = blocks.filter(
-    block => block.body.trim() !== '' && !UNANSWERED.test(block.body.trim())
-  )
+  const answered = blocks.filter(block => isAnswered(block.body))
   if (blocks.length > 0 && answered.length === 0) return null
 
   // Each surviving block keeps the spacing it was written with; only the
@@ -245,7 +269,7 @@ function readKnowledgeFile(
   // résumé and blog sections still read byte for byte like the public
   // pages they were copied from.
   const parts = [
-    intro,
+    isAnswered(intro) ? intro : '',
     ...answered.map(block => `${block.heading}\n${trimEnd(block.body)}`),
   ]
   const text = parts.filter(part => part !== '').join('\n\n')
@@ -336,6 +360,12 @@ export function buildKnowledgeBase(
       path.join('content', 'knowledge', name)
     )
     if (file) files.push(file)
+  }
+
+  if (files.length === 0) {
+    throw new Error(
+      `${dir}: every knowledge file is empty or still a TODO; the assistant would have nothing to read`
+    )
   }
 
   const seen = new Set<string>()

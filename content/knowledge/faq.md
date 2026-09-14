@@ -11,10 +11,20 @@ updated: '2026-09-14'
 Matt writes these answers himself, in his own words. They are the questions
 hiring managers and engineering leaders ask him most often.
 
-Every question below is a placeholder until Matt fills it in. The knowledge
-base build drops any question whose answer still reads `TODO`, so an
-unanswered question never reaches the model — replace the `TODO (Matt)` line
-with a real answer to publish one.
+<!--
+Notes for whoever edits this file. lib/knowledge/build.ts strips HTML
+comments, so nothing in here reaches the model — keep authoring process
+talk inside these fences and out of the prose above.
+
+Every question below is a placeholder. The build drops any question whose
+body still reads TODO, and drops this whole section while none of them are
+answered, so a placeholder never reaches the model. To publish an answer,
+replace the "TODO (Matt)" line under a question with the answer itself.
+
+Questions are Matt's own voice; the derived files (projects.md,
+career-timeline.md) are third person about Matt. Job-search topics are out
+of scope here.
+-->
 
 ## What does Matt's team own?
 

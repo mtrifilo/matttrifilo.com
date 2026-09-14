@@ -9,7 +9,15 @@
 # people, projects, vendors and topics that must never reach the model is a
 # map of exactly what to look for. It is one term per line; blank lines and
 # lines starting with # are ignored. Matching is case-insensitive and
-# whole-word, so "keap" does not fire on "keapish".
+# whole-word.
+#
+# Each file is flattened to a single whitespace-normalised line before
+# matching. The knowledge files are hard-wrapped at about 76 columns, so a
+# two-word term lands astride a line break often enough that line-by-line
+# grep would miss it silently — "Project\nNimbus" is invisible to grep and
+# obvious to a reader and to a model. Flattening costs nothing and removes
+# the whole class of miss. scripts/knowledge-denylist-check.test.ts pins
+# that behaviour with a wrapped fixture.
 #
 # Never commit the denylist. .gitignore blocks the filename, and the file
 # belongs in ~/docs, not here.
@@ -35,13 +43,14 @@
 # Bypass a single commit with `git commit --no-verify` when a term is a
 # false positive; fix the denylist rather than making a habit of it.
 #
-# Override the denylist path for a dry run:
+# Two environment overrides, both for the self-test and for a dry run:
 #
-#   KNOWLEDGE_DENYLIST=/tmp/terms.txt scripts/knowledge-denylist-check.sh
+#   KNOWLEDGE_DENYLIST=/tmp/terms.txt KNOWLEDGE_DIR=/tmp/fixture \
+#     scripts/knowledge-denylist-check.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-KNOWLEDGE_DIR="$ROOT/content/knowledge"
+KNOWLEDGE_DIR="${KNOWLEDGE_DIR:-$ROOT/content/knowledge}"
 DENYLIST="${KNOWLEDGE_DENYLIST:-$HOME/docs/career/.chatbot-denylist}"
 
 if [ ! -f "$DENYLIST" ]; then
@@ -56,27 +65,38 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 1
 fi
 
-hits=0
+# Read the terms once, so each file is flattened once rather than per term.
+terms=()
 while IFS= read -r term || [ -n "$term" ]; do
-  # Trim surrounding whitespace, then skip blanks and comments.
   term="${term#"${term%%[![:space:]]*}"}"
   term="${term%"${term##*[![:space:]]}"}"
   case "$term" in '' | '#'*) continue ;; esac
-
-  if matches=$(grep -F -i -w -n -H -e "$term" "${files[@]}"); then
-    hits=1
-    # Print the file and line, never the matched text: the terminal
-    # scrollback and any CI log are less private than the denylist.
-    echo "$matches" | cut -d: -f1,2 | while IFS= read -r where; do
-      echo "knowledge denylist: hit in $where" >&2
-    done
-  fi
+  terms+=("$term")
 done <"$DENYLIST"
 
-if [ "$hits" -ne 0 ]; then
-  echo "knowledge denylist: a denied term is in content/knowledge; remove it before committing" >&2
+if [ ${#terms[@]} -eq 0 ]; then
+  echo "knowledge denylist: $DENYLIST has no terms" >&2
   exit 1
 fi
 
-echo "knowledge denylist: clean ($(basename "$DENYLIST") checked against ${#files[@]} files)"
+hits=0
+for file in "${files[@]}"; do
+  # One line, single-spaced: line breaks inside a multi-word term vanish.
+  flat="$(tr '[:space:]' ' ' <"$file" | tr -s ' ')"
+  for term in "${terms[@]}"; do
+    if printf '%s' "$flat" | grep -F -i -w -q -e "$term"; then
+      hits=1
+      # The file, never the term and never the surrounding text: terminal
+      # scrollback and CI logs are both less private than the denylist.
+      echo "knowledge denylist: hit in ${file#"$ROOT/"}" >&2
+    fi
+  done
+done
+
+if [ "$hits" -ne 0 ]; then
+  echo "knowledge denylist: a denied term is in the knowledge base; remove it before committing" >&2
+  exit 1
+fi
+
+echo "knowledge denylist: clean (${#terms[@]} terms against ${#files[@]} files)"
 exit 0
