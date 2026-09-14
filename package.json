@@ -11,10 +11,14 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@ai-sdk/google-vertex": "^5.0.81",
     "@vercel/analytics": "^1.6.1",
+    "@vercel/oidc": "^3.8.7",
+    "ai": "^7.0.99",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "geist": "^1.7.0",
+    "google-auth-library": "^10.6.2",
     "gray-matter": "^4.0.3",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
