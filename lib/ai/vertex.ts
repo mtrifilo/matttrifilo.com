@@ -1,6 +1,7 @@
 import { createVertex } from '@ai-sdk/google-vertex'
 import { getVercelOidcToken } from '@vercel/oidc'
 import { ExternalAccountClient } from 'google-auth-library'
+import { readEnv, type EnvSource } from '@/lib/env'
 
 /**
  * Vertex AI access from Vercel with no service-account key (MTC-30).
@@ -13,16 +14,6 @@ import { ExternalAccountClient } from 'google-auth-library'
  * variables are set on the Vercel project; `vercel env pull` provides them
  * locally, and @vercel/oidc refreshes the pulled VERCEL_OIDC_TOKEN itself.
  */
-
-/** Configuration values: process.env in production, a plain object in tests. */
-export type EnvSource = Record<string, string | undefined>
-
-/** Read a required variable; an empty value counts as missing. */
-export function readEnv(name: string, source: EnvSource = process.env): string {
-  const value = source[name]
-  if (!value) throw new Error(`${name} is not set; run \`vercel env pull\``)
-  return value
-}
 
 /** The pool provider that vouches for the deployment's identity. */
 export interface WorkloadIdentityProvider {

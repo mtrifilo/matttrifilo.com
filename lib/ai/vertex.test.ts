@@ -3,7 +3,6 @@ import {
   DEFAULT_GEMINI_MODEL,
   geminiModel,
   oidcAudience,
-  readEnv,
   stsAudience,
 } from './vertex'
 
@@ -19,20 +18,6 @@ describe('workload identity audiences', () => {
       '//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/vercel/providers/vercel'
     )
     expect(oidcAudience(provider)).toBe(`https:${stsAudience(provider)}`)
-  })
-})
-
-describe('readEnv', () => {
-  test('returns the value when set', () => {
-    expect(readEnv('X', { X: 'value' })).toBe('value')
-  })
-  test('treats missing and empty values the same, naming the variable', () => {
-    expect(() => readEnv('GCP_PROJECT_ID', {})).toThrow(
-      /GCP_PROJECT_ID is not set/
-    )
-    expect(() => readEnv('GCP_PROJECT_ID', { GCP_PROJECT_ID: '' })).toThrow(
-      /is not set/
-    )
   })
 })
 
