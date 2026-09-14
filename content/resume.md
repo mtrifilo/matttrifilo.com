@@ -32,6 +32,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 ##### Platform and operations
 
 - Moved all 9 team microservices (Java/Micronaut, Python, Go) off the weekly release train onto independent, gated production deploys, finishing in 9 weeks, 4 months ahead of schedule. Any engineer can now ship to production as soon as end-to-end, contract, load, and manual readiness tests pass. Encoded the org's readiness standard in a reusable agent plugin so every service is prepared the same way.
+- Own the team's 24/7 on-call program and take rotations myself. Built an on-call agent plugin that triages and mitigates alerts and writes the incident and runbook docs, plus a weekly handoff skill that briefs the incoming operator on last week's incidents and the risks ahead.
 - Forecast monthly sending volume through 2026 for the annual MTA license renewal (quoted at +48%); matched the vendor's own reporting within ~1% and closed at my recommended tier, roughly flat year over year.
 
 #### Software Engineer III / Tech Lead (player-coach), Email Reliability · Jul 2022 – May 2025
