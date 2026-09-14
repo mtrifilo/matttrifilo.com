@@ -394,6 +394,24 @@ describe('logging', () => {
     expect(loggedText()).toContain('"stage":"config"')
   })
 
+  test('a corpus that only fits without the policy is still a config fault, not a 400', async () => {
+    // The budget check charges the system prompt too, so a corpus a few
+    // tokens under the cap would otherwise blame every visitor for it.
+    const handler = createChatHandler({
+      loadKnowledgeBase: () => ({
+        ...kb,
+        tokenEstimate: CHAT_MAX_INPUT_TOKENS - 10,
+      }),
+      model: () => streamingModel(),
+      env: {},
+    })
+    const response = await handler(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    expect(response.status).toBe(502)
+    expect((await response.json()).error.code).toBe('unavailable')
+  })
+
   test('no message text reaches the console', async () => {
     const response = await handlerWith(streamingModel())(
       post({
@@ -463,43 +481,28 @@ describe('logging', () => {
 })
 
 describe('cachedInputTokens', () => {
-  const cached = (n: number) => ({
-    usageMetadata: { cachedContentTokenCount: n },
-  })
-
-  test('prefers the AI SDK usage mapping', () => {
+  test('reads the AI SDK usage mapping', () => {
     expect(
-      cachedInputTokens(
-        {
-          inputTokenDetails: {
-            noCacheTokens: 1,
-            cacheReadTokens: 7,
-            cacheWriteTokens: 0,
-          },
+      cachedInputTokens({
+        inputTokenDetails: {
+          noCacheTokens: 1,
+          cacheReadTokens: 7,
+          cacheWriteTokens: 0,
         },
-        { googleVertex: cached(99) }
-      )
+      })
     ).toBe(7)
   })
 
-  test('falls back to the key the Vertex provider actually uses', () => {
-    expect(cachedInputTokens(undefined, { googleVertex: cached(99) })).toBe(99)
-    expect(cachedInputTokens(undefined, { vertex: cached(88) })).toBe(88)
-    // Kept last so the function still works against the direct Gemini API.
-    expect(cachedInputTokens(undefined, { google: cached(77) })).toBe(77)
-  })
-
-  test('prefers googleVertex when the provider sends both of its keys', () => {
+  test('is zero when usage never arrived or reports no cache read', () => {
+    expect(cachedInputTokens(undefined)).toBe(0)
     expect(
-      cachedInputTokens(undefined, {
-        googleVertex: cached(99),
-        vertex: cached(1),
+      cachedInputTokens({
+        inputTokenDetails: {
+          noCacheTokens: 5,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
       })
-    ).toBe(99)
-  })
-
-  test('is zero when neither source reports a cache read', () => {
-    expect(cachedInputTokens(undefined, undefined)).toBe(0)
-    expect(cachedInputTokens(undefined, { googleVertex: {} })).toBe(0)
+    ).toBe(0)
   })
 })

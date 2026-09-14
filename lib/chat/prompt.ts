@@ -139,11 +139,28 @@ function visitorMessage(history: ChatTurn[], userMessage: string): string {
 
   const transcript = history
     .map(
-      turn => `${turn.role === 'user' ? 'Visitor' : 'Assistant'}: ${turn.text}`
+      turn =>
+        `${turn.role === 'user' ? 'Visitor' : 'Assistant'}: ${neutralise(turn.text)}`
     )
     .join('\n')
 
   return `${TRANSCRIPT_HEADING}\n${transcript}\n\n${CURRENT_QUESTION_HEADING}\n${userMessage}`
+}
+
+/**
+ * Replayed text cannot be allowed to impersonate the frame around it: a turn
+ * that contains the transcript or question heading, or starts a line with a
+ * speaker label, is rewritten so the markers no longer match. The policy
+ * already treats every line in the block as untrusted; this keeps the block's
+ * boundaries mechanical as well.
+ */
+export function neutralise(text: string): string {
+  return text
+    .split(TRANSCRIPT_HEADING)
+    .join('[previous exchange]')
+    .split(CURRENT_QUESTION_HEADING)
+    .join('[current question]')
+    .replace(/^(\s*)(Visitor|Assistant):/gim, '$1$2 -')
 }
 
 /**

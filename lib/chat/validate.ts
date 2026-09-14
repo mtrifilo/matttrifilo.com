@@ -150,9 +150,9 @@ export function validateChatRequest({
   const questions = turns.filter(turn => turn.role === 'user').length
   if (questions > CHAT_MAX_TURNS) return reject('too_many_turns')
 
-  const overlong = turns.some(
-    turn => turn.role === 'user' && turn.text.length > CHAT_MAX_MESSAGE_CHARS
-  )
+  // Every replayed turn is client-authored, the assistant ones included, so
+  // the cap applies to all of them, not just the visitor's questions.
+  const overlong = turns.some(turn => turn.text.length > CHAT_MAX_MESSAGE_CHARS)
   if (overlong) return reject('message_too_long')
 
   const conversationTokens = turns.reduce(

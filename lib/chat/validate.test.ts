@@ -130,6 +130,18 @@ describe('rejecting a request', () => {
     expect(codeOf(result)).toBe('message_too_long')
   })
 
+  test('a replayed assistant turn over the character limit is refused too', () => {
+    // Assistant turns are client-authored as well, so they get the same cap.
+    const result = validate(
+      body(
+        said('user', 'hi'),
+        said('assistant', 'x'.repeat(CHAT_MAX_MESSAGE_CHARS + 1)),
+        said('user', 'short')
+      )
+    )
+    expect(codeOf(result)).toBe('message_too_long')
+  })
+
   test('a messages array longer than a whole conversation, before it is walked', () => {
     const padded = Array.from({ length: CHAT_MAX_MESSAGES + 1 }, () =>
       said('assistant', 'ok')

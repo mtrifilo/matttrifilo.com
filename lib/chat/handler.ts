@@ -4,18 +4,18 @@ import {
   toUIMessageStream,
   type LanguageModel,
   type LanguageModelUsage,
-  type ProviderMetadata,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
 import type { EnvSource } from '@/lib/env'
 import type { KnowledgeBase } from '@/lib/knowledge'
-import { buildMessages } from './prompt'
+import { SYSTEM_PROMPT, buildMessages } from './prompt'
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_OUTPUT_TOKENS,
   CHAT_TEMPERATURE,
   chatErrorBody,
+  estimateTokens,
   isChatDisabled,
   validateChatRequest,
 } from './validate'
@@ -72,7 +72,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       // request would fail the budget check below and blame the visitor for a
       // deployment fault. MTC-29 caps the corpus at build time; this is the
       // serving-side backstop, and it is our problem, not theirs.
-      if (kb.tokenEstimate >= CHAT_MAX_INPUT_TOKENS) {
+      if (
+        kb.tokenEstimate + estimateTokens(SYSTEM_PROMPT) >=
+        CHAT_MAX_INPUT_TOKENS
+      ) {
         console.error('[chat]', {
           stage: 'config',
           error: 'knowledge-base-over-input-budget',
@@ -115,21 +118,21 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // marker below is how a too-small budget shows up in the logs.
         reasoning: 'none',
         maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
-        onEnd({ usage, finishReason, finalStep }) {
+        onEnd({ usage, finishReason }) {
           logCompletion({
             usage,
             finishReason,
-            providerMetadata: finalStep.providerMetadata,
             ms: now() - started,
           })
         },
-        onAbort({ steps }) {
-          logCompletion({
-            usage: sumUsage(steps),
+        onAbort() {
+          // No step has finished by the time a stream is cancelled, so no
+          // usage exists to report: the SDK only records a step on
+          // finish-step. Log the fact and the duration, nothing invented.
+          console.info('[chat]', {
             finishReason: 'abort',
-            providerMetadata: steps.at(-1)?.providerMetadata,
-            ms: now() - started,
             aborted: true,
+            ms: now() - started,
           })
         },
       })
@@ -169,87 +172,30 @@ function rejectionResponse(code: 'disabled' | 'invalid'): Response {
   return errorResponse(code)
 }
 
-/** Raw Gemini usage, as the provider nests it under its metadata key. */
-interface GoogleUsageMetadata {
-  usageMetadata?: { cachedContentTokenCount?: number | null }
-}
-
 /**
- * Cached input tokens for this call.
- *
- * `usage.inputTokenDetails.cacheReadTokens` is the normal source and is
- * already populated from Gemini's `cachedContentTokenCount`. The raw metadata
- * is only a fallback for a usage object that never arrived — an aborted run,
- * say. Note the metadata key: a Vertex-backed model has provider id
- * `google.vertex.chat`, and the SDK keys its metadata `googleVertex` and
- * `vertex` for those, never `google`. `google` is kept last so the same
- * function still works if this ever runs against the direct Gemini API.
+ * Cached input tokens for this call, from the AI SDK's usage mapping, which
+ * the Google provider fills from Gemini's `cachedContentTokenCount`. A
+ * missing mapping reads as zero; there is no second source worth consulting.
  */
 export function cachedInputTokens(
-  usage: Pick<LanguageModelUsage, 'inputTokenDetails'> | undefined,
-  providerMetadata: ProviderMetadata | undefined
+  usage: Pick<LanguageModelUsage, 'inputTokenDetails'> | undefined
 ): number {
-  const mapped = usage?.inputTokenDetails?.cacheReadTokens
-  if (typeof mapped === 'number') return mapped
-
-  const raw = (providerMetadata?.googleVertex ??
-    providerMetadata?.vertex ??
-    providerMetadata?.google) as GoogleUsageMetadata | undefined
-  return raw?.usageMetadata?.cachedContentTokenCount ?? 0
-}
-
-/**
- * Combined usage across whatever steps completed before an abort. A visitor
- * who closes the tab mid-answer has still been billed for the tokens spent so
- * far, so they are worth the same log line as a completed request.
- */
-function sumUsage(
-  steps: readonly { usage: LanguageModelUsage }[]
-): LanguageModelUsage {
-  const total = steps.reduce(
-    (sum, step) => ({
-      input: sum.input + (step.usage.inputTokens ?? 0),
-      output: sum.output + (step.usage.outputTokens ?? 0),
-      reasoning:
-        sum.reasoning + (step.usage.outputTokenDetails?.reasoningTokens ?? 0),
-      cacheRead:
-        sum.cacheRead + (step.usage.inputTokenDetails?.cacheReadTokens ?? 0),
-    }),
-    { input: 0, output: 0, reasoning: 0, cacheRead: 0 }
-  )
-  return {
-    inputTokens: total.input,
-    inputTokenDetails: {
-      noCacheTokens: total.input - total.cacheRead,
-      cacheReadTokens: total.cacheRead,
-      cacheWriteTokens: undefined,
-    },
-    outputTokens: total.output,
-    outputTokenDetails: {
-      textTokens: total.output - total.reasoning,
-      reasoningTokens: total.reasoning,
-    },
-    totalTokens: total.input + total.output,
-  }
+  return usage?.inputTokenDetails?.cacheReadTokens ?? 0
 }
 
 interface CompletionAggregates {
   usage: LanguageModelUsage
   finishReason: string
-  providerMetadata: ProviderMetadata | undefined
   ms: number
-  aborted?: boolean
 }
 
 /** Numbers only. Never the question, never the answer, never a section id. */
 function logCompletion({
   usage,
   finishReason,
-  providerMetadata,
   ms,
-  aborted = false,
 }: CompletionAggregates): void {
-  const cached = cachedInputTokens(usage, providerMetadata)
+  const cached = cachedInputTokens(usage)
   const aggregate = {
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
@@ -257,7 +203,7 @@ function logCompletion({
     cachedInputTokens: cached,
     cacheHit: cached > 0,
     finishReason,
-    aborted,
+    aborted: false,
     ms,
   }
   // An answer that stopped on length lost its Sources trailer mid-word, so it
