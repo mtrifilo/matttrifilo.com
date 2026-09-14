@@ -39,8 +39,14 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
  */
 export const CHAT_MAX_INPUT_TOKENS = 24_000
 
-/** Visible answer length. */
-export const CHAT_MAX_OUTPUT_TOKENS = 600
+/**
+ * Visible answer length. The ticket's 600 cut a "summarise every role"
+ * answer mid-sentence on the first preview (the model emits no reasoning
+ * tokens at its floor level, so this is all answer). 1,000 fits that
+ * answer with room; the '[chat] truncated' marker shows if it is still
+ * too small.
+ */
+export const CHAT_MAX_OUTPUT_TOKENS = 1_000
 
 /** Low, because the job is reporting what the corpus says, not composing. */
 export const CHAT_TEMPERATURE = 0.2

@@ -277,7 +277,7 @@ describe('a normal request', () => {
 
     const call = model.doStreamCalls[0]
     expect(call.temperature).toBe(0.2)
-    expect(call.maxOutputTokens).toBe(600)
+    expect(call.maxOutputTokens).toBe(1_000)
     expect(call.reasoning).toBe('none')
     expect(call.tools ?? []).toHaveLength(0)
   })
