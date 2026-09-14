@@ -11,6 +11,17 @@ import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
 /** Questions one visitor may ask in a single conversation. */
 export const CHAT_MAX_TURNS = 8
 
+/**
+ * Hard cap on entries in the posted `messages` array, checked before the array
+ * is walked at all.
+ *
+ * The per-turn limits below only bind turns that carry text, so without this
+ * cap a body of one real question plus ninety thousand empty assistant turns
+ * passes every other check while costing an unbounded parse. A full
+ * conversation is at most CHAT_MAX_TURNS questions and their answers.
+ */
+export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
+
 /** Characters in one question. Roughly a long paragraph. */
 export const CHAT_MAX_MESSAGE_CHARS = 1_500
 
@@ -123,7 +134,11 @@ export function validateChatRequest({
 }: ValidateChatRequestInput): ChatRequestValidation {
   if (isChatDisabled(env)) return reject('disabled')
 
-  const turns = readTurns(body)
+  if (!isRecord(body) || !Array.isArray(body.messages)) return reject('invalid')
+  // Before walking the array: an oversized one is refused on its length alone.
+  if (body.messages.length > CHAT_MAX_MESSAGES) return reject('too_many_turns')
+
+  const turns = readTurns(body.messages)
   if (!turns) return reject('invalid')
   if (turns.length === 0) return reject('invalid')
 
@@ -173,16 +188,14 @@ function reject(
 }
 
 /**
- * Reduce the AI SDK's `UIMessage[]` to roles and text, or `null` if the body
- * is not that shape. This is the trust boundary: only `user` and `assistant`
- * roles and only text parts survive, so a client cannot smuggle in a system
- * message, a file, or a tool result to steer the model.
+ * Reduce the AI SDK's `UIMessage[]` to roles and text, or `null` if it is not
+ * that shape. This is the trust boundary: only `user` and `assistant` roles
+ * and only text parts survive, so a client cannot smuggle in a system message,
+ * a file, or a tool result to steer the model.
  */
-function readTurns(body: unknown): ChatTurn[] | null {
-  if (!isRecord(body) || !Array.isArray(body.messages)) return null
-
+function readTurns(messages: unknown[]): ChatTurn[] | null {
   const turns: ChatTurn[] = []
-  for (const message of body.messages) {
+  for (const message of messages) {
     if (!isRecord(message)) return null
     if (message.role !== 'user' && message.role !== 'assistant') return null
     if (!Array.isArray(message.parts)) return null
@@ -195,6 +208,10 @@ function readTurns(body: unknown): ChatTurn[] | null {
       if (part.type !== 'text' || typeof part.text !== 'string') return null
       text += part.text
     }
+    // An empty turn is not a turn. Refusing them here is what keeps the
+    // budget honest: a blank turn estimates at zero tokens, so a conversation
+    // padded with them would otherwise slip under every limit below.
+    if (text.trim().length === 0) return null
     turns.push({ role: message.role, text })
   }
   return turns

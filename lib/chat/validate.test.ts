@@ -4,6 +4,7 @@ import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
+  CHAT_MAX_MESSAGES,
   CHAT_MAX_TURNS,
   estimateTokens,
   isChatDisabled,
@@ -127,6 +128,37 @@ describe('rejecting a request', () => {
       )
     )
     expect(codeOf(result)).toBe('message_too_long')
+  })
+
+  test('a messages array longer than a whole conversation, before it is walked', () => {
+    const padded = Array.from({ length: CHAT_MAX_MESSAGES + 1 }, () =>
+      said('assistant', 'ok')
+    )
+    expect(codeOf(validate(body(...padded)))).toBe('too_many_turns')
+  })
+
+  test('90,000 empty assistant turns no longer slip past every limit', () => {
+    // Blank turns estimate at zero tokens, so before the length cap and the
+    // empty-turn check this body passed validation outright.
+    const flood = [
+      said('user', 'What does Matt do?'),
+      ...Array.from({ length: 90_000 }, () => said('assistant', '')),
+    ]
+    expect(codeOf(validate(body(...flood)))).toBe('too_many_turns')
+  })
+
+  test('an empty turn inside a short conversation is invalid', () => {
+    const result = validate(
+      body(said('user', 'first'), said('assistant', ''), said('user', 'second'))
+    )
+    expect(codeOf(result)).toBe('invalid')
+  })
+
+  test('a turn whose only parts are blank text is invalid', () => {
+    const result = validate(
+      body({ id: 'm1', role: 'user', parts: [{ type: 'text', text: '' }] })
+    )
+    expect(codeOf(result)).toBe('invalid')
   })
 
   test('a conversation over the input token budget', () => {
