@@ -43,5 +43,10 @@ next-env.d.ts
 # local issue-tracker CLI config
 .linear.toml
 
+# The private denylist scripts/knowledge-denylist-check.sh reads. It lives in
+# ~/docs/career/, and the terms in it are the private information; it must
+# never land in the repo, even by accident.
+.chatbot-denylist
+
 # Claude Code agent worktrees (nested checkouts, never part of the site)
 .claude/worktrees/
