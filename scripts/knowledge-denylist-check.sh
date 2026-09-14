@@ -81,8 +81,9 @@ fi
 
 hits=0
 for file in "${files[@]}"; do
-  # One line, single-spaced: line breaks inside a multi-word term vanish.
-  flat="$(tr '[:space:]' ' ' <"$file" | tr -s ' ')"
+  # One line, single-spaced, with blockquote and list markers dropped so a
+  # term wrapped inside a quote or a bullet still reads as adjacent words.
+  flat="$(sed -E 's/^[[:space:]]*(> ?)+//; s/^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]+//' "$file" | tr '[:space:]' ' ' | tr -s ' ')"
   for term in "${terms[@]}"; do
     if printf '%s' "$flat" | grep -F -i -w -q -e "$term"; then
       hits=1

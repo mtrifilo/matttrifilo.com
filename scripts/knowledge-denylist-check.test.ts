@@ -17,7 +17,11 @@ import path from 'path'
  * misses it and says "clean".
  */
 
-const SCRIPT = path.join(process.cwd(), 'scripts', 'knowledge-denylist-check.sh')
+const SCRIPT = path.join(
+  process.cwd(),
+  'scripts',
+  'knowledge-denylist-check.sh'
+)
 
 let workdir: string
 
@@ -56,6 +60,13 @@ function run(denylist: string) {
 }
 
 describe('knowledge-denylist-check.sh', () => {
+  test('catches a two-word term wrapped inside a blockquote', () => {
+    writeKnowledge('> Matt led the Project\n> Nimbus rollout.\n')
+    const result = run(writeDenylist('Project Nimbus\n'))
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('hit in')
+  })
+
   test('catches a two-word term split across a line break', () => {
     // This is what hard wrapping at ~76 columns does to a two-word name,
     // and what a line-by-line grep cannot see.

@@ -15,11 +15,7 @@ import type { KnowledgeBase } from './build'
  * without going through the cache below.
  */
 
-export type {
-  KnowledgeBase,
-  KnowledgeSection,
-  KnowledgeSource,
-} from './build'
+export type { KnowledgeBase, KnowledgeSection, KnowledgeSource } from './build'
 export { KNOWLEDGE_TOKEN_CEILING } from './build'
 
 let cached: KnowledgeBase | undefined

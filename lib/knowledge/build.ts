@@ -17,11 +17,7 @@ import path from 'path'
  */
 
 export type KnowledgeSource =
-  | 'resume'
-  | 'blog'
-  | 'open-source'
-  | 'derived'
-  | 'faq'
+  'resume' | 'blog' | 'open-source' | 'derived' | 'faq'
 
 export interface KnowledgeSection {
   id: string
@@ -127,7 +123,9 @@ function parseFrontmatter(raw: string, source: string): Frontmatter {
     if (line.trim() === '') continue
     const match = FRONTMATTER_FIELD.exec(line)
     if (!match) {
-      throw new Error(`${source}: frontmatter line is not "key: value": ${line}`)
+      throw new Error(
+        `${source}: frontmatter line is not "key: value": ${line}`
+      )
     }
     fields.set(match[1], unquote(match[2]))
   }
@@ -201,7 +199,13 @@ const trimEnd = (text: string) => text.replace(/\s+$/, '')
  * so a comment is not a place to hide something private.
  */
 function stripComments(body: string): string {
-  return body.replace(/<!--[\s\S]*?-->[ \t]*\r?\n?/g, '')
+  const stripped = body.replace(/<!--[\s\S]*?-->[ \t]*\r?\n?/g, '')
+  if (stripped.includes('<!--')) {
+    throw new Error(
+      'knowledge: an unterminated <!-- comment would ship to the model; close it'
+    )
+  }
+  return stripped
 }
 
 /**
@@ -225,7 +229,10 @@ function splitBlocks(body: string): { intro: string; blocks: Block[] } {
   for (const line of lines) {
     if (BLOCK_HEADING.test(line)) {
       if (current) {
-        blocks.push({ heading: current.heading, body: current.lines.join('\n') })
+        blocks.push({
+          heading: current.heading,
+          body: current.lines.join('\n'),
+        })
       }
       current = { heading: line, lines: [] }
       continue

@@ -32,7 +32,11 @@ const built = base.text
  * a stray BOM. A soft hyphen in the middle of "runway" reads as one
  * word to a person and to a model, and as two to /\brunway\b/.
  */
-const INVISIBLE = /[\u00AD\u200B\u200C\u200D\u2060\uFEFF]/g
+// Every Unicode format character (zero-width and bidi controls, joiners,
+// BOM) plus the soft hyphen and two combining/space oddities NFKC leaves
+// alone. A category beats a hand list: the next invisible codepoint is
+// covered by construction.
+const INVISIBLE = /[\p{Cf}\u00AD\u034F\u180E]/gu
 
 /** Matt's own site: the one host whose URLs are his words, not a citation. */
 const OWN_HOST = /^https?:\/\/(?:www\.)?matttrifilo\.com(?=[/?#]|$)/i
@@ -131,7 +135,8 @@ const FIGURES_NOT_IN_RESUME: readonly string[] = []
 
 const PUBLIC_CONTACT = 'matt.trifilo@gmail.com'
 
-const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * Whole-word, case-insensitive containment for a term that may contain
@@ -147,7 +152,9 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&
  * not skipped as one.
  */
 function containsWord(text: string, term: string): boolean {
-  return new RegExp(`(?<![\\w-])${escapeRegExp(term)}(?![\\w-])`, 'i').test(text)
+  // Plain \w boundaries: a hyphenated compound like "post-layoff" must
+  // still fire, and own-domain slugs are split on '-' by unpackUrl anyway.
+  return new RegExp(`(?<!\\w)${escapeRegExp(term)}(?!\\w)`, 'i').test(text)
 }
 
 describe('knowledge base content guards', () => {
@@ -195,11 +202,21 @@ describe('knowledge base content guards', () => {
     // …and does not fire inside a longer word.
     expect(containsWord('the runwayside cafe', 'runway')).toBe(false)
     expect(containsWord('401(k)s everywhere', '401(k)')).toBe(false)
+    // …but a hyphenated compound is still the word.
+    expect(containsWord('post-layoff planning', 'layoff')).toBe(true)
+    expect(containsWord('the salary-band review', 'salary')).toBe(true)
   })
 
   test('contains no TODO placeholder', () => {
     expect(built).not.toMatch(/\bTODO\b/)
     expect(prose(built)).not.toMatch(/\bTODO\b/)
+  })
+
+  test('contains no comment markers, closed or unterminated', () => {
+    // stripComments removes closed comments; an unterminated `<!--` would
+    // otherwise ship verbatim with everything after it.
+    expect(built).not.toContain('<!--')
+    expect(built).not.toContain('-->')
   })
 
   test('the prose view unpacks own URLs and drops third-party ones', () => {
@@ -220,8 +237,8 @@ describe('knowledge base content guards', () => {
     // prose() strips them before matching; this asserts they are not in the
     // published text at all, so the stripping is a backstop and not the
     // only thing standing between a hidden word and the prompt.
-    const found = [...new Set(built.match(INVISIBLE) ?? [])].map(c =>
-      `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
+    const found = [...new Set(built.match(INVISIBLE) ?? [])].map(
+      c => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
     )
     expect(found).toEqual([])
   })
@@ -248,7 +265,9 @@ describe('knowledge base structure', () => {
     expect(names.length).toBeGreaterThan(0)
     for (const name of names) {
       const contents = fs.readFileSync(path.join(KNOWLEDGE_DIR, name), 'utf8')
-      const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(contents)
+      const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(
+        contents
+      )
       expect(match, `${name} has no frontmatter block`).not.toBeNull()
       const frontmatter = match![1]
       for (const key of ['id', 'title', 'url', 'source', 'updated']) {
@@ -260,7 +279,10 @@ describe('knowledge base structure', () => {
       // ids stable and unique; assert it here too so the reason is
       // visible where the contract is described.
       expect(frontmatter).toMatch(
-        new RegExp(`^id:[ \\t]*['"]?${name.replace(/\.md$/, '')}['"]?[ \\t]*$`, 'm')
+        new RegExp(
+          `^id:[ \\t]*['"]?${name.replace(/\.md$/, '')}['"]?[ \\t]*$`,
+          'm'
+        )
       )
     }
   })
@@ -318,7 +340,7 @@ function missingTwinMessage(slug: string): string {
   return [
     `content/blog/${slug}.md has no content/knowledge/blog-${slug}.md.`,
     'Create it with this frontmatter, then paste the post body below it',
-    'with the post\'s own frontmatter removed:',
+    "with the post's own frontmatter removed:",
     '',
     '---',
     `id: 'blog-${slug}'`,
@@ -383,8 +405,12 @@ describe('knowledge base stays in sync with its public sources', () => {
     )
     // Trailing sentence punctuation is not part of a figure: "late 2025,"
     // and "Cyber Monday 2025." are both the number 2025.
+    // Suffixes carry meaning (1B is not 1), so B/M/K/x and a trailing + stay
+    // attached. Figures written as words ("five roles") are out of scope.
     const figures = (text: string) =>
-      (text.match(/\d[\d.,]*[%MKx+]?/g) ?? []).map(f => f.replace(/[.,]+$/, ''))
+      (
+        text.match(/\d[\d.,]*(?:%|[MKBmkb](?![a-z])|[xX](?![a-z]))?\+?/g) ?? []
+      ).map(f => f.replace(/[.,]+$/, ''))
     const fromResume = new Set(figures(published))
     const stale: string[] = []
     for (const id of ['projects', 'career-timeline']) {
@@ -395,6 +421,13 @@ describe('knowledge base stays in sync with its public sources', () => {
       }
     }
     expect(stale).toEqual([])
+    // The extractor keeps the suffix that makes the figure a figure.
+    expect(figures('up to 1B emails, 99.9%+ uptime, 27.7M sent, ~3x')).toEqual([
+      '1B',
+      '99.9%+',
+      '27.7M',
+      '3x',
+    ])
   })
 
   test('every curated open-source project is described', () => {
@@ -444,15 +477,15 @@ describe('knowledge base build', () => {
     const oversized = 'Matt led the thing. '.repeat(
       Math.ceil((KNOWLEDGE_TOKEN_CEILING * 4) / 20) + 100
     )
-    expect(() =>
-      buildFixture({ name: 'resume.md', body: oversized })
-    ).toThrow(/too large for the prompt/)
+    expect(() => buildFixture({ name: 'resume.md', body: oversized })).toThrow(
+      /too large for the prompt/
+    )
   })
 
   test('refuses a file whose id does not match its name', () => {
-    expect(() =>
-      buildFixture({ name: 'resume.md', id: 'not-resume' })
-    ).toThrow(/must match the file name/)
+    expect(() => buildFixture({ name: 'resume.md', id: 'not-resume' })).toThrow(
+      /must match the file name/
+    )
   })
 
   test('refuses a section it does not know where to order', () => {
