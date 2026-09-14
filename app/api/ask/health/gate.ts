@@ -21,25 +21,6 @@ export function isHealthy(result: {
   return result.text.trim().length > 0 && result.finishReason !== 'length'
 }
 
-export type FailureStage = 'config' | 'auth' | 'model'
-
-/**
- * Which leg failed, for the caller. Google's and Vercel's messages name the
- * project, model, and service account, so only this classification leaves
- * the server; the full error goes to the log.
- */
-export function failureStage(error: unknown): FailureStage {
-  for (let e: unknown = error; e instanceof Error; e = e.cause) {
-    if (/is not set; run `vercel env pull`/.test(e.message)) return 'config'
-    if (e.name === 'VercelOidcTokenError') return 'auth'
-    const url = (e as { config?: { url?: string } }).config?.url ?? ''
-    if (
-      /sts\.googleapis|iamcredentials\.googleapis|oidc\.vercel/i.test(
-        `${url} ${e.message}`
-      )
-    ) {
-      return 'auth'
-    }
-  }
-  return 'model'
-}
+// Moved to lib/ai when the chat route (MTC-31) became a second caller; the
+// classification is a property of the Vertex chain, not of this route.
+export { failureStage, type FailureStage } from '@/lib/ai/failure-stage'
