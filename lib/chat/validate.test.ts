@@ -3,6 +3,7 @@ import { KNOWLEDGE_INDEX_TOKEN_CEILING } from '@/lib/knowledge'
 import {
   CHAT_ERROR_MESSAGE,
   CHAT_ERROR_STATUS,
+  CHAT_MAX_ANSWER_CHARS,
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
   CHAT_MAX_MESSAGES,
@@ -116,6 +117,41 @@ describe('accepting a request', () => {
     ])
   })
 
+  test('accepts a replayed answer longer than a question may be', () => {
+    // Answers run to CHAT_MAX_OUTPUT_TOKENS, several times the question
+    // cap; the first preview's second turn was refused for exactly this.
+    const answer = 'x'.repeat(CHAT_MAX_ANSWER_CHARS)
+    const result = validate(
+      body(
+        said('user', 'Summarise every role.'),
+        said('assistant', answer),
+        said('user', 'And the latest?')
+      )
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  test('drops an answer that has no text instead of refusing the request', () => {
+    // A run that read documents but never wrote, replayed by the client as
+    // a message with only step boundaries (or nothing at all).
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }] },
+        said('user', 'Try again?'),
+        { id: 'a2', role: 'assistant', parts: [] },
+        said('user', 'Where?')
+      )
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.history).toEqual([
+      { role: 'user', text: 'What does Matt do?' },
+      { role: 'user', text: 'Try again?' },
+    ])
+    expect(result.userMessage).toBe('Where?')
+  })
+
   test('accepts exactly the turn limit', () => {
     const turns = Array.from({ length: CHAT_MAX_TURNS }, (_, i) => [
       said('user', `question ${i}`),
@@ -157,18 +193,6 @@ describe('rejecting a request', () => {
     expect(codeOf(result)).toBe('message_too_long')
   })
 
-  test('a replayed assistant turn over the character limit is refused too', () => {
-    // Assistant turns are client-authored as well, so they get the same cap.
-    const result = validate(
-      body(
-        said('user', 'hi'),
-        said('assistant', 'x'.repeat(CHAT_MAX_MESSAGE_CHARS + 1)),
-        said('user', 'short')
-      )
-    )
-    expect(codeOf(result)).toBe('message_too_long')
-  })
-
   test('a messages array longer than a whole conversation, before it is walked', () => {
     const padded = Array.from({ length: CHAT_MAX_MESSAGES + 1 }, () =>
       said('assistant', 'ok')
@@ -184,13 +208,6 @@ describe('rejecting a request', () => {
       ...Array.from({ length: 90_000 }, () => said('assistant', '')),
     ]
     expect(codeOf(validate(body(...flood)))).toBe('too_many_turns')
-  })
-
-  test('an empty turn inside a short conversation is invalid', () => {
-    const result = validate(
-      body(said('user', 'first'), said('assistant', ''), said('user', 'second'))
-    )
-    expect(codeOf(result)).toBe('invalid')
   })
 
   test('a turn whose only parts are blank text is invalid', () => {
@@ -218,13 +235,14 @@ describe('rejecting a request', () => {
     // to sit above their sum or a visitor gets a 400 for staying inside all
     // of them. Failing here means the policy or the index ceiling grew: raise
     // the cap deliberately rather than shrinking what a visitor may ask.
-    const full = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
+    const fullQuestion = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
+    const fullAnswer = 'x'.repeat(CHAT_MAX_ANSWER_CHARS)
     // The longest body that passes every other limit: CHAT_MAX_TURNS
-    // questions and the answers between them, each at the character cap.
+    // questions and the answers between them, each at its role's cap.
     // Sixteen messages, assistant first so a user turn is last: the exact
     // body the route accepts, not one short of it.
     const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
-      said(i % 2 === 0 ? 'assistant' : 'user', full)
+      i % 2 === 0 ? said('assistant', fullAnswer) : said('user', fullQuestion)
     )
 
     const result = validateChatRequest({
@@ -257,11 +275,24 @@ describe('rejecting a request', () => {
     expect(codeOf(result)).toBe('invalid')
   })
 
-  test('a turn made only of step-start parts is still empty', () => {
+  test('a blank question is invalid even between real turns', () => {
     const result = validate(
       body(
         said('user', 'What does Matt do?'),
-        { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }] },
+        said('assistant', 'He builds platforms.'),
+        said('user', '   '),
+        said('assistant', 'Sorry?'),
+        said('user', 'Where?')
+      )
+    )
+    expect(codeOf(result)).toBe('invalid')
+  })
+
+  test('an answer longer than the route can write is invalid', () => {
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        said('assistant', 'x'.repeat(CHAT_MAX_ANSWER_CHARS + 1)),
         said('user', 'Where?')
       )
     )
@@ -292,6 +323,7 @@ describe('error envelopes', () => {
       'budget_exceeded',
       'invalid',
       'unavailable',
+      'interrupted',
     ] as const) {
       expect(CHAT_ERROR_MESSAGE[code].length).toBeGreaterThan(0)
       expect(CHAT_ERROR_STATUS[code]).toBeGreaterThanOrEqual(400)

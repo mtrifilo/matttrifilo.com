@@ -78,10 +78,6 @@ export interface ChatHandlerDeps {
   now?: () => number
 }
 
-/** What the visitor sees if the model fails mid-stream. */
-export const STREAM_ERROR_MESSAGE =
-  'The assistant lost its connection part-way through that answer. Ask again, or email Matt at matt.trifilo@gmail.com.'
-
 /**
  * Model calls allowed in one request: one per document the model may read,
  * plus the one that writes the answer.
@@ -323,10 +319,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             }
             return Object.keys(metadata).length > 0 ? metadata : undefined
           },
-          // Masks the provider's text, which can quote the prompt back.
+          // Masks the provider's text, which can quote the prompt back. The
+          // response is already a 200 by now, so the refusal envelope goes
+          // down the stream as text: the client reads the same shape it
+          // reads from a 4xx/5xx body, and shows the same fixed copy.
           onError(error) {
             logFailure(error)
-            return STREAM_ERROR_MESSAGE
+            return JSON.stringify(chatErrorBody('interrupted'))
           },
         }).pipeThrough(onlyClientChunks()),
       })

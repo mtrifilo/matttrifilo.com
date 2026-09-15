@@ -30,14 +30,33 @@ export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 export const CHAT_MAX_MESSAGE_CHARS = 1_500
 
 /**
+ * Visible answer length. The ticket's 600 cut a "summarise every role"
+ * answer mid-sentence on the first preview (the model emits no reasoning
+ * tokens at its floor level, so this is all answer). 1,000 fits that
+ * answer with room; the '[chat] truncated' marker shows if it is still
+ * too small.
+ */
+export const CHAT_MAX_OUTPUT_TOKENS = 1_000
+
+/**
+ * Characters in one replayed answer. The client posts the assistant's own
+ * earlier answers back with each question, and those run well past
+ * CHAT_MAX_MESSAGE_CHARS: CHAT_MAX_OUTPUT_TOKENS is about 4,000 characters
+ * of prose. Six per token leaves headroom for text that tokenises densely.
+ * The route never writes a longer answer, so exceeding this is a tampered
+ * body, not a long conversation, and is refused as `invalid`.
+ */
+export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * 6
+
+/**
  * Ceiling on the estimated input tokens of the request the client posts:
  * document index plus system policy plus the conversation so far.
  *
- * 16,000 leaves room for every part of that at its own limit:
+ * 26,000 leaves room for every part of that at its own limit:
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
- * 1,400, and a conversation cannot exceed CHAT_MAX_MESSAGES messages of
- * CHAT_MAX_MESSAGE_CHARS characters each (~6,000 tokens) — 15,400 or so
- * against this cap.
+ * 1,400, and a conversation cannot exceed CHAT_MAX_TURNS questions of
+ * CHAT_MAX_MESSAGE_CHARS characters (~3,000 tokens) and as many answers of
+ * CHAT_MAX_ANSWER_CHARS (~12,000 tokens) — 24,400 or so against this cap.
  *
  * So this is a backstop, not a limit anyone reaches: while the other caps
  * hold, one of them always fires first, and `budget_exceeded` is unreachable
@@ -52,16 +71,7 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 16_000
-
-/**
- * Visible answer length. The ticket's 600 cut a "summarise every role"
- * answer mid-sentence on the first preview (the model emits no reasoning
- * tokens at its floor level, so this is all answer). 1,000 fits that
- * answer with room; the '[chat] truncated' marker shows if it is still
- * too small.
- */
-export const CHAT_MAX_OUTPUT_TOKENS = 1_000
+export const CHAT_MAX_INPUT_TOKENS = 26_000
 
 /** Low, because the job is reporting what the corpus says, not composing. */
 export const CHAT_TEMPERATURE = 0.2
@@ -79,6 +89,7 @@ export type ChatErrorCode =
   | 'rate_limited'
   | 'invalid'
   | 'unavailable'
+  | 'interrupted'
 
 export interface ChatErrorBody {
   error: { code: ChatErrorCode; message: string }
@@ -92,6 +103,8 @@ export const CHAT_ERROR_STATUS: Record<ChatErrorCode, number> = {
   rate_limited: 429,
   invalid: 400,
   unavailable: 502,
+  // Never an HTTP status: the stream is already 200 when this is written.
+  interrupted: 502,
 }
 
 /**
@@ -112,6 +125,8 @@ export const CHAT_ERROR_MESSAGE: Record<
     "That request wasn't something the assistant could read. Reload the page and try again.",
   unavailable:
     "The assistant couldn't reach its model just now. Try again in a moment, or email Matt at matt.trifilo@gmail.com.",
+  interrupted:
+    'The assistant lost its connection part-way through that answer. Ask again, or email Matt at matt.trifilo@gmail.com.',
 }
 
 export type ChatRequestValidation =
@@ -172,9 +187,17 @@ export function validateChatRequest({
   if (questions > CHAT_MAX_TURNS) return reject('too_many_turns')
 
   // Every replayed turn is client-authored, the assistant ones included, so
-  // the cap applies to all of them, not just the visitor's questions.
-  const overlong = turns.some(turn => turn.text.length > CHAT_MAX_MESSAGE_CHARS)
-  if (overlong) return reject('message_too_long')
+  // each role has a cap. A question over its cap is the visitor's to trim;
+  // an answer over its cap is one the route never wrote, so the body is not
+  // something a real conversation produced.
+  for (const turn of turns) {
+    if (turn.role === 'user' && turn.text.length > CHAT_MAX_MESSAGE_CHARS) {
+      return reject('message_too_long')
+    }
+    if (turn.role === 'assistant' && turn.text.length > CHAT_MAX_ANSWER_CHARS) {
+      return reject('invalid')
+    }
+  }
 
   const conversationTokens = turns.reduce(
     (total, turn) => total + estimateTokens(turn.text),
@@ -235,10 +258,15 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
       if (part.type !== 'text' || typeof part.text !== 'string') return null
       text += part.text
     }
-    // An empty turn is not a turn. Refusing them here is what keeps the
-    // budget honest: a blank turn estimates at zero tokens, so a conversation
-    // padded with them would otherwise slip under every limit below.
-    if (text.trim().length === 0) return null
+    if (text.trim().length === 0) {
+      // A run that spent every step reading, or was cut off before its
+      // first word, leaves an answer with no text, and the client replays
+      // it like any other. Dropping it here keeps the conversation usable;
+      // CHAT_MAX_MESSAGES already bounds how many such turns a body can
+      // carry. A blank question, though, is not a question.
+      if (message.role === 'assistant') continue
+      return null
+    }
     turns.push({ role: message.role, text })
   }
   return turns

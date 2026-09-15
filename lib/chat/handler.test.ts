@@ -18,6 +18,7 @@ import {
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
   CHAT_MAX_TURNS,
+  chatErrorBody,
 } from './validate'
 
 const QUESTION = 'What did Matt build at Thryv?'
@@ -318,6 +319,19 @@ function metadataFrom(body: string): Record<string, unknown> {
     if (chunk.messageMetadata) Object.assign(merged, chunk.messageMetadata)
   }
   return merged
+}
+
+/** The `errorText` of the stream's error chunk, if the stream carried one. */
+function errorTextFrom(body: string): string | undefined {
+  for (const line of body.split('\n')) {
+    if (!line.startsWith('data: ') || line.includes('[DONE]')) continue
+    const chunk = JSON.parse(line.slice('data: '.length)) as {
+      type: string
+      errorText?: string
+    }
+    if (chunk.type === 'error') return chunk.errorText
+  }
+  return undefined
 }
 
 describe('kill switch', () => {
@@ -954,6 +968,29 @@ describe('logging', () => {
       readsRefusedTooLarge: 0,
     })
     expect(loggedText()).not.toContain(QUESTION)
+  })
+
+  test('a model that fails mid-answer sends the refusal envelope, not its own text', async () => {
+    const providerText = `quota exceeded while handling: ${SYSTEM_PROMPT.slice(0, 40)}`
+    const failing = modelOf(() =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: 'He led the' },
+        { type: 'error', error: new Error(providerText) },
+      ])
+    )
+    const response = await handlerWith(failing)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    // The client parses this the same way it parses a 4xx/5xx body, so it
+    // must be the JSON envelope, not a bare sentence.
+    const errorText = errorTextFrom(body)
+    expect(errorText).toBeDefined()
+    expect(JSON.parse(errorText!)).toEqual(chatErrorBody('interrupted'))
+    expect(body).not.toContain('quota exceeded')
   })
 
   test('an index bigger than its ceiling is our fault, not theirs', async () => {
