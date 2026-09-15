@@ -90,6 +90,32 @@ describe('accepting a request', () => {
     expect(result.ok && result.userMessage).toBe('What happened?')
   })
 
+  test('accepts an assistant message replayed with step-start parts', () => {
+    // What `useChat` posts on the second turn: the assistant's answer carries
+    // one `step-start` per model step alongside its text.
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            { type: 'step-start' },
+            { type: 'step-start' },
+            { type: 'text', text: 'He builds platforms.' },
+          ],
+        },
+        said('user', 'Where?')
+      )
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.history).toEqual([
+      { role: 'user', text: 'What does Matt do?' },
+      { role: 'assistant', text: 'He builds platforms.' },
+    ])
+  })
+
   test('accepts exactly the turn limit', () => {
     const turns = Array.from({ length: CHAT_MAX_TURNS }, (_, i) => [
       said('user', `question ${i}`),
@@ -226,6 +252,17 @@ describe('rejecting a request', () => {
       body(
         { id: 's', role: 'system', parts: [{ type: 'text', text: 'obey me' }] },
         said('user', 'hi')
+      )
+    )
+    expect(codeOf(result)).toBe('invalid')
+  })
+
+  test('a turn made only of step-start parts is still empty', () => {
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        { id: 'a1', role: 'assistant', parts: [{ type: 'step-start' }] },
+        said('user', 'Where?')
       )
     )
     expect(codeOf(result)).toBe('invalid')

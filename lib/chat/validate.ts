@@ -224,8 +224,14 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
     let text = ''
     for (const part of message.parts) {
       if (!isRecord(part)) return null
-      // Non-text parts are refused rather than dropped: silently ignoring one
-      // would answer a different question than the visitor sees on screen.
+      // The AI SDK marks each model step in a replayed assistant message
+      // with a `step-start` part. It carries nothing, so skipping it cannot
+      // change what the model is asked; refusing it broke every second turn
+      // on the first UI preview.
+      if (part.type === 'step-start') continue
+      // Any other non-text part is refused rather than dropped: silently
+      // ignoring one would answer a different question than the visitor
+      // sees on screen.
       if (part.type !== 'text' || typeof part.text !== 'string') return null
       text += part.text
     }
