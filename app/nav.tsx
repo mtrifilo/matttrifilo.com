@@ -51,7 +51,7 @@ export default function Nav() {
         </Link>
 
         {/* Desktop Navigation */}
-        {/* Six links no longer fit beside the brand at md (768px); switch at lg. */}
+        {/* Seven links no longer fit beside the brand at md (768px); switch at lg. */}
         <div className="hidden lg:flex items-center gap-1">
           {navLinks.map(link => (
             <Link

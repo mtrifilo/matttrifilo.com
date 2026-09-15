@@ -1,6 +1,9 @@
 import type { EnvSource } from '@/lib/env'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
+import { CHAT_MAX_MESSAGE_CHARS } from './answer'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
+
+export { CHAT_MAX_MESSAGE_CHARS }
 
 /**
  * Every limit the chat route enforces on an incoming request, and the only
@@ -26,9 +29,6 @@ export const CHAT_MAX_TURNS = 8
  * conversation is at most CHAT_MAX_TURNS questions and their answers.
  */
 export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
-
-/** Characters in one question. Roughly a long paragraph. */
-export const CHAT_MAX_MESSAGE_CHARS = 1_500
 
 /**
  * Visible answer length. The ticket's 600 cut a "summarise every role"

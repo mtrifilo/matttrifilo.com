@@ -1,5 +1,6 @@
 import type { KnowledgeIndex } from '@/lib/knowledge'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
+import { SOURCES_TRAILER_PREFIX } from './answer'
 
 /**
  * Prompt assembly for Matt's Career Assistant (MTC-31).
@@ -56,8 +57,14 @@ export const DECLINE_SENTENCE =
  * makes the model name its sources inside the answer, which measurably keeps
  * it honest about which document a claim came from — but a model that forgets
  * it, or invents an id it never read, cannot mislead the UI.
+ *
+ * Defined in ./answer and re-exported here so the policy prose below still
+ * reads from one constant. It has to live over there because the browser is
+ * the other end of this contract — it strips the line back out of the answer
+ * — and this module cannot be imported from a client component: it reads
+ * lib/knowledge, which reads the filesystem.
  */
-export const SOURCES_TRAILER_PREFIX = 'Sources: '
+export { SOURCES_TRAILER_PREFIX }
 
 /**
  * The policy. Written as prose rather than assembled from fragments because
