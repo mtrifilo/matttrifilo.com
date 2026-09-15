@@ -25,6 +25,15 @@ export const siteRoutes: readonly SiteRoute[] = [
   { href: '/', label: 'Home', changeFrequency: 'monthly', priority: 1 },
   { href: '/blog', label: 'Blog', changeFrequency: 'weekly', priority: 0.8 },
   {
+    // Matt's Career Assistant. Labelled "Ask" rather than "Assistant" or
+    // "Chat" because the nav reads as a list of what a visitor can do, and
+    // asking is the thing this page is for.
+    href: '/ask',
+    label: 'Ask',
+    changeFrequency: 'monthly',
+    priority: 0.7,
+  },
+  {
     href: '/open-source',
     label: 'Open Source',
     changeFrequency: 'monthly',
@@ -50,9 +59,9 @@ export const siteRoutes: readonly SiteRoute[] = [
   },
   {
     // The career assistant's published corpus. In the sitemap so the
-    // documents are indexable and the assistant's answers are checkable;
-    // out of the nav until MTC-33 decides where the assistant itself
-    // belongs in it.
+    // documents are indexable and the assistant's answers are checkable,
+    // and out of the nav because it is reached through an answer's source
+    // chips rather than browsed: /ask is the nav entry for the assistant.
     href: '/knowledge',
     label: 'Knowledge',
     changeFrequency: 'weekly',
