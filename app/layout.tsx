@@ -57,7 +57,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <HexBackground />
-          <div className="flex flex-col min-h-screen relative z-10">
+          {/* svh, not screen (100vh): /ask sizes its column in svh, and on a
+              phone with the toolbar out the two differ by the toolbar, which
+              would give that page exactly the scroll it exists to avoid. */}
+          <div className="flex flex-col min-h-svh relative z-10">
             <Nav />
             <main className="flex-1">{children}</main>
             {/* /ask fills the viewport exactly (see --nav-height in

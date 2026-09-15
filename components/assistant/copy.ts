@@ -1,13 +1,14 @@
 /**
- * The sentences Matt's Career Assistant puts on the page from its components
- * (MTC-33).
+ * The assistant-voice copy of Matt's Career Assistant: the name, the
+ * introduction, the starter questions, the notices (MTC-33).
  *
  * It is one file because the framing is the constraint: the assistant is
  * always a third party talking *about* Matt, never Matt, and that is easier to
- * hold to when every line is readable together. Two kinds of copy live
- * elsewhere on purpose: the route's own — the refusals, the limits, the kill
- * switch — which the UI renders as sent; and the error fallback in
- * lib/chat/answer.ts, which is decided alongside the parsing it covers.
+ * hold to when every line is readable together. It is not every string the
+ * components render — labels, the disclosure paragraph and the composer's
+ * hints sit with their markup — and two kinds of copy live elsewhere on
+ * purpose: the route's own, which the UI renders as sent, and the error
+ * fallback in lib/chat/answer.ts, decided alongside the parsing it covers.
  */
 
 export const MATT_EMAIL = 'matt.trifilo@gmail.com'

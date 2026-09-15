@@ -49,6 +49,8 @@ export interface AssistantComposerProps {
 /** The counter shows once a question is this close to the limit. */
 const COUNTER_THRESHOLD = Math.floor(CHAT_MAX_MESSAGE_CHARS * 0.8)
 
+const OVER_LIMIT_HINT = 'trim the question to send it'
+
 export function AssistantComposer({
   value,
   onValueChange,
@@ -68,14 +70,15 @@ export function AssistantComposer({
 
   useAutoGrow(ref, value)
 
-  const overLimit = value.length > CHAT_MAX_MESSAGE_CHARS
-  const showCounter = value.length >= COUNTER_THRESHOLD
+  // Measured on what would be sent: the route sees the trimmed question.
+  const question = value.trim()
+  const overLimit = question.length > CHAT_MAX_MESSAGE_CHARS
+  const showCounter = question.length >= COUNTER_THRESHOLD
 
   const submit = useCallback(() => {
-    const question = value.trim()
     if (question.length === 0 || overLimit || streaming) return
     onSubmit(question)
-  }, [onSubmit, overLimit, streaming, value])
+  }, [onSubmit, overLimit, question, streaming])
 
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -95,7 +98,7 @@ export function AssistantComposer({
     [composing, submit]
   )
 
-  const canSend = value.trim().length > 0 && !overLimit
+  const canSend = question.length > 0 && !overLimit
 
   return (
     <form
@@ -151,18 +154,22 @@ export function AssistantComposer({
       </div>
       {showCounter && (
         <p
-          aria-live="polite"
           className={cn(
             'mt-1 text-right text-xs tabular-nums',
             overLimit ? 'text-destructive' : 'text-muted-foreground'
           )}
           id={counterId}
         >
-          {value.length.toLocaleString('en-US')} /{' '}
+          {question.length.toLocaleString('en-US')} /{' '}
           {CHAT_MAX_MESSAGE_CHARS.toLocaleString('en-US')}
-          {overLimit && ' — trim the question to send it'}
+          {overLimit && ` — ${OVER_LIMIT_HINT}`}
         </p>
       )}
+      {/* The counter itself is not live: it would be read on every
+          keystroke. Only crossing the limit, either way, is announced. */}
+      <span aria-live="polite" className="sr-only">
+        {overLimit ? OVER_LIMIT_HINT : ''}
+      </span>
     </form>
   )
 }

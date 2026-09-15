@@ -18,7 +18,6 @@ import {
   toChatErrorView,
 } from '@/lib/chat/answer'
 import type { ChatUIMessage } from '@/lib/chat/handler'
-import { cn } from '@/lib/utils'
 import { AnswerShimmer } from './answer-shimmer'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
@@ -80,7 +79,10 @@ export function AssistantChat() {
       setMessages(current =>
         current.at(-1)?.role === 'user' ? current.slice(0, -1) : current
       )
-      setInput(current => (current.length > 0 ? current : question))
+      // A draft typed while the request was out is kept too, after it.
+      setInput(current =>
+        current.length > 0 ? `${question}\n\n${current}` : question
+      )
     },
   })
 
@@ -101,11 +103,13 @@ export function AssistantChat() {
     [clearError, sendMessage]
   )
 
+  // Empties the transcript, not the composer: what is typed there is the
+  // next question (or the refused one, just handed back), and "new
+  // conversation" is where it is about to be asked.
   const reset = useCallback(() => {
     stop()
     clearError()
     setMessages([])
-    setInput('')
     askedRef.current = null
     textareaRef.current?.focus()
   }, [clearError, setMessages, stop])
@@ -153,13 +157,9 @@ export function AssistantChat() {
       </div>
 
       {/* The page keeps its heading once the conversation starts; it only
-          stops taking up room. */}
-      <h1
-        className={cn('font-semibold', hasTranscript && 'sr-only')}
-        style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
-      >
-        {ASSISTANT_NAME}
-      </h1>
+          stops taking up room. The empty state renders the visible one, as
+          part of its centred group. */}
+      {hasTranscript && <h1 className="sr-only">{ASSISTANT_NAME}</h1>}
 
       <p aria-atomic="true" className="sr-only" role="status">
         {announcement}
@@ -231,6 +231,12 @@ export function AssistantChat() {
 function EmptyState({ onPick }: { onPick: (question: string) => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center gap-4 pb-8">
+      <h1
+        className="font-semibold"
+        style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
+      >
+        {ASSISTANT_NAME}
+      </h1>
       <p className="max-w-xl leading-relaxed text-muted-foreground">
         {ASSISTANT_INTRO}
       </p>

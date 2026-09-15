@@ -115,9 +115,13 @@ export function ChatErrorNotice({
     )
   }
 
+  // `invalid` is here too: it can be the replayed history the route refuses,
+  // not the question, and then only a fresh transcript gets past it.
   const offersReset =
     onReset &&
-    (error.code === 'too_many_turns' || error.code === 'budget_exceeded')
+    (error.code === 'too_many_turns' ||
+      error.code === 'budget_exceeded' ||
+      error.code === 'invalid')
 
   return (
     <Notice
