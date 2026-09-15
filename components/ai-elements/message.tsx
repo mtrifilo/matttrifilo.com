@@ -48,7 +48,11 @@ export const MessageContent = ({
   <div
     className={cn(
       "flex min-w-0 max-w-full flex-col gap-4 text-base leading-relaxed",
+      // The question is rendered as typed, not as Markdown, so its line
+      // breaks are only kept if the bubble keeps them; and a pasted URL has
+      // to wrap rather than run out of the bubble.
       "group-[.is-user]:w-fit group-[.is-user]:max-w-[85%] group-[.is-user]:rounded-xl",
+      "group-[.is-user]:whitespace-pre-wrap group-[.is-user]:break-words",
       "group-[.is-user]:border group-[.is-user]:border-border group-[.is-user]:bg-muted",
       "group-[.is-user]:px-4 group-[.is-user]:py-3",
       className

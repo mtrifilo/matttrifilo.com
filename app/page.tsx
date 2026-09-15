@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
-import { HomeAssistantPanel } from '@/components/assistant'
+import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
 import { getAllBlogPosts } from '@/lib/blog'
 import { formatDate } from '@/lib/format-date'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'

@@ -2,18 +2,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Suggestion,
-  Suggestions,
-} from '@/components/ai-elements/suggestion'
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
-import {
-  ASSISTANT_INTRO,
-  ASSISTANT_NAME,
-  HOME_STARTER_QUESTIONS,
-} from './copy'
+import { ASSISTANT_INTRO, ASSISTANT_NAME, HOME_STARTER_QUESTIONS } from './copy'
 import { handOffQuestion } from './pending-question'
 
 /**
@@ -50,9 +43,7 @@ export function HomeAssistantPanel() {
       <h2 className="text-xl font-semibold" id="career-assistant-heading">
         {ASSISTANT_NAME}
       </h2>
-      <p className="leading-relaxed text-muted-foreground">
-        {ASSISTANT_INTRO}
-      </p>
+      <p className="leading-relaxed text-muted-foreground">{ASSISTANT_INTRO}</p>
       <Suggestions>
         {HOME_STARTER_QUESTIONS.map(question => (
           <Suggestion key={question} onClick={start} suggestion={question} />

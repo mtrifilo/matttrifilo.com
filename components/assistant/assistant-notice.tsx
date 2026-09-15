@@ -7,6 +7,7 @@ import {
   INCOMPLETE_NOTICE,
   MATT_MAILTO,
   RATE_LIMIT_NOTICE,
+  RESET_LABEL,
   TRUNCATED_NOTICE,
 } from './copy'
 
@@ -25,11 +26,13 @@ function Notice({
   children,
   className,
   icon,
+  role,
   tone = 'muted',
 }: {
   children: ReactNode
   className?: string
   icon: ReactNode
+  role?: 'alert'
   tone?: 'muted' | 'destructive'
 }) {
   return (
@@ -40,6 +43,7 @@ function Notice({
         tone === 'destructive' ? 'text-foreground' : 'text-muted-foreground',
         className
       )}
+      role={role}
     >
       <span
         aria-hidden="true"
@@ -78,11 +82,24 @@ export function IncompleteNotice() {
  * what knows why it refused. `rate_limited` is the exception: a visitor out of
  * questions needs somewhere to go, so the notice hands them the two pages that
  * answer most of what they were asking and Matt's address for the rest.
+ *
+ * Two refusals tell the visitor to start a new conversation, so those two
+ * carry the control that does it. The rest are about the assistant, not the
+ * conversation, and a retry is the right next step.
+ *
+ * The status region announces only "Error"; `role="alert"` here is what reads
+ * the sentence itself to a screen reader.
  */
-export function ChatErrorNotice({ error }: { error: ChatErrorView }) {
+export function ChatErrorNotice({
+  error,
+  onReset,
+}: {
+  error: ChatErrorView
+  onReset?: () => void
+}) {
   if (error.code === 'rate_limited') {
     return (
-      <Notice icon={<Clock className="size-4" />}>
+      <Notice icon={<Clock className="size-4" />} role="alert">
         {RATE_LIMIT_NOTICE.lead}
         <NoticeLink href="/resume">{RATE_LIMIT_NOTICE.resumeLabel}</NoticeLink>
         {RATE_LIMIT_NOTICE.between}
@@ -98,20 +115,31 @@ export function ChatErrorNotice({ error }: { error: ChatErrorView }) {
     )
   }
 
+  const offersReset =
+    onReset &&
+    (error.code === 'too_many_turns' || error.code === 'budget_exceeded')
+
   return (
-    <Notice icon={<AlertCircle className="size-4" />} tone="destructive">
+    <Notice
+      icon={<AlertCircle className="size-4" />}
+      role="alert"
+      tone="destructive"
+    >
       {error.message}
+      {offersReset && (
+        <button
+          className="ml-2 font-medium underline underline-offset-2 hover:text-primary"
+          onClick={onReset}
+          type="button"
+        >
+          {RESET_LABEL}
+        </button>
+      )}
     </Notice>
   )
 }
 
-function NoticeLink({
-  children,
-  href,
-}: {
-  children: ReactNode
-  href: string
-}) {
+function NoticeLink({ children, href }: { children: ReactNode; href: string }) {
   return (
     <Link
       className="text-foreground underline underline-offset-2 hover:text-primary"

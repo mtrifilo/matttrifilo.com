@@ -1,6 +1,15 @@
 const PENDING_QUESTION_KEY = 'matt-career-assistant:pending-question'
 
 /**
+ * How long a handed-off question stays askable. The hand-off is one
+ * navigation, well under a second; anything older is a question the visitor
+ * walked away from (Back mid-navigation, a tab left open), and asking it on
+ * their next visit to /ask would bill a model call for something they never
+ * chose to send.
+ */
+const PENDING_QUESTION_TTL_MS = 60_000
+
+/**
  * The homepage panel's handoff to /ask (MTC-33).
  *
  * The question travels in sessionStorage rather than as a `?q=` search param.
@@ -16,20 +25,31 @@ const PENDING_QUESTION_KEY = 'matt-career-assistant:pending-question'
  * act of reading, and the cost of that is retyping a sentence, not a crash.
  */
 
-export function handOffQuestion(question: string): void {
+export function handOffQuestion(question: string, now = Date.now()): void {
   try {
-    sessionStorage.setItem(PENDING_QUESTION_KEY, question)
+    sessionStorage.setItem(
+      PENDING_QUESTION_KEY,
+      JSON.stringify({ question, at: now })
+    )
   } catch {
     // Storage disabled or full. /ask opens empty and the visitor retypes.
   }
 }
 
-/** Read the pending question and clear it. Returns null when there is none. */
-export function takePendingQuestion(): string | null {
+/**
+ * Read the pending question and clear it. Returns null when there is none,
+ * or when the one there is has gone stale.
+ */
+export function takePendingQuestion(now = Date.now()): string | null {
   try {
-    const question = sessionStorage.getItem(PENDING_QUESTION_KEY)
-    if (question !== null) sessionStorage.removeItem(PENDING_QUESTION_KEY)
-    return question
+    const raw = sessionStorage.getItem(PENDING_QUESTION_KEY)
+    if (raw === null) return null
+    sessionStorage.removeItem(PENDING_QUESTION_KEY)
+    const pending = JSON.parse(raw) as { question?: unknown; at?: unknown }
+    if (typeof pending.question !== 'string' || typeof pending.at !== 'number')
+      return null
+    if (now - pending.at > PENDING_QUESTION_TTL_MS) return null
+    return pending.question
   } catch {
     return null
   }

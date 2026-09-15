@@ -28,6 +28,16 @@ import type { ChatErrorCode } from './validate'
  */
 export const SOURCES_TRAILER_PREFIX = 'Sources: '
 
+/**
+ * Characters in one question. Roughly a long paragraph.
+ *
+ * Defined here for the same reason as the trailer prefix: both ends enforce
+ * it. The route refuses a longer question with `message_too_long`; the
+ * composer stops one being sent, because the route's refusal arrives after
+ * the question has already left the box. validate.ts re-exports it.
+ */
+export const CHAT_MAX_MESSAGE_CHARS = 1_500
+
 /** One assistant message, reduced to what the transcript renders. */
 export interface AnswerView {
   /** The answer, with any `Sources:` trailer removed. */
@@ -82,9 +92,30 @@ export function joinTextParts(
  * the word, which is the cost of not guessing at prefixes like "So".
  */
 export function stripSourcesTrailer(text: string): string {
-  const lastBreak = text.lastIndexOf('\n')
-  if (!TRAILER_LINE.test(text.slice(lastBreak + 1))) return text
-  return text.slice(0, Math.max(lastBreak, 0)).trimEnd()
+  // Models routinely end with a newline; without this the "final line" would
+  // be the empty string after it, and the trailer would stay on screen.
+  const trimmed = text.trimEnd()
+  const lastBreak = trimmed.lastIndexOf('\n')
+  if (!TRAILER_LINE.test(trimmed.slice(lastBreak + 1))) return text
+  return trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd()
+}
+
+/** Which notice, if any, sits under an answer once its run has ended. */
+export type AnswerNotice = 'truncated' | 'incomplete'
+
+/**
+ * A cut-short answer is still an answer, so it gets the notice that says to
+ * ask something narrower. Every other run that did not end cleanly — no text
+ * at all, or text that stopped on something other than the output cap, such
+ * as a safety filter — gets the one that says to try again. `truncated`
+ * without text falls into that second group: there is nothing to have been
+ * cut short.
+ */
+export function noticeFor(view: AnswerView): AnswerNotice | null {
+  const hasText = view.text.trim().length > 0
+  if (view.truncated && hasText) return 'truncated'
+  if (view.incomplete) return 'incomplete'
+  return null
 }
 
 const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
@@ -123,11 +154,11 @@ export interface ChatErrorView {
 /**
  * Copy for anything that is not a refusal the server named.
  *
- * A dropped connection, a request that never reached the route, and a model
- * that died mid-answer all arrive as an `Error` with a message written by
- * somewhere other than this route — the AI SDK's transport, or the browser's
- * fetch. None of them is copy to show a visitor, and none can be told apart
- * from the others with any certainty, so they share one true sentence.
+ * A dropped connection and a request that never reached the route arrive as
+ * an `Error` with a message written by somewhere other than this route — the
+ * AI SDK's transport, or the browser's fetch. Neither is copy to show a
+ * visitor, and they cannot be told apart with any certainty, so they share
+ * one true sentence.
  */
 export const CHAT_UNKNOWN_ERROR_MESSAGE =
   'Something went wrong reaching the assistant. Try again in a moment, or email Matt at matt.trifilo@gmail.com.'
@@ -140,17 +171,37 @@ const CHAT_ERROR_CODES: ReadonlySet<string> = new Set<ChatErrorCode>([
   'rate_limited',
   'invalid',
   'unavailable',
+  'interrupted',
 ])
+
+/**
+ * Refusals that were about the question just sent, not about the assistant.
+ *
+ * `useChat` puts the question into the transcript before the request and
+ * leaves it there when the request fails, so after one of these the same
+ * over-long or over-limit body is posted again on every later send. The
+ * transcript has to let go of that question; the composer gets it back.
+ */
+export function discardsQuestion(code: ChatErrorCode): boolean {
+  return (
+    code === 'too_many_turns' ||
+    code === 'message_too_long' ||
+    code === 'budget_exceeded' ||
+    code === 'invalid'
+  )
+}
 
 /**
  * Read the route's structured refusal back out of a `useChat` error.
  *
  * The AI SDK's transport rejects a non-2xx response with an `Error` whose
  * message is the raw body, so the route's `{ error: { code, message } }` is
- * sitting in `error.message` as JSON. Parsing it is what lets the UI render
- * the sentence the server chose — the limits, the kill switch and the
- * too-long question each explain themselves — instead of one flat "something
- * went wrong" for seven different situations.
+ * sitting in `error.message` as JSON. A model that fails once the stream is
+ * open arrives the same way: the route writes the envelope into the stream's
+ * error text. Parsing it is what lets the UI render the sentence the server
+ * chose — the limits, the kill switch and the too-long question each explain
+ * themselves — instead of one flat "something went wrong" for eight
+ * different situations.
  *
  * Anything that is not that exact shape is treated as unknown rather than
  * shown. A message this route did not write is not copy.

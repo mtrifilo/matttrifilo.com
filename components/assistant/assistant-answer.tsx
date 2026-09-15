@@ -4,7 +4,7 @@ import { Check, Copy, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { Source, Sources } from '@/components/ai-elements/sources'
-import type { AnswerView } from '@/lib/chat/answer'
+import { noticeFor, type AnswerView } from '@/lib/chat/answer'
 import { AnswerShimmer } from './answer-shimmer'
 import { IncompleteNotice, TruncatedNotice } from './assistant-notice'
 
@@ -32,6 +32,9 @@ export function AssistantAnswer({
   actions,
 }: AssistantAnswerProps) {
   const hasText = view.text.trim().length > 0
+  // Decided in lib/chat/answer.ts, where it is tested; nothing here is
+  // reachable from bun test.
+  const notice = pending ? null : noticeFor(view)
 
   return (
     <>
@@ -46,10 +49,8 @@ export function AssistantAnswer({
         </Sources>
       )}
 
-      {/* A cut-short answer is still an answer, so it keeps its own notice;
-          a run that produced nothing gets the one that says to try again. */}
-      {view.truncated && <TruncatedNotice />}
-      {view.incomplete && !view.truncated && !hasText && <IncompleteNotice />}
+      {notice === 'truncated' && <TruncatedNotice />}
+      {notice === 'incomplete' && <IncompleteNotice />}
 
       {actions && hasText && (
         <AnswerActions onRegenerate={actions.onRegenerate} text={view.text} />

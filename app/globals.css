@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/*
+ * Streamdown renders the assistant's Markdown with Tailwind classes of its
+ * own — heading sizes, blockquote rules, the link-safety dialog's backdrop.
+ * Tailwind does not scan node_modules, so without this those classes are
+ * never generated and the answers render half-styled.
+ */
+@source '../node_modules/streamdown/dist';
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -222,12 +230,14 @@
   --reading-column: 48rem; /* keep equal to max-w-3xl used by every page */
   --veil-edge: 2rem;
   /*
-   * Height of the sticky nav: py-3 (12px twice) around a 36px control. Only
-   * /ask needs it — it is the one page that fills the viewport exactly, so
-   * that its composer can sit at the bottom without the page scrolling behind
-   * the transcript. Keep it equal to what app/nav.tsx renders.
+   * Height of the sticky nav: py-3 (12px twice) around a 36px control, plus
+   * the 1px bottom border it has while the page is unscrolled. Only /ask
+   * needs it — it is the one page that fills the viewport exactly, so that
+   * its composer can sit at the bottom without the page scrolling behind the
+   * transcript (its footer is left out for the same reason; see
+   * app/layout.tsx). Keep it equal to what app/nav.tsx renders.
    */
-  --nav-height: 3.75rem;
+  --nav-height: calc(3.75rem + 1px);
 }
 
 @media (min-width: 56rem) {

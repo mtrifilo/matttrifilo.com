@@ -4,12 +4,14 @@ import { ArrowUp, Square } from 'lucide-react'
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
   type RefObject,
 } from 'react'
+import { CHAT_MAX_MESSAGE_CHARS } from '@/lib/chat/answer'
 import { cn } from '@/lib/utils'
 import { ASSISTANT_PLACEHOLDER } from './copy'
 
@@ -22,13 +24,18 @@ import { ASSISTANT_PLACEHOLDER } from './copy'
  * component is built around file attachments, screen capture, a model picker
  * and a command palette — none of which this assistant has, all of which would
  * ship to every visitor of the homepage. What is left after removing them is
- * the eighty lines below.
+ * the hundred lines below.
+ *
+ * The question limit is enforced here as well as on the route, because the
+ * route's refusal arrives after the question has left the box: by then it is
+ * in the transcript and out of the visitor's hands. A counter appears as the
+ * limit nears, and the send button will not send past it.
  */
 
 export interface AssistantComposerProps {
   value: string
   onValueChange: (value: string) => void
-  /** Called with the trimmed question. Never called with an empty string. */
+  /** Called with the trimmed question. Never called empty or over the limit. */
   onSubmit: (question: string) => void
   /** Present only where an answer can be interrupted. */
   onStop?: () => void
@@ -38,6 +45,9 @@ export interface AssistantComposerProps {
   textareaRef?: RefObject<HTMLTextAreaElement | null>
   className?: string
 }
+
+/** The counter shows once a question is this close to the limit. */
+const COUNTER_THRESHOLD = Math.floor(CHAT_MAX_MESSAGE_CHARS * 0.8)
 
 export function AssistantComposer({
   value,
@@ -50,6 +60,7 @@ export function AssistantComposer({
 }: AssistantComposerProps) {
   const fallbackRef = useRef<HTMLTextAreaElement | null>(null)
   const ref = textareaRef ?? fallbackRef
+  const counterId = useId()
   // An IME composing a character sends Enter to commit it. Sending the message
   // there would post a half-written word and eat the keystroke that finished
   // it, so Enter only sends once composition has ended.
@@ -57,11 +68,14 @@ export function AssistantComposer({
 
   useAutoGrow(ref, value)
 
+  const overLimit = value.length > CHAT_MAX_MESSAGE_CHARS
+  const showCounter = value.length >= COUNTER_THRESHOLD
+
   const submit = useCallback(() => {
     const question = value.trim()
-    if (question.length === 0 || streaming) return
+    if (question.length === 0 || overLimit || streaming) return
     onSubmit(question)
-  }, [onSubmit, streaming, value])
+  }, [onSubmit, overLimit, streaming, value])
 
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -81,54 +95,73 @@ export function AssistantComposer({
     [composing, submit]
   )
 
-  const canSend = value.trim().length > 0
+  const canSend = value.trim().length > 0 && !overLimit
 
   return (
     <form
       className={cn(
-        'flex items-end gap-3 rounded-xl border border-border bg-card py-3 pl-4 pr-3',
+        'rounded-xl border border-border bg-card py-3 pl-4 pr-3',
         'transition-colors focus-within:border-ring',
+        overLimit && 'border-destructive focus-within:border-destructive',
         className
       )}
       onSubmit={handleSubmit}
     >
-      <textarea
-        aria-label="Ask a question about Matt's work"
-        className={cn(
-          'max-h-40 min-h-[1.625rem] flex-1 resize-none bg-transparent text-base',
-          'leading-relaxed outline-none placeholder:text-muted-foreground'
-        )}
-        onChange={event => onValueChange(event.target.value)}
-        onCompositionEnd={() => setComposing(false)}
-        onCompositionStart={() => setComposing(true)}
-        onKeyDown={handleKeyDown}
-        placeholder={ASSISTANT_PLACEHOLDER}
-        ref={ref}
-        rows={1}
-        value={value}
-      />
-      {streaming && onStop ? (
-        <button
-          aria-label="Stop generating"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70"
-          onClick={onStop}
-          type="button"
-        >
-          <Square aria-hidden="true" className="size-4 fill-current" />
-        </button>
-      ) : (
-        <button
-          aria-label="Send question"
+      <div className="flex items-end gap-3">
+        <textarea
+          aria-describedby={showCounter ? counterId : undefined}
+          aria-invalid={overLimit || undefined}
+          aria-label="Ask a question about Matt's work"
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-full',
-            'bg-primary text-primary-foreground transition-opacity',
-            'disabled:opacity-40'
+            'max-h-40 min-h-[1.625rem] flex-1 resize-none bg-transparent text-base',
+            'leading-relaxed outline-none placeholder:text-muted-foreground'
           )}
-          disabled={!canSend}
-          type="submit"
+          onChange={event => onValueChange(event.target.value)}
+          onCompositionEnd={() => setComposing(false)}
+          onCompositionStart={() => setComposing(true)}
+          onKeyDown={handleKeyDown}
+          placeholder={ASSISTANT_PLACEHOLDER}
+          ref={ref}
+          rows={1}
+          value={value}
+        />
+        {streaming && onStop ? (
+          <button
+            aria-label="Stop generating"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70"
+            onClick={onStop}
+            type="button"
+          >
+            <Square aria-hidden="true" className="size-4 fill-current" />
+          </button>
+        ) : (
+          <button
+            aria-label="Send question"
+            className={cn(
+              'flex size-9 shrink-0 items-center justify-center rounded-full',
+              'bg-primary text-primary-foreground transition-opacity',
+              'disabled:opacity-40'
+            )}
+            disabled={!canSend}
+            type="submit"
+          >
+            <ArrowUp aria-hidden="true" className="size-4.5" />
+          </button>
+        )}
+      </div>
+      {showCounter && (
+        <p
+          aria-live="polite"
+          className={cn(
+            'mt-1 text-right text-xs tabular-nums',
+            overLimit ? 'text-destructive' : 'text-muted-foreground'
+          )}
+          id={counterId}
         >
-          <ArrowUp aria-hidden="true" className="size-4.5" />
-        </button>
+          {value.length.toLocaleString('en-US')} /{' '}
+          {CHAT_MAX_MESSAGE_CHARS.toLocaleString('en-US')}
+          {overLimit && ' — trim the question to send it'}
+        </p>
       )}
     </form>
   )

@@ -1,12 +1,13 @@
 /**
- * Every sentence Matt's Career Assistant puts on the page that the server did
- * not write (MTC-33).
+ * The sentences Matt's Career Assistant puts on the page from its components
+ * (MTC-33).
  *
  * It is one file because the framing is the constraint: the assistant is
  * always a third party talking *about* Matt, never Matt, and that is easier to
- * hold to when every line is readable together. The route's own copy — the
- * refusals, the limits, the kill switch — is not repeated here; the UI renders
- * what the server sent.
+ * hold to when every line is readable together. Two kinds of copy live
+ * elsewhere on purpose: the route's own — the refusals, the limits, the kill
+ * switch — which the UI renders as sent; and the error fallback in
+ * lib/chat/answer.ts, which is decided alongside the parsing it covers.
  */
 
 export const MATT_EMAIL = 'matt.trifilo@gmail.com'
@@ -37,6 +38,12 @@ export const ASK_STARTER_QUESTIONS = [
   "How did his team's delivery change after adopting AI coding agents?",
   'What does the Email Reliability team own at Thryv?',
 ] as const
+
+/**
+ * The control that empties the transcript. Two of the route's refusals tell
+ * the visitor to "start a new one", and this is the thing they mean.
+ */
+export const RESET_LABEL = 'New conversation'
 
 /** Shown under an answer the model started but the output cap cut off. */
 export const TRUNCATED_NOTICE =
