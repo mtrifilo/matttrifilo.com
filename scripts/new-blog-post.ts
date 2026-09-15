@@ -16,6 +16,10 @@
 import fs from 'fs'
 import path from 'path'
 import readline from 'readline'
+// Imported, not restated: a second copy of the limit is a copy that can be
+// wrong, and the whole job of this scaffold is to emit a file the loader
+// accepts.
+import { SUMMARY_MAX_LENGTH } from '../lib/knowledge/build'
 
 const BLOG_DIR = path.join(process.cwd(), 'content', 'blog')
 const KNOWLEDGE_BLOG_DIR = path.join(
@@ -25,8 +29,6 @@ const KNOWLEDGE_BLOG_DIR = path.join(
   'blog'
 )
 const SITE_URL = 'https://matttrifilo.com'
-/** Mirrors SUMMARY_MAX_LENGTH in lib/knowledge/build.ts. */
-const SUMMARY_MAX_LENGTH = 160
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -96,6 +98,29 @@ function quoted(value: string): string {
 }
 
 /**
+ * Refuses an answer the knowledge loader would reject, at the prompt,
+ * where it costs one retype.
+ *
+ * The index renders `- [id] title — summary (…)`, so an em dash in a
+ * title or description would make that line ambiguous and the loader
+ * throws on it. Without this the scaffold happily writes a twin that
+ * turns the whole suite red the moment it lands — the exact failure this
+ * scaffold exists to prevent.
+ */
+export function frontmatterProblem(
+  label: string,
+  value: string
+): string | null {
+  if (value.includes('—')) {
+    return `The ${label} may not contain an em dash (—): the knowledge index uses it to separate a title from its summary. Use a colon, a comma, or two hyphens.`
+  }
+  if (/[\r\n]/.test(value)) {
+    return `The ${label} must be a single line.`
+  }
+  return null
+}
+
+/**
  * The index line the model reads before deciding to fetch this post.
  *
  * The description Matt typed is the closest thing to "what a reader would
@@ -127,7 +152,6 @@ id: '${slug}'
 title: ${quoted(draft.title)}
 summary: ${quoted(draftSummary(draft))}
 tags: [${tags.join(', ')}]
-source: 'blog'
 updated: '${draft.date}'
 canonical: '${SITE_URL}/blog/${slug}'
 ---
@@ -143,6 +167,11 @@ async function main() {
     console.error('Title is required.')
     process.exit(1)
   }
+  const titleProblem = frontmatterProblem('title', title)
+  if (titleProblem) {
+    console.error(titleProblem)
+    process.exit(1)
+  }
 
   const categoriesInput = await prompt('Categories (comma-separated, optional): ')
   const categories = categoriesInput
@@ -150,6 +179,12 @@ async function main() {
     : []
 
   const description = await prompt('Description (optional): ')
+  const descriptionProblem =
+    description && frontmatterProblem('description', description)
+  if (descriptionProblem) {
+    console.error(descriptionProblem)
+    process.exit(1)
+  }
 
   const today = new Date().toISOString().split('T')[0]
   const draft: PostDraft = { title, date: today, categories, description }

@@ -2,19 +2,25 @@
  * `bun run knowledge:check`
  *
  * Prints what the career assistant would be given — the index text as the
- * model sees it, what each document would cost to read, and the headroom
- * left under KNOWLEDGE_INDEX_TOKEN_CEILING — and then runs the content
- * guards in lib/knowledge/knowledge.test.ts. Exits non-zero if the corpus
- * fails to build or any guard fails, so it is safe to wire into CI or a
- * pre-commit hook next to scripts/knowledge-denylist-check.sh.
+ * model sees it, what each document would cost to read, anything the build
+ * dropped, and the headroom left under the two ceilings — and then runs the
+ * content guards in lib/knowledge/knowledge.test.ts. Exits non-zero if the
+ * corpus fails to build, if a single turn could not afford its three reads,
+ * or if any guard fails, so it is safe to wire into CI or a pre-commit hook
+ * next to scripts/knowledge-denylist-check.sh.
+ *
+ * The corpus is built directly rather than through lib/knowledge: the
+ * loaders there are the chat route's contract and deliberately expose only
+ * what a request needs, while this script is the authoring view and wants
+ * the offcuts too.
  */
 import path from 'path'
 import {
-  listKnowledgeDocuments,
-  loadKnowledgeIndex,
+  buildKnowledgeCorpus,
+  KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
-  KNOWLEDGE_READ_BUDGET,
-} from '../lib/knowledge'
+} from '../lib/knowledge/build'
+import { KNOWLEDGE_READ_BUDGET } from '../lib/knowledge'
 
 // Leading "./" so bun test treats these as paths rather than name filters.
 const GUARD_TESTS = [
@@ -23,11 +29,12 @@ const GUARD_TESTS = [
   path.join('scripts', 'new-blog-post.test.ts'),
 ].map(file => `.${path.sep}${file}`)
 
-const index = loadKnowledgeIndex()
-const documents = listKnowledgeDocuments()
+const corpus = buildKnowledgeCorpus()
+const { index, documents, unanswered, droppedDocuments } = corpus
 
 console.log('--- the index, as the model sees it ---\n')
 console.log(index.text)
+
 console.log('\n--- documents the model can fetch ---\n')
 for (const document of documents) {
   console.log(
@@ -35,12 +42,24 @@ for (const document of documents) {
   )
 }
 
+// The faq drops its unanswered questions, and a drop that prints nothing
+// is indistinguishable from a file that was never read. Say what is
+// missing, every run.
+if (unanswered.length > 0 || droppedDocuments.length > 0) {
+  console.log('\n--- dropped: unanswered, so neither published nor sent ---\n')
+  for (const question of unanswered) {
+    console.log(`  ${question.file}  ## ${question.heading}`)
+  }
+  for (const file of droppedDocuments) {
+    console.log(`  ${file}  (whole document: nothing in it is answered yet)`)
+  }
+}
+
 const bodyTokens = documents.reduce((sum, d) => sum + d.tokenEstimate, 0)
-// The three largest documents: the worst a single turn can spend under
-// KNOWLEDGE_READ_BUDGET.maxDocuments, and the number worth watching as the
-// corpus grows.
-const worstRead = [...documents]
-  .sort((a, b) => b.tokenEstimate - a.tokenEstimate)
+const largest = [...documents].sort((a, b) => b.tokenEstimate - a.tokenEstimate)
+// The worst a single turn can spend under KNOWLEDGE_READ_BUDGET: the
+// per-document ceiling alone cannot promise this, so check the real number.
+const worstRead = largest
   .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
   .reduce((sum, d) => sum + d.tokenEstimate, 0)
 
@@ -58,9 +77,23 @@ console.log(`index ceiling:   ${KNOWLEDGE_INDEX_TOKEN_CEILING}`)
 console.log(`headroom:        ~${headroom} tokens (${used}% of ceiling used)`)
 console.log(`document tokens: ~${bodyTokens} across the whole corpus`)
 console.log(
+  `largest document: ~${largest[0].tokenEstimate} tokens (ceiling ${KNOWLEDGE_DOCUMENT_TOKEN_CEILING})`
+)
+console.log(
   `worst-case read: ~${worstRead} tokens (the ${KNOWLEDGE_READ_BUDGET.maxDocuments} largest, budget ${KNOWLEDGE_READ_BUDGET.maxTokens})`
 )
 console.log(`built at:        ${index.builtAt}`)
+
+if (worstRead > KNOWLEDGE_READ_BUDGET.maxTokens) {
+  console.error(
+    `\nknowledge: the ${KNOWLEDGE_READ_BUDGET.maxDocuments} largest documents are ~${worstRead} tokens together, over the ${KNOWLEDGE_READ_BUDGET.maxTokens} a turn may spend. The model cannot read them in one answer. Split the largest ones: ${largest
+      .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
+      .map(d => `${d.id} (~${d.tokenEstimate})`)
+      .join(', ')}`
+  )
+  process.exit(1)
+}
+
 console.log(`\nrunning guards in ${GUARD_TESTS.join(' ')}\n`)
 
 // Spawned rather than imported so the guards keep running as ordinary bun

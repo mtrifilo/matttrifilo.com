@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import sitemap from '@/app/sitemap'
 import { getBlogSlugs } from './blog'
+import { listKnowledgeDocuments } from './knowledge'
 import { siteRoutes } from './site-routes'
 
 const BASE = 'https://matttrifilo.com'
@@ -59,5 +60,20 @@ describe('sitemap', () => {
     const urls = new Set(sitemap().map(entry => entry.url))
     for (const slug of slugs)
       expect(urls.has(`${BASE}/blog/${slug}`)).toBe(true)
+  })
+
+  test('includes every knowledge document, dated by its own frontmatter', () => {
+    // /knowledge exists so the assistant's sources can be looked up; a
+    // document missing from the sitemap is a source nobody can find.
+    const documents = listKnowledgeDocuments()
+    expect(documents.length).toBeGreaterThan(0)
+    const entries = new Map(sitemap().map(entry => [entry.url, entry]))
+    for (const document of documents) {
+      const entry = entries.get(`${BASE}${document.url}`)
+      expect(entry, `${document.id} is not in the sitemap`).toBeDefined()
+      // The author's date, not the build's: a rebuild changes nothing
+      // about when the document last said something different.
+      expect(entry!.lastModified).toEqual(new Date(document.updated))
+    }
   })
 })

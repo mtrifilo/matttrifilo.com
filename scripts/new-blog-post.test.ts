@@ -7,6 +7,7 @@ import {
   buildKnowledgeTwin,
   buildPostFile,
   draftSummary,
+  frontmatterProblem,
   postSlug,
   STARTER_BODY,
   type PostDraft,
@@ -66,6 +67,43 @@ describe('new-blog-post scaffold', () => {
       expect(document.summary).toBe(draftSummary(draft))
       expect(document.tags).toEqual(['blog', 'engineering'])
       expect(document.text).toBe(STARTER_BODY.trim())
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('an em dash is refused at the prompt, not at the next build', () => {
+    // The index renders `- [id] title — summary (…)`, so the loader throws
+    // on an em dash in either. Without this the scaffold writes a twin
+    // that turns the suite red the moment it lands — exactly the failure
+    // the scaffold exists to prevent.
+    expect(frontmatterProblem('title', 'Shipping — a note')).toMatch(
+      /may not contain an em dash/
+    )
+    expect(frontmatterProblem('description', 'A note — on shipping')).toMatch(
+      /may not contain an em dash/
+    )
+    expect(frontmatterProblem('title', 'Two\nlines')).toMatch(
+      /must be a single line/
+    )
+    expect(frontmatterProblem('title', draft.title)).toBeNull()
+    expect(frontmatterProblem('description', draft.description!)).toBeNull()
+  })
+
+  test('a twin built from a rejected title would not load', () => {
+    // Proves the guard above is guarding something real, through the same
+    // loader the site uses.
+    const bad = { ...draft, title: 'Shipping — a note' }
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-post-'))
+    try {
+      fs.mkdirSync(path.join(dir, 'blog'))
+      fs.writeFileSync(
+        path.join(dir, 'blog', `${postSlug(bad.title, bad.date)}.md`),
+        buildKnowledgeTwin(bad)
+      )
+      expect(() => buildKnowledgeCorpus(dir)).toThrow(
+        /may not contain an em dash/
+      )
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }

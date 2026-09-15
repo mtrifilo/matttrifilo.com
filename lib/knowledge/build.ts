@@ -26,8 +26,35 @@ import path from 'path'
  * the route depends on.
  */
 
-export type KnowledgeSource =
-  'resume' | 'blog' | 'open-source' | 'career' | 'faq'
+/**
+ * The topic directories, in the order they appear in the index: most
+ * generally useful first, the long tail of blog posts last.
+ *
+ * Topics are a closed set on purpose. Adding a *document* must stay a
+ * one-file change Matt can make without touching code — that is the whole
+ * point of this layout — but adding a whole new *kind* of knowledge is a
+ * decision about what the assistant is for, and it should be made here,
+ * on purpose, rather than by whatever a directory happens to be called.
+ *
+ * This list is also the only definition of `source`. They used to be two
+ * fields with the same five values and nothing asserting they agreed,
+ * which let a document in career/ declare itself the résumé.
+ */
+const TOPIC_ORDER = ['resume', 'career', 'faq', 'open-source', 'blog'] as const
+
+/**
+ * The topic a document lives in. It keeps the name `source` because that
+ * is the chat route's contract; it is derived from the directory rather
+ * than declared in frontmatter, so the two cannot disagree.
+ */
+export type KnowledgeSource = (typeof TOPIC_ORDER)[number]
+
+function isTopic(name: string): name is KnowledgeSource {
+  return (TOPIC_ORDER as readonly string[]).includes(name)
+}
+
+const topicIndex = (topic: string): number =>
+  (TOPIC_ORDER as readonly string[]).indexOf(topic)
 
 /**
  * One line in the index: everything the model needs to decide whether
@@ -66,6 +93,10 @@ export interface KnowledgeIndex {
 export interface KnowledgeCorpus {
   index: KnowledgeIndex
   documents: KnowledgeDocument[]
+  /** faq questions dropped for still being a TODO, so a build can say so. */
+  unanswered: UnansweredQuestion[]
+  /** faq files dropped whole, for the same reason. */
+  droppedDocuments: string[]
 }
 
 /**
@@ -81,33 +112,33 @@ export interface KnowledgeCorpus {
  */
 export const KNOWLEDGE_INDEX_TOKEN_CEILING = 8_000
 
-export const KNOWLEDGE_DIR = path.join(process.cwd(), 'content', 'knowledge')
-
-const SOURCES: readonly KnowledgeSource[] = [
-  'resume',
-  'blog',
-  'open-source',
-  'career',
-  'faq',
-]
-
 /**
- * The topic directories, in the order they appear in the index: most
- * generally useful first, the long tail of blog posts last.
+ * The most tokens one document may cost to read.
  *
- * Topics are a closed set on purpose. Adding a *document* must stay a
- * one-file change Matt can make without touching code — that is the whole
- * point of this layout — but adding a whole new *kind* of knowledge is a
- * decision about what the assistant is for, and it should be made here,
- * on purpose, rather than by whatever a directory happens to be called.
+ * A document is the unit the model fetches, so an oversized one quietly
+ * eats a whole turn's budget and crowds out the other two reads
+ * KNOWLEDGE_READ_BUDGET allows. Splitting it is almost always the better
+ * answer: two focused documents are easier for the model to choose
+ * between than one long one, and that is the point of the index.
+ *
+ * 9,000, and the reasoning is worth writing down because the tidy answer
+ * is wrong. maxTokens / maxDocuments is 6,666, which would reject the
+ * essay in blog/ — ~7,900 tokens, one published piece that should not be
+ * chopped into three to satisfy a constant. 8,000 accepts it by 74 tokens,
+ * which is not a ceiling, it is a tripwire: the next typo fix in that post
+ * breaks the build. 9,000 is the value that gives the one genuinely large
+ * document real headroom while still leaving a realistic turn well inside
+ * budget — one big document plus two career documents at the size Matt's
+ * actually are (~2,500 tokens) is ~14,000 against 20,000.
+ *
+ * That means three documents at the ceiling would be 27,000, over budget.
+ * So this is deliberately not the only guard: `bun run knowledge:check`
+ * fails on the *actual* worst-case three-document read, which is the
+ * number that matters and the one that will move as the corpus grows.
  */
-const TOPIC_ORDER: readonly string[] = [
-  'resume',
-  'career',
-  'faq',
-  'open-source',
-  'blog',
-]
+export const KNOWLEDGE_DOCUMENT_TOKEN_CEILING = 9_000
+
+export const KNOWLEDGE_DIR = path.join(process.cwd(), 'content', 'knowledge')
 
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/
 const FRONTMATTER_FIELD = /^([A-Za-z]+):[ \t]*(.*)$/
@@ -129,10 +160,32 @@ interface Frontmatter {
   title: string
   summary: string
   tags: string[]
-  source: KnowledgeSource
   updated: string
   canonical?: string
 }
+
+/**
+ * Every key a document may declare. `source` is not among them: it is the
+ * topic directory. An unknown key is an error rather than something
+ * ignored, because the failure mode of a silently ignored `sumary:` is a
+ * document that loads and is wrong.
+ */
+const FRONTMATTER_KEYS: readonly string[] = [
+  'id',
+  'title',
+  'summary',
+  'tags',
+  'updated',
+  'canonical',
+]
+
+/**
+ * `canonical` says "the public original of this document lives here". It
+ * can only be a page Matt controls: a canonical pointing somewhere else
+ * hands another site the search ranking for his own words, and the
+ * /knowledge page renders it as a link readers will trust.
+ */
+const CANONICAL_HOST = /^https:\/\/(?:www\.)?matttrifilo\.com(?=[/?#]|$)/
 
 /** `'value'`, `"value"` or a bare value, as written in the frontmatter. */
 function unquote(value: string): string {
@@ -200,6 +253,11 @@ function parseFrontmatter(
         `${source}: frontmatter line is not "key: value": ${line}`
       )
     }
+    if (!FRONTMATTER_KEYS.includes(match[1])) {
+      throw new Error(
+        `${source}: unknown frontmatter key "${match[1]}". A document declares ${FRONTMATTER_KEYS.join(', ')} and nothing else; its topic comes from the directory it is in.`
+      )
+    }
     fields.set(match[1], unquote(match[2]))
   }
 
@@ -213,18 +271,12 @@ function parseFrontmatter(
   const title = required('title')
   const summary = required('summary')
   const tags = parseTags(fields.get('tags') ?? '', source)
-  const source_ = required('source')
   const updated = required('updated')
   const canonical = fields.get('canonical')
 
   if (id !== expectedId) {
     throw new Error(
       `${source}: id "${id}" must match the file name ("${expectedId}"), so ids stay stable and /knowledge/<id> keeps resolving`
-    )
-  }
-  if (!SOURCES.includes(source_ as KnowledgeSource)) {
-    throw new Error(
-      `${source}: source must be one of ${SOURCES.join(' | ')} (got "${source_}")`
     )
   }
   if (!ISO_DATE.test(updated) || !isRealDate(updated)) {
@@ -254,9 +306,9 @@ function parseFrontmatter(
       )
     }
   }
-  if (canonical !== undefined && !canonical.startsWith('https://')) {
+  if (canonical !== undefined && !CANONICAL_HOST.test(canonical)) {
     throw new Error(
-      `${source}: canonical must be an https:// URL (got "${canonical}")`
+      `${source}: canonical must be an https://matttrifilo.com URL — it is where the original of this document is published, not a citation (got "${canonical}")`
     )
   }
 
@@ -265,7 +317,6 @@ function parseFrontmatter(
     title,
     summary,
     tags,
-    source: source_ as KnowledgeSource,
     updated,
     ...(canonical ? { canonical } : {}),
   }
@@ -317,15 +368,60 @@ interface Block {
   body: string
 }
 
-/** Everything before the first `##` heading, then one entry per heading. */
+/** An opening or closing ``` / ~~~ fence, with any indent and info string. */
+const CODE_FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/
+
+/**
+ * Tracks whether a line is inside a fenced code block.
+ *
+ * Markdown closes a fence only with the same character, at least as long
+ * as the opener, and with no info string — so a ``` inside a ~~~~ block is
+ * content, not a close. Callers feed lines in order and read `inCode`
+ * before deciding what a line means.
+ */
+class FenceTracker {
+  private fence: string | null = null
+
+  /** True when this line is inside a fence (the fence lines themselves count). */
+  consume(line: string): boolean {
+    const match = CODE_FENCE.exec(line)
+    if (!match) return this.fence !== null
+    const [, marker, info] = match
+    if (this.fence === null) {
+      this.fence = marker
+      return true
+    }
+    const closes =
+      marker[0] === this.fence[0] &&
+      marker.length >= this.fence.length &&
+      info.trim() === ''
+    if (closes) this.fence = null
+    return true
+  }
+
+  get open(): boolean {
+    return this.fence !== null
+  }
+}
+
+/**
+ * Everything before the first `##` heading, then one entry per heading.
+ *
+ * A `##` inside a fenced code block is a comment in someone's shell
+ * snippet, not a section: treating it as a boundary would split the block
+ * and orphan the fence, which is how a document ends up rendering as one
+ * long code block or failing to render at all.
+ */
 function splitBlocks(body: string): { intro: string; blocks: Block[] } {
   const lines = body.split(/\r?\n/)
   const introLines: string[] = []
   const blocks: Block[] = []
   let current: { heading: string; lines: string[] } | null = null
+  const fence = new FenceTracker()
 
   for (const line of lines) {
-    if (BLOCK_HEADING.test(line)) {
+    const inCode = fence.consume(line)
+    if (!inCode && BLOCK_HEADING.test(line)) {
       if (current) {
         blocks.push({
           heading: current.heading,
@@ -345,17 +441,188 @@ function splitBlocks(body: string): { intro: string; blocks: Block[] } {
   return { intro: introLines.join('\n').trim(), blocks }
 }
 
+/** An inline code span: one or more backticks, matching run to close. */
+const INLINE_CODE = /(`+)(?:(?!\1)[\s\S])*?\1/g
+
+/** A line of a document, numbered as it is numbered in the file itself. */
+interface SourceLine {
+  text: string
+  number: number
+}
+
 /**
- * Reads one document, dropping every `##` block whose answer is missing or
- * still a `TODO`. A file that had blocks and has none left contributes no
- * document at all, so an FAQ Matt has not written yet is simply absent
+ * The body line by line, with anything inside an HTML comment blanked out
+ * and every line still carrying its real line number in the file.
+ *
+ * The checks below run against the body rather than the shipped text so
+ * they can say "a-role.md:42" and mean it. Comments are blanked rather
+ * than removed for the same reason: an author reads the number off this
+ * message and opens the file at that line. Comments never ship, so
+ * nothing inside one is any of these checks' business.
+ */
+function sourceLines(body: string, lineOffset: number): SourceLine[] {
+  const lines: SourceLine[] = []
+  let inComment = false
+  for (const [i, raw] of body.split(/\r?\n/).entries()) {
+    let text = raw
+    if (inComment) {
+      const end = text.indexOf('-->')
+      if (end === -1) {
+        lines.push({ text: '', number: lineOffset + i + 1 })
+        continue
+      }
+      text = text.slice(end + 3)
+      inComment = false
+    }
+    text = text.replace(/<!--[\s\S]*?-->/g, '')
+    const opens = text.indexOf('<!--')
+    if (opens !== -1) {
+      text = text.slice(0, opens)
+      inComment = true
+    }
+    lines.push({ text, number: lineOffset + i + 1 })
+  }
+  return lines
+}
+
+/**
+ * Refuses a body that would not survive being compiled as MDX.
+ *
+ * /knowledge/[id] renders these documents through the same MDX pipeline as
+ * the blog, and every page on this site is prerendered — so one stray `<`
+ * in one document does not break one page, it fails `next build` for the
+ * whole site. `{` is worse than that: `{process.env.SOMETHING}` is not a
+ * syntax error, it is a valid expression that MDX evaluates on the server
+ * and prints onto a public page.
+ *
+ * So both characters are refused outright outside code, including the
+ * autolink form `<https://example.com>` (also an MDX error) and anything
+ * that reads as a tag. The fix an author wants is almost always a pair of
+ * backticks; `&lt;` and `&#123;` work where the character must be literal
+ * prose. Fenced blocks and inline code spans are exempt because MDX does
+ * not parse their contents — an indented code block is *not* exempt, so
+ * use a fence.
+ *
+ * The rule is every line of the file, not only the lines that ship: a
+ * document has to be safe to render whichever of its sections survive,
+ * and one rule is easier to hold than two.
+ */
+function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
+  const fence = new FenceTracker()
+  for (const line of lines) {
+    if (fence.consume(line.text)) continue
+    const prose = line.text.replace(INLINE_CODE, '')
+    const offence = /[<{]/.exec(prose)
+    if (!offence) continue
+    const char = offence[0]
+    const advice =
+      char === '<'
+        ? 'wrap it in backticks, or write &lt; — a bare < starts a JSX tag in MDX, and an autolink <https://…> is an MDX error too'
+        : 'wrap it in backticks, or write &#123; — a bare { starts a JavaScript expression that MDX evaluates on the server rather than printing'
+    throw new Error(
+      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}. Line: ${line.text.trim()}`
+    )
+  }
+  if (fence.open) {
+    throw new Error(
+      `${label}: a fenced code block is never closed; MDX would swallow the rest of the document`
+    )
+  }
+}
+
+/**
+ * The one topic where an unfinished section is dropped instead of failing
+ * the build.
+ *
+ * faq.md ships its questions before their answers exist, on purpose: the
+ * list of questions is the plan, and the build hides the ones Matt has not
+ * written yet. That is a deletion, and a silent deletion is only tolerable
+ * because in this one file it is the documented workflow.
+ *
+ * Everywhere else it would be a trap. A `career/` document is written
+ * elsewhere, approved, and pasted in whole; if a stray placeholder let the
+ * build quietly delete a section from both the published page and the
+ * model's copy, the failure would look like nothing at all — exit 0, no
+ * output, a document that is merely missing a paragraph nobody can see is
+ * missing.
+ */
+const UNANSWERED_TOPIC = 'faq'
+
+/** A faq question the build dropped because its answer is still a TODO. */
+export interface UnansweredQuestion {
+  file: string
+  heading: string
+}
+
+/**
+ * Refuses a placeholder in a topic that does not drop them, naming the
+ * line and the section it is under so the fix is obvious.
+ *
+ * The content guard in knowledge.test.ts asserts no TODO reaches any
+ * surface; this is the same rule moved to where it can say *where*.
+ */
+function assertNoPlaceholder(
+  lines: readonly SourceLine[],
+  label: string
+): void {
+  const fence = new FenceTracker()
+  let heading: string | null = null
+  for (const line of lines) {
+    const inCode = fence.consume(line.text)
+    if (!inCode && BLOCK_HEADING.test(line.text)) {
+      heading = line.text.replace(/^##\s*/, '')
+      continue
+    }
+    if (!/\bTODO\b/.test(line.text)) continue
+    throw new Error(
+      `${label}:${line.number}: a TODO placeholder under "${heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the published page and the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
+    )
+  }
+}
+
+/**
+ * The faq's text: every `##` block whose answer is missing or still a
+ * TODO is dropped, and the headings that were dropped are reported so
+ * `bun run knowledge:check` can print them rather than leaving the
+ * deletion invisible. A file that had blocks and has none left contributes
+ * no document at all, so an FAQ Matt has not written yet is simply absent
  * from the index rather than present and empty.
+ */
+function readAnsweredBlocks(
+  body: string,
+  label: string
+): { text: string; unanswered: UnansweredQuestion[] } {
+  const { intro, blocks } = splitBlocks(body)
+  const answered = blocks.filter(block => isAnswered(block.body))
+  const unanswered = blocks
+    .filter(block => !isAnswered(block.body))
+    .map(block => ({
+      file: label,
+      heading: block.heading.replace(/^##\s*/, ''),
+    }))
+  if (blocks.length > 0 && answered.length === 0) {
+    return { text: '', unanswered }
+  }
+
+  // Each surviving block keeps the spacing it was written with; only the
+  // dropped ones change the file.
+  const parts = [
+    isAnswered(intro) ? intro : '',
+    ...answered.map(block => `${block.heading}\n${trimEnd(block.body)}`),
+  ]
+  return { text: parts.filter(part => part !== '').join('\n\n'), unanswered }
+}
+
+/**
+ * Reads one document. Returns no document when the faq is still entirely
+ * unanswered; throws for anything that is an authoring mistake rather than
+ * a documented state.
  */
 function readDocument(
   filePath: string,
-  topic: string,
+  topic: KnowledgeSource,
   label: string
-): KnowledgeDocument | null {
+): { document: KnowledgeDocument | null; unanswered: UnansweredQuestion[] } {
   const contents = fs.readFileSync(filePath, 'utf8')
   const match = FRONTMATTER_BLOCK.exec(contents)
   if (!match) {
@@ -365,35 +632,52 @@ function readDocument(
   }
   const expectedId = path.basename(filePath, '.md')
   const frontmatter = parseFrontmatter(match[1], label, expectedId)
-  const body = stripComments(contents.slice(match[0].length))
+  const raw = contents.slice(match[0].length)
+  const body = stripComments(raw)
 
-  const { intro, blocks } = splitBlocks(body)
-  const answered = blocks.filter(block => isAnswered(block.body))
-  if (blocks.length > 0 && answered.length === 0) return null
+  // Checked against the raw body, so an error can cite the line number the
+  // author will open the file at rather than one counted from wherever the
+  // frontmatter happened to end.
+  const lineOffset = (match[0].match(/\n/g) ?? []).length
+  const lines = sourceLines(raw, lineOffset)
+  assertMdxSafe(lines, label)
 
-  // Each surviving block keeps the spacing it was written with; only the
-  // dropped ones change the file. That is what lets the guards assert the
-  // résumé and blog documents still read byte for byte like the public
-  // pages they were copied from.
-  const parts = [
-    isAnswered(intro) ? intro : '',
-    ...answered.map(block => `${block.heading}\n${trimEnd(block.body)}`),
-  ]
-  const text = parts.filter(part => part !== '').join('\n\n')
-  if (text === '') return null
+  // Outside the faq, the body ships exactly as written. That is not only
+  // safer than reassembling it — it is what makes "the résumé document is
+  // the published résumé, verbatim" true by construction rather than by
+  // the reassembly happening to round-trip.
+  let text: string
+  let unanswered: UnansweredQuestion[] = []
+  if (topic === UNANSWERED_TOPIC) {
+    ;({ text, unanswered } = readAnsweredBlocks(body, label))
+  } else {
+    assertNoPlaceholder(lines, label)
+    text = body.trim()
+  }
+  if (text === '') return { document: null, unanswered }
+
+  const tokenEstimate = estimateTokens(text)
+  if (tokenEstimate > KNOWLEDGE_DOCUMENT_TOKEN_CEILING) {
+    throw new Error(
+      `${label}: ~${tokenEstimate} tokens against a per-document ceiling of ${KNOWLEDGE_DOCUMENT_TOKEN_CEILING}. Split this document: it is one of the handful the model may read in a turn (KNOWLEDGE_READ_BUDGET), and at this size it crowds the others out. Two focused documents are also easier for it to choose between, which is what the index is for.`
+    )
+  }
 
   return {
-    id: frontmatter.id,
-    title: frontmatter.title,
-    summary: frontmatter.summary,
-    tags: frontmatter.tags,
-    topic,
-    source: frontmatter.source,
-    tokenEstimate: estimateTokens(text),
-    url: `/knowledge/${frontmatter.id}`,
-    ...(frontmatter.canonical ? { canonical: frontmatter.canonical } : {}),
-    text,
-    updated: frontmatter.updated,
+    document: {
+      id: frontmatter.id,
+      title: frontmatter.title,
+      summary: frontmatter.summary,
+      tags: frontmatter.tags,
+      topic,
+      source: topic,
+      tokenEstimate,
+      url: `/knowledge/${frontmatter.id}`,
+      ...(frontmatter.canonical ? { canonical: frontmatter.canonical } : {}),
+      text,
+      updated: frontmatter.updated,
+    },
+    unanswered,
   }
 }
 
@@ -405,7 +689,7 @@ function readDocument(
 function orderDocuments(documents: KnowledgeDocument[]): KnowledgeDocument[] {
   return [...documents].sort((a, b) => {
     if (a.topic !== b.topic) {
-      return TOPIC_ORDER.indexOf(a.topic) - TOPIC_ORDER.indexOf(b.topic)
+      return topicIndex(a.topic) - topicIndex(b.topic)
     }
     if (a.updated !== b.updated) return a.updated < b.updated ? 1 : -1
     return a.id < b.id ? -1 : 1
@@ -452,8 +736,10 @@ export function estimateTokens(text: string): number {
 }
 
 /** The `.md` files under `dir`, one topic directory deep, sorted. */
-function findDocumentFiles(dir: string): { file: string; topic: string }[] {
-  const found: { file: string; topic: string }[] = []
+function findDocumentFiles(
+  dir: string
+): { file: string; topic: KnowledgeSource }[] {
+  const found: { file: string; topic: KnowledgeSource }[] = []
   for (const entry of fs
     .readdirSync(dir, { withFileTypes: true })
     .sort((a, b) => (a.name < b.name ? -1 : 1))) {
@@ -466,9 +752,9 @@ function findDocumentFiles(dir: string): { file: string; topic: string }[] {
       continue
     }
     const topic = entry.name
-    if (!TOPIC_ORDER.includes(topic)) {
+    if (!isTopic(topic)) {
       throw new Error(
-        `content/knowledge/${topic}: unknown topic. Add it to TOPIC_ORDER in lib/knowledge/build.ts, deciding where it belongs in the index.`
+        `content/knowledge/${topic}: unknown topic (known: ${TOPIC_ORDER.join(', ')}). A new topic is a decision about what the assistant is for, so it is added by hand in two places: TOPIC_ORDER in lib/knowledge/build.ts, which decides where it sits in the index and is also the "source" a document reports, and OVERRIDES in app/knowledge/topic-label.ts if title-casing the directory name is not the heading you want.`
       )
     }
     const names = fs
@@ -486,10 +772,11 @@ function findDocumentFiles(dir: string): { file: string; topic: string }[] {
  * Reads content/knowledge and returns the index plus every document.
  *
  * Everything is parsed once, here: the index needs each document's size
- * anyway, and holding the parsed corpus means readKnowledgeDocument is a
- * map lookup rather than a path built from a caller's string. "On demand"
- * is about what reaches the model's context, not about what reaches
- * memory — a few hundred short Markdown files is a few megabytes.
+ * anyway, and holding the parsed corpus is what lets ./index answer
+ * readKnowledgeDocument from a Map it builds over these documents, rather
+ * than from a path built out of a caller's string. "On demand" is about
+ * what reaches the model's context, not about what reaches memory — a few
+ * hundred short Markdown files is a few megabytes.
  *
  * `dir` and `ceiling` are here for the guards in knowledge.test.ts; the
  * site calls the loaders in ./index and passes neither. Throws on any
@@ -509,10 +796,14 @@ export function buildKnowledgeCorpus(
   }
 
   const documents: KnowledgeDocument[] = []
+  const unanswered: UnansweredQuestion[] = []
+  const droppedDocuments: string[] = []
   for (const { file, topic } of files) {
     const label = path.join('content', 'knowledge', topic, path.basename(file))
-    const document = readDocument(file, topic, label)
-    if (document) documents.push(document)
+    const read = readDocument(file, topic, label)
+    unanswered.push(...read.unanswered)
+    if (read.document) documents.push(read.document)
+    else droppedDocuments.push(label)
   }
 
   if (documents.length === 0) {
@@ -559,5 +850,7 @@ export function buildKnowledgeCorpus(
   return {
     index: { entries, text, tokenEstimate, builtAt: new Date().toISOString() },
     documents: ordered,
+    unanswered,
+    droppedDocuments,
   }
 }

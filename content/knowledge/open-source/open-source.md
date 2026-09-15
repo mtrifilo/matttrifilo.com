@@ -3,7 +3,6 @@ id: 'open-source'
 title: 'Open Source Projects'
 summary: 'The open-source projects Matt curates on his site: what each one does and where the repository lives.'
 tags: [open-source, projects, github, cli, side-projects]
-source: 'open-source'
 updated: '2026-09-14'
 canonical: 'https://matttrifilo.com/open-source'
 ---

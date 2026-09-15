@@ -3,7 +3,6 @@ id: 'faq'
 title: 'FAQ'
 summary: "Matt's own answers to the questions hiring managers and engineering leaders ask him most often."
 tags: [faq, hiring, management, ai-agents, on-call]
-source: 'faq'
 updated: '2026-09-14'
 ---
 
@@ -22,6 +21,12 @@ body still reads TODO, and drops this whole document while none of them are
 answered, so a placeholder never reaches the model — and while it is
 dropped, /knowledge/faq does not exist either. To publish an answer,
 replace the "TODO (Matt)" line under a question with the answer itself.
+
+This file is the ONLY place where the build drops an unfinished section.
+Everywhere else a TODO is a build error, on purpose: a career document is
+written elsewhere and pasted in whole, and a silent deletion there would
+look like nothing at all. `bun run knowledge:check` prints every question
+dropped from this file on every run, so the deletion here is visible too.
 
 Answers here are Matt's own voice, first person. Job-search topics are out
 of scope. An answer long enough to need its own page is a new document in

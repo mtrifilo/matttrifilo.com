@@ -7,6 +7,7 @@ import {
   buildKnowledgeCorpus,
   estimateTokens,
   KNOWLEDGE_DIR,
+  KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
   SUMMARY_MAX_LENGTH,
 } from './build'
@@ -333,18 +334,17 @@ describe('knowledge corpus structure', () => {
       )
       expect(match, `${label} has no frontmatter block`).not.toBeNull()
       const frontmatter = match![1]
-      for (const key of [
-        'id',
-        'title',
-        'summary',
-        'tags',
-        'source',
-        'updated',
-      ]) {
+      for (const key of ['id', 'title', 'summary', 'tags', 'updated']) {
         expect(frontmatter, `${label} is missing ${key}`).toMatch(
           new RegExp(`^${key}:[ \\t]*\\S`, 'm')
         )
       }
+      // `source` is the topic directory, never a declaration: two fields
+      // with the same five values and nothing asserting they agreed is how
+      // a career document gets to call itself the résumé.
+      expect(frontmatter, `${label} must not declare source`).not.toMatch(
+        /^source:/m
+      )
       // The build enforces id === basename, which is what keeps
       // /knowledge/<id> resolving; assert it here too so the reason is
       // visible where the contract is described.
@@ -433,7 +433,6 @@ function missingTwinMessage(slug: string): string {
     "title: '<the post title, on one line>'",
     "summary: '<one sentence, what a reader would learn>'",
     'tags: [blog, <a topic or two>]',
-    "source: 'blog'",
     "updated: '<the post date, YYYY-MM-DD>'",
     `canonical: 'https://matttrifilo.com/blog/${slug}'`,
     '---',
@@ -615,7 +614,6 @@ describe('knowledge corpus build', () => {
       {
         topic: 'faq',
         name: 'faq.md',
-        source: 'faq',
         body: [
           '# FAQ',
           '',
@@ -647,17 +645,258 @@ describe('knowledge corpus build', () => {
     expect(faq!.text).not.toContain('Replace the')
     expect(answered.index.text).not.toMatch(/\bTODO\b/)
     expect(answered.index.text).not.toContain('<!--')
+    // The drop is reported, not silent: knowledge-check prints these.
+    expect(answered.unanswered).toEqual([
+      {
+        file: path.join('content', 'knowledge', 'faq', 'faq.md'),
+        heading: 'How does he use AI coding agents?',
+      },
+    ])
   })
 
-  test('drops a document whose intro is still a placeholder', () => {
+  test('drops an faq whose intro is still a placeholder, and says so', () => {
     // An intro is no more publishable than a question while it says TODO,
     // and a corpus with nothing left in it fails loudly rather than
     // handing the model an empty index.
     expect(() =>
-      buildFixture([
-        { topic: 'career', name: 'timeline.md', body: 'TODO (Matt)' },
-      ])
+      buildFixture([{ topic: 'faq', name: 'faq.md', body: 'TODO (Matt)' }])
     ).toThrow(/nothing to read/)
+  })
+
+  test('reports an faq dropped whole rather than dropping it silently', () => {
+    const built = buildFixture([
+      { topic: 'career', name: 'a-role.md' },
+      {
+        topic: 'faq',
+        name: 'faq.md',
+        body: ['## One?', '', 'TODO (Matt)', '', '## Two?', '', 'TODO'].join(
+          '\n'
+        ),
+      },
+    ])
+    expect(built.documents.map(d => d.id)).toEqual(['a-role'])
+    expect(built.droppedDocuments).toEqual([
+      path.join('content', 'knowledge', 'faq', 'faq.md'),
+    ])
+    expect(built.unanswered.map(q => q.heading)).toEqual(['One?', 'Two?'])
+  })
+
+  test('a TODO outside the faq is a build error, naming file and heading', () => {
+    // The dangerous case: Matt pastes in an approved career document with a
+    // stray placeholder, and the old rule would delete that section from
+    // both the published page and the model's copy, exit 0, no output.
+    expect(
+      () =>
+        buildFixture([
+          {
+            topic: 'career',
+            name: 'a-role.md',
+            body: ['# A role', '', '## What I owned', '', 'TODO (Matt)'].join(
+              '\n'
+            ),
+          },
+        ])
+      // Line 13 of the file, not line 5 of the body: the number has to be
+      // the one the author's editor shows.
+    ).toThrow(/a-role\.md:13: a TODO placeholder under "What I owned"/)
+  })
+
+  test('a TODO in the introduction outside the faq is a build error too', () => {
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'a-role.md', body: 'TODO (Matt)' },
+      ])
+    ).toThrow(/a TODO placeholder under "the introduction"/)
+  })
+
+  test('outside the faq, the body ships exactly as written', () => {
+    // Not reassembled from blocks: byte-identity with the published source
+    // is then true by construction rather than by the reassembly happening
+    // to round-trip. An empty section stays; nothing is quietly dropped.
+    const body = ['# Title', '', '## One', '', 'Text.', '', '## Two', ''].join(
+      '\n'
+    )
+    const built = buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+    expect(built.documents[0].text).toBe(body.trim())
+    expect(built.documents[0].text).toContain('## Two')
+  })
+
+  test('refuses a document big enough to crowd out the other two reads', () => {
+    const oversized = 'Matt led the thing. '.repeat(
+      Math.ceil((KNOWLEDGE_DOCUMENT_TOKEN_CEILING * 4) / 20) + 100
+    )
+    expect(() =>
+      buildFixture([{ topic: 'career', name: 'a-role.md', body: oversized }])
+    ).toThrow(/per-document ceiling of 9000\. Split this document/)
+  })
+
+  test('every published document is inside the per-document ceiling', () => {
+    // The blog essay is the one that comes close, and it is why the
+    // ceiling is not maxTokens / maxDocuments. If this starts failing, the
+    // answer is to split the document, not to raise the constant.
+    for (const document of corpus.documents) {
+      expect(
+        document.tokenEstimate,
+        `${document.id} is too large to read alongside two others`
+      ).toBeLessThanOrEqual(KNOWLEDGE_DOCUMENT_TOKEN_CEILING)
+    }
+  })
+
+  test('refuses a canonical that points at someone else', () => {
+    // A canonical hands another URL the authority for these words; it can
+    // only be a page Matt controls.
+    expect(() =>
+      buildFixture([
+        {
+          topic: 'career',
+          name: 'a-role.md',
+          canonical: 'https://example.com/matt',
+        },
+      ])
+    ).toThrow(/canonical must be an https:\/\/matttrifilo\.com URL/)
+    expect(() =>
+      buildFixture([
+        {
+          topic: 'career',
+          name: 'a-role.md',
+          canonical: 'https://matttrifilo.com.evil.test/x',
+        },
+      ])
+    ).toThrow(/canonical must be an https:\/\/matttrifilo\.com URL/)
+    // …and the real thing is accepted, in both host spellings.
+    for (const canonical of [
+      'https://matttrifilo.com/resume',
+      'https://www.matttrifilo.com/resume',
+    ]) {
+      const built = buildFixture([
+        { topic: 'career', name: 'a-role.md', canonical },
+      ])
+      expect(built.documents[0].canonical).toBe(canonical)
+    }
+  })
+
+  test('refuses frontmatter that declares its own source, or any typo', () => {
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'a-role.md', extra: ["source: 'resume'"] },
+      ])
+    ).toThrow(/unknown frontmatter key "source"/)
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'a-role.md', extra: ["sumary: 'oops'"] },
+      ])
+    ).toThrow(/unknown frontmatter key "sumary"/)
+  })
+
+  test('source is the topic directory, not a claim the document makes', () => {
+    const built = buildFixture([
+      { topic: 'career', name: 'a-role.md' },
+      { topic: 'faq', name: 'faq.md', body: '## Q?\n\nAn answer.' },
+    ])
+    for (const document of built.documents) {
+      expect(document.source).toBe(document.topic as typeof document.source)
+    }
+  })
+})
+
+describe('documents must survive being compiled as MDX', () => {
+  // /knowledge/[id] compiles every document with the blog's MDX pipeline,
+  // and every page on this site is prerendered — so one bad character in
+  // one document fails the build for the whole site. `{` does not even
+  // fail: it evaluates.
+  const mdxFixture = (body: string) =>
+    buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+
+  test('every published document is MDX-safe today', () => {
+    // The guard that matters: this is the corpus, not a fixture.
+    for (const document of corpus.documents) {
+      const fence = /^[ \t]{0,3}(`{3,}|~{3,})/
+      let inCode = false
+      for (const line of document.text.split('\n')) {
+        if (fence.test(line)) {
+          inCode = !inCode
+          continue
+        }
+        if (inCode) continue
+        expect(
+          line.replace(/(`+)(?:(?!\1)[\s\S])*?\1/g, ''),
+          `${document.id}: ${line}`
+        ).not.toMatch(/[<{]/)
+      }
+    }
+  })
+
+  test('refuses a bare tag, which would fail next build for every page', () => {
+    expect(() => mdxFixture('Matt uses a <Thing> here.')).toThrow(
+      /"<" outside code would break the MDX build/
+    )
+  })
+
+  test('refuses a comparison written as prose', () => {
+    expect(() => mdxFixture('When a<b, the send is retried.')).toThrow(/"<"/)
+  })
+
+  test('refuses an autolink, which MDX also rejects', () => {
+    expect(() => mdxFixture('See <https://matttrifilo.com/resume>.')).toThrow(
+      /"<"/
+    )
+  })
+
+  test('refuses a brace, which MDX evaluates rather than prints', () => {
+    // The quiet one: this is not a syntax error, it is server-side
+    // evaluation rendered onto a public page.
+    expect(() => mdxFixture('The key is {process.env.SECRET}.')).toThrow(
+      /"\{" outside code would break the MDX build/
+    )
+  })
+
+  test('names the line in the file, and quotes it', () => {
+    // Seven lines of frontmatter, a blank line, then the body: the number
+    // has to be the one the author's editor shows, not an offset into
+    // whatever the loader happens to have sliced off.
+    expect(() => mdxFixture('# Title\n\nFine.\n\nBroken <Thing>.')).toThrow(
+      /a-role\.md:13:.*Line: Broken <Thing>\./
+    )
+  })
+
+  test('ignores what is inside an HTML comment, which never ships', () => {
+    const built = mdxFixture(
+      [
+        '# Title',
+        '',
+        '<!--',
+        'Note: <Thing> and {x} live here.',
+        '-->',
+        '',
+        'Done.',
+      ].join('\n')
+    )
+    expect(built.documents[0].text).not.toContain('Note:')
+  })
+
+  test('allows both characters inside inline code and fenced blocks', () => {
+    const body = [
+      '# Title',
+      '',
+      'Use `<Thing>` and `{value}` in prose by quoting them.',
+      '',
+      '```tsx',
+      'const x = <Thing value={1} />',
+      '## not a heading, just a comment',
+      '```',
+      '',
+      'Done.',
+    ].join('\n')
+    const built = mdxFixture(body)
+    expect(built.documents[0].text).toBe(body)
+    // The fence also protected the `##` from being read as a section.
+    expect(built.documents[0].text).toContain('## not a heading')
+  })
+
+  test('refuses a fence that is never closed', () => {
+    expect(() => mdxFixture('# Title\n\n```ts\nconst x = 1\n')).toThrow(
+      /never closed/
+    )
   })
 })
 
@@ -705,7 +944,9 @@ interface Fixture {
   id?: string
   summary?: string
   tags?: string
-  source?: string
+  canonical?: string
+  /** Extra frontmatter lines, verbatim, for testing what is refused. */
+  extra?: string[]
   body?: string
 }
 
@@ -725,8 +966,9 @@ function buildFixture(files: Fixture[]) {
         `title: 'Fixture'`,
         `summary: '${file.summary ?? 'What a reader would learn from it.'}'`,
         `tags: ${file.tags ?? '[fixture]'}`,
-        `source: '${file.source ?? 'career'}'`,
         `updated: '2026-09-14'`,
+        ...(file.canonical ? [`canonical: '${file.canonical}'`] : []),
+        ...(file.extra ?? []),
         '---',
       ].join('\n')
       fs.mkdirSync(path.join(dir, file.topic), { recursive: true })

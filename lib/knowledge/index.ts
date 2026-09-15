@@ -25,7 +25,10 @@ export type {
   KnowledgeIndex,
   KnowledgeSource,
 } from './build'
-export { KNOWLEDGE_INDEX_TOKEN_CEILING } from './build'
+export {
+  KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
+  KNOWLEDGE_INDEX_TOKEN_CEILING,
+} from './build'
 
 /**
  * What one turn may spend fetching documents.
@@ -43,6 +46,7 @@ export const KNOWLEDGE_READ_BUDGET = {
 } as const
 
 let cached: KnowledgeCorpus | undefined
+let byId: Map<string, KnowledgeDocument> | undefined
 
 /**
  * Parsed once per process and reused. Synchronous on purpose: callers
@@ -54,7 +58,10 @@ let cached: KnowledgeCorpus | undefined
  * so a throw is left to surface rather than cached as an empty corpus.
  */
 function corpus(): KnowledgeCorpus {
-  if (!cached) cached = buildKnowledgeCorpus()
+  if (!cached) {
+    cached = buildKnowledgeCorpus()
+    byId = new Map(cached.documents.map(document => [document.id, document]))
+  }
   return cached
 }
 
@@ -69,17 +76,18 @@ export function loadKnowledgeIndex(): KnowledgeIndex {
 /**
  * One document by id, or undefined when there is no such document.
  *
- * The id comes from the model, so it is untrusted input: this is a lookup
- * in the parsed corpus, never a path built from a caller's string, and it
- * returns undefined rather than throwing for anything it does not
- * recognise — including a non-string, which is what a malformed tool call
- * produces.
+ * The id comes from the model, so it is untrusted input: this is a Map
+ * lookup over documents already parsed, never a path built from a caller's
+ * string, and it returns undefined rather than throwing for anything it
+ * does not recognise — including a non-string, which is what a malformed
+ * tool call produces.
  */
 export function readKnowledgeDocument(
   id: string
 ): KnowledgeDocument | undefined {
   if (typeof id !== 'string' || id === '') return undefined
-  return corpus().documents.find(document => document.id === id)
+  corpus()
+  return byId!.get(id)
 }
 
 /** Every document, in index order. The /knowledge pages render from this. */
