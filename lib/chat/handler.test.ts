@@ -180,6 +180,49 @@ function reads(id: string): Step {
   }
 }
 
+/** A step that narrates first and then calls the tool, as models often do. */
+function readsAfterSaying(preamble: string, id: string): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      { type: 'text-start', id: 'p' },
+      { type: 'text-delta', id: 'p', delta: preamble },
+      { type: 'text-end', id: 'p' },
+      {
+        type: 'tool-call',
+        toolCallId: `call-${id}`,
+        toolName: READ_DOCUMENT_TOOL_NAME,
+        input: JSON.stringify({ id }),
+      },
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
+/** A step that asks for several documents at once, in one model call. */
+function readsAll(...ids: string[]): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      ...ids.map(id => ({
+        type: 'tool-call',
+        toolCallId: `call-${id}`,
+        toolName: READ_DOCUMENT_TOOL_NAME,
+        input: JSON.stringify({ id }),
+      })),
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
 /**
  * A model that plays the given steps in order. Once they run out it repeats
  * the last one, so a model that only ever asks for another document keeps
@@ -557,31 +600,71 @@ describe('reading documents', () => {
     expect(model.doStreamCalls).toHaveLength(CHAT_MAX_STEPS)
   })
 
-  test('the read budget stops the fourth document', async () => {
+  test('the last step is not offered the tool, so an answer gets written', async () => {
+    const model = modelOf(reads('resume'))
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    // Every step but the last may read; the last must answer.
+    const choices = model.doStreamCalls.map(call => call.toolChoice?.type)
+    expect(choices.slice(0, -1).every(choice => choice !== 'none')).toBe(true)
+    expect(choices.at(-1)).toBe('none')
+  })
+
+  test('a run that spends every step reading is marked incomplete, not cited', async () => {
+    // The mock ignores toolChoice, so this is the worst case the forced step
+    // is meant to prevent, with the model refusing to take the hint: reads all
+    // the way to the cap and never a word of answer. The visitor must not get
+    // an empty bubble with source chips under it.
+    const model = modelOf(reads('resume'), reads('faq'), reads('projects'))
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+    const metadata = metadataFrom(body)
+
+    expect(metadata.incomplete).toBe(true)
+    expect(metadata.sources).toBeUndefined()
+
+    const marker = logged.find(args => args[0] === '[chat] incomplete')
+    expect(marker?.[1]).toMatchObject({
+      answered: false,
+      finishReason: 'tool-calls',
+      documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
+    })
+  })
+
+  test('the read budget stops a fourth document asked for in one step', async () => {
+    // Four reads in a single step, which is how the budget gets tested now
+    // that the last step is spent on the answer. It is also the case the
+    // budget exists for: a model that tries to open the whole corpus at once.
     const model = modelOf(
-      reads('resume'),
-      reads('faq'),
-      reads('projects'),
-      reads('timeline')
+      readsAll('resume', 'faq', 'projects', 'timeline'),
+      answers()
     )
     const response = await handlerWith(model)(
       post({ messages: [uiMessage('user', QUESTION)] })
     )
     const body = await response.text()
 
-    // Four steps were allowed, and the fourth read was refused by the budget.
-    expect(model.doStreamCalls).toHaveLength(CHAT_MAX_STEPS)
     expect(JSON.stringify(model.doStreamCalls)).toContain(
       'read_budget_exhausted'
     )
     // The document behind the refused read never reached the model.
     expect(JSON.stringify(model.doStreamCalls)).not.toContain(documents[3].text)
+    // And the visitor got a real answer, not an empty bubble with chips.
+    expect(body).toContain('He led the platform migration.')
 
     const entry = logged.find(
       args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
     )
     expect(entry?.[1]).toMatchObject({
       documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
+      readsRefusedBudget: 1,
+      readsRefusedUnknown: 0,
+      answered: true,
     })
     expect(metadataFrom(body).sources).toHaveLength(
       KNOWLEDGE_READ_BUDGET.maxDocuments
@@ -666,6 +749,58 @@ describe('sources on the stream', () => {
       args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
     )
     expect(entry?.[1]).toMatchObject({ documentsRead: 1 })
+  })
+
+  test('a preamble before a read does not hide a later decline', async () => {
+    // The model narrates, then reads, then declines. Only the final step's
+    // text is the answer: judging the run's first text would see the
+    // preamble, miss the decline, and put chips under "I can't answer that".
+    const model = modelOf(
+      readsAfterSaying('Let me check his résumé.', 'resume'),
+      answers(DECLINE_SENTENCE)
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(body).toContain(DECLINE_SENTENCE)
+    expect(metadataFrom(body).sources).toBeUndefined()
+  })
+
+  test('a preamble before a read does not suppress a real answer', async () => {
+    // The mirror case: the preamble must not be mistaken for the answer in
+    // the other direction either, so an ordinary reply keeps its chips.
+    const model = modelOf(
+      readsAfterSaying('Let me check his résumé.', 'resume'),
+      answers()
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).sources).toEqual([
+      { id: 'resume', title: 'Résumé', url: 'https://matttrifilo.com/resume' },
+    ])
+  })
+
+  test('document text is never streamed to the browser', async () => {
+    const model = modelOf(reads('resume'), answers())
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    // The model read it — the answer is drawn from it — but the browser is
+    // sent the answer and the sources, never the document itself.
+    expect(JSON.stringify(model.doStreamCalls)).toContain(documents[0].text)
+    expect(body).not.toContain(documents[0].text)
+    expect(body).not.toContain('tool-output-available')
+    expect(body).not.toContain('tool-input-start')
+    // What the UI actually needs still arrives.
+    expect(body).toContain('He led the platform migration.')
+    expect(metadataFrom(body).sources).toHaveLength(1)
   })
 })
 
@@ -763,11 +898,17 @@ describe('logging', () => {
 
     const marker = logged.find(args => args[0] === '[chat] truncated')
     expect(marker).toBeDefined()
-    expect(marker?.[1]).toMatchObject({ finishReason: 'length' })
+    expect(marker?.[1]).toMatchObject({
+      finishReason: 'length',
+      answered: true,
+    })
     // MTC-33 reads this off the stream to show "cut short" in the UI.
     expect(metadataFrom(body).truncated).toBe(true)
-    // A cut-off answer still cites what it managed to read.
-    expect(metadataFrom(body).sources).toHaveLength(1)
+    // 'length' is not a clean stop, so the answer is flagged incomplete and
+    // its chips are withheld: a half-written answer under a full citation
+    // list claims more than it delivered.
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(metadataFrom(body).sources).toBeUndefined()
   })
 
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {

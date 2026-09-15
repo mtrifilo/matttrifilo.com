@@ -30,8 +30,20 @@ import { estimateTokens } from './validate'
  * the step with no answer, and "the id was wrong" is a recoverable mistake.
  */
 
-/** Why a read was refused. Both values are quoted in SYSTEM_PROMPT. */
-export type ReadDocumentError = 'unknown_document' | 'read_budget_exhausted'
+/**
+ * Why a read was refused. Every value is quoted in SYSTEM_PROMPT.
+ *
+ * `document_too_large` is separated from `read_budget_exhausted` because the
+ * two mean opposite things to the model: the budget one is "you have spent
+ * what this question gets, answer from what you have", while this one is
+ * "this particular document will never fit, try a different one" — retrying
+ * it, or freeing budget by reading less, cannot help. It is also a corpus
+ * fault worth seeing in the logs: a document larger than the whole read
+ * budget is permanently unreadable, so the per-document ceiling that would
+ * prevent it belongs in MTC-29's build step, not here.
+ */
+export type ReadDocumentError =
+  'unknown_document' | 'read_budget_exhausted' | 'document_too_large'
 
 export type ReadDocumentResult =
   { id: string; title: string; text: string } | { error: ReadDocumentError }
@@ -72,6 +84,15 @@ export interface ReadDocumentSession {
   /** Aggregate counters for the log line. Numbers only, never text. */
   documentsRead(): number
   readTokens(): number
+  /** Reads refused, by reason, so the log can tell the failure modes apart. */
+  readsRefused(): ReadsRefused
+}
+
+/** How many reads each guard turned away during one request. */
+export interface ReadsRefused {
+  unknown: number
+  budget: number
+  tooLarge: number
 }
 
 /**
@@ -121,12 +142,14 @@ export function createReadDocumentSession({
 }: ReadDocumentSessionDeps): ReadDocumentSession {
   const indexed = new Map(entries.map(entry => [entry.id, entry]))
   const reads: DocumentRead[] = []
+  const refused: ReadsRefused = { unknown: 0, budget: 0, tooLarge: 0 }
   let spentTokens = 0
 
   function read(id: string): ReadDocumentResult {
     // Checked before the id is even looked at: once three documents are in,
     // no fourth read can happen, whatever the model asks for.
     if (reads.length >= KNOWLEDGE_READ_BUDGET.maxDocuments) {
+      refused.budget += 1
       return { error: 'read_budget_exhausted' }
     }
 
@@ -134,18 +157,32 @@ export function createReadDocumentSession({
     // hallucinates a path, or is talked into one by a visitor, reaches no
     // document at all. A miss costs nothing against the budget: it returned
     // no text, and the step cap already bounds how often it can happen.
-    if (!indexed.has(id)) return { error: 'unknown_document' }
+    if (!indexed.has(id)) {
+      refused.unknown += 1
+      return { error: 'unknown_document' }
+    }
 
     const document = readKnowledgeDocument(id)
     // The index and the store disagreeing is a deployment fault, not a
     // visitor's. The model gets the same recoverable answer either way.
-    if (!document) return { error: 'unknown_document' }
+    if (!document) {
+      refused.unknown += 1
+      return { error: 'unknown_document' }
+    }
 
     // Measured off the text actually being handed over rather than read from
     // the entry's advertised `tokenEstimate`: the budget exists to bound what
     // this request sends, so it counts what this request sends.
     const tokens = estimateTokens(document.text)
+    // Bigger than the whole budget, so no amount of reading less would let it
+    // through: the model is told that plainly rather than being invited to
+    // retry, and the count is logged because only the corpus can fix it.
+    if (tokens > KNOWLEDGE_READ_BUDGET.maxTokens) {
+      refused.tooLarge += 1
+      return { error: 'document_too_large' }
+    }
     if (spentTokens + tokens > KNOWLEDGE_READ_BUDGET.maxTokens) {
+      refused.budget += 1
       return { error: 'read_budget_exhausted' }
     }
 
@@ -161,7 +198,7 @@ export function createReadDocumentSession({
 
   return {
     tool: tool({
-      description: `Read the full text of one document from the index. Takes the document's id. Returns {"id", "title", "text"}, or {"error": "unknown_document"} if no entry has that id, or {"error": "read_budget_exhausted"} once this question's limit of ${KNOWLEDGE_READ_BUDGET.maxDocuments} documents is used up.`,
+      description: `Read the full text of one document from the index. Takes the document's id. Returns {"id", "title", "text"}, or {"error": "unknown_document"} if no entry has that id, or {"error": "read_budget_exhausted"} once this question's limit of ${KNOWLEDGE_READ_BUDGET.maxDocuments} documents is used up, or {"error": "document_too_large"} if that one document is too big to read at all.`,
       inputSchema: READ_DOCUMENT_INPUT_SCHEMA,
       execute: ({ id }) => read(id),
     }),
@@ -179,5 +216,6 @@ export function createReadDocumentSession({
     },
     documentsRead: () => reads.length,
     readTokens: () => spentTokens,
+    readsRefused: () => ({ ...refused }),
   }
 }

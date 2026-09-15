@@ -23,7 +23,11 @@ import {
   READ_DOCUMENT_TOOL_NAME,
   buildMessages,
 } from './prompt'
-import { createReadDocumentSession, type ChatSource } from './read-document'
+import {
+  createReadDocumentSession,
+  type ChatSource,
+  type ReadsRefused,
+} from './read-document'
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_OUTPUT_TOKENS,
@@ -43,9 +47,17 @@ import {
  *
  * The shape of one request: the policy and the document index go up as the
  * prompt, the model calls `read_document` for the documents it decides it
- * needs, and only then does it answer. `stopWhen` bounds that loop and
- * KNOWLEDGE_READ_BUDGET bounds what it may read; between them a request can
- * cost at most a fixed, known amount however the model behaves.
+ * needs, and only then does it answer. `stopWhen` bounds that loop,
+ * `prepareStep` forces the last step to write the answer, and
+ * KNOWLEDGE_READ_BUDGET bounds what may be read.
+ *
+ * Bounded is not cheap. Every step re-sends the whole conversation so far,
+ * tool results included, so the input tokens add up rather than staying flat:
+ * with a 16k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
+ * steps, the worst case is roughly 16k + 23k + 29k + 36k ≈ 104k input tokens
+ * for one question. Vertex's implicit cache covers the stable prefix and
+ * should take a large bite out of what is billed, but the ceiling is real and
+ * it is why MTC-34's rate limit is not optional.
  *
  * Privacy rule for this whole module: no message text is ever written
  * anywhere. Not to the log, not into an error response, not into a header.
@@ -79,31 +91,55 @@ export const STREAM_ERROR_MESSAGE =
  * Both caps are needed: this one stops a model that loops without ever
  * answering, KNOWLEDGE_READ_BUDGET stops one that reads the whole corpus in
  * a single step.
+ *
+ * `+ 1` and not `+ 2` because `prepareStep` now spends the last step on the
+ * answer rather than hoping the model volunteers one. That makes a wasted
+ * call — a hallucinated id, say — cost a document rather than the answer: the
+ * visitor gets a reply drawn from fewer sources instead of an empty bubble.
+ * Raising it to `+ 2` would buy one retry back at about a quarter more input
+ * tokens per request; the cost note above is the reason it is not free.
  */
 export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
 
 /**
- * Metadata the server attaches to the streamed message. MTC-33 renders
- * `sources` as chips and `truncated` as a "cut short" notice.
+ * Metadata the server attaches to the streamed message, for MTC-33.
  *
- * `sources` is authoritative, and it is what the UI should render: it is the
- * set of documents this request actually read, named by the server, in read
- * order. The `Sources:` line the policy asks the model to write is a
- * secondary signal — useful inside the answer, but a model can forget it or
- * cite an id it never opened, so it must not drive the chips.
+ * - `sources`: the documents this request actually read, named by the server,
+ *   in read order. Authoritative, and what the chips should render. The
+ *   `Sources:` line the policy asks the model to write is a secondary signal —
+ *   a model can forget it or cite an id it never opened, so it must not drive
+ *   the chips. Absent when there is nothing to cite, and withheld whenever
+ *   `incomplete` is set.
+ * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
+ *   answer is partial and still worth showing under a "cut short" notice.
+ * - `incomplete`: the run ended without a clean answer — no text at all, or a
+ *   finish reason other than 'stop'. Show a "couldn't finish, try again"
+ *   notice. `truncated` implies this, so a UI that handles only `incomplete`
+ *   still degrades correctly.
+ *
+ * Both flags are present-or-absent rather than booleans, so `metadata.x` is
+ * never a falsy `false` the UI has to distinguish from "not set".
  */
 export interface ChatMessageMetadata {
   sources?: ChatSource[]
   truncated?: true
+  incomplete?: true
 }
 
 /** The one tool the model is offered. */
 type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
 
 /**
- * The message MTC-33 receives. Alongside the text it also carries the
- * `read_document` call and result parts the SDK streams for every tool step;
- * those are progress, not content, and the UI is free to ignore them.
+ * The message MTC-33 receives: answer text and the metadata above, and
+ * nothing else.
+ *
+ * The SDK would also stream a `tool-output-available` part per read, carrying
+ * the document's whole text — up to KNOWLEDGE_READ_BUDGET.maxTokens of it —
+ * down to the browser. `withoutToolParts` strips every `tool-*` chunk before
+ * the response is built. The UI needs the `sources` metadata, not the bytes,
+ * so sending them would be bandwidth spent on a second copy of what the
+ * answer already summarises, and a channel through which a corpus that later
+ * stops being wholly public would leak without anyone editing this route.
  */
 export type ChatUIMessage = UIMessage<
   ChatMessageMetadata,
@@ -177,6 +213,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // Reads, then one answer. Without a stop condition the SDK would run
         // a single step and never come back for the answer after a tool call.
         stopWhen: stepCountIs(CHAT_MAX_STEPS),
+        // The last step has to produce the answer, so it is not offered the
+        // tool. Without this a model that spends every step reading ends the
+        // run on 'tool-calls' with no text at all, and the visitor gets an
+        // empty bubble — with source chips under it, which is worse than
+        // nothing because it looks like an answer that said nothing.
+        prepareStep: ({ stepNumber }) =>
+          stepNumber === CHAT_MAX_STEPS - 1
+            ? { toolChoice: 'none' }
+            : undefined,
         // buildMessages puts the policy and the index at the front as system
         // messages; the Google provider folds them into the single
         // `systemInstruction` that Vertex's implicit cache keys on.
@@ -199,8 +244,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           logCompletion({
             usage,
             finishReason,
+            answered: answer.answered(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
+            readsRefused: session.readsRefused(),
             ms: now() - started,
           })
         },
@@ -212,8 +259,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           console.info('[chat]', {
             finishReason: 'abort',
             aborted: true,
+            answered: answer.answered(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
+            readsRefused: session.readsRefused(),
             ms: now() - started,
           })
         },
@@ -231,12 +280,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             // a half sentence and a missing Sources line looking like an
             // answer.
             if (part.finishReason === 'length') metadata.truncated = true
+            // No text, or any finish that is not a clean stop, means there is
+            // no answer to stand behind — most often a model that spent every
+            // step reading. Say so, and withhold the chips: citations under a
+            // blank or half-finished reply claim it was sourced when it was
+            // never written.
+            if (!answer.answered() || part.finishReason !== 'stop') {
+              metadata.incomplete = true
+            }
+
             const sources = session.sources()
             // A decline is the one answer that may be written without
             // reading. It can still follow reads that turned out not to
             // answer the question, and chips under "I can't answer that"
             // would claim the opposite, so they are dropped.
-            if (sources.length > 0 && !answer.isDecline()) {
+            if (
+              sources.length > 0 &&
+              !answer.isDecline() &&
+              !metadata.incomplete
+            ) {
               metadata.sources = sources
             }
             return Object.keys(metadata).length > 0 ? metadata : undefined
@@ -246,7 +308,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             logFailure(error)
             return STREAM_ERROR_MESSAGE
           },
-        }),
+        }).pipeThrough(withoutToolParts()),
       })
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
@@ -258,26 +320,63 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 }
 
 /**
- * Just enough of the answer to tell whether it is the decline sentence.
+ * Just enough of the answer to tell whether it is the decline sentence, and
+ * whether there was an answer at all.
  *
  * Only the opening characters are kept. The question this has to answer is
  * "did the model decline", and holding a whole answer to decide it would mean
  * this module carrying visitor-visible text further than it needs to.
+ *
+ * The buffer resets on every `start-step`, so only the final step's text is
+ * judged. A model may narrate before a tool call ("Let me check his
+ * résumé.") and that preamble is not the answer: left in, it would fill the
+ * buffer and make a decline written two steps later look like prose, or the
+ * reverse.
  */
 class AnswerText {
   /** The sentence plus room for whatever whitespace precedes it. */
   private static readonly KEEP = DECLINE_SENTENCE.length + 16
   private opening = ''
+  private sawText = false
 
   observe(part: { type: string; text?: string }): void {
+    if (part.type === 'start-step') {
+      this.opening = ''
+      this.sawText = false
+      return
+    }
     if (part.type !== 'text-delta' || typeof part.text !== 'string') return
+    this.sawText ||= part.text.length > 0
     if (this.opening.length >= AnswerText.KEEP) return
     this.opening += part.text
+  }
+
+  /** Whether the final step produced any text for the visitor to read. */
+  answered(): boolean {
+    return this.sawText
   }
 
   isDecline(): boolean {
     return this.opening.trimStart().startsWith(DECLINE_SENTENCE)
   }
+}
+
+/**
+ * Strips every `tool-*` chunk from the UI stream.
+ *
+ * The SDK streams a `read_document` input part and an output part per read,
+ * and the output part carries the document's whole text. The browser has no
+ * use for it — the answer is the content, and `sources` names where it came
+ * from — so it is dropped here rather than shipped and ignored. Filtering the
+ * UI chunks rather than the model stream keeps it a pure output concern: the
+ * tool loop, the read ledger, and the metadata above all still see everything.
+ */
+function withoutToolParts<T extends { type: string }>(): TransformStream<T, T> {
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (!chunk.type.startsWith('tool-')) controller.enqueue(chunk)
+    },
+  })
 }
 
 function errorResponse(code: 'disabled' | 'invalid' | 'unavailable'): Response {
@@ -304,8 +403,10 @@ export function cachedInputTokens(
 interface CompletionAggregates {
   usage: LanguageModelUsage
   finishReason: string
+  answered: boolean
   documentsRead: number
   readTokens: number
+  readsRefused: ReadsRefused
   ms: number
 }
 
@@ -320,8 +421,10 @@ interface CompletionAggregates {
 function logCompletion({
   usage,
   finishReason,
+  answered,
   documentsRead,
   readTokens,
+  readsRefused,
   ms,
 }: CompletionAggregates): void {
   const cached = cachedInputTokens(usage)
@@ -333,13 +436,26 @@ function logCompletion({
     cacheHit: cached > 0,
     documentsRead,
     readTokens,
+    // Split by reason: unknown ids mean the model is guessing at the index,
+    // budget refusals mean the caps are too tight for real questions, and
+    // tooLarge means a document in the corpus can never be read at all. They
+    // call for three different fixes, so they are three different counters.
+    readsRefusedUnknown: readsRefused.unknown,
+    readsRefusedBudget: readsRefused.budget,
+    readsRefusedTooLarge: readsRefused.tooLarge,
+    // False here is the signal that a request burned tokens and gave the
+    // visitor nothing. It should be rare; if it is not, CHAT_MAX_STEPS is
+    // wrong.
+    answered,
     finishReason,
     aborted: false,
     ms,
   }
-  // An answer that stopped on length lost its Sources trailer mid-word, so it
-  // gets its own marker rather than hiding among the ordinary completions.
+  // An answer that stopped on length lost its Sources trailer mid-word, and
+  // any other non-'stop' finish means no usable answer at all. Both get their
+  // own marker rather than hiding among the ordinary completions.
   if (finishReason === 'length') console.warn('[chat] truncated', aggregate)
+  else if (finishReason !== 'stop') console.warn('[chat] incomplete', aggregate)
   else console.info('[chat]', aggregate)
 }
 

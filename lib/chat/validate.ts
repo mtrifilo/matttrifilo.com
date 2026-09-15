@@ -37,10 +37,17 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
  * 1,400, and a conversation cannot exceed CHAT_MAX_MESSAGES messages of
  * CHAT_MAX_MESSAGE_CHARS characters each (~6,000 tokens) — 15,400 or so
- * against this cap. A request over it means the client has replayed a history
- * longer than the route ever produced, so it is refused rather than silently
- * billed. validate.test.ts asserts that worst case still fits, so growing the
- * policy past the margin is a failing test rather than a 400 for the visitor.
+ * against this cap.
+ *
+ * So this is a backstop, not a limit anyone reaches: while the other caps
+ * hold, one of them always fires first, and `budget_exceeded` is unreachable
+ * from any body a client can post. "The longest conversation the route can
+ * produce still fits" in validate.test.ts is what pins that, and it is the
+ * test that should fail if the policy or the index ceiling grows past the
+ * margin — the alternative is a visitor getting a 400 for staying inside
+ * every documented limit. It stays because the sum being safe is a property
+ * of four constants that are edited independently, and a cheap check beats
+ * trusting that nobody raises one of them.
  *
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.

@@ -85,6 +85,7 @@ HOW TO WORK
 - Then answer only from the text those calls returned.
 - If a call returns {"error": "unknown_document"}, the id was not in the index: look again and use an id exactly as the index spells it.
 - If a call returns {"error": "read_budget_exhausted"}, you have read everything you may for this question. Answer from what you already read, or decline.
+- If a call returns {"error": "document_too_large"}, that document cannot be read at all. Do not ask for it again: read a different one, or answer from what you already have, or decline.
 - The one time you may answer without reading anything is a decline. If the index shows nothing that could bear on the question, or the question is one of the kinds listed below, decline straight away and read nothing.
 
 WHEN TO DECLINE
@@ -166,9 +167,15 @@ export function buildMessages({
 /**
  * The transcript, then the question. With no history there is nothing to
  * frame, so the question is sent on its own.
+ *
+ * The question is neutralised alongside the replayed turns. It is typed by
+ * the same untrusted visitor, so a question that contains the headings or
+ * speaker labels could otherwise forge a transcript of its own — including on
+ * a first turn, where there is no real block for it to compete with.
  */
 function visitorMessage(history: ChatTurn[], userMessage: string): string {
-  if (history.length === 0) return userMessage
+  const question = neutralise(userMessage)
+  if (history.length === 0) return question
 
   const transcript = history
     .map(
@@ -177,7 +184,7 @@ function visitorMessage(history: ChatTurn[], userMessage: string): string {
     )
     .join('\n')
 
-  return `${TRANSCRIPT_HEADING}\n${transcript}\n\n${CURRENT_QUESTION_HEADING}\n${userMessage}`
+  return `${TRANSCRIPT_HEADING}\n${transcript}\n\n${CURRENT_QUESTION_HEADING}\n${question}`
 }
 
 /**

@@ -152,7 +152,7 @@ describe('the read budget', () => {
     expect(s.documentsRead()).toBe(KNOWLEDGE_READ_BUDGET.maxDocuments)
   })
 
-  test('a single document over the whole token budget is refused', async () => {
+  test('a single document over the whole token budget is unreadable', async () => {
     const huge = document(
       'huge',
       'x'.repeat((KNOWLEDGE_READ_BUDGET.maxTokens + 1) * 4)
@@ -162,13 +162,26 @@ describe('the read budget', () => {
       readKnowledgeDocument: () => huge,
     })
 
-    expect(await read(s.tool, 'huge')).toEqual({
-      error: 'read_budget_exhausted',
-    })
+    // Its own error, not the budget's: no amount of reading less would let
+    // this document through, so the model must not be invited to retry it.
+    expect(await read(s.tool, 'huge')).toEqual({ error: 'document_too_large' })
+    expect(await read(s.tool, 'huge')).toEqual({ error: 'document_too_large' })
     // The refusal is total: nothing was sent, so nothing is charged or cited.
     expect(s.documentsRead()).toBe(0)
     expect(s.readTokens()).toBe(0)
     expect(s.sources()).toEqual([])
+    // Counted apart from ordinary budget refusals: only the corpus can fix it.
+    expect(s.readsRefused()).toEqual({ unknown: 0, budget: 0, tooLarge: 2 })
+  })
+
+  test('refusals are counted by reason', async () => {
+    const s = session()
+    await read(s.tool, 'nope')
+    await read(s.tool, 'also-nope')
+    for (const id of ['resume', 'faq', 'projects']) await read(s.tool, id)
+    await read(s.tool, 'open-source')
+
+    expect(s.readsRefused()).toEqual({ unknown: 2, budget: 1, tooLarge: 0 })
   })
 
   test('the token budget counts across reads, not per read', async () => {
