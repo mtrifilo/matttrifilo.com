@@ -2,10 +2,14 @@ import type { EnvSource } from '@/lib/env'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
 
 /**
- * Every limit the chat route enforces, and the only place a request is judged
- * (MTC-31). Pure and synchronous: the caller hands in an already-parsed body
- * and the knowledge base's token estimate, so the whole policy is reachable
- * from a test without a server, a network, or a model.
+ * Every limit the chat route enforces on an incoming request, and the only
+ * place a request is judged (MTC-31). Pure and synchronous: the caller hands
+ * in an already-parsed body and the document index's token estimate, so the
+ * whole policy is reachable from a test without a server, a network, or a
+ * model.
+ *
+ * What the model then reads is a separate budget, enforced per request in
+ * read-document.ts. This file only decides what may reach the model at all.
  */
 
 /** Questions one visitor may ask in a single conversation. */
@@ -26,18 +30,22 @@ export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 export const CHAT_MAX_MESSAGE_CHARS = 1_500
 
 /**
- * Ceiling on the estimated input tokens of an entire request: knowledge base
- * plus system policy plus the conversation so far.
+ * Ceiling on the estimated input tokens of the request the client posts:
+ * document index plus system policy plus the conversation so far.
  *
- * 24,000 = 16,000 for the corpus (KNOWLEDGE_TOKEN_CEILING, which MTC-29
- * enforces at build time) + ~8,000 for a worst-case conversation: eight
- * questions of 1,500 characters (~3,000 tokens), seven answers at the
- * CHAT_MAX_OUTPUT_TOKENS ceiling (~4,200 tokens), and the policy itself
- * (~800 tokens). A request over this cap means the client has replayed a
- * history longer than the route ever produced, so it is refused rather than
- * silently billed.
+ * 16,000 leaves room for every part of that at its own limit:
+ * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
+ * 1,400, and a conversation cannot exceed CHAT_MAX_MESSAGES messages of
+ * CHAT_MAX_MESSAGE_CHARS characters each (~6,000 tokens) — 15,400 or so
+ * against this cap. A request over it means the client has replayed a history
+ * longer than the route ever produced, so it is refused rather than silently
+ * billed. validate.test.ts asserts that worst case still fits, so growing the
+ * policy past the margin is a failing test rather than a 400 for the visitor.
+ *
+ * It does not bound the whole generation. Documents arrive mid-loop as tool
+ * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 24_000
+export const CHAT_MAX_INPUT_TOKENS = 16_000
 
 /**
  * Visible answer length. The ticket's 600 cut a "summarise every role"
@@ -120,8 +128,8 @@ export function estimateTokens(text: string): number {
 export interface ValidateChatRequestInput {
   /** The parsed JSON body the AI SDK client posted. */
   body: unknown
-  /** `KnowledgeBase.tokenEstimate` for the corpus this request would carry. */
-  kbTokenEstimate: number
+  /** `KnowledgeIndex.tokenEstimate` for the index this request would carry. */
+  indexTokenEstimate: number
   env?: EnvSource
 }
 
@@ -135,7 +143,7 @@ export interface ValidateChatRequestInput {
  */
 export function validateChatRequest({
   body,
-  kbTokenEstimate,
+  indexTokenEstimate,
   env = process.env,
 }: ValidateChatRequestInput): ChatRequestValidation {
   if (isChatDisabled(env)) return reject('disabled')
@@ -166,7 +174,7 @@ export function validateChatRequest({
     0
   )
   const inputTokens =
-    kbTokenEstimate + estimateTokens(SYSTEM_PROMPT) + conversationTokens
+    indexTokenEstimate + estimateTokens(SYSTEM_PROMPT) + conversationTokens
   if (inputTokens > CHAT_MAX_INPUT_TOKENS) return reject('budget_exceeded')
 
   return {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { KNOWLEDGE_INDEX_TOKEN_CEILING } from '@/lib/knowledge'
 import {
   CHAT_ERROR_MESSAGE,
   CHAT_ERROR_STATUS,
@@ -20,8 +21,8 @@ const said = (role: 'user' | 'assistant', text: string) => ({
 
 const body = (...messages: unknown[]) => ({ messages })
 
-const validate = (input: unknown, kbTokenEstimate = 100) =>
-  validateChatRequest({ body: input, kbTokenEstimate, env: {} })
+const validate = (input: unknown, indexTokenEstimate = 100) =>
+  validateChatRequest({ body: input, indexTokenEstimate, env: {} })
 
 const codeOf = (result: ReturnType<typeof validate>) =>
   result.ok ? null : result.body.error.code
@@ -39,7 +40,7 @@ describe('the kill switch is checked before anything else', () => {
   test('a disabled deployment refuses even a well-formed request', () => {
     const result = validateChatRequest({
       body: body(said('user', 'Hi')),
-      kbTokenEstimate: 100,
+      indexTokenEstimate: 100,
       env: { CHAT_DISABLED: '1' },
     })
     expect(result.ok).toBe(false)
@@ -50,7 +51,7 @@ describe('the kill switch is checked before anything else', () => {
   test('a disabled deployment refuses a malformed body the same way', () => {
     const result = validateChatRequest({
       body: 'not a body at all',
-      kbTokenEstimate: 100,
+      indexTokenEstimate: 100,
       env: { CHAT_DISABLED: '1' },
     })
     expect(codeOf(result)).toBe('disabled')
@@ -178,12 +179,32 @@ describe('rejecting a request', () => {
     expect(codeOf(result)).toBe('budget_exceeded')
   })
 
-  test('the budget counts the knowledge base, the policy, and the history', () => {
-    // Just under the cap with a tiny corpus, over it once the corpus grows.
+  test('the budget counts the index, the policy, and the history', () => {
+    // Just under the cap with a small index, over it once the index grows.
     expect(validate(body(said('user', 'hi')), 1_000).ok).toBe(true)
-    expect(codeOf(validate(body(said('user', 'hi')), 23_900))).toBe(
-      'budget_exceeded'
-    )
+    expect(
+      codeOf(validate(body(said('user', 'hi')), CHAT_MAX_INPUT_TOKENS - 100))
+    ).toBe('budget_exceeded')
+  })
+
+  test('the longest conversation the route can produce still fits', () => {
+    // Every part of a request has its own cap, and CHAT_MAX_INPUT_TOKENS has
+    // to sit above their sum or a visitor gets a 400 for staying inside all
+    // of them. Failing here means the policy or the index ceiling grew: raise
+    // the cap deliberately rather than shrinking what a visitor may ask.
+    const full = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
+    // The longest body that passes every other limit: CHAT_MAX_TURNS
+    // questions and the answers between them, each at the character cap.
+    const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
+      said(i % 2 === 0 ? 'user' : 'assistant', full)
+    ).slice(0, -1)
+
+    const result = validateChatRequest({
+      body: body(...longest),
+      indexTokenEstimate: KNOWLEDGE_INDEX_TOKEN_CEILING,
+      env: {},
+    })
+    expect(codeOf(result)).toBe(null)
   })
 
   test.each([

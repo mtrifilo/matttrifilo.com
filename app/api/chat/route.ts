@@ -1,9 +1,9 @@
 import { geminiModel, getVertex } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
-import { loadKnowledgeBase } from '@/lib/knowledge'
+import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
 
 // Matt's Career Assistant (MTC-31). All of the behaviour is in
-// lib/chat/handler.ts; this file only names the runtime and wires the two
+// lib/chat/handler.ts; this file only names the runtime and wires the three
 // real dependencies, because a Next route module may export nothing but its
 // handlers and its config.
 
@@ -13,6 +13,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export const POST = createChatHandler({
-  loadKnowledgeBase,
+  loadKnowledgeIndex,
+  readKnowledgeDocument,
   model: () => getVertex()(geminiModel()),
 })

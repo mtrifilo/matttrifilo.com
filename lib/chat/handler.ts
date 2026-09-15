@@ -1,32 +1,51 @@
 import {
   createUIMessageStreamResponse,
+  stepCountIs,
   streamText,
   toUIMessageStream,
+  type InferUITools,
   type LanguageModel,
   type LanguageModelUsage,
+  type Tool,
+  type UIDataTypes,
+  type UIMessage,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
 import type { EnvSource } from '@/lib/env'
-import type { KnowledgeBase } from '@/lib/knowledge'
-import { SYSTEM_PROMPT, buildMessages } from './prompt'
+import {
+  KNOWLEDGE_INDEX_TOKEN_CEILING,
+  KNOWLEDGE_READ_BUDGET,
+  type KnowledgeDocument,
+  type KnowledgeIndex,
+} from '@/lib/knowledge'
+import {
+  DECLINE_SENTENCE,
+  READ_DOCUMENT_TOOL_NAME,
+  buildMessages,
+} from './prompt'
+import { createReadDocumentSession, type ChatSource } from './read-document'
 import {
   CHAT_ERROR_STATUS,
-  CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_OUTPUT_TOKENS,
   CHAT_TEMPERATURE,
   chatErrorBody,
-  estimateTokens,
   isChatDisabled,
   validateChatRequest,
 } from './validate'
 
 /**
- * The chat route's behaviour, with its two impure edges injected (MTC-31).
+ * The chat route's behaviour, with its impure edges injected (MTC-31).
  *
  * `app/api/chat/route.ts` is a thin wiring file over this so the knowledge
- * base and the Vertex model can be swapped for test doubles, and so the route
- * module itself exports nothing but a handler (Next's route type check
+ * module and the Vertex model can be swapped for test doubles, and so the
+ * route module itself exports nothing but a handler (Next's route type check
  * rejects anything else).
+ *
+ * The shape of one request: the policy and the document index go up as the
+ * prompt, the model calls `read_document` for the documents it decides it
+ * needs, and only then does it answer. `stopWhen` bounds that loop and
+ * KNOWLEDGE_READ_BUDGET bounds what it may read; between them a request can
+ * cost at most a fixed, known amount however the model behaves.
  *
  * Privacy rule for this whole module: no message text is ever written
  * anywhere. Not to the log, not into an error response, not into a header.
@@ -34,7 +53,8 @@ import {
  */
 
 export interface ChatHandlerDeps {
-  loadKnowledgeBase: () => KnowledgeBase
+  loadKnowledgeIndex: () => KnowledgeIndex
+  readKnowledgeDocument: (id: string) => KnowledgeDocument | undefined
   /**
    * A thunk, not a model. Building the Vertex client reads required env, so
    * it must not run at import time — a missing variable would otherwise break
@@ -50,8 +70,55 @@ export interface ChatHandlerDeps {
 export const STREAM_ERROR_MESSAGE =
   'The assistant lost its connection part-way through that answer. Ask again, or email Matt at matt.trifilo@gmail.com.'
 
+/**
+ * Model calls allowed in one request: one per document the model may read,
+ * plus the one that writes the answer.
+ *
+ * A step is a model call and the tool calls it emitted, so this is not the
+ * same bound as the read budget — one step can ask for several documents.
+ * Both caps are needed: this one stops a model that loops without ever
+ * answering, KNOWLEDGE_READ_BUDGET stops one that reads the whole corpus in
+ * a single step.
+ */
+export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
+
+/**
+ * Metadata the server attaches to the streamed message. MTC-33 renders
+ * `sources` as chips and `truncated` as a "cut short" notice.
+ *
+ * `sources` is authoritative, and it is what the UI should render: it is the
+ * set of documents this request actually read, named by the server, in read
+ * order. The `Sources:` line the policy asks the model to write is a
+ * secondary signal — useful inside the answer, but a model can forget it or
+ * cite an id it never opened, so it must not drive the chips.
+ */
+export interface ChatMessageMetadata {
+  sources?: ChatSource[]
+  truncated?: true
+}
+
+/** The one tool the model is offered. */
+type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
+
+/**
+ * The message MTC-33 receives. Alongside the text it also carries the
+ * `read_document` call and result parts the SDK streams for every tool step;
+ * those are progress, not content, and the UI is free to ignore them.
+ */
+export type ChatUIMessage = UIMessage<
+  ChatMessageMetadata,
+  UIDataTypes,
+  InferUITools<ChatTools>
+>
+
 export function createChatHandler(deps: ChatHandlerDeps) {
-  const { loadKnowledgeBase, model, env = process.env, now = Date.now } = deps
+  const {
+    loadKnowledgeIndex,
+    readKnowledgeDocument,
+    model,
+    env = process.env,
+    now = Date.now,
+  } = deps
 
   return async function handleChat(request: Request): Promise<Response> {
     // Before anything else, including reading the body: a disabled deployment
@@ -67,25 +134,22 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const started = now()
     try {
-      const kb = loadKnowledgeBase()
-      // A corpus this large leaves no room for a conversation, so every
-      // request would fail the budget check below and blame the visitor for a
-      // deployment fault. MTC-29 caps the corpus at build time; this is the
-      // serving-side backstop, and it is our problem, not theirs.
-      if (
-        kb.tokenEstimate + estimateTokens(SYSTEM_PROMPT) >=
-        CHAT_MAX_INPUT_TOKENS
-      ) {
+      const index = loadKnowledgeIndex()
+      // An index over its own ceiling is a deployment fault: MTC-29 enforces
+      // the ceiling at build time and this is the serving-side backstop. It
+      // is refused here rather than left to the input budget below, which
+      // would blame the visitor for it.
+      if (index.tokenEstimate > KNOWLEDGE_INDEX_TOKEN_CEILING) {
         console.error('[chat]', {
           stage: 'config',
-          error: 'knowledge-base-over-input-budget',
+          error: 'knowledge-index-over-ceiling',
         })
         return errorResponse('unavailable')
       }
 
       const validation = validateChatRequest({
         body,
-        kbTokenEstimate: kb.tokenEstimate,
+        indexTokenEstimate: index.tokenEstimate,
         env,
       })
       if (!validation.ok) {
@@ -93,15 +157,28 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         return Response.json(validation.body, { status: validation.status })
       }
 
+      // Per request, because the read budget is per request: a session built
+      // once at module scope would let one visitor's reads exhaust another's.
+      const session = createReadDocumentSession({
+        entries: index.entries,
+        readKnowledgeDocument,
+      })
+
+      const answer = new AnswerText()
+
       const result = streamText({
         model: model(),
         messages: buildMessages({
-          kb,
+          index,
           history: validation.history,
           userMessage: validation.userMessage,
         }),
-        // buildMessages puts the policy and the knowledge base at the front as
-        // system messages; the Google provider folds them into the single
+        tools: { [READ_DOCUMENT_TOOL_NAME]: session.tool } satisfies ChatTools,
+        // Reads, then one answer. Without a stop condition the SDK would run
+        // a single step and never come back for the answer after a tool call.
+        stopWhen: stepCountIs(CHAT_MAX_STEPS),
+        // buildMessages puts the policy and the index at the front as system
+        // messages; the Google provider folds them into the single
         // `systemInstruction` that Vertex's implicit cache keys on.
         allowSystemInMessages: true,
         // Cancels the upstream Vertex call when the visitor closes the tab,
@@ -122,30 +199,48 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           logCompletion({
             usage,
             finishReason,
+            documentsRead: session.documentsRead(),
+            readTokens: session.readTokens(),
             ms: now() - started,
           })
         },
         onAbort() {
           // No step has finished by the time a stream is cancelled, so no
           // usage exists to report: the SDK only records a step on
-          // finish-step. Log the fact and the duration, nothing invented.
+          // finish-step. Log the fact, the reads that did happen, and the
+          // duration, nothing invented.
           console.info('[chat]', {
             finishReason: 'abort',
             aborted: true,
+            documentsRead: session.documentsRead(),
+            readTokens: session.readTokens(),
             ms: now() - started,
           })
         },
       })
 
       return createUIMessageStreamResponse({
-        stream: toUIMessageStream({
+        stream: toUIMessageStream<ChatTools, ChatUIMessage>({
           stream: result.stream,
-          // Lets MTC-33 show "this answer was cut short" instead of leaving a
-          // half sentence and a missing Sources line looking like an answer.
-          messageMetadata: ({ part }) =>
-            part.type === 'finish' && part.finishReason === 'length'
-              ? { truncated: true }
-              : undefined,
+          messageMetadata: ({ part }) => {
+            answer.observe(part)
+            if (part.type !== 'finish') return undefined
+
+            const metadata: ChatMessageMetadata = {}
+            // Lets MTC-33 show "this answer was cut short" instead of leaving
+            // a half sentence and a missing Sources line looking like an
+            // answer.
+            if (part.finishReason === 'length') metadata.truncated = true
+            const sources = session.sources()
+            // A decline is the one answer that may be written without
+            // reading. It can still follow reads that turned out not to
+            // answer the question, and chips under "I can't answer that"
+            // would claim the opposite, so they are dropped.
+            if (sources.length > 0 && !answer.isDecline()) {
+              metadata.sources = sources
+            }
+            return Object.keys(metadata).length > 0 ? metadata : undefined
+          },
           // Masks the provider's text, which can quote the prompt back.
           onError(error) {
             logFailure(error)
@@ -159,6 +254,29 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       logFailure(error)
       return errorResponse('unavailable')
     }
+  }
+}
+
+/**
+ * Just enough of the answer to tell whether it is the decline sentence.
+ *
+ * Only the opening characters are kept. The question this has to answer is
+ * "did the model decline", and holding a whole answer to decide it would mean
+ * this module carrying visitor-visible text further than it needs to.
+ */
+class AnswerText {
+  /** The sentence plus room for whatever whitespace precedes it. */
+  private static readonly KEEP = DECLINE_SENTENCE.length + 16
+  private opening = ''
+
+  observe(part: { type: string; text?: string }): void {
+    if (part.type !== 'text-delta' || typeof part.text !== 'string') return
+    if (this.opening.length >= AnswerText.KEEP) return
+    this.opening += part.text
+  }
+
+  isDecline(): boolean {
+    return this.opening.trimStart().startsWith(DECLINE_SENTENCE)
   }
 }
 
@@ -186,13 +304,24 @@ export function cachedInputTokens(
 interface CompletionAggregates {
   usage: LanguageModelUsage
   finishReason: string
+  documentsRead: number
+  readTokens: number
   ms: number
 }
 
-/** Numbers only. Never the question, never the answer, never a section id. */
+/**
+ * Numbers only. Never the question, never the answer, never a document id.
+ *
+ * Document ids are not secret — they are in the index and on the page as
+ * source chips — but leaving them out keeps this line a fixed set of numeric
+ * fields that a log query can aggregate without ever growing a text column
+ * that someone later fills with something that is secret.
+ */
 function logCompletion({
   usage,
   finishReason,
+  documentsRead,
+  readTokens,
   ms,
 }: CompletionAggregates): void {
   const cached = cachedInputTokens(usage)
@@ -202,6 +331,8 @@ function logCompletion({
     reasoningTokens: usage.outputTokenDetails?.reasoningTokens ?? 0,
     cachedInputTokens: cached,
     cacheHit: cached > 0,
+    documentsRead,
+    readTokens,
     finishReason,
     aborted: false,
     ms,
