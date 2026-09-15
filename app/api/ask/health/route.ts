@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import { geminiModel, getVertex } from '@/lib/ai/vertex'
+import { geminiModel, getAuthClient, getVertex } from '@/lib/ai/vertex'
 import { failureStage, isHealthRouteEnabled, isHealthy } from './gate'
 
 // Proves the keyless Vertex AI path end to end (MTC-30 acceptance): one
@@ -14,6 +14,13 @@ export async function GET() {
   const model = geminiModel()
   const started = Date.now()
   try {
+    // Phase timing: a slow preview showed every model call stalling for
+    // 80 to 110 s while the same call from a laptop took 2 s. Splitting the
+    // token exchange from the model call says which side owns the stall.
+    const tokenStarted = Date.now()
+    await getAuthClient().getAccessToken()
+    const tokenMs = Date.now() - tokenStarted
+    const modelStarted = Date.now()
     const result = await generateText({
       model: getVertex()(model),
       prompt: 'Reply with the single word: ok',
@@ -31,6 +38,8 @@ export async function GET() {
         text: result.text,
         finishReason: result.finishReason,
         usage: result.usage,
+        tokenMs,
+        modelMs: Date.now() - modelStarted,
         ms: Date.now() - started,
       },
       { status: ok ? 200 : 502 }

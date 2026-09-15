@@ -69,27 +69,36 @@ function createAuthClient(
 }
 
 let vertex: ReturnType<typeof createVertex> | undefined
+let authClient: ReturnType<typeof createAuthClient> | undefined
 
-/** Lazily built so importing this module never throws at build time. */
-export function getVertex() {
-  if (!vertex) {
-    const projectId = readEnv('GCP_PROJECT_ID')
+/**
+ * The federated auth client behind getVertex(), shared so the health route
+ * can time the token exchange separately from a model call.
+ */
+export function getAuthClient() {
+  if (!authClient) {
     const provider: WorkloadIdentityProvider = {
       projectNumber: readEnv('GCP_PROJECT_NUMBER'),
       poolId: readEnv('GCP_WORKLOAD_IDENTITY_POOL_ID'),
       providerId: readEnv('GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID'),
     }
+    authClient = createAuthClient(
+      provider,
+      readEnv('GCP_SERVICE_ACCOUNT_EMAIL')
+    )
+  }
+  return authClient
+}
+
+/** Lazily built so importing this module never throws at build time. */
+export function getVertex() {
+  if (!vertex) {
     vertex = createVertex({
-      project: projectId,
+      project: readEnv('GCP_PROJECT_ID'),
       // Gemini 3.x is served from the global endpoint; us-central1 returned
       // "model not found" for this project on the first preview.
       location: 'global',
-      googleAuthOptions: {
-        authClient: createAuthClient(
-          provider,
-          readEnv('GCP_SERVICE_ACCOUNT_EMAIL')
-        ),
-      },
+      googleAuthOptions: { authClient: getAuthClient() },
     })
   }
   return vertex
