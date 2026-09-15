@@ -48,4 +48,15 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'yearly',
     priority: 0.5,
   },
+  {
+    // The career assistant's published corpus. In the sitemap so the
+    // documents are indexable and the assistant's answers are checkable;
+    // out of the nav until MTC-33 decides where the assistant itself
+    // belongs in it.
+    href: '/knowledge',
+    label: 'Knowledge',
+    changeFrequency: 'weekly',
+    priority: 0.4,
+    hideFromNav: true,
+  },
 ]
