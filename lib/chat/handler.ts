@@ -169,6 +169,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
 
     const started = now()
+    let stepCount = 0
     try {
       const index = loadKnowledgeIndex()
       // An index over its own ceiling is a deployment fault: MTC-29 enforces
@@ -240,6 +241,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // marker below is how a too-small budget shows up in the logs.
         reasoning: 'none',
         maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
+        // One numeric line per model call, so a slow request shows which
+        // step (a read, or the final answer) the time went to. A preview
+        // run took two minutes for two reads and a short answer with no
+        // sign of where; this is the instrument that answers that.
+        onStepEnd(step) {
+          stepCount += 1
+          console.info('[chat] step', {
+            step: stepCount,
+            msSinceStart: now() - started,
+            inputTokens: step.usage.inputTokens ?? 0,
+            outputTokens: step.usage.outputTokens ?? 0,
+            reasoningTokens:
+              step.usage.outputTokenDetails?.reasoningTokens ?? 0,
+            toolCalls: step.toolCalls.length,
+            finishReason: step.finishReason,
+          })
+        },
         onEnd({ usage, finishReason }) {
           logCompletion({
             usage,
