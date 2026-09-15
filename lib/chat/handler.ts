@@ -262,7 +262,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             answered: answer.answered(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
-            readsRefused: session.readsRefused(),
+            ...flatRefusals(session.readsRefused()),
             ms: now() - started,
           })
         },
@@ -348,7 +348,7 @@ class AnswerText {
       return
     }
     if (part.type !== 'text-delta' || typeof part.text !== 'string') return
-    this.sawText ||= part.text.length > 0
+    this.sawText ||= part.text.trim().length > 0
     if (this.opening.length >= AnswerText.KEEP) return
     this.opening += part.text
   }
@@ -373,12 +373,40 @@ class AnswerText {
  * UI chunks rather than the model stream keeps it a pure output concern: the
  * tool loop, the read ledger, and the metadata above all still see everything.
  */
+// Only these chunk types reach the browser: the answer text, the stream
+// framing, and the metadata carried on `finish`. An allowlist, not a
+// denylist: a future chunk type that carries model-visible content
+// (reasoning, tool output, source parts) stays server-side by default.
+const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
+  'start',
+  'start-step',
+  'finish-step',
+  'finish',
+  'text-start',
+  'text-delta',
+  'text-end',
+  'error',
+])
+
 function withoutToolParts<T extends { type: string }>(): TransformStream<T, T> {
   return new TransformStream({
     transform(chunk, controller) {
-      if (!chunk.type.startsWith('tool-')) controller.enqueue(chunk)
+      if (CLIENT_CHUNK_TYPES.has(chunk.type)) controller.enqueue(chunk)
     },
   })
+}
+
+/** The refusal counters as the same three flat fields on every log path. */
+function flatRefusals(r: {
+  unknown: number
+  budget: number
+  tooLarge: number
+}) {
+  return {
+    readsRefusedUnknown: r.unknown,
+    readsRefusedBudget: r.budget,
+    readsRefusedTooLarge: r.tooLarge,
+  }
 }
 
 function errorResponse(code: 'disabled' | 'invalid' | 'unavailable'): Response {
@@ -442,9 +470,7 @@ function logCompletion({
     // budget refusals mean the caps are too tight for real questions, and
     // tooLarge means a document in the corpus can never be read at all. They
     // call for three different fixes, so they are three different counters.
-    readsRefusedUnknown: readsRefused.unknown,
-    readsRefusedBudget: readsRefused.budget,
-    readsRefusedTooLarge: readsRefused.tooLarge,
+    ...flatRefusals(readsRefused),
     // False here is the signal that a request burned tokens and gave the
     // visitor nothing. It should be rare; if it is not, CHAT_MAX_STEPS is
     // wrong.

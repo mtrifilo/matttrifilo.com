@@ -912,6 +912,15 @@ describe('logging', () => {
     ).toEqual(['resume'])
   })
 
+  test('a whitespace-only reply is not an answer and gets no chips', async () => {
+    const response = await handlerWith(
+      modelOf(reads('resume'), answers('   \n'))
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    const body = await response.text()
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(metadataFrom(body).sources).toBeUndefined()
+  })
+
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {
     const aborter = new AbortController()
     const response = await handlerWith(slowModel())(
@@ -940,6 +949,9 @@ describe('logging', () => {
       finishReason: 'abort',
       documentsRead: 0,
       readTokens: 0,
+      readsRefusedUnknown: 0,
+      readsRefusedBudget: 0,
+      readsRefusedTooLarge: 0,
     })
     expect(loggedText()).not.toContain(QUESTION)
   })

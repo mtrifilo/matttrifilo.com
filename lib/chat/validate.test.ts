@@ -195,9 +195,11 @@ describe('rejecting a request', () => {
     const full = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
     // The longest body that passes every other limit: CHAT_MAX_TURNS
     // questions and the answers between them, each at the character cap.
+    // Sixteen messages, assistant first so a user turn is last: the exact
+    // body the route accepts, not one short of it.
     const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
-      said(i % 2 === 0 ? 'user' : 'assistant', full)
-    ).slice(0, -1)
+      said(i % 2 === 0 ? 'assistant' : 'user', full)
+    )
 
     const result = validateChatRequest({
       body: body(...longest),
