@@ -7,6 +7,7 @@ import {
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
   CHAT_MAX_MESSAGES,
+  CHAT_MAX_OUTPUT_TOKENS,
   CHAT_MAX_TURNS,
   estimateTokens,
   isChatDisabled,
@@ -230,17 +231,16 @@ describe('rejecting a request', () => {
     ).toBe('budget_exceeded')
   })
 
-  test('the longest conversation the route can produce still fits', () => {
-    // Every part of a request has its own cap, and CHAT_MAX_INPUT_TOKENS has
-    // to sit above their sum or a visitor gets a 400 for staying inside all
-    // of them. Failing here means the policy or the index ceiling grew: raise
-    // the cap deliberately rather than shrinking what a visitor may ask.
+  test('a conversation of full-length answers still fits', () => {
+    // A visitor who asks the longest allowed question every time and gets a
+    // full answer (one step's worth of text at the output cap) every time
+    // must never see budget_exceeded. Failing here means the policy or the
+    // index ceiling grew: raise the cap deliberately rather than shrinking
+    // what a visitor may ask.
     const fullQuestion = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
-    const fullAnswer = 'x'.repeat(CHAT_MAX_ANSWER_CHARS)
-    // The longest body that passes every other limit: CHAT_MAX_TURNS
-    // questions and the answers between them, each at its role's cap.
-    // Sixteen messages, assistant first so a user turn is last: the exact
-    // body the route accepts, not one short of it.
+    const fullAnswer = 'x'.repeat(CHAT_MAX_OUTPUT_TOKENS * 4)
+    // Sixteen messages, assistant first so a user turn is last: the longest
+    // such body the route accepts, not one short of it.
     const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
       i % 2 === 0 ? said('assistant', fullAnswer) : said('user', fullQuestion)
     )
@@ -251,6 +251,23 @@ describe('rejecting a request', () => {
       env: {},
     })
     expect(codeOf(result)).toBe(null)
+  })
+
+  test('a conversation of answers that narrated every step is over budget', () => {
+    // Each answer is within its own cap, so this body passes every check but
+    // the ceiling. It is the one case budget_exceeded exists for: keeping it
+    // reachable is what bounds the worst-case cost of a request.
+    const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
+      i % 2 === 0
+        ? said('assistant', 'x'.repeat(CHAT_MAX_ANSWER_CHARS))
+        : said('user', 'x'.repeat(CHAT_MAX_MESSAGE_CHARS))
+    )
+    const result = validateChatRequest({
+      body: body(...longest),
+      indexTokenEstimate: KNOWLEDGE_INDEX_TOKEN_CEILING,
+      env: {},
+    })
+    expect(codeOf(result)).toBe('budget_exceeded')
   })
 
   test.each([

@@ -81,28 +81,26 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * Ceiling on the estimated input tokens of the request the client posts:
  * document index plus system policy plus the conversation so far.
  *
- * 46,000 leaves room for every part of that at its own limit:
+ * 26,000 fits every conversation a visitor can have with ordinary answers:
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
- * 1,400, and a conversation cannot exceed CHAT_MAX_TURNS questions of
- * CHAT_MAX_MESSAGE_CHARS characters (~3,000 tokens) and as many answers of
- * CHAT_MAX_ANSWER_CHARS (~32,000 tokens) — 44,400 or so against this cap.
- * A real conversation sits far below it: an answer that narrates through
- * every step is the ceiling, not the norm.
+ * 1,400, CHAT_MAX_TURNS questions at CHAT_MAX_MESSAGE_CHARS are ~3,000
+ * tokens, and as many answers of one step's worth of text
+ * (CHAT_MAX_OUTPUT_TOKENS each) are ~8,000 — 20,400 or so against this cap.
+ * "A conversation of full-length answers still fits" in validate.test.ts
+ * pins that, and it is the test that should fail if the policy or the index
+ * ceiling grows past the margin.
  *
- * So this is a backstop, not a limit anyone reaches: while the other caps
- * hold, one of them always fires first, and `budget_exceeded` is unreachable
- * from any body a client can post. "The longest conversation the route can
- * produce still fits" in validate.test.ts is what pins that, and it is the
- * test that should fail if the policy or the index ceiling grows past the
- * margin — the alternative is a visitor getting a 400 for staying inside
- * every documented limit. It stays because the sum being safe is a property
- * of four constants that are edited independently, and a cheap check beats
- * trusting that nobody raises one of them.
+ * It is deliberately below the sum of the caps, though. CHAT_MAX_ANSWER_CHARS
+ * allows an answer that narrated through every step, and eight of those in
+ * one body would double the worst-case billing of a request on a route that
+ * has no rate limit until MTC-34. A conversation like that is refused with
+ * `budget_exceeded`, whose copy and reset control already say the right
+ * thing; the test that pins it is beside the one above.
  *
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 46_000
+export const CHAT_MAX_INPUT_TOKENS = 26_000
 
 /** Low, because the job is reporting what the corpus says, not composing. */
 export const CHAT_TEMPERATURE = 0.2
@@ -159,7 +157,7 @@ export const CHAT_ERROR_MESSAGE: Record<
   budget_exceeded:
     'This conversation has grown too long for the assistant to hold in mind. Start a new one and it will pick up fresh.',
   invalid:
-    "That request wasn't something the assistant could read. Reload the page and try again.",
+    "That request wasn't something the assistant could read. Try again, or start a new conversation.",
   unavailable:
     "The assistant couldn't reach its model just now. Try again in a moment, or email Matt at matt.trifilo@gmail.com.",
   interrupted:
