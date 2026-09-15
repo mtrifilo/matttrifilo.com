@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { buildKnowledgeBase } from '@/lib/knowledge/build'
+import { buildKnowledgeCorpus } from '@/lib/knowledge/build'
 import {
   buildKnowledgeTwin,
   buildPostFile,
+  draftSummary,
   postSlug,
   STARTER_BODY,
   type PostDraft,
@@ -43,23 +44,41 @@ describe('new-blog-post scaffold', () => {
     expect(post.trim()).toBe(STARTER_BODY.trim())
   })
 
-  test('the twin loads as a blog section at the post URL', () => {
+  test('the twin loads as a blog document under content/knowledge/blog', () => {
     const slug = postSlug(draft.title, draft.date)
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-post-'))
     try {
+      // The twin's home is the blog topic directory; a file written
+      // anywhere else is not a document the corpus can see.
+      fs.mkdirSync(path.join(dir, 'blog'))
       fs.writeFileSync(
-        path.join(dir, `blog-${slug}.md`),
+        path.join(dir, 'blog', `${slug}.md`),
         buildKnowledgeTwin(draft)
       )
-      const [section] = buildKnowledgeBase(dir).sections
-      expect(section.id).toBe(`blog-${slug}`)
-      expect(section.source).toBe('blog')
-      expect(section.url).toBe(`https://matttrifilo.com/blog/${slug}`)
+      const [document] = buildKnowledgeCorpus(dir).documents
+      expect(document.id).toBe(slug)
+      expect(document.topic).toBe('blog')
+      expect(document.source).toBe('blog')
+      expect(document.url).toBe(`/knowledge/${slug}`)
+      expect(document.canonical).toBe(`https://matttrifilo.com/blog/${slug}`)
       // An apostrophe in the title must survive the frontmatter quoting.
-      expect(section.title).toBe(draft.title)
-      expect(section.text).toBe(STARTER_BODY.trim())
+      expect(document.title).toBe(draft.title)
+      expect(document.summary).toBe(draftSummary(draft))
+      expect(document.tags).toEqual(['blog', 'engineering'])
+      expect(document.text).toBe(STARTER_BODY.trim())
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  test('the summary falls back to the title and never overruns the index', () => {
+    // The build refuses a summary over 160 characters, so a long
+    // description must not be able to turn the scaffold's own output into
+    // a file that fails to load.
+    expect(draftSummary({ ...draft, description: undefined })).toBe(draft.title)
+    expect(draftSummary({ ...draft, description: '   ' })).toBe(draft.title)
+    const long = draftSummary({ ...draft, description: 'word '.repeat(60) })
+    expect(long.length).toBeLessThanOrEqual(160)
+    expect(long.endsWith('…')).toBe(true)
   })
 })

@@ -1,9 +1,11 @@
 ---
-id: 'blog-from-typing-code-to-agent-factories'
+id: 'from-typing-code-to-agent-factories'
 title: 'From Typing Code to Agent Factories. A Message of Hope.'
-url: 'https://matttrifilo.com/blog/from-typing-code-to-agent-factories'
+summary: "Matt's essay on why the shift from typing code to running fleets of coding agents is good news for engineers who adapt."
+tags: [blog, ai-agents, agentic-engineering, careers, software-industry]
 source: 'blog'
 updated: '2026-03-01'
+canonical: 'https://matttrifilo.com/blog/from-typing-code-to-agent-factories'
 ---
 
 We are deep in an inflection point like I've never experienced before. The closest comparison I can remember is when the [personal computer](https://medium.com/@madmedic11671/behind-the-spots-the-story-of-gateway-computers-ce3263bcd07f) became affordable to the middle class in the late 90's.

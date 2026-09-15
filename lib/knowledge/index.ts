@@ -1,35 +1,88 @@
-import { buildKnowledgeBase } from './build'
-import type { KnowledgeBase } from './build'
+import { buildKnowledgeCorpus } from './build'
+import type {
+  KnowledgeCorpus,
+  KnowledgeDocument,
+  KnowledgeIndex,
+} from './build'
 
 /**
- * The career assistant's knowledge base: the only source it may read.
+ * The career assistant's corpus: the only source it may read.
  *
- * Everything the assistant knows comes from content/knowledge/*.md, which
- * is written for the public. Nothing in this module — or anything it
- * imports — reads a private document or makes a network call, at build
- * time or at request time. lib/knowledge/knowledge.test.ts is the
- * mechanical guard on what those files may contain.
+ * Everything the assistant knows comes from content/knowledge, which is
+ * written for the public. Nothing in this module — or anything it imports
+ * — reads a private document or makes a network call, at build time or at
+ * request time. lib/knowledge/knowledge.test.ts is the mechanical guard on
+ * what those files may contain.
  *
- * This module is the contract the chat route depends on; keep it to these
- * four exports. The build itself lives in ./build so tests can rebuild
- * without going through the cache below.
+ * This module is the contract the chat route and the /knowledge pages
+ * depend on; keep it to these exports. The build itself lives in ./build
+ * so tests can rebuild without going through the cache below.
  */
 
-export type { KnowledgeBase, KnowledgeSection, KnowledgeSource } from './build'
-export { KNOWLEDGE_TOKEN_CEILING } from './build'
-
-let cached: KnowledgeBase | undefined
+export type {
+  KnowledgeDocument,
+  KnowledgeEntry,
+  KnowledgeIndex,
+  KnowledgeSource,
+} from './build'
+export { KNOWLEDGE_INDEX_TOKEN_CEILING } from './build'
 
 /**
- * The whole knowledge base, read from disk on the first call and reused
- * afterwards. Synchronous on purpose: callers assemble a prompt from it,
- * and the files are a few tens of kilobytes read once per process.
+ * What one turn may spend fetching documents.
  *
- * Throws if the files do not parse or the text is over
- * KNOWLEDGE_TOKEN_CEILING. A failure is not recoverable by retrying, so a
- * throw is left to surface rather than cached as an empty base.
+ * Nothing in the build enforces this — it is the chat route's policy, and
+ * it lives here because here is where the route looks. Three documents is
+ * the point where an answer stops being "Matt wrote this" and starts being
+ * a survey; 20k tokens is a generous ceiling for three of them that still
+ * leaves a long conversation room to breathe. A question that genuinely
+ * needs more is a question to answer with a link to the page.
  */
-export function loadKnowledgeBase(): KnowledgeBase {
-  if (!cached) cached = buildKnowledgeBase()
+export const KNOWLEDGE_READ_BUDGET = {
+  maxDocuments: 3,
+  maxTokens: 20_000,
+} as const
+
+let cached: KnowledgeCorpus | undefined
+
+/**
+ * Parsed once per process and reused. Synchronous on purpose: callers
+ * assemble a prompt or render a page from it, and the files are a few tens
+ * of kilobytes read once.
+ *
+ * Throws if the files do not parse or the index is over
+ * KNOWLEDGE_INDEX_TOKEN_CEILING. A failure is not recoverable by retrying,
+ * so a throw is left to surface rather than cached as an empty corpus.
+ */
+function corpus(): KnowledgeCorpus {
+  if (!cached) cached = buildKnowledgeCorpus()
   return cached
+}
+
+/**
+ * The index the model sees on every turn: one line per document, and the
+ * rendered text to drop into the prompt.
+ */
+export function loadKnowledgeIndex(): KnowledgeIndex {
+  return corpus().index
+}
+
+/**
+ * One document by id, or undefined when there is no such document.
+ *
+ * The id comes from the model, so it is untrusted input: this is a lookup
+ * in the parsed corpus, never a path built from a caller's string, and it
+ * returns undefined rather than throwing for anything it does not
+ * recognise — including a non-string, which is what a malformed tool call
+ * produces.
+ */
+export function readKnowledgeDocument(
+  id: string
+): KnowledgeDocument | undefined {
+  if (typeof id !== 'string' || id === '') return undefined
+  return corpus().documents.find(document => document.id === id)
+}
+
+/** Every document, in index order. The /knowledge pages render from this. */
+export function listKnowledgeDocuments(): KnowledgeDocument[] {
+  return corpus().documents
 }

@@ -34,8 +34,14 @@ afterEach(() => {
   fs.rmSync(workdir, { recursive: true, force: true })
 })
 
-function writeKnowledge(body: string, name = 'projects.md') {
-  fs.writeFileSync(path.join(workdir, 'knowledge', name), body)
+/**
+ * Writes a document at `name`, which may carry a topic directory
+ * ("career/timeline.md") the way the real corpus does.
+ */
+function writeKnowledge(body: string, name = 'career/timeline.md') {
+  const file = path.join(workdir, 'knowledge', name)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, body)
 }
 
 function writeDenylist(contents: string): string {
@@ -76,7 +82,27 @@ describe('knowledge-denylist-check.sh', () => {
     const result = run(writeDenylist('Project Nimbus\n'))
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('hit in')
-    expect(result.stderr).toContain('projects.md')
+    expect(result.stderr).toContain('timeline.md')
+  })
+
+  test('searches every topic directory, not just the top level', () => {
+    // Documents live in content/knowledge/<topic>/<id>.md. A glob that
+    // only saw the top level would report "clean" over a whole corpus.
+    writeKnowledge('Nothing to see here.\n', 'faq/faq.md')
+    writeKnowledge('Matt led the Project Nimbus rollout.\n', 'blog/a-post.md')
+    const result = run(writeDenylist('Project Nimbus\n'))
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('a-post.md')
+    expect(result.stdout).not.toContain('clean')
+  })
+
+  test('still sees a document left loose at the top level', () => {
+    // The loader rejects one, but a file this check cannot see is a file
+    // nobody greps, so it must be scanned before it is rejected.
+    writeKnowledge('Matt led the Project Nimbus rollout.\n', 'stray.md')
+    const result = run(writeDenylist('Project Nimbus\n'))
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('stray.md')
   })
 
   test('catches the same term on one line, case-insensitively', () => {

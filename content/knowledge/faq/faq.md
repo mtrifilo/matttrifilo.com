@@ -1,7 +1,8 @@
 ---
 id: 'faq'
 title: 'FAQ'
-url: 'https://matttrifilo.com/contact'
+summary: "Matt's own answers to the questions hiring managers and engineering leaders ask him most often."
+tags: [faq, hiring, management, ai-agents, on-call]
 source: 'faq'
 updated: '2026-09-14'
 ---
@@ -17,13 +18,14 @@ comments, so nothing in here reaches the model — keep authoring process
 talk inside these fences and out of the prose above.
 
 Every question below is a placeholder. The build drops any question whose
-body still reads TODO, and drops this whole section while none of them are
-answered, so a placeholder never reaches the model. To publish an answer,
+body still reads TODO, and drops this whole document while none of them are
+answered, so a placeholder never reaches the model — and while it is
+dropped, /knowledge/faq does not exist either. To publish an answer,
 replace the "TODO (Matt)" line under a question with the answer itself.
 
-Questions are Matt's own voice; the derived files (projects.md,
-career-timeline.md) are third person about Matt. Job-search topics are out
-of scope here.
+Answers here are Matt's own voice, first person. Job-search topics are out
+of scope. An answer long enough to need its own page is a new document in
+content/knowledge/career, not a longer answer here.
 -->
 
 ## What does Matt's team own?

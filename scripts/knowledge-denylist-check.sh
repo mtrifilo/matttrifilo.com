@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Greps content/knowledge/*.md against a private denylist and fails if any
-# denied term made it into the career assistant's knowledge base.
+# Greps every Markdown file under content/knowledge against a private
+# denylist and fails if a denied term made it into the career assistant's
+# corpus. The search is recursive: documents live in topic directories
+# (content/knowledge/<topic>/<id>.md), and a new topic must not be able to
+# add itself to the corpus without also being checked.
 #
 #   scripts/knowledge-denylist-check.sh
 #
@@ -58,8 +61,16 @@ if [ ! -f "$DENYLIST" ]; then
   exit 0
 fi
 
-shopt -s nullglob
-files=("$KNOWLEDGE_DIR"/*.md)
+# `find`, not a glob: macOS ships bash 3.2, which has no globstar, and
+# `content/knowledge/*/*.md` would miss both a document left loose at the
+# top and a topic nested deeper than one level. Both are authoring
+# mistakes the loader rejects — but this check must see them either way,
+# because a file it cannot see is a file nobody greps.
+files=()
+while IFS= read -r -d '' file; do
+  files+=("$file")
+done < <(find "$KNOWLEDGE_DIR" -type f -name '*.md' -print0 | sort -z)
+
 if [ ${#files[@]} -eq 0 ]; then
   echo "knowledge denylist: no files in $KNOWLEDGE_DIR" >&2
   exit 1

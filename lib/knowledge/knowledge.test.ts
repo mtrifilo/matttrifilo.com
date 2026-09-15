@@ -4,27 +4,44 @@ import os from 'os'
 import path from 'path'
 import { openSourceRepos } from '@/content/open-source'
 import {
-  buildKnowledgeBase,
+  buildKnowledgeCorpus,
   estimateTokens,
   KNOWLEDGE_DIR,
-  KNOWLEDGE_TOKEN_CEILING,
+  KNOWLEDGE_INDEX_TOKEN_CEILING,
+  SUMMARY_MAX_LENGTH,
 } from './build'
 
 /**
  * The mechanical guard on what the career assistant is allowed to read.
  *
- * content/knowledge/*.md is the assistant's only source, and it is written
- * for the public. These assertions run against the built text — what the
- * model actually receives — rather than the files, so a leak cannot slip
- * in through the wrapper, the ordering, or a section the build assembles.
+ * content/knowledge is the assistant's only source, and it is written for
+ * the public. The corpus has two surfaces now — the index, which is in
+ * every prompt, and the documents, which the model fetches one at a time —
+ * and a leak in either is a leak. So every content guard below runs over
+ * the same list: the rendered index text, plus each document's body as the
+ * build produces it. Asserting against the built output rather than the
+ * files means a leak cannot slip in through a summary, the ordering, or
+ * anything else the build assembles.
  *
  * scripts/knowledge-denylist-check.sh is the second half of the guard: it
  * greps the files against a private denylist that only exists on Matt's
  * machine. This file holds everything that can live in the repo.
  */
 
-const base = buildKnowledgeBase()
-const built = base.text
+const corpus = buildKnowledgeCorpus()
+const index = corpus.index
+
+/** Everything the model can ever see, each piece named for the failure. */
+const surfaces: readonly { label: string; text: string }[] = [
+  { label: 'the index', text: index.text },
+  ...corpus.documents.map(document => ({
+    label: `${document.topic}/${document.id}`,
+    text: document.text,
+  })),
+]
+
+/** The whole corpus as one string, for guards that only need containment. */
+const everything = surfaces.map(surface => surface.text).join('\n\n')
 
 /**
  * Characters that are invisible in an editor but split a word for any
@@ -81,11 +98,11 @@ function prose(text: string): string {
  * here — that would disable the guard everywhere.
  */
 const REVIEWED_PUBLIC_PHRASES: readonly string[] = [
-  // blog-from-typing-code-to-agent-factories: startup runway, about AI
+  // blog/from-typing-code-to-agent-factories: startup runway, about AI
   // companies raising money, not about anyone's personal finances.
   'run out of runway',
   'the runway to afford',
-  // blog-from-typing-code-to-agent-factories: a model name that happens to
+  // blog/from-typing-code-to-agent-factories: a model name that happens to
   // have the shape of an issue key.
   'GPT-5.3',
 ]
@@ -97,7 +114,11 @@ function withoutReviewedPhrases(text: string): string {
   )
 }
 
-const proseText = withoutReviewedPhrases(prose(built))
+/** Each surface as the word-shaped guards see it. */
+const proseSurfaces = surfaces.map(surface => ({
+  label: surface.label,
+  text: withoutReviewedPhrases(prose(surface.text)),
+}))
 
 /**
  * Topics that are out of bounds for a public career assistant: employment
@@ -120,18 +141,6 @@ const FORBIDDEN_WORDS: readonly string[] = [
   'CDP',
   'KumoMTA',
 ]
-
-/**
- * Numbers allowed to appear in projects.md or career-timeline.md without
- * appearing in content/resume.md, in the style of
- * REVIEWED_PUBLIC_PHRASES: a literal token, and a comment saying where it
- * comes from and why the résumé is not its source.
- *
- * Empty on purpose today — every figure in the derived files is the
- * résumé's. Keep it that way if you can: a figure with no source on a
- * public page is a figure nobody can check.
- */
-const FIGURES_NOT_IN_RESUME: readonly string[] = []
 
 const PUBLIC_CONTACT = 'matt.trifilo@gmail.com'
 
@@ -157,37 +166,66 @@ function containsWord(text: string, term: string): boolean {
   return new RegExp(`(?<!\\w)${escapeRegExp(term)}(?!\\w)`, 'i').test(text)
 }
 
-describe('knowledge base content guards', () => {
+/** Reports the surface that failed, not just that something did. */
+function offenders(
+  list: readonly { label: string; text: string }[],
+  fails: (text: string) => boolean
+): string[] {
+  return list.filter(surface => fails(surface.text)).map(s => s.label)
+}
+
+describe('knowledge corpus content guards', () => {
   test('positive control: the guards are running against real text', () => {
-    // If the build ever returned an empty string, every "not to match"
+    // If the build ever returned empty text, every "not to match"
     // assertion below would pass for the wrong reason.
-    expect(built.length).toBeGreaterThan(10_000)
-    expect(built).toContain('Matt Trifilo')
-    expect(built).toContain('<section id="resume"')
-    expect(proseText.length).toBeGreaterThan(10_000)
+    expect(surfaces.length).toBeGreaterThan(1)
+    expect(everything.length).toBeGreaterThan(10_000)
+    expect(everything).toContain('Matt Trifilo')
+    expect(index.text).toContain('## resume')
+    expect(index.text).toContain('[resume]')
+    expect(proseSurfaces.map(s => s.text).join('').length).toBeGreaterThan(
+      10_000
+    )
   })
 
-  test('contains no phone number', () => {
-    expect(proseText).not.toMatch(/\d{3}[-. ()]*\d{3}[-. ()]*\d{4}/)
-    expect(proseText).not.toMatch(/\+1[\s-]?\d/)
+  test('no surface contains a phone number', () => {
+    expect(
+      offenders(
+        proseSurfaces,
+        text =>
+          /\d{3}[-. ()]*\d{3}[-. ()]*\d{4}/.test(text) ||
+          /\+1[\s-]?\d/.test(text)
+      )
+    ).toEqual([])
   })
 
-  test('the only email address is the public contact', () => {
-    const addresses = [...new Set(built.match(/[\w.+-]+@[\w.-]+\.\w+/g) ?? [])]
+  test('the only email address in the corpus is the public contact', () => {
+    const addresses = [
+      ...new Set(everything.match(/[\w.+-]+@[\w.-]+\.\w+/g) ?? []),
+    ]
     expect(addresses).toEqual([PUBLIC_CONTACT])
   })
 
-  test('contains no dollar amounts', () => {
-    expect(built).not.toMatch(/\$\s*[\d.,]/)
+  test('no surface contains a dollar amount', () => {
+    expect(offenders(surfaces, text => /\$\s*[\d.,]/.test(text))).toEqual([])
   })
 
-  test('contains no issue-tracker keys', () => {
-    const keys = [...new Set(proseText.match(/\b[A-Z]{2,5}-\d+\b/g) ?? [])]
+  test('no surface contains an issue-tracker key', () => {
+    const keys = [
+      ...new Set(
+        proseSurfaces.flatMap(s => s.text.match(/\b[A-Z]{2,5}-\d+\b/g) ?? [])
+      ),
+    ]
     expect(keys).toEqual([])
   })
 
-  test('contains none of the forbidden words', () => {
-    const hits = FORBIDDEN_WORDS.filter(word => containsWord(proseText, word))
+  test('no surface contains a forbidden word', () => {
+    const hits: string[] = []
+    for (const surface of proseSurfaces) {
+      for (const word of FORBIDDEN_WORDS) {
+        if (containsWord(surface.text, word)) hits.push(surface.label)
+      }
+    }
     expect(hits).toEqual([])
   })
 
@@ -207,16 +245,17 @@ describe('knowledge base content guards', () => {
     expect(containsWord('the salary-band review', 'salary')).toBe(true)
   })
 
-  test('contains no TODO placeholder', () => {
-    expect(built).not.toMatch(/\bTODO\b/)
-    expect(prose(built)).not.toMatch(/\bTODO\b/)
+  test('no surface contains a TODO placeholder', () => {
+    expect(offenders(surfaces, text => /\bTODO\b/.test(text))).toEqual([])
+    expect(offenders(proseSurfaces, text => /\bTODO\b/.test(text))).toEqual([])
   })
 
-  test('contains no comment markers, closed or unterminated', () => {
+  test('no surface contains a comment marker, closed or unterminated', () => {
     // stripComments removes closed comments; an unterminated `<!--` would
     // otherwise ship verbatim with everything after it.
-    expect(built).not.toContain('<!--')
-    expect(built).not.toContain('-->')
+    expect(
+      offenders(surfaces, t => t.includes('<!--') || t.includes('-->'))
+    ).toEqual([])
   })
 
   test('the prose view unpacks own URLs and drops third-party ones', () => {
@@ -231,103 +270,150 @@ describe('knowledge base content guards', () => {
     expect(containsWord(prose('\uFF53alary band'), 'salary')).toBe(true)
   })
 
-  test('contains no invisible characters that would defeat the guards', () => {
+  test('no surface contains invisible characters that would defeat the guards', () => {
     // A soft hyphen or zero-width space inside a guard word is invisible to
     // a reader and to the model, and splits the word for every regex above.
     // prose() strips them before matching; this asserts they are not in the
     // published text at all, so the stripping is a backstop and not the
     // only thing standing between a hidden word and the prompt.
-    const found = [...new Set(built.match(INVISIBLE) ?? [])].map(
+    const found = [...new Set(everything.match(INVISIBLE) ?? [])].map(
       c => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
     )
     expect(found).toEqual([])
   })
 
   test('drops the unanswered FAQ questions entirely', () => {
-    // faq.md ships eight questions with `TODO (Matt)` bodies. Until Matt
-    // answers one, the section must not exist at all — not exist and be
-    // empty, and certainly not carry the placeholders into the prompt.
+    // faq/faq.md ships eight questions with `TODO (Matt)` bodies. Until
+    // Matt answers one, the document must not exist at all — not exist and
+    // be empty, and certainly not carry the placeholders into the index.
     const faqSource = fs.readFileSync(
-      path.join(KNOWLEDGE_DIR, 'faq.md'),
+      path.join(KNOWLEDGE_DIR, 'faq', 'faq.md'),
       'utf8'
     )
     expect(faqSource).toContain('TODO (Matt)')
-    expect(base.sections.map(s => s.id)).not.toContain('faq')
-    expect(built).not.toContain("What does Matt's team own?")
+    expect(corpus.documents.map(d => d.id)).not.toContain('faq')
+    expect(index.text).not.toContain('[faq]')
+    expect(everything).not.toContain("What does Matt's team own?")
   })
 })
 
-describe('knowledge base structure', () => {
+describe('knowledge corpus structure', () => {
+  /** Every `.md` under content/knowledge, with the topic it sits in. */
+  function filesOnDisk(): { topic: string; name: string; path: string }[] {
+    return fs
+      .readdirSync(KNOWLEDGE_DIR, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .flatMap(entry =>
+        fs
+          .readdirSync(path.join(KNOWLEDGE_DIR, entry.name))
+          .filter(name => name.endsWith('.md'))
+          .map(name => ({
+            topic: entry.name,
+            name,
+            path: path.join(KNOWLEDGE_DIR, entry.name, name),
+          }))
+      )
+  }
+
+  test('every document lives in a topic directory, never loose', () => {
+    const loose = fs
+      .readdirSync(KNOWLEDGE_DIR, { withFileTypes: true })
+      .filter(entry => !entry.isDirectory() && entry.name.endsWith('.md'))
+      .map(entry => entry.name)
+    expect(loose).toEqual([])
+    expect(filesOnDisk().length).toBeGreaterThan(0)
+  })
+
   test('every file carries the full frontmatter contract', () => {
-    const names = fs
-      .readdirSync(KNOWLEDGE_DIR)
-      .filter(name => name.endsWith('.md'))
-    expect(names.length).toBeGreaterThan(0)
-    for (const name of names) {
-      const contents = fs.readFileSync(path.join(KNOWLEDGE_DIR, name), 'utf8')
+    for (const file of filesOnDisk()) {
+      const label = `${file.topic}/${file.name}`
+      const contents = fs.readFileSync(file.path, 'utf8')
       const match = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(
         contents
       )
-      expect(match, `${name} has no frontmatter block`).not.toBeNull()
+      expect(match, `${label} has no frontmatter block`).not.toBeNull()
       const frontmatter = match![1]
-      for (const key of ['id', 'title', 'url', 'source', 'updated']) {
-        expect(frontmatter, `${name} is missing ${key}`).toMatch(
+      for (const key of [
+        'id',
+        'title',
+        'summary',
+        'tags',
+        'source',
+        'updated',
+      ]) {
+        expect(frontmatter, `${label} is missing ${key}`).toMatch(
           new RegExp(`^${key}:[ \\t]*\\S`, 'm')
         )
       }
-      // buildKnowledgeBase enforces id === basename, which is what makes
-      // ids stable and unique; assert it here too so the reason is
+      // The build enforces id === basename, which is what keeps
+      // /knowledge/<id> resolving; assert it here too so the reason is
       // visible where the contract is described.
-      expect(frontmatter).toMatch(
+      expect(frontmatter, `${label}: id must equal the file name`).toMatch(
         new RegExp(
-          `^id:[ \\t]*['"]?${name.replace(/\.md$/, '')}['"]?[ \\t]*$`,
+          `^id:[ \\t]*['"]?${file.name.replace(/\.md$/, '')}['"]?[ \\t]*$`,
           'm'
         )
       )
     }
   })
 
-  test('section ids are unique', () => {
-    const ids = base.sections.map(s => s.id)
-    expect(new Set(ids).size).toBe(ids.length)
-  })
-
-  test('sections come out in the documented order', () => {
-    const ids = base.sections.map(s => s.id)
-    const fixed = ids.filter(id => !id.startsWith('blog-'))
-    expect(fixed).toEqual([
-      'resume',
-      'projects',
-      'career-timeline',
-      'open-source',
-    ])
-    // 'faq' is absent only because every question is still a TODO; it sits
-    // between 'resume' and 'projects' as soon as one is answered.
-    const blog = base.sections.filter(s => s.id.startsWith('blog-'))
-    expect(ids.slice(fixed.length)).toEqual(blog.map(s => s.id))
-    // `updated` is not part of the KnowledgeSection contract, so read the
-    // dates back off disk to check the newest-first ordering.
-    const dates = blog.map(section => {
-      const file = fs.readFileSync(
-        path.join(KNOWLEDGE_DIR, `${section.id}.md`),
-        'utf8'
-      )
-      return /^updated:[ \t]*'?([\d-]+)'?/m.exec(file)![1]
-    })
-    expect([...dates].sort().reverse()).toEqual(dates)
-  })
-
-  test('every section is wrapped so the model can cite it', () => {
-    for (const section of base.sections) {
-      expect(built).toContain(
-        `<section id="${section.id}" title="${section.title}" url="${section.url}">`
-      )
-      expect(section.url.startsWith('https://')).toBe(true)
+  test('every summary is one short sentence a reader could skim', () => {
+    for (const document of corpus.documents) {
+      expect(
+        document.summary.length,
+        `${document.id} summary`
+      ).toBeLessThanOrEqual(SUMMARY_MAX_LENGTH)
+      expect(document.summary.trim(), `${document.id} summary`).not.toBe('')
+      expect(document.summary, `${document.id} summary`).not.toContain('\n')
     }
-    const opens = built.match(/<section /g) ?? []
-    const closes = built.match(/<\/section>/g) ?? []
-    expect(opens.length).toBe(base.sections.length)
-    expect(closes.length).toBe(base.sections.length)
+  })
+
+  test('every document has tags and a topic that is its directory', () => {
+    for (const document of corpus.documents) {
+      expect(document.tags.length, `${document.id} tags`).toBeGreaterThan(0)
+      const onDisk = filesOnDisk().find(
+        file => file.name === `${document.id}.md`
+      )
+      expect(onDisk, `${document.id} has no file`).toBeDefined()
+      expect(document.topic).toBe(onDisk!.topic)
+    }
+  })
+
+  test('ids are unique and each one is a page on this site', () => {
+    const ids = corpus.documents.map(d => d.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const document of corpus.documents) {
+      expect(document.url).toBe(`/knowledge/${document.id}`)
+      if (document.canonical !== undefined) {
+        expect(document.canonical.startsWith('https://')).toBe(true)
+      }
+    }
+  })
+
+  test('the index renders one line per document, grouped by topic', () => {
+    const lines = index.text.split('\n').filter(line => line.startsWith('- '))
+    expect(lines.length).toBe(index.entries.length)
+    for (const entry of index.entries) {
+      expect(index.text).toContain(
+        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+      )
+    }
+    // Topic headings come before the entries they group, and each topic
+    // appears once: that is what "grouped" has to mean for the model.
+    const topics = index.text
+      .split('\n')
+      .filter(line => line.startsWith('## '))
+      .map(line => line.slice(3))
+    expect(new Set(topics).size).toBe(topics.length)
+    expect(topics).toEqual([...new Set(index.entries.map(e => e.topic))])
+  })
+
+  test('the index carries no document body', () => {
+    // The whole point of the split: the index is a menu, not the meal.
+    for (const document of corpus.documents) {
+      expect(index.text.length).toBeLessThan(document.text.length + 2_000)
+    }
+    expect(index.tokenEstimate).toBeLessThan(KNOWLEDGE_INDEX_TOKEN_CEILING)
   })
 })
 
@@ -338,28 +424,30 @@ describe('knowledge base structure', () => {
  */
 function missingTwinMessage(slug: string): string {
   return [
-    `content/blog/${slug}.md has no content/knowledge/blog-${slug}.md.`,
+    `content/blog/${slug}.md has no content/knowledge/blog/${slug}.md.`,
     'Create it with this frontmatter, then paste the post body below it',
     "with the post's own frontmatter removed:",
     '',
     '---',
-    `id: 'blog-${slug}'`,
+    `id: '${slug}'`,
     "title: '<the post title, on one line>'",
-    `url: 'https://matttrifilo.com/blog/${slug}'`,
+    "summary: '<one sentence, what a reader would learn>'",
+    'tags: [blog, <a topic or two>]',
     "source: 'blog'",
     "updated: '<the post date, YYYY-MM-DD>'",
+    `canonical: 'https://matttrifilo.com/blog/${slug}'`,
     '---',
   ].join('\n')
 }
 
-describe('knowledge base stays in sync with its public sources', () => {
-  const sectionText = (id: string) => {
-    const section = base.sections.find(s => s.id === id)
-    expect(section, `no section ${id}`).toBeDefined()
-    return section!.text
+describe('knowledge corpus stays in sync with its public sources', () => {
+  const documentText = (id: string) => {
+    const document = corpus.documents.find(d => d.id === id)
+    expect(document, `no document ${id}`).toBeDefined()
+    return document!.text
   }
 
-  test('the résumé section is the published résumé, verbatim', () => {
+  test('the résumé document is the published résumé, verbatim', () => {
     // content/resume.md is regenerated by scripts/render-resume.sh from a
     // private source. Without this, a regeneration would quietly leave the
     // assistant answering from a stale résumé.
@@ -367,10 +455,10 @@ describe('knowledge base stays in sync with its public sources', () => {
       path.join(process.cwd(), 'content', 'resume.md'),
       'utf8'
     )
-    expect(sectionText('resume')).toBe(published.trim())
+    expect(documentText('resume')).toBe(published.trim())
   })
 
-  test('every blog post has a section carrying the published body', () => {
+  test('every blog post has a document carrying the published body', () => {
     const blogDir = path.join(process.cwd(), 'content', 'blog')
     const slugs = fs
       .readdirSync(blogDir)
@@ -384,57 +472,25 @@ describe('knowledge base stays in sync with its public sources', () => {
         /^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n/,
         ''
       )
-      const section = base.sections.find(s => s.id === `blog-${slug}`)
-      expect(section, missingTwinMessage(slug)).toBeDefined()
-      expect(section!.source).toBe('blog')
-      expect(section!.url).toBe(`https://matttrifilo.com/blog/${slug}`)
-      expect(section!.text).toBe(body.trim())
+      const document = corpus.documents.find(d => d.id === slug)
+      expect(document, missingTwinMessage(slug)).toBeDefined()
+      expect(document!.topic).toBe('blog')
+      expect(document!.source).toBe('blog')
+      // The site page is /knowledge/<slug>; the post it was copied from is
+      // the canonical one, and that is the link the model should cite.
+      expect(document!.url).toBe(`/knowledge/${slug}`)
+      expect(document!.canonical).toBe(`https://matttrifilo.com/blog/${slug}`)
+      expect(document!.text).toBe(body.trim())
       // Frontmatter stripped: the post's own YAML must not be in the text.
-      expect(section!.text).not.toContain('description:')
+      expect(document!.text).not.toContain('description:')
     }
-  })
-
-  test('every figure in the derived files comes from the résumé', () => {
-    // projects.md and career-timeline.md restate the résumé in Matt's
-    // third person. They repeat around twenty of its numbers, and a
-    // regeneration of content/resume.md would otherwise leave stale
-    // figures sitting next to fresh ones with a green suite.
-    const published = fs.readFileSync(
-      path.join(process.cwd(), 'content', 'resume.md'),
-      'utf8'
-    )
-    // Trailing sentence punctuation is not part of a figure: "late 2025,"
-    // and "Cyber Monday 2025." are both the number 2025.
-    // Suffixes carry meaning (1B is not 1), so B/M/K/x and a trailing + stay
-    // attached. Figures written as words ("five roles") are out of scope.
-    const figures = (text: string) =>
-      (
-        text.match(/\d[\d.,]*(?:%|[MKBmkb](?![a-z])|[xX](?![a-z]))?\+?/g) ?? []
-      ).map(f => f.replace(/[.,]+$/, ''))
-    const fromResume = new Set(figures(published))
-    const stale: string[] = []
-    for (const id of ['projects', 'career-timeline']) {
-      for (const figure of figures(sectionText(id))) {
-        if (fromResume.has(figure)) continue
-        if (FIGURES_NOT_IN_RESUME.includes(figure)) continue
-        stale.push(`${id}: ${figure}`)
-      }
-    }
-    expect(stale).toEqual([])
-    // The extractor keeps the suffix that makes the figure a figure.
-    expect(figures('up to 1B emails, 99.9%+ uptime, 27.7M sent, ~3x')).toEqual([
-      '1B',
-      '99.9%+',
-      '27.7M',
-      '3x',
-    ])
   })
 
   test('every curated open-source project is described', () => {
     // content/open-source.ts is the reviewed list the /open-source page
     // renders; adding a project there without describing it here would
     // leave the assistant unaware of work the site already shows.
-    const text = sectionText('open-source')
+    const text = documentText('open-source')
     const flat = text.replace(/\s+/g, ' ').toLowerCase()
     for (const repo of openSourceRepos) {
       expect(text).toContain(`## ${repo.name}`)
@@ -454,71 +510,133 @@ describe('knowledge base stays in sync with its public sources', () => {
   })
 })
 
-describe('knowledge base build', () => {
-  test('is byte-stable: two builds produce identical text', () => {
-    const again = buildKnowledgeBase()
-    expect(again.text).toBe(built)
-    expect(again.tokenEstimate).toBe(base.tokenEstimate)
-    expect(again.sections).toEqual(base.sections)
+describe('knowledge corpus build', () => {
+  test('is byte-stable: two builds produce an identical index', () => {
+    const again = buildKnowledgeCorpus()
+    expect(again.index.text).toBe(index.text)
+    expect(again.index.tokenEstimate).toBe(index.tokenEstimate)
+    expect(again.index.entries).toEqual(index.entries)
+    expect(again.documents).toEqual(corpus.documents)
   })
 
   test('token estimate is chars/4, rounded up', () => {
-    expect(base.tokenEstimate).toBe(Math.ceil(built.length / 4))
+    expect(index.tokenEstimate).toBe(Math.ceil(index.text.length / 4))
+    for (const document of corpus.documents) {
+      expect(document.tokenEstimate).toBe(Math.ceil(document.text.length / 4))
+    }
     expect(estimateTokens('abcde')).toBe(2)
   })
 
-  test('stays under the token ceiling', () => {
-    expect(base.tokenEstimate).toBeLessThanOrEqual(KNOWLEDGE_TOKEN_CEILING)
-  })
-
-  test('throws when the knowledge base would exceed the ceiling', () => {
-    // Long enough to break the real ceiling, not a lowered stand-in, so the
-    // published constant is what is actually under test.
-    const oversized = 'Matt led the thing. '.repeat(
-      Math.ceil((KNOWLEDGE_TOKEN_CEILING * 4) / 20) + 100
-    )
-    expect(() => buildFixture({ name: 'resume.md', body: oversized })).toThrow(
-      /too large for the prompt/
+  test('the index stays under the token ceiling', () => {
+    expect(index.tokenEstimate).toBeLessThanOrEqual(
+      KNOWLEDGE_INDEX_TOKEN_CEILING
     )
   })
 
-  test('refuses a file whose id does not match its name', () => {
-    expect(() => buildFixture({ name: 'resume.md', id: 'not-resume' })).toThrow(
-      /must match the file name/
+  test('throws when the index would exceed the ceiling', () => {
+    // Enough documents, each with a full-length summary, to break the real
+    // ceiling rather than a lowered stand-in, so the published constant is
+    // what is actually under test. This is roughly the corpus size at
+    // which the index stops being cheap: a useful thing to see fail.
+    const summary = 'A'.repeat(SUMMARY_MAX_LENGTH)
+    const files = Array.from({ length: 250 }, (_, i) => ({
+      topic: 'career',
+      name: `doc-${String(i).padStart(4, '0')}.md`,
+      summary,
+      tags: '[career, roles, dates, scope, outcomes]',
+    }))
+    expect(() => buildFixture(files)).toThrow(/index is too large/)
+  })
+
+  test('refuses a document whose id does not match its name', () => {
+    expect(() =>
+      buildFixture([{ topic: 'resume', name: 'resume.md', id: 'not-resume' }])
+    ).toThrow(/must match the file name/)
+  })
+
+  test('refuses a topic directory it does not know where to order', () => {
+    expect(() => buildFixture([{ topic: 'talks', name: 'a-talk.md' }])).toThrow(
+      /unknown topic/
     )
   })
 
-  test('refuses a section it does not know where to order', () => {
-    expect(() => buildFixture({ name: 'talks.md' })).toThrow(/unknown section/)
+  test('refuses a document left loose at the top of content/knowledge', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-fixture-'))
+    try {
+      fs.writeFileSync(path.join(dir, 'stray.md'), 'not in a topic\n')
+      expect(() => buildKnowledgeCorpus(dir)).toThrow(/topic directory/)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses a summary longer than one index line', () => {
+    expect(() =>
+      buildFixture([
+        {
+          topic: 'career',
+          name: 'long.md',
+          summary: 'A'.repeat(SUMMARY_MAX_LENGTH + 1),
+        },
+      ])
+    ).toThrow(/keep it to 160/)
+  })
+
+  test('refuses a document with no tags', () => {
+    expect(() =>
+      buildFixture([{ topic: 'career', name: 'untagged.md', tags: '[]' }])
+    ).toThrow(/tags may not be empty/)
+  })
+
+  test('refuses a YAML block list of tags, naming the line', () => {
+    // One list form across a hundred files; the error has to say which
+    // line to fix rather than "frontmatter is invalid".
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'blocklist.md', tags: '\n  - career' },
+      ])
+    ).toThrow(/frontmatter line is not "key: value":\s+- career/)
+  })
+
+  test('refuses two documents that would claim the same /knowledge URL', () => {
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'twin.md' },
+        { topic: 'faq', name: 'twin.md' },
+      ])
+    ).toThrow(/duplicate id "twin"/)
   })
 
   test('answering one FAQ question emits only the answer', () => {
     // The state faq.md reaches the first time Matt writes something: one
     // answer, seven placeholders, and authoring notes in the file. The
-    // section must carry the answer and nothing about the build process.
-    const answered = buildFixture({
-      name: 'faq.md',
-      source: 'faq',
-      body: [
-        '# FAQ',
-        '',
-        'Matt writes these answers himself.',
-        '',
-        '<!--',
-        'Replace the TODO (Matt) line under a question to publish it.',
-        '-->',
-        '',
-        "## What does Matt's team own?",
-        '',
-        'Email sending end to end for all Keap products.',
-        '',
-        '## How does he use AI coding agents?',
-        '',
-        'TODO (Matt)',
-      ].join('\n'),
-    })
+    // document must carry the answer and nothing about the build process.
+    const answered = buildFixture([
+      {
+        topic: 'faq',
+        name: 'faq.md',
+        source: 'faq',
+        body: [
+          '# FAQ',
+          '',
+          'Matt writes these answers himself.',
+          '',
+          '<!--',
+          'Replace the TODO (Matt) line under a question to publish it.',
+          '-->',
+          '',
+          "## What does Matt's team own?",
+          '',
+          'Email sending end to end for all Keap products.',
+          '',
+          '## How does he use AI coding agents?',
+          '',
+          'TODO (Matt)',
+        ].join('\n'),
+      },
+    ])
 
-    const faq = answered.sections.find(s => s.id === 'faq')
+    const faq = answered.documents.find(d => d.id === 'faq')
     expect(faq).toBeDefined()
     expect(faq!.text).toContain('Email sending end to end')
     expect(faq!.text).toContain("## What does Matt's team own?")
@@ -527,48 +645,97 @@ describe('knowledge base build', () => {
     expect(faq!.text).not.toMatch(/\bTODO\b/)
     expect(faq!.text).not.toContain('How does he use AI coding agents?')
     expect(faq!.text).not.toContain('Replace the')
-    expect(answered.text).not.toMatch(/\bTODO\b/)
-    expect(answered.text).not.toContain('<!--')
+    expect(answered.index.text).not.toMatch(/\bTODO\b/)
+    expect(answered.index.text).not.toContain('<!--')
   })
 
-  test('drops a section whose intro is still a placeholder', () => {
+  test('drops a document whose intro is still a placeholder', () => {
     // An intro is no more publishable than a question while it says TODO,
-    // and a knowledge base with nothing left in it fails loudly rather
-    // than handing the model an empty prompt.
+    // and a corpus with nothing left in it fails loudly rather than
+    // handing the model an empty index.
     expect(() =>
-      buildFixture({ name: 'projects.md', body: 'TODO (Matt)' })
+      buildFixture([
+        { topic: 'career', name: 'timeline.md', body: 'TODO (Matt)' },
+      ])
     ).toThrow(/nothing to read/)
   })
 })
 
-/**
- * Builds one throwaway knowledge file in a temp directory and runs the real
- * build against it, so the authoring errors above are asserted through the
- * same code path the site uses.
- */
-function buildFixture(file: {
+describe('the loaders the site and the chat route use', () => {
+  test('a document is fetched by id, and an unknown id is undefined', async () => {
+    const { readKnowledgeDocument, listKnowledgeDocuments } =
+      await import('./index')
+    const first = corpus.documents[0]
+    expect(readKnowledgeDocument(first.id)?.text).toBe(first.text)
+    expect(listKnowledgeDocuments().map(d => d.id)).toEqual(
+      corpus.documents.map(d => d.id)
+    )
+  })
+
+  test('a hostile id returns undefined rather than throwing', async () => {
+    const { readKnowledgeDocument } = await import('./index')
+    // The id comes from a model, so every one of these is reachable input.
+    for (const id of [
+      '',
+      'nope',
+      '../../../etc/passwd',
+      '../resume/resume',
+      'resume.md',
+      '.',
+    ]) {
+      expect(readKnowledgeDocument(id), id).toBeUndefined()
+    }
+    // Not a string at all — a malformed tool call, which must not throw.
+    expect(
+      readKnowledgeDocument(undefined as unknown as string)
+    ).toBeUndefined()
+    expect(readKnowledgeDocument(null as unknown as string)).toBeUndefined()
+  })
+
+  test('the read budget is the one the route documents', async () => {
+    const { KNOWLEDGE_READ_BUDGET } = await import('./index')
+    expect(KNOWLEDGE_READ_BUDGET.maxDocuments).toBe(3)
+    expect(KNOWLEDGE_READ_BUDGET.maxTokens).toBe(20_000)
+  })
+})
+
+interface Fixture {
+  topic: string
   name: string
   id?: string
+  summary?: string
+  tags?: string
   source?: string
   body?: string
-}) {
+}
+
+/**
+ * Builds throwaway documents in a temp directory and runs the real build
+ * against them, so the authoring errors above are asserted through the
+ * same code path the site uses.
+ */
+function buildFixture(files: Fixture[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-fixture-'))
   try {
-    const id = file.id ?? file.name.replace(/\.md$/, '')
-    const frontmatter = [
-      '---',
-      `id: '${id}'`,
-      `title: 'Fixture'`,
-      `url: 'https://matttrifilo.com/${id}'`,
-      `source: '${file.source ?? 'derived'}'`,
-      `updated: '2026-09-14'`,
-      '---',
-    ].join('\n')
-    fs.writeFileSync(
-      path.join(dir, file.name),
-      `${frontmatter}\n\n${file.body ?? 'Matt led the thing.'}\n`
-    )
-    return buildKnowledgeBase(dir)
+    for (const file of files) {
+      const id = file.id ?? file.name.replace(/\.md$/, '')
+      const frontmatter = [
+        '---',
+        `id: '${id}'`,
+        `title: 'Fixture'`,
+        `summary: '${file.summary ?? 'What a reader would learn from it.'}'`,
+        `tags: ${file.tags ?? '[fixture]'}`,
+        `source: '${file.source ?? 'career'}'`,
+        `updated: '2026-09-14'`,
+        '---',
+      ].join('\n')
+      fs.mkdirSync(path.join(dir, file.topic), { recursive: true })
+      fs.writeFileSync(
+        path.join(dir, file.topic, file.name),
+        `${frontmatter}\n\n${file.body ?? 'Matt led the thing.'}\n`
+      )
+    }
+    return buildKnowledgeCorpus(dir)
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
