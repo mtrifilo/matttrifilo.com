@@ -6,11 +6,14 @@ import { openSourceRepos } from '@/content/open-source'
 import {
   buildKnowledgeCorpus,
   estimateTokens,
+  findPlaceholder,
   KNOWLEDGE_DIR,
   KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
+  sourceLines,
   SUMMARY_MAX_LENGTH,
 } from './build'
+import { KNOWLEDGE_READ_BUDGET } from './index'
 
 /**
  * The mechanical guard on what the career assistant is allowed to read.
@@ -247,8 +250,36 @@ describe('knowledge corpus content guards', () => {
   })
 
   test('no surface contains a TODO placeholder', () => {
-    expect(offenders(surfaces, text => /\bTODO\b/.test(text))).toEqual([])
-    expect(offenders(proseSurfaces, text => /\bTODO\b/.test(text))).toEqual([])
+    // The backstop for the build-time refusal, run over the text as it
+    // actually ships — which is the only place it can catch the faq, whose
+    // placeholders are dropped rather than refused.
+    //
+    // It looks for a placeholder's shape, not the word: findPlaceholder is
+    // the same function the build uses, so a document that passes the build
+    // cannot fail here for a reason the author was never told about. A
+    // career document is allowed to discuss TODO comments in code.
+    expect(
+      offenders(surfaces, text => findPlaceholder(sourceLines(text)) !== null)
+    ).toEqual([])
+  })
+
+  test('the placeholder matcher finds placeholders, not the word', () => {
+    const placeholder = (body: string) =>
+      findPlaceholder(sourceLines(body)) !== null
+    // Shapes that are placeholders.
+    expect(placeholder('TODO (Matt)')).toBe(true)
+    expect(placeholder('TODO: write this up')).toBe(true)
+    expect(placeholder('- TODO (Matt)')).toBe(true)
+    expect(placeholder('1. TODO')).toBe(true)
+    expect(placeholder('# A doc\n\n## A section\n\n  TODO (Matt)')).toBe(true)
+    // Prose that is not. Matt's career documents describe how his team
+    // works; rejecting the bare word would make that unpublishable.
+    expect(placeholder('The agent leaves a TODO for the reviewer.')).toBe(false)
+    expect(placeholder('We grep for `TODO` before every release.')).toBe(false)
+    expect(placeholder('```sh\n# TODO: fix this\n```')).toBe(false)
+    // …and an escaped backtick does not make a code span, so the
+    // placeholder inside one is still a placeholder.
+    expect(placeholder('\\`TODO (Matt)\\`')).toBe(true)
   })
 
   test('no surface contains a comment marker, closed or unterminated', () => {
@@ -709,6 +740,48 @@ describe('knowledge corpus build', () => {
     ).toThrow(/a TODO placeholder under "the introduction"/)
   })
 
+  test('a document about TODO comments is publishable', () => {
+    // The placeholder check reads a line the way MDX will, so the word in
+    // prose, in a code span, and in a fenced block are all left alone.
+    // Without this, a career document describing how the team works would
+    // be rejected for describing it.
+    const body = [
+      '# How the team reviews agent output',
+      '',
+      'The agent leaves a TODO for the reviewer rather than guessing.',
+      '',
+      'We grep for `TODO` before every release.',
+      '',
+      '```sh',
+      '# TODO: this is a comment in a snippet, not a placeholder',
+      'rg TODO',
+      '```',
+    ].join('\n')
+    const built = buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+    expect(built.documents[0].text).toBe(body)
+  })
+
+  test('an escaped backtick does not hide a placeholder', () => {
+    // `\`TODO (Matt)\`` is not a code span — the backticks are literal
+    // text — so the placeholder inside it is a real placeholder.
+    expect(() =>
+      buildFixture([
+        { topic: 'career', name: 'a-role.md', body: '\\`TODO (Matt)\\`' },
+      ])
+    ).toThrow(/a TODO placeholder/)
+  })
+
+  test('an empty body outside the faq is an error, not a quiet deletion', () => {
+    // Returning null here would have removed the document from the index,
+    // /knowledge, generateStaticParams and the sitemap at once, exit 0,
+    // nothing printed — the exact failure the faq scoping exists to stop.
+    for (const body of ['', '   \n\n  \n', '<!-- only a note -->']) {
+      expect(() =>
+        buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+      ).toThrow(/the body is empty; only content\/knowledge\/faq drops/)
+    }
+  })
+
   test('outside the faq, the body ships exactly as written', () => {
     // Not reassembled from blocks: byte-identity with the published source
     // is then true by construction rather than by the reassembly happening
@@ -740,6 +813,22 @@ describe('knowledge corpus build', () => {
         `${document.id} is too large to read alongside two others`
       ).toBeLessThanOrEqual(KNOWLEDGE_DOCUMENT_TOKEN_CEILING)
     }
+  })
+
+  test('the three largest documents fit in one turn', () => {
+    // The gate that matters, and the reason it lives here rather than only
+    // in `bun run knowledge:check`: CI runs lint, typecheck, `bun test`
+    // and build — not the script. The per-document ceiling cannot promise
+    // this on its own (three at the ceiling would be over budget), so the
+    // real sum has to be asserted somewhere CI actually looks.
+    const largest = [...corpus.documents]
+      .sort((a, b) => b.tokenEstimate - a.tokenEstimate)
+      .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
+    const worstRead = largest.reduce((sum, d) => sum + d.tokenEstimate, 0)
+    expect(
+      worstRead,
+      `the model could not read ${largest.map(d => d.id).join(', ')} in one answer; split the largest`
+    ).toBeLessThanOrEqual(KNOWLEDGE_READ_BUDGET.maxTokens)
   })
 
   test('refuses a canonical that points at someone else', () => {
@@ -896,6 +985,39 @@ describe('documents must survive being compiled as MDX', () => {
   test('refuses a fence that is never closed', () => {
     expect(() => mdxFixture('# Title\n\n```ts\nconst x = 1\n')).toThrow(
       /never closed/
+    )
+  })
+
+  test('escaped backticks are not a code span, so the tag inside is real', () => {
+    // The false negative that would have shipped: `\`a <Thing> b\`` reads
+    // as a code span to a naive matcher and as prose to MDX, which then
+    // fails the prerender for every page on the site.
+    expect(() => mdxFixture('Literal backticks: \\`a <Thing> b\\`')).toThrow(
+      /"<" outside code/
+    )
+  })
+
+  test('an escaped angle bracket is how MDX wants it written, so it passes', () => {
+    const built = mdxFixture('Sending fewer than \\<100 messages an hour.')
+    expect(built.documents[0].text).toContain('\\<100')
+  })
+
+  test('says so when an over-indented fence is the likely cause', () => {
+    // A fence indented four or more spaces is valid CommonMark inside a
+    // nested list, and this check does not recognise it — recognising it
+    // means tracking list context, which is a Markdown parser. It is not
+    // silent about it: when something does fail, the message names it.
+    const body = [
+      '# Title',
+      '',
+      '1. First step:',
+      '',
+      '    ```tsx',
+      '    const x = <Thing />',
+      '    ```',
+    ].join('\n')
+    expect(() => mdxFixture(body)).toThrow(
+      /indented four or more spaces, which this check does not recognise as code/
     )
   })
 })

@@ -150,7 +150,26 @@ const BLOCK_HEADING = /^## (?!#)/
  * (Matt)` bodies; those blocks are dropped so a placeholder never reaches
  * the model, and knowledge.test.ts asserts no `TODO` survives the build.
  */
-const UNANSWERED = /^TODO\b/
+/**
+ * What a placeholder looks like, as opposed to the word "TODO" appearing
+ * in something Matt wrote.
+ *
+ * A career document about how his team works may well mention TODO
+ * comments in code; rejecting the bare word anywhere would make that
+ * unpublishable for no reason. A placeholder is the thing that stands
+ * where prose should be: a line that *starts* with TODO (after an optional
+ * list marker), or the literal marker faq.md uses.
+ *
+ * One definition, used three ways: the faq drop below, the build-time
+ * refusal in every other topic, and the backstop in knowledge.test.ts that
+ * checks the text as it ships.
+ */
+const PLACEHOLDER_LINE = /^[ \t]*(?:(?:[-*+]|\d+\.)[ \t]+)?TODO\b/
+const PLACEHOLDER_MARKER = /TODO \(Matt\)/
+
+function isPlaceholder(line: string): boolean {
+  return PLACEHOLDER_LINE.test(line) || PLACEHOLDER_MARKER.test(line)
+}
 
 /** A summary is a line in the index, so it has to stay one short line. */
 export const SUMMARY_MAX_LENGTH = 160
@@ -360,7 +379,7 @@ function stripComments(body: string): string {
  */
 function isAnswered(body: string): boolean {
   const trimmed = body.trim()
-  return trimmed !== '' && !UNANSWERED.test(trimmed)
+  return trimmed !== '' && !isPlaceholder(trimmed)
 }
 
 interface Block {
@@ -444,8 +463,34 @@ function splitBlocks(body: string): { intro: string; blocks: Block[] } {
 /** An inline code span: one or more backticks, matching run to close. */
 const INLINE_CODE = /(`+)(?:(?!\1)[\s\S])*?\1/g
 
+/**
+ * A Markdown backslash escape. Blanked before anything else looks at a
+ * line, for two reasons that point the same way: an escaped backtick does
+ * not open a code span (so `` \`a <Thing> b\` `` is prose, and the tag in
+ * it is real), and an escaped `\<` is already the correct way to write a
+ * literal angle bracket in MDX (so it is not an offence).
+ */
+const MD_ESCAPE = /\\[\s\S]/g
+
+/**
+ * The part of a line MDX will parse as content: escapes and inline code
+ * removed. Both checks below read a line through this, so they agree on
+ * what counts as code.
+ */
+function visibleProse(line: string): string {
+  return line.replace(MD_ESCAPE, '').replace(INLINE_CODE, '')
+}
+
+/**
+ * A fence CommonMark would accept inside a nested list item but this
+ * check's 3-space rule does not. Tracked only so an error can say so:
+ * recognising it properly means tracking list context, which is a Markdown
+ * parser, and the corpus has no nested code blocks to justify one.
+ */
+const OVER_INDENTED_FENCE = /^[ \t]{4,}(?:`{3,}|~{3,})/
+
 /** A line of a document, numbered as it is numbered in the file itself. */
-interface SourceLine {
+export interface SourceLine {
   text: string
   number: number
 }
@@ -460,7 +505,7 @@ interface SourceLine {
  * message and opens the file at that line. Comments never ship, so
  * nothing inside one is any of these checks' business.
  */
-function sourceLines(body: string, lineOffset: number): SourceLine[] {
+export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
   const lines: SourceLine[] = []
   let inComment = false
   for (const [i, raw] of body.split(/\r?\n/).entries()) {
@@ -506,21 +551,34 @@ function sourceLines(body: string, lineOffset: number): SourceLine[] {
  * The rule is every line of the file, not only the lines that ship: a
  * document has to be safe to render whichever of its sections survive,
  * and one rule is easier to hold than two.
+ *
+ * Known limitation, deliberate: a fence must be indented at most three
+ * spaces to be recognised as code. CommonMark allows a deeper indent
+ * inside a nested list item, and honouring that means tracking list
+ * context — a Markdown parser, for a case the corpus does not have. The
+ * cost is a false positive, never a false negative, and the error says so
+ * when an over-indented fence is in the document.
  */
 function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
   const fence = new FenceTracker()
+  let sawOverIndentedFence = false
   for (const line of lines) {
     if (fence.consume(line.text)) continue
-    const prose = line.text.replace(INLINE_CODE, '')
-    const offence = /[<{]/.exec(prose)
+    if (OVER_INDENTED_FENCE.test(line.text)) sawOverIndentedFence = true
+    const offence = /[<{]/.exec(visibleProse(line.text))
     if (!offence) continue
     const char = offence[0]
     const advice =
       char === '<'
         ? 'wrap it in backticks, or write &lt; — a bare < starts a JSX tag in MDX, and an autolink <https://…> is an MDX error too'
         : 'wrap it in backticks, or write &#123; — a bare { starts a JavaScript expression that MDX evaluates on the server rather than printing'
+    // Only mentioned when something actually failed: a deeply indented
+    // fence is legal and common, and most of the time it is not the cause.
+    const indentNote = sawOverIndentedFence
+      ? ' (this document also has a ``` fence indented four or more spaces, which this check does not recognise as code — outdent it to three spaces or fewer)'
+      : ''
     throw new Error(
-      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}. Line: ${line.text.trim()}`
+      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${indentNote}. Line: ${line.text.trim()}`
     )
   }
   if (fence.open) {
@@ -554,30 +612,52 @@ export interface UnansweredQuestion {
   heading: string
 }
 
+/** A placeholder found in a document: the line, and the section it is in. */
+export interface FoundPlaceholder {
+  line: SourceLine
+  heading: string | null
+}
+
+/**
+ * The first placeholder in a document, or null.
+ *
+ * Reads each line the way MDX will — fenced blocks skipped, escapes and
+ * inline code removed — so `// TODO` inside a ```` ``` ```` block and a
+ * `` `TODO` `` written about in prose are both left alone. What it looks
+ * for is a placeholder's *shape* (isPlaceholder), not the word.
+ *
+ * Exported because knowledge.test.ts runs it over the shipped text as a
+ * backstop, and the two must agree on what a placeholder is.
+ */
+export function findPlaceholder(
+  lines: readonly SourceLine[]
+): FoundPlaceholder | null {
+  const fence = new FenceTracker()
+  let heading: string | null = null
+  for (const line of lines) {
+    if (fence.consume(line.text)) continue
+    if (BLOCK_HEADING.test(line.text)) {
+      heading = line.text.replace(/^##\s*/, '')
+      continue
+    }
+    if (isPlaceholder(visibleProse(line.text))) return { line, heading }
+  }
+  return null
+}
+
 /**
  * Refuses a placeholder in a topic that does not drop them, naming the
  * line and the section it is under so the fix is obvious.
- *
- * The content guard in knowledge.test.ts asserts no TODO reaches any
- * surface; this is the same rule moved to where it can say *where*.
  */
 function assertNoPlaceholder(
   lines: readonly SourceLine[],
   label: string
 ): void {
-  const fence = new FenceTracker()
-  let heading: string | null = null
-  for (const line of lines) {
-    const inCode = fence.consume(line.text)
-    if (!inCode && BLOCK_HEADING.test(line.text)) {
-      heading = line.text.replace(/^##\s*/, '')
-      continue
-    }
-    if (!/\bTODO\b/.test(line.text)) continue
-    throw new Error(
-      `${label}:${line.number}: a TODO placeholder under "${heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the published page and the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
-    )
-  }
+  const found = findPlaceholder(lines)
+  if (!found) return
+  throw new Error(
+    `${label}:${found.line.number}: a TODO placeholder under "${found.heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the published page and the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
+  )
 }
 
 /**
@@ -650,11 +730,22 @@ function readDocument(
   let unanswered: UnansweredQuestion[] = []
   if (topic === UNANSWERED_TOPIC) {
     ;({ text, unanswered } = readAnsweredBlocks(body, label))
+    // The documented drop: an faq with nothing answered yet is absent
+    // rather than present and empty.
+    if (text === '') return { document: null, unanswered }
   } else {
     assertNoPlaceholder(lines, label)
     text = body.trim()
+    // Not a drop. A file with a frontmatter block and no body is a paste
+    // that went wrong, and returning null here would have removed it from
+    // the index, /knowledge, generateStaticParams and the sitemap at once,
+    // with exit 0 and nothing printed.
+    if (text === '') {
+      throw new Error(
+        `${label}: the body is empty; only content/knowledge/${UNANSWERED_TOPIC} drops documents, so this would otherwise vanish from the index and the site without a word. Write it, or delete the file.`
+      )
+    }
   }
-  if (text === '') return { document: null, unanswered }
 
   const tokenEstimate = estimateTokens(text)
   if (tokenEstimate > KNOWLEDGE_DOCUMENT_TOKEN_CEILING) {
