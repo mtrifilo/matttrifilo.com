@@ -135,8 +135,8 @@ type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
  *
  * The SDK would also stream a `tool-output-available` part per read, carrying
  * the document's whole text — up to KNOWLEDGE_READ_BUDGET.maxTokens of it —
- * down to the browser. `withoutToolParts` strips every `tool-*` chunk before
- * the response is built. The UI needs the `sources` metadata, not the bytes,
+ * down to the browser. `onlyClientChunks` passes only the answer text, the
+ * stream framing, and the finish metadata; everything else stays server-side. The UI needs the `sources` metadata, not the bytes,
  * so sending them would be bandwidth spent on a second copy of what the
  * answer already summarises, and a channel through which a corpus that later
  * stops being wholly public would leak without anyone editing this route.
@@ -328,7 +328,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             logFailure(error)
             return STREAM_ERROR_MESSAGE
           },
-        }).pipeThrough(withoutToolParts()),
+        }).pipeThrough(onlyClientChunks()),
       })
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
@@ -381,16 +381,6 @@ class AnswerText {
   }
 }
 
-/**
- * Strips every `tool-*` chunk from the UI stream.
- *
- * The SDK streams a `read_document` input part and an output part per read,
- * and the output part carries the document's whole text. The browser has no
- * use for it — the answer is the content, and `sources` names where it came
- * from — so it is dropped here rather than shipped and ignored. Filtering the
- * UI chunks rather than the model stream keeps it a pure output concern: the
- * tool loop, the read ledger, and the metadata above all still see everything.
- */
 // Only these chunk types reach the browser: the answer text, the stream
 // framing, and the metadata carried on `finish`. An allowlist, not a
 // denylist: a future chunk type that carries model-visible content
@@ -406,7 +396,17 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'error',
 ])
 
-function withoutToolParts<T extends { type: string }>(): TransformStream<T, T> {
+/**
+ * Keeps only the UI chunks in CLIENT_CHUNK_TYPES.
+ *
+ * The SDK would otherwise stream a `read_document` input part and an output
+ * part per read, the latter carrying the document's whole text. The browser
+ * has no use for it: the answer is the content and `sources` names where it
+ * came from. Filtering the UI chunks rather than the model stream keeps this
+ * a pure output concern: the tool loop, the read ledger, and the metadata
+ * callback still see everything.
+ */
+function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
   return new TransformStream({
     transform(chunk, controller) {
       if (CLIENT_CHUNK_TYPES.has(chunk.type)) controller.enqueue(chunk)

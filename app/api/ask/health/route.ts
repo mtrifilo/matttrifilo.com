@@ -67,8 +67,15 @@ async function drainStream(model: string) {
     reasoning: 'none',
     maxOutputTokens: 1024,
   })
+  // fullStream, not textStream: a provider failure arrives as an error part
+  // and the result promises then reject with a generic "no output" error,
+  // so the real cause has to be lifted out of the stream to reach the
+  // route's catch and its stage classification.
   let text = ''
-  for await (const delta of result.textStream) text += delta
+  for await (const part of result.fullStream) {
+    if (part.type === 'text-delta') text += part.text
+    if (part.type === 'error') throw part.error
+  }
   return {
     text,
     finishReason: await result.finishReason,
