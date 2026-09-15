@@ -14,7 +14,6 @@ import { failureStage } from '@/lib/ai/failure-stage'
 import type { EnvSource } from '@/lib/env'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
-  KNOWLEDGE_READ_BUDGET,
   type KnowledgeDocument,
   type KnowledgeIndex,
 } from '@/lib/knowledge'
@@ -31,6 +30,7 @@ import {
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_OUTPUT_TOKENS,
+  CHAT_MAX_STEPS,
   CHAT_TEMPERATURE,
   chatErrorBody,
   isChatDisabled,
@@ -53,11 +53,13 @@ import {
  *
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat:
- * with a 16k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
- * steps, the worst case is roughly 16k + 23k + 29k + 36k ≈ 104k input tokens
- * for one question. Vertex's implicit cache covers the stable prefix and
- * should take a large bite out of what is billed, but the ceiling is real and
- * it is why MTC-34's rate limit is not optional.
+ * with a 46k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
+ * steps, the worst case is roughly 46k + 53k + 59k + 66k ≈ 224k input tokens
+ * for one question. That ceiling assumes eight earlier answers that each
+ * narrated through every step; a real conversation is a fraction of it.
+ * Vertex's implicit cache covers the stable prefix and should take a large
+ * bite out of what is billed, but the ceiling is real and it is why MTC-34's
+ * rate limit is not optional.
  *
  * Privacy rule for this whole module: no message text is ever written
  * anywhere. Not to the log, not into an error response, not into a header.
@@ -78,24 +80,9 @@ export interface ChatHandlerDeps {
   now?: () => number
 }
 
-/**
- * Model calls allowed in one request: one per document the model may read,
- * plus the one that writes the answer.
- *
- * A step is a model call and the tool calls it emitted, so this is not the
- * same bound as the read budget — one step can ask for several documents.
- * Both caps are needed: this one stops a model that loops without ever
- * answering, KNOWLEDGE_READ_BUDGET stops one that reads the whole corpus in
- * a single step.
- *
- * `+ 1` and not `+ 2` because `prepareStep` now spends the last step on the
- * answer rather than hoping the model volunteers one. That makes a wasted
- * call — a hallucinated id, say — cost a document rather than the answer: the
- * visitor gets a reply drawn from fewer sources instead of an empty bubble.
- * Raising it to `+ 2` would buy one retry back at about a quarter more input
- * tokens per request; the cost note above is the reason it is not free.
- */
-export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
+// Defined with the limits it feeds; re-exported so callers of the handler
+// keep one import.
+export { CHAT_MAX_STEPS }
 
 /**
  * Metadata the server attaches to the streamed message, for MTC-33.

@@ -323,11 +323,12 @@ describe('error envelopes', () => {
       'budget_exceeded',
       'invalid',
       'unavailable',
-      'interrupted',
     ] as const) {
       expect(CHAT_ERROR_MESSAGE[code].length).toBeGreaterThan(0)
       expect(CHAT_ERROR_STATUS[code]).toBeGreaterThanOrEqual(400)
     }
+    // Sent down an open stream, never as a status.
+    expect(CHAT_ERROR_MESSAGE.interrupted.length).toBeGreaterThan(0)
   })
 
   test('rate_limited is reserved for MTC-34: a status, but no copy yet', () => {

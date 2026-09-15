@@ -1,4 +1,5 @@
 import type { EnvSource } from '@/lib/env'
+import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
 
 /**
@@ -39,24 +40,54 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
 export const CHAT_MAX_OUTPUT_TOKENS = 1_000
 
 /**
+ * Model calls allowed in one request: one per document the model may read,
+ * plus the one that writes the answer.
+ *
+ * A step is a model call and the tool calls it emitted, so this is not the
+ * same bound as the read budget — one step can ask for several documents.
+ * Both caps are needed: this one stops a model that loops without ever
+ * answering, KNOWLEDGE_READ_BUDGET stops one that reads the whole corpus in
+ * a single step.
+ *
+ * `+ 1` and not `+ 2` because `prepareStep` spends the last step on the
+ * answer rather than hoping the model volunteers one. That makes a wasted
+ * call — a hallucinated id, say — cost a document rather than the answer: the
+ * visitor gets a reply drawn from fewer sources instead of an empty bubble.
+ * Raising it to `+ 2` would buy one retry back at about a quarter more input
+ * tokens per request; the cost note in handler.ts is the reason it is not
+ * free.
+ *
+ * It lives here rather than in handler.ts because the answer cap below is
+ * derived from it.
+ */
+export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
+
+/**
  * Characters in one replayed answer. The client posts the assistant's own
  * earlier answers back with each question, and those run well past
- * CHAT_MAX_MESSAGE_CHARS: CHAT_MAX_OUTPUT_TOKENS is about 4,000 characters
- * of prose. Six per token leaves headroom for text that tokenises densely.
- * The route never writes a longer answer, so exceeding this is a tampered
- * body, not a long conversation, and is refused as `invalid`.
+ * CHAT_MAX_MESSAGE_CHARS.
+ *
+ * CHAT_MAX_OUTPUT_TOKENS is applied per model call, not per answer, and the
+ * text of every step reaches the client — a model may narrate before each
+ * read. The most the route can write in one answer is therefore every step
+ * at its cap, about four characters a token. A real answer is one step's
+ * worth, so the gap between typical and possible is the headroom. Exceeding
+ * this is a tampered body, not a long conversation, and is refused as
+ * `invalid`.
  */
-export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * 6
+export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
 
 /**
  * Ceiling on the estimated input tokens of the request the client posts:
  * document index plus system policy plus the conversation so far.
  *
- * 26,000 leaves room for every part of that at its own limit:
+ * 46,000 leaves room for every part of that at its own limit:
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
  * 1,400, and a conversation cannot exceed CHAT_MAX_TURNS questions of
  * CHAT_MAX_MESSAGE_CHARS characters (~3,000 tokens) and as many answers of
- * CHAT_MAX_ANSWER_CHARS (~12,000 tokens) — 24,400 or so against this cap.
+ * CHAT_MAX_ANSWER_CHARS (~32,000 tokens) — 44,400 or so against this cap.
+ * A real conversation sits far below it: an answer that narrates through
+ * every step is the ceiling, not the norm.
  *
  * So this is a backstop, not a limit anyone reaches: while the other caps
  * hold, one of them always fires first, and `budget_exceeded` is unreachable
@@ -71,31 +102,39 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * 6
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 26_000
+export const CHAT_MAX_INPUT_TOKENS = 46_000
 
 /** Low, because the job is reporting what the corpus says, not composing. */
 export const CHAT_TEMPERATURE = 0.2
 
 /**
+ * Every code the client may receive.
+ *
  * `rate_limited` is reserved here and deliberately unused: MTC-34 owns rate
  * limiting and its copy. Defining the code now keeps the client's error
- * handling exhaustive across both branches.
+ * handling exhaustive across both branches. `interrupted` is the one code
+ * that is never an HTTP rejection: the stream is already a 200 when the
+ * model fails, so it travels in the stream's error text instead.
  */
-export type ChatErrorCode =
+export type ChatErrorCode = ChatRejectionCode | 'rate_limited' | 'interrupted'
+
+/** Codes a request can be refused with before any model call is made. */
+export type ChatRejectionCode =
   | 'disabled'
   | 'too_many_turns'
   | 'message_too_long'
   | 'budget_exceeded'
-  | 'rate_limited'
   | 'invalid'
   | 'unavailable'
-  | 'interrupted'
 
 export interface ChatErrorBody {
   error: { code: ChatErrorCode; message: string }
 }
 
-export const CHAT_ERROR_STATUS: Record<ChatErrorCode, number> = {
+export const CHAT_ERROR_STATUS: Record<
+  ChatRejectionCode | 'rate_limited',
+  number
+> = {
   disabled: 503,
   too_many_turns: 400,
   message_too_long: 400,
@@ -103,8 +142,6 @@ export const CHAT_ERROR_STATUS: Record<ChatErrorCode, number> = {
   rate_limited: 429,
   invalid: 400,
   unavailable: 502,
-  // Never an HTTP status: the stream is already 200 when this is written.
-  interrupted: 502,
 }
 
 /**
@@ -221,9 +258,7 @@ export function chatErrorBody(
   return { error: { code, message: CHAT_ERROR_MESSAGE[code] } }
 }
 
-function reject(
-  code: Exclude<ChatErrorCode, 'rate_limited'>
-): ChatRequestValidation {
+function reject(code: ChatRejectionCode): ChatRequestValidation {
   return {
     ok: false,
     status: CHAT_ERROR_STATUS[code],
