@@ -1,4 +1,4 @@
-import { generateText } from 'ai'
+import { generateText, streamText } from 'ai'
 import { geminiModel, getAuthClient, getVertex } from '@/lib/ai/vertex'
 import { failureStage, isHealthRouteEnabled, isHealthy } from './gate'
 
@@ -9,8 +9,11 @@ import { failureStage, isHealthRouteEnabled, isHealthy } from './gate'
 // rate-limited chat route (MTC-31) replaces it.
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isHealthRouteEnabled()) return new Response('Not found', { status: 404 })
+  // ?stream=1 drives the same prompt through streamText and drains it, so
+  // a streaming stall can be told apart from a non-streaming one.
+  const streaming = new URL(request.url).searchParams.get('stream') === '1'
   const model = geminiModel()
   const started = Date.now()
   try {
@@ -21,15 +24,17 @@ export async function GET() {
     await getAuthClient().getAccessToken()
     const tokenMs = Date.now() - tokenStarted
     const modelStarted = Date.now()
-    const result = await generateText({
-      model: getVertex()(model),
-      prompt: 'Reply with the single word: ok',
-      // Gemini 3.x reasons before it answers and cannot have that fully
-      // disabled; ask for the least of it and leave the budget slack so a
-      // chattier thought never trips the length check on a healthy chain.
-      reasoning: 'none',
-      maxOutputTokens: 1024,
-    })
+    const result = streaming
+      ? await drainStream(model)
+      : await generateText({
+          model: getVertex()(model),
+          prompt: 'Reply with the single word: ok',
+          // Gemini 3.x reasons before it answers and cannot have that fully
+          // disabled; ask for the least of it and leave the budget slack so a
+          // chattier thought never trips the length check on a healthy chain.
+          reasoning: 'none',
+          maxOutputTokens: 1024,
+        })
     const ok = isHealthy(result)
     return Response.json(
       {
@@ -38,6 +43,7 @@ export async function GET() {
         text: result.text,
         finishReason: result.finishReason,
         usage: result.usage,
+        streaming,
         tokenMs,
         modelMs: Date.now() - modelStarted,
         ms: Date.now() - started,
@@ -50,5 +56,22 @@ export async function GET() {
       { ok: false, stage: failureStage(error) },
       { status: 502 }
     )
+  }
+}
+
+/** streamText with the health prompt, fully consumed; same shape as generateText's result for the fields the route reports. */
+async function drainStream(model: string) {
+  const result = streamText({
+    model: getVertex()(model),
+    prompt: 'Reply with the single word: ok',
+    reasoning: 'none',
+    maxOutputTokens: 1024,
+  })
+  let text = ''
+  for await (const delta of result.textStream) text += delta
+  return {
+    text,
+    finishReason: await result.finishReason,
+    usage: await result.usage,
   }
 }
