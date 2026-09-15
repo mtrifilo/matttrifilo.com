@@ -93,7 +93,10 @@ export function AssistantChat() {
   const ask = useCallback(
     (question: string) => {
       clearError()
-      setInput('')
+      // Only the text being sent leaves the box. A starter pill tapped with
+      // a refused question sitting there (handed back by onError) must not
+      // discard it.
+      setInput(current => (current.trim() === question ? '' : current))
       askedRef.current = question
       void sendMessage({ text: question })
       // The next question is usually a follow-up, and a starter question that
@@ -213,7 +216,12 @@ export function AssistantChat() {
       )}
 
       <div className="space-y-2">
-        {errorView && <ChatErrorNotice error={errorView} onReset={reset} />}
+        {errorView && (
+          <ChatErrorNotice
+            error={errorView}
+            onReset={hasTranscript ? reset : undefined}
+          />
+        )}
         <AssistantComposer
           onStop={stop}
           onSubmit={ask}

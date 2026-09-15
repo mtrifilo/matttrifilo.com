@@ -166,7 +166,8 @@ export function AssistantComposer({
         </p>
       )}
       {/* The counter itself is not live: it would be read on every
-          keystroke. Only crossing the limit, either way, is announced. */}
+          keystroke. Only crossing the limit is announced; emptying a polite
+          region says nothing, so coming back under it is silent. */}
       <span aria-live="polite" className="sr-only">
         {overLimit ? OVER_LIMIT_HINT : ''}
       </span>

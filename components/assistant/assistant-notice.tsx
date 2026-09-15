@@ -83,9 +83,11 @@ export function IncompleteNotice() {
  * questions needs somewhere to go, so the notice hands them the two pages that
  * answer most of what they were asking and Matt's address for the rest.
  *
- * Two refusals tell the visitor to start a new conversation, so those two
- * carry the control that does it. The rest are about the assistant, not the
- * conversation, and a retry is the right next step.
+ * Three refusals are about the conversation rather than the assistant —
+ * the turn limit, the token budget, and a body the route could not read,
+ * which can be the replayed history rather than the question — so those
+ * carry the control that starts a new one, when there is one to leave. The
+ * rest are about the assistant, and a retry is the right next step.
  *
  * The status region announces only "Error"; `role="alert"` here is what reads
  * the sentence itself to a screen reader.
@@ -115,8 +117,6 @@ export function ChatErrorNotice({
     )
   }
 
-  // `invalid` is here too: it can be the replayed history the route refuses,
-  // not the question, and then only a fresh transcript gets past it.
   const offersReset =
     onReset &&
     (error.code === 'too_many_turns' ||
