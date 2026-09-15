@@ -904,11 +904,12 @@ describe('logging', () => {
     })
     // MTC-33 reads this off the stream to show "cut short" in the UI.
     expect(metadataFrom(body).truncated).toBe(true)
-    // 'length' is not a clean stop, so the answer is flagged incomplete and
-    // its chips are withheld: a half-written answer under a full citation
-    // list claims more than it delivered.
+    // 'length' is not a clean stop, so the answer is flagged incomplete, but
+    // it is real text drawn from what was read, so it keeps its chips.
     expect(metadataFrom(body).incomplete).toBe(true)
-    expect(metadataFrom(body).sources).toBeUndefined()
+    expect(
+      (metadataFrom(body).sources as { id: string }[]).map(s => s.id)
+    ).toEqual(['resume'])
   })
 
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {

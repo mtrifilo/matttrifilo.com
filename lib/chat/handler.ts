@@ -108,8 +108,8 @@ export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
  *   in read order. Authoritative, and what the chips should render. The
  *   `Sources:` line the policy asks the model to write is a secondary signal —
  *   a model can forget it or cite an id it never opened, so it must not drive
- *   the chips. Absent when there is nothing to cite, and withheld whenever
- *   `incomplete` is set.
+ *   the chips. Absent when there is nothing to cite, on a decline, and when
+ *   the run produced no answer text at all; a truncated answer keeps them.
  * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
  *   answer is partial and still worth showing under a "cut short" notice.
  * - `incomplete`: the run ended without a clean answer — no text at all, or a
@@ -280,11 +280,13 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             // a half sentence and a missing Sources line looking like an
             // answer.
             if (part.finishReason === 'length') metadata.truncated = true
-            // No text, or any finish that is not a clean stop, means there is
-            // no answer to stand behind — most often a model that spent every
-            // step reading. Say so, and withhold the chips: citations under a
-            // blank or half-finished reply claim it was sourced when it was
-            // never written.
+            // No text, or any finish that is not a clean stop, means the run
+            // did not end with a finished answer — most often a model that
+            // spent every step reading. Say so. A length-truncated answer is
+            // still real text that was drawn from the documents read, so it
+            // keeps its chips; only a run with no answer at all withholds
+            // them, since citations under a blank reply claim it was sourced
+            // when it was never written.
             if (!answer.answered() || part.finishReason !== 'stop') {
               metadata.incomplete = true
             }
@@ -297,7 +299,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             if (
               sources.length > 0 &&
               !answer.isDecline() &&
-              !metadata.incomplete
+              answer.answered()
             ) {
               metadata.sources = sources
             }
