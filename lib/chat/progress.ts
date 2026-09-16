@@ -130,7 +130,12 @@ export function toProgressView(
 }
 
 function findProgressData(parts: ReadonlyArray<{ type: string }>): unknown {
-  for (const part of parts) {
+  // Backwards, so the newest wins. The SDK merges a repeated data part into
+  // the existing one, which leaves exactly one here; reading from the end
+  // means a version that appended instead would show the latest step rather
+  // than freezing on the first and reporting every answer as stopped.
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i]
     // `?.` rather than a type guard: the array is typed, but it comes from a
     // stream the browser assembled, and a hole in it must not throw here.
     if (part?.type !== PROGRESS_PART_TYPE) continue
@@ -183,6 +188,18 @@ export const STOPPED_BEFORE_FIRST_STEP: ProgressView = {
 export type ProgressStatus =
   'thinking' | 'reading' | 'writing' | 'done' | 'stopped' | 'none'
 
+/**
+ * Whether a run that is no longer in flight ended without finishing.
+ *
+ * One rule, read by both channels: `progressStatus` renders it, and
+ * `announcementFor` in ./answer speaks it. A phase added to
+ * ChatProgressPhase without a thought for this function would otherwise be
+ * handled in the visible channel and missed in the one nobody sees break.
+ */
+export function wasCutOff(progress: ProgressView | undefined): boolean {
+  return progress !== undefined && progress.phase !== 'done'
+}
+
 export function progressStatus(
   view: AnswerView,
   pending: boolean
@@ -202,8 +219,7 @@ export function progressStatus(
   // No part at all: a refusal that never opened a stream, or an ordinary run
   // that answered without reading anything. Neither has steps to show.
   if (!progress) return 'none'
-  // The part exists but never reached `done`, so the run was cut off.
-  return progress.phase === 'done' ? 'done' : 'stopped'
+  return wasCutOff(progress) ? 'stopped' : 'done'
 }
 
 /** What a finished run may claim: how many documents, over how long. */
@@ -217,10 +233,13 @@ export interface ProgressTotals {
  * there is no claim to make.
  *
  * Three conditions, all of them about not overclaiming: the server said the
- * run finished, it read something, and an answer came of it. A run that
- * ended `incomplete` keeps its steps expanded under the existing notice and
- * claims nothing: "Read 3 documents" above an empty reply would be a
- * sentence about work that produced no answer.
+ * run finished, it read something, and it produced answer text. The third is
+ * about text, not about the `incomplete` flag, which is deliberate: an answer
+ * cut off on the output cap is stamped `incomplete` and is still real text
+ * drawn from the documents that were read, so it keeps the count. A run that
+ * wrote nothing at all keeps its steps expanded and claims nothing, because
+ * "Read 3 documents" above an empty reply would be a sentence about work that
+ * produced no answer.
  */
 export function progressTotals(view: AnswerView): ProgressTotals | undefined {
   const progress = view.progress
@@ -236,6 +255,78 @@ export function progressTotals(view: AnswerView): ProgressTotals | undefined {
  */
 export function toSeconds(ms: number): number {
   return Math.max(1, Math.round(ms / 1000))
+}
+
+/* ------------------------------------------------------------------ *
+ * The shape of the rendered view. Decided here, drawn by                *
+ * components/assistant/assistant-progress.tsx.                          *
+ * ------------------------------------------------------------------ */
+
+/** What a step row is doing, and therefore which icon it earns. */
+export type StepState = 'complete' | 'active' | 'stopped'
+
+/** One row of the disclosure, named by the step it reports. */
+export interface ProgressRow {
+  /** The step's document id, or the fixed key of the writing row. */
+  key: string
+  /** `undefined` on the writing row, which names no document. */
+  title?: string
+  state: StepState
+}
+
+/**
+ * The rows, and which one the run is on.
+ *
+ * While reading, the last document is in flight and every earlier one is
+ * done. While writing, every read is done and the answer row is in flight. A
+ * stopped run kept whichever phase it stopped in, so it is the same list with
+ * the row that was in flight marked as the place it stopped. A finished run
+ * is all complete, and a run with nothing read yet has no rows at all.
+ *
+ * Rows carry titles rather than sentences: the wording is Matt's and lives in
+ * components/assistant/copy.ts.
+ */
+export function progressRows(
+  status: ProgressStatus,
+  progress: ProgressView | undefined
+): ProgressRow[] {
+  const steps = progress?.steps ?? []
+  const rows: ProgressRow[] = steps.map(step => ({
+    key: step.id,
+    title: step.title,
+    state: 'complete',
+  }))
+  if (rows.length === 0) return rows
+
+  if (progress?.phase === 'writing') {
+    rows.push({ key: WRITING_ROW_KEY, state: 'complete' })
+  }
+  if (status === 'done') return rows
+
+  const current = rows[rows.length - 1]
+  current.state = status === 'stopped' ? 'stopped' : 'active'
+  return rows
+}
+
+/** The key of the row that reports the answer being written. */
+export const WRITING_ROW_KEY = 'writing'
+
+/**
+ * Whole seconds for the live timer, or `undefined` when there is no clock to
+ * show.
+ *
+ * Counted from zero rather than rounded up, so the first second reads `0s`
+ * instead of claiming one that has not passed. An answer further up the
+ * transcript has no clock at all: this tab stopped timing it when the next
+ * question was asked, and a stale number beside it would be a worse answer
+ * than none.
+ */
+export function progressSeconds(
+  pending: boolean,
+  elapsedMs: number
+): number | undefined {
+  if (!pending && elapsedMs <= 0) return undefined
+  return Math.round(elapsedMs / 1000)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

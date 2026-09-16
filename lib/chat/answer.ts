@@ -1,6 +1,6 @@
 import type { ChatStatus } from 'ai'
 import type { ChatMessageMetadata } from './handler'
-import { toProgressView, type ProgressView } from './progress'
+import { toProgressView, wasCutOff, type ProgressView } from './progress'
 import type { ChatErrorCode } from './validate'
 
 /**
@@ -159,7 +159,7 @@ export function announcementFor(
   // deliberately not a live region, and the timer is hidden from them.
   // "Response complete" here would be the one false claim this view exists
   // to prevent, made in the only channel that cannot be checked by looking.
-  if (progress && progress.phase !== 'done') return 'Response stopped'
+  if (wasCutOff(progress)) return 'Response stopped'
   return 'Response complete'
 }
 
@@ -167,6 +167,12 @@ export function announcementFor(
  * The current step, said plainly. `undefined` when the run has not narrated
  * anything yet, or has already reported itself done. In both cases the
  * caller's "Responding" is the truthful thing to say.
+ *
+ * These two verbs are the spoken half of what
+ * components/assistant/copy.ts shows on screen as "Reading {title}…" and
+ * "Writing answer…". They are written out here rather than imported because
+ * this module may not reach into components; change one and change the
+ * other, or the two channels will describe different work.
  */
 function stepAnnouncement(
   progress: ProgressView | undefined

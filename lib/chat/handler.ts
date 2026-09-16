@@ -603,10 +603,11 @@ function withProgress({
  * The token half of that budget is not predicted, because it depends on
  * document text this stage has not seen. A read the session refused for size
  * would therefore both earn a row it did not deserve and spend one of the
- * three this counter allows, hiding a later read that did happen. Two tests
- * in lib/knowledge/knowledge.test.ts keep that unreachable: one holds every
+ * three this counter allows, hiding a later read that did happen. Tests in
+ * lib/knowledge/knowledge.test.ts keep that unreachable: one holds every
  * document under KNOWLEDGE_DOCUMENT_TOKEN_CEILING, well under the whole-turn
- * budget, and one holds the three largest together inside it. They are
+ * budget, and 'the three largest documents fit in one turn' holds both the
+ * three largest together and the worst repeated read inside it. They are
  * load-bearing for a claim this view makes on screen, which is why they are
  * named here rather than left to be found.
  */

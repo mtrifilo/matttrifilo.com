@@ -9,8 +9,9 @@ The registry is not configured in `components.json`, on purpose: re-running
 the generator would overwrite the deviations each file's header documents.
 
 Treat these as ours to edit. They keep the registry's formatting (double
-quotes, semicolons) so a diff against the upstream component stays readable;
-that is the one place in `components/` where `.prettierrc` is not followed.
+quotes, semicolons) so a diff against the upstream component stays readable.
+`components/ui/` does the same, for the same reason; those two directories are
+where `.prettierrc` is not followed.
 
 What was cut, and why, is at the top of each file. The short version: no
 branch selector, no transcript download, no `role="log"` (it re-announces

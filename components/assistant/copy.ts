@@ -81,15 +81,24 @@ export const RATE_LIMIT_NOTICE = {
 /** Before the first read: the model is still choosing what to open. */
 export const PROGRESS_THINKING = 'Thinking…'
 
-/** One line per document, titled from the server's index, never the model. */
+/**
+ * One line per document, titled from the server's index, never the model.
+ *
+ * `announcementFor` in lib/chat/answer.ts speaks the same two things to a
+ * screen reader, without the ellipsis, from its own literals: that module is
+ * where the announcement strings live and it cannot import this one. Change
+ * the verb here and change it there.
+ */
 export const progressReading = (title: string) => `Reading ${title}…`
 
 /** The last step: the reading is done and the answer is being written. */
 export const PROGRESS_WRITING = 'Writing answer…'
 
 /**
- * Appended to whichever step was in flight when a run ended without an
- * answer. The timer beside it is frozen, and no count is claimed.
+ * The header line of a run that ended without an answer. It replaces the
+ * status the header would otherwise show; the step that was in flight keeps
+ * its own label and changes only its icon. The timer beside it is frozen,
+ * and no count is claimed.
  */
 export const PROGRESS_STOPPED = 'Stopped'
 

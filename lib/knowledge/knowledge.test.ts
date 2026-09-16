@@ -626,7 +626,7 @@ describe('knowledge corpus build', () => {
     ).toThrow(/frontmatter line is not "key: value":\s+- career/)
   })
 
-  test('refuses two documents that would claim the same /knowledge URL', () => {
+  test('refuses two documents that would answer to the same id', () => {
     expect(() =>
       buildFixture([
         { topic: 'career', name: 'twin.md' },
@@ -770,9 +770,9 @@ describe('knowledge corpus build', () => {
   })
 
   test('an empty body outside the faq is an error, not a quiet deletion', () => {
-    // Returning null here would have removed the document from the index,
-    // /knowledge, generateStaticParams and the sitemap at once, exit 0,
-    // nothing printed — the exact failure the faq scoping exists to stop.
+    // Returning null here would take the document out of the index the
+    // model is shown, exit 0, nothing printed: the exact failure the faq
+    // scoping exists to stop.
     for (const body of ['', '   \n\n  \n', '<!-- only a note -->']) {
       expect(() =>
         buildFixture([{ topic: 'career', name: 'a-role.md', body }])
@@ -833,13 +833,25 @@ describe('knowledge corpus build', () => {
     // and build — not the script. The per-document ceiling cannot promise
     // this on its own (three at the ceiling would be over budget), so the
     // real sum has to be asserted somewhere CI actually looks.
-    const largest = [...corpus.documents]
-      .sort((a, b) => b.tokenEstimate - a.tokenEstimate)
-      .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
+    const sorted = [...corpus.documents].sort(
+      (a, b) => b.tokenEstimate - a.tokenEstimate
+    )
+    const largest = sorted.slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
     const worstRead = largest.reduce((sum, d) => sum + d.tokenEstimate, 0)
     expect(
       worstRead,
       `the model could not read ${largest.map(d => d.id).join(', ')} in one answer; split the largest`
+    ).toBeLessThanOrEqual(KNOWLEDGE_READ_BUDGET.maxTokens)
+
+    // A model that reads one document twice is charged for it twice but is
+    // shown one row, so this is the sequence that could put a row on screen
+    // for a read the budget then refuses: the count above an answer would
+    // claim a document that was never opened. Two of the largest plus the
+    // next is the worst it can be.
+    const repeated = 2 * sorted[0].tokenEstimate + sorted[1].tokenEstimate
+    expect(
+      repeated,
+      `re-reading ${sorted[0].id} would exhaust the budget before ${sorted[1].id}; the progress count above an answer would name a document that was refused`
     ).toBeLessThanOrEqual(KNOWLEDGE_READ_BUDGET.maxTokens)
   })
 

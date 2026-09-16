@@ -199,8 +199,7 @@ const FRONTMATTER_KEYS: readonly string[] = [
 /**
  * `canonical` says "the public original of this document lives here". It
  * can only be a page Matt controls: a canonical pointing somewhere else
- * hands another site the search ranking for his own words, and the
- * /knowledge page renders it as a link readers will trust.
+ * hands another site the search ranking for his own words.
  */
 const CANONICAL_HOST = /^https:\/\/(?:www\.)?matttrifilo\.com(?=[/?#]|$)/
 
@@ -739,9 +738,8 @@ function readDocument(
     assertNoPlaceholder(lines, label)
     text = body.trim()
     // Not a drop. A file with a frontmatter block and no body is a paste
-    // that went wrong, and returning null here would have removed it from
-    // the index, /knowledge, generateStaticParams and the sitemap at once,
-    // with exit 0 and nothing printed.
+    // that went wrong, and returning null here would take it out of the
+    // index the model is shown, with exit 0 and nothing printed.
     if (text === '') {
       throw new Error(
         `${label}: the body is empty; only content/knowledge/${UNANSWERED_TOPIC} drops documents, so this would otherwise vanish from the index and the site without a word. Write it, or delete the file.`
@@ -909,7 +907,7 @@ export function buildKnowledgeCorpus(
     const previous = seen.get(document.id)
     if (previous !== undefined) {
       throw new Error(
-        `content/knowledge: duplicate id "${document.id}" in ${previous} and ${document.topic}; /knowledge/${document.id} can only be one of them`
+        `content/knowledge: duplicate id "${document.id}" in ${previous} and ${document.topic}; the model reads one document per id`
       )
     }
     seen.set(document.id, document.topic)

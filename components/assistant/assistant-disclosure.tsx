@@ -3,8 +3,13 @@ import { cn } from '@/lib/utils'
 import { MATT_MAILTO } from './copy'
 
 /**
- * The required disclosure under the input: what the answers are, and the two
- * ways to check them — the sources the answer links, or Matt himself.
+ * The required disclosure under the input: what the answers are, and who to
+ * ask when it matters.
+ *
+ * Nothing serves a corpus document, so Matt is the only check this page can
+ * honestly offer. Each answer names the documents it read, by title, above
+ * the text, but that is a record of what the answer drew on rather than
+ * something a visitor can open, so the disclosure does not send them to it.
  *
  * "Conversations aren't saved" is a statement about the whole system, not a
  * nicety: nothing about a conversation is written down on the server, and the
@@ -19,12 +24,13 @@ export function AssistantDisclosure({ className }: { className?: string }) {
       )}
     >
       <p>
-        AI-generated. May be incomplete or wrong. Check the linked sources, or{' '}
+        AI-generated. May be incomplete or wrong. Check anything that matters
+        with{' '}
         <Link
           className="underline underline-offset-2 hover:text-foreground"
           href={MATT_MAILTO}
         >
-          email Matt
+          Matt himself
         </Link>
         .
       </p>

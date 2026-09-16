@@ -197,7 +197,10 @@ export function AssistantChat() {
   )
   const announcement = announcementFor(
     status,
-    messages.some(message => message.role === 'assistant'),
+    // A run stopped before its first chunk left no assistant message behind,
+    // so on a first question there is nothing in `messages` to report. It is
+    // still an ending, and the reader is told about it.
+    stoppedBare || messages.some(message => message.role === 'assistant'),
     stoppedBare ? STOPPED_BEFORE_FIRST_STEP : lastProgress
   )
 

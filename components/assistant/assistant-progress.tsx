@@ -1,12 +1,6 @@
 'use client'
 
-import {
-  CircleStop,
-  FileText,
-  LoaderCircle,
-  PenLine,
-  type LucideIcon,
-} from 'lucide-react'
+import { CircleStop, FileText, LoaderCircle, PenLine } from 'lucide-react'
 import { useState } from 'react'
 import {
   ChainOfThought,
@@ -16,11 +10,12 @@ import {
 } from '@/components/ai-elements/chain-of-thought'
 import type { AnswerView } from '@/lib/chat/answer'
 import {
+  progressRows,
+  progressSeconds,
   progressStatus,
   progressTotals,
-  type ChatProgressStep,
+  type ProgressRow,
   type ProgressStatus,
-  type ProgressView,
 } from '@/lib/chat/progress'
 import {
   PROGRESS_STOPPED,
@@ -40,15 +35,10 @@ import {
  * there the headline becomes "Read 3 documents in 14s" and the steps fold
  * away behind it.
  *
- * This file is only the mapping. Which of six states a run is in is decided
- * in lib/chat/progress.ts, where it is tested; every string is in ./copy;
- * the markup is the vendored ChainOfThought component. Nothing here should
- * grow a second opinion about any of the three.
- *
- * The honest states are the ones worth naming: a run that was cut off shows
- * its steps frozen with the one in flight marked stopped, and a run that
- * finished without writing an answer shows its steps under a headline that
- * claims nothing. Neither spins, and neither counts documents.
+ * This file draws. It decides nothing: which of six states a run is in, which
+ * rows it has, and what the clock reads are all settled in lib/chat/progress,
+ * where they are tested without a browser, and every string is in ./copy.
+ * Anything here that starts to look like a judgement belongs in one of those.
  */
 
 export interface AssistantProgressProps {
@@ -77,10 +67,11 @@ export function AssistantProgress({
   if (status === 'none') return null
 
   const totals = progressTotals(view)
-  const rows = rowsFor(status, view.progress)
   const summary = totals
     ? progressSummary(totals.count, totals.seconds)
     : undefined
+  const rows = progressRows(status, view.progress)
+  const seconds = progressSeconds(pending, elapsedMs)
 
   return (
     <ChainOfThought
@@ -94,88 +85,67 @@ export function AssistantProgress({
       <ChainOfThoughtHeader
         // Nothing has been read yet, so there is nothing to open.
         disabled={rows.length === 0}
-        timer={summary ? undefined : timerFor(pending, elapsedMs)}
+        icon={<HeadlineIcon status={status} />}
+        timer={summary || seconds === undefined ? undefined : `${seconds}s`}
       >
-        {summary ?? headlineFor(status, rows)}
+        {summary ?? headline(status, rows)}
       </ChainOfThoughtHeader>
-      {rows.length > 0 && (
-        <ChainOfThoughtContent>
-          {rows.map(row => (
-            <ChainOfThoughtStep
-              icon={row.icon}
-              key={row.key}
-              label={row.label}
-              status={row.status}
-            />
-          ))}
-        </ChainOfThoughtContent>
-      )}
+      {/* Always rendered, even with no steps to put in it: Radix stamps the
+          region's id on the trigger as `aria-controls`, and an open trigger
+          pointing at an element that is not in the document is the defect
+          the component's single Collapsible root exists to avoid. */}
+      <ChainOfThoughtContent>
+        {rows.map(row => (
+          <ChainOfThoughtStep
+            icon={rowIcon(row)}
+            key={row.key}
+            label={label(row)}
+            status={row.state}
+          />
+        ))}
+      </ChainOfThoughtContent>
     </ChainOfThought>
   )
 }
 
-/** One step of the run, as the vendored component wants it. */
-interface Row {
-  key: string
-  label: string
-  icon: LucideIcon
-  status: 'complete' | 'active' | 'stopped'
-}
-
 /**
- * The steps, and which one the run is on.
- *
- * While reading, the last document is in flight and every earlier one is
- * done. While writing, every read is done and the answer row is in flight. A
- * stopped run kept whichever phase it stopped in, so it is the same list with
- * the row that was in flight marked as the place it stopped.
+ * A row in flight spins; one that stopped says so; a finished one shows what
+ * it was, a document or the answer.
  */
-function rowsFor(status: ProgressStatus, progress: ProgressView | undefined) {
-  const steps = progress?.steps ?? []
-  const rows: Row[] = steps.map(readRow)
-  if (rows.length === 0) return rows
-
-  const writing = progress?.phase === 'writing'
-  if (writing) {
-    rows.push({
-      key: 'writing',
-      label: PROGRESS_WRITING,
-      icon: PenLine,
-      status: 'complete',
-    })
-  }
-  if (status === 'done') return rows
-
-  const current = rows[rows.length - 1]
-  const stopped = status === 'stopped'
-  current.icon = stopped ? CircleStop : LoaderCircle
-  current.status = stopped ? 'stopped' : 'active'
-  return rows
+function rowIcon(row: ProgressRow) {
+  if (row.state === 'active') return LoaderCircle
+  if (row.state === 'stopped') return CircleStop
+  return row.title === undefined ? PenLine : FileText
 }
 
-function readRow(step: ChatProgressStep, index: number): Row {
-  return {
-    key: `${step.id}-${index}`,
-    label: progressReading(step.title),
-    icon: FileText,
-    status: 'complete',
-  }
+/** A read row names its document; the writing row names the answer. */
+function label(row: ProgressRow): string {
+  return row.title === undefined ? PROGRESS_WRITING : progressReading(row.title)
 }
 
 /** The headline while a run is in flight, or once it ended without one. */
-function headlineFor(status: ProgressStatus, rows: readonly Row[]): string {
+function headline(
+  status: ProgressStatus,
+  rows: readonly ProgressRow[]
+): string {
   if (status === 'stopped') return PROGRESS_STOPPED
   if (status === 'done') return PROGRESS_UNFINISHED
-  if (status === 'writing') return PROGRESS_WRITING
-  return rows.length > 0 ? rows[rows.length - 1].label : PROGRESS_THINKING
+  const current = rows[rows.length - 1]
+  if (!current) return PROGRESS_THINKING
+  return label(current)
 }
 
 /**
- * Whole seconds from zero, so the first second reads `0s` rather than
- * rounding a run that has barely started up to one. Absent for an older
- * answer in the transcript, whose clock this tab is no longer keeping.
+ * The one thing that moves while the model works.
+ *
+ * The header carries it rather than a step row, because the longest part of
+ * the wait, before the first document is chosen, has no rows at all.
  */
-function timerFor(pending: boolean, elapsedMs: number): string | undefined {
-  if (!pending && elapsedMs <= 0) return undefined
-  return `${Math.round(elapsedMs / 1000)}s`
+function HeadlineIcon({ status }: { status: ProgressStatus }) {
+  if (status === 'stopped') return <CircleStop className="size-4 shrink-0" />
+  if (status === 'done') return <FileText className="size-4 shrink-0" />
+  // Every remaining status is a run still working.
+  return (
+    <LoaderCircle className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />
+  )
 }

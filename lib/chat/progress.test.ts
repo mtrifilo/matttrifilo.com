@@ -3,6 +3,8 @@ import { announcementFor, type AnswerView } from './answer'
 import {
   PROGRESS_PART_TYPE,
   STOPPED_BEFORE_FIRST_STEP,
+  progressRows,
+  progressSeconds,
   progressStatus,
   progressTotals,
   toProgressView,
@@ -294,5 +296,83 @@ describe('announcementFor, with a run in flight', () => {
     ]) {
       expect(text).not.toMatch(/\d/)
     }
+  })
+})
+
+describe('progressRows', () => {
+  const writing = (...titles: string[]): ProgressView => ({
+    phase: 'writing',
+    steps: titles.map((title, i) => step(`doc-${i}`, title)),
+  })
+
+  test('nothing read yet has no rows to show', () => {
+    expect(progressRows('thinking', undefined)).toEqual([])
+    expect(progressRows('thinking', { phase: 'reading', steps: [] })).toEqual(
+      []
+    )
+    // The same holds for a run stopped before its first read: the headline
+    // carries it, and there is no row to mark.
+    expect(progressRows('stopped', STOPPED_BEFORE_FIRST_STEP)).toEqual([])
+  })
+
+  test('while reading, the newest document is the one in flight', () => {
+    expect(progressRows('reading', reading('Résumé', 'FAQ'))).toEqual([
+      { key: 'doc-0', title: 'Résumé', state: 'complete' },
+      { key: 'doc-1', title: 'FAQ', state: 'active' },
+    ])
+  })
+
+  test('while writing, every read is done and the answer is in flight', () => {
+    expect(progressRows('writing', writing('Résumé'))).toEqual([
+      { key: 'doc-0', title: 'Résumé', state: 'complete' },
+      { key: 'writing', state: 'active' },
+    ])
+  })
+
+  test('a finished run has nothing in flight', () => {
+    // The state that must never spin: no `active` row survives a run that
+    // ended.
+    const rows = progressRows('done', { ...done(2, 9_000), phase: 'done' })
+    expect(rows.every(row => row.state === 'complete')).toBe(true)
+    expect(rows).toHaveLength(2)
+  })
+
+  test('a stopped run marks where it stopped, and never spins', () => {
+    const readingRows = progressRows('stopped', reading('Résumé', 'FAQ'))
+    expect(readingRows.map(row => row.state)).toEqual(['complete', 'stopped'])
+
+    const writingRows = progressRows('stopped', writing('Résumé'))
+    expect(writingRows.map(row => row.state)).toEqual(['complete', 'stopped'])
+    expect(writingRows.at(-1)?.title).toBeUndefined()
+  })
+
+  test('no run that has ended leaves a row in flight', () => {
+    // The ticket's rule, asserted over every ended status rather than
+    // spot-checked: a spinner after the fact is the thing to prevent.
+    for (const status of ['done', 'stopped'] as const) {
+      for (const progress of [reading('Résumé', 'FAQ'), writing('Résumé')]) {
+        const rows = progressRows(status, progress)
+        expect(rows.some(row => row.state === 'active')).toBe(false)
+      }
+    }
+  })
+})
+
+describe('progressSeconds', () => {
+  test('counts from zero rather than rounding a run up to one', () => {
+    expect(progressSeconds(true, 0)).toBe(0)
+    expect(progressSeconds(true, 400)).toBe(0)
+    expect(progressSeconds(true, 600)).toBe(1)
+    expect(progressSeconds(true, 14_200)).toBe(14)
+  })
+
+  test('an answer this tab is no longer timing shows no clock', () => {
+    // An earlier turn in the transcript: a stale number beside it would be
+    // worse than none.
+    expect(progressSeconds(false, 0)).toBeUndefined()
+  })
+
+  test('a run that has ended keeps the time it took', () => {
+    expect(progressSeconds(false, 12_400)).toBe(12)
   })
 })

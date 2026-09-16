@@ -22,13 +22,14 @@ import { createContext, memo, useContext, useMemo } from "react";
  *
  * Changed:
  *
- * - `ChainOfThoughtHeader` has no `BrainIcon` and no default label. The label
- *   is the caller's, because it is the one line that stays on screen after
- *   the answer arrives and it has to say something true about the run. It
- *   also takes a `timer` slot, rendered right-aligned and `aria-hidden`: the
- *   elapsed seconds change every second, and a screen reader that re-read
- *   them would drown out the steps. It is still a real `CollapsibleTrigger`,
- *   so `aria-expanded` and keyboard behaviour come from Radix.
+ * - `ChainOfThoughtHeader` has no default label and no fixed `BrainIcon`.
+ *   Both are the caller's: the label is the one line that stays on screen
+ *   after the answer arrives and it has to say something true about the run,
+ *   and the icon has to be able to move while the run does. It also takes a
+ *   `timer` slot, rendered right-aligned and `aria-hidden`: the elapsed
+ *   seconds change every second, and a screen reader that re-read them would
+ *   drown out the steps. It is still a real `CollapsibleTrigger`, so
+ *   `aria-expanded` and keyboard behaviour come from Radix.
  * - `ChainOfThoughtStep` has a fourth status, `stopped`, for the step that was
  *   in flight when a run ended without finishing. It is the state that keeps
  *   the view honest, so it is part of the component rather than a caller's
@@ -38,8 +39,18 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   around the trigger and a second around the content. Radix derives the
  *   content's id per root and stamps it on the trigger as `aria-controls`, so
  *   two roots leave the trigger pointing at an id that is not in the document
- *   and the button is never associated with the region it opens.
- * - Every animation class is paired with `motion-reduce:animate-none`.
+ *   and the button is never associated with the region it opens. A caller
+ *   that renders no `ChainOfThoughtContent` at all leaves the trigger
+ *   pointing at nothing for the same reason, so it should always render one,
+ *   empty if need be, and disable the trigger instead.
+ * - Animation and transition alike are paired with their `motion-reduce`
+ *   counterparts, so nothing moves for a visitor who asked for less.
+ *
+ * `@radix-ui/react-use-controllable-state` is a direct dependency pinned to
+ * the exact version `radix-ui` itself depends on, so the tree holds one copy
+ * and this file and the Collapsible root share a hook. Bumping `radix-ui`
+ * means checking that pin: two copies would mean two notions of whether the
+ * panel is open.
  */
 
 type ChainOfThoughtContextValue = {
@@ -105,22 +116,25 @@ export const ChainOfThought = memo(
 export type ChainOfThoughtHeaderProps = ComponentProps<
   typeof CollapsibleTrigger
 > & {
+  /** Leads the label. The caller's, so it can say what the run is doing. */
+  icon?: ReactNode;
   /** Right-aligned and hidden from assistive tech. See the file header. */
   timer?: ReactNode;
 };
 
 export const ChainOfThoughtHeader = memo(
-  ({ className, children, timer, ...props }: ChainOfThoughtHeaderProps) => {
+  ({ className, children, icon, timer, ...props }: ChainOfThoughtHeaderProps) => {
     const { isOpen } = useChainOfThought();
 
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground motion-reduce:transition-none",
           className
         )}
         {...props}
       >
+        {icon}
         <span className="min-w-0 flex-1 truncate text-left">{children}</span>
         {timer !== undefined && (
           <span aria-hidden="true" className="shrink-0 tabular-nums">
@@ -129,7 +143,7 @@ export const ChainOfThoughtHeader = memo(
         )}
         <ChevronDownIcon
           className={cn(
-            "size-4 shrink-0 transition-transform",
+            "size-4 shrink-0 transition-transform motion-reduce:transition-none",
             isOpen ? "rotate-180" : "rotate-0"
           )}
         />

@@ -4,7 +4,7 @@ import { AssistantChat } from '@/components/assistant/assistant-chat'
 export const metadata: Metadata = {
   title: 'Ask',
   description:
-    "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his published work, and links the documents it used.",
+    "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his own documents, and says which ones it read.",
   alternates: { canonical: '/ask' },
 }
 
