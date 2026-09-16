@@ -263,10 +263,19 @@
   }
 }
 
-/* Nav blur-on-scroll */
+/*
+ * Nav blur-on-scroll (MTC-36).
+ *
+ * Only the unprefixed property is written. The build minifies through
+ * Lightning CSS, which treats a hand-written `-webkit-backdrop-filter`
+ * after `backdrop-filter` as the later declaration, keeps that one, and
+ * drops the standard one; Chrome then reports `backdrop-filter: none` and
+ * the nav never blurs. Lightning adds the prefix itself from the browser
+ * targets, so the shipped rule carries both. Verified with
+ * `bunx @tailwindcss/cli -i app/globals.css --minify` on 2026-09-15.
+ */
 nav[data-scrolled='true'] {
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   background-color: rgba(255, 255, 255, 0.8);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
