@@ -4,12 +4,14 @@ import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
   assertAnswered,
+  assertChipsMatchReads,
   assertCites,
   assertCitesOnlyWhatItRead,
   assertDecline,
   assertDeclineOrWithholds,
   assertNoInventedFact,
   assertNoPolicyLeak,
+  assertReadsAnyOf,
   assertReadsExpected,
   assertReadsWithinIndex,
   assertThirdPerson,
@@ -244,6 +246,60 @@ describe('assertReadsExpected', () => {
     expect(assertReadsExpected('', ctx(undefined, { readIds: [] })).pass).toBe(
       false
     )
+  })
+})
+
+describe('assertReadsAnyOf', () => {
+  test('reading any one of the acceptable documents passes', () => {
+    expect(
+      assertReadsAnyOf(
+        '',
+        ctx({ expectReadsAny: ['resume', 'faq'] }, { readIds: ['faq'] })
+      ).pass
+    ).toBe(true)
+  })
+
+  test('reading none of them fails and names them', () => {
+    const result = assertReadsAnyOf(
+      '',
+      ctx({ expectReadsAny: ['resume', 'faq'] }, { readIds: ['open-source'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('resume')
+    expect(result.reason).toContain('open-source')
+  })
+
+  test('a test that named no expectation fails rather than passing vacuously', () => {
+    expect(assertReadsAnyOf('', ctx(undefined, { readIds: [] })).pass).toBe(
+      false
+    )
+  })
+})
+
+describe('assertChipsMatchReads', () => {
+  test('a source list drawn from the reads passes', () => {
+    expect(
+      assertChipsMatchReads(
+        '',
+        ctx(undefined, { sourceIds: ['resume'], readIds: ['resume', 'faq'] })
+      ).pass
+    ).toBe(true)
+  })
+
+  test('no chips at all passes: a decline shows none', () => {
+    expect(
+      assertChipsMatchReads('', ctx(undefined, { sourceIds: [], readIds: [] }))
+        .pass
+    ).toBe(true)
+  })
+
+  test('a chip for a document the run never read fails and names it', () => {
+    const result = assertChipsMatchReads(
+      '',
+      ctx(undefined, { sourceIds: ['resume', 'faq'], readIds: ['resume'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('faq')
   })
 })
 

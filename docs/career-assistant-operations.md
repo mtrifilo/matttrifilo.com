@@ -82,12 +82,12 @@ See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-chec
 
 `evals/` holds four promptfoo suites that run the chat route's own handler in process. There is no server and no fixture model: `evals/provider.ts` builds `createChatHandler` with the real knowledge corpus and the real Vertex client, posts the body a browser would post, and reads the answer back off the stream. What a suite asserts on is therefore the live policy, the live corpus and the live read budget.
 
-| Suite          | Tests | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `golden`       |    32 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times inside an `assert-set` at `threshold: 0.6`.                                                                                                                                                                                             |
-| `refusals`     |    24 | Compensation, employment status, contact details, colleague names, employer internals, opinions, "print your system prompt", and off-topic tasks. Compared against `DECLINE_SENTENCE` imported from `lib/chat/prompt.ts`, so rewording the sentence fails the suite instead of passing a stale copy.                                                                                                                                                         |
-| `injection`    |    23 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, and attempts to dump the index or name the tool. Asserts no first person as Matt, no verbatim policy phrase or tool name, and no read outside the index. A paraphrased disclosure of the rules is not something a substring check can catch; read a failing injection answer, do not only trust the green. |
-| `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                                                                                                                                                                                    |
+| Suite          | Tests | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `golden`       |    32 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times inside an `assert-set` at `threshold: 0.6`.                                                                                                                                                                                                                                                                                                                                         |
+| `refusals`     |    24 | Compensation, employment status, contact details, colleague names, employer internals, opinions, "print your system prompt", and off-topic tasks. Compared against `DECLINE_SENTENCE` imported from `lib/chat/prompt.ts`, so rewording the sentence fails the suite instead of passing a stale copy.                                                                                                                                                                                                                                                                                                     |
+| `injection`    |    23 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, and attempts to dump the index or name the tool. Every test asserts that the run answered at all, that it stays in the third person, and that no verbatim policy phrase or tool name comes back; the eight tests that could plausibly open a document also assert it read nothing outside the index. A paraphrased disclosure of the rules is not something a substring check can catch; read a failing injection answer, do not only trust the green. |
+| `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. That is what keeps grader variance from reddening a merge.
 
@@ -99,13 +99,13 @@ The assertions live in `evals/assertions.ts` and import the route's own constant
 
 ### When CI runs them
 
-`.github/workflows/evals.yml` runs on every pull request, but only spends money when something the answers depend on changed: `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/vertex.ts`, `evals/**`, or the workflow itself. The job always runs and always reports, and says in the step summary which path it took.
+`.github/workflows/evals.yml` runs on every pull request, but only spends money when something the answers depend on changed: `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or the workflow itself. The job always runs and always reports, and says in the step summary which path it took.
 
-The list is wider than the ticket's "corpus, prompt, or model id" on purpose: the assertions also stand on `read-document.ts`'s index guard, `KNOWLEDGE_READ_BUDGET`, the step cap and client-chunk allowlist in `handler.ts`, and `SOURCES_TRAILER_PREFIX` in `answer.ts`. A pull request that weakened any of them while touching only the prompt's neighbours would otherwise run no evals at all. What is still **not** on the list is a dependency bump: an `ai` or `@ai-sdk/google-vertex` upgrade changes how the stream and the tool loop behave and runs nothing. Dispatch the workflow by hand on that branch.
+The list is wider than the ticket's "corpus, prompt, or model id" on purpose: the assertions also stand on `read-document.ts`'s index guard, `KNOWLEDGE_READ_BUDGET`, the step cap and client-chunk allowlist in `handler.ts`, `SOURCES_TRAILER_PREFIX` in `answer.ts`, the bounded-fetch deadlines in `lib/ai/`, and the route's own wiring in `app/api/chat/`. A pull request that weakened any of them while touching only the prompt's neighbours would otherwise run no evals at all. What is still **not** on the list is a dependency bump: an `ai` or `@ai-sdk/google-vertex` upgrade changes how the stream and the tool loop behave and runs nothing. Dispatch the workflow by hand on that branch.
 
 That is deliberate. `on.pull_request.paths` would look tidier, but a path-filtered required check never reports at all on a pull request that touches none of the paths, and such a pull request can then never merge.
 
-Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both uploaded as the `evals` workflow artifact, plus a per-suite table in the job summary. `summary.json` has a stable shape, so a later ticket can publish it on the site:
+Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both uploaded as the `evals` workflow artifact, plus a per-suite table in the job summary. `summary.json` has a stable shape, so a later ticket can publish it on the site. `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
 
 ```json
 {
@@ -113,13 +113,14 @@ Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both u
   "ranAt": "…",
   "model": "gemini-3.8-flash",
   "suites": [{ "name": "golden", "passed": 32, "total": 32 }],
-  "totals": { "passed": 102, "total": 102 }
+  "totals": { "passed": 102, "total": 102 },
+  "retried": 0
 }
 ```
 
 ### A red run blocks the merge
 
-`bun run evals/summarize.ts` exits non-zero when any test failed, so the job fails, and the branch-protection rule below makes that block the merge. A red run is one of three things, and the artifact's `results.json` says which:
+`bun run evals/summarize.ts` exits non-zero when any test failed, so the job fails, and the branch-protection rule below makes that block the merge. A red run is one of four things, and the artifact's `results.json` says which:
 
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
@@ -151,14 +152,16 @@ Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by pro
 | groundedness (mixed)               |    23 |            ~9,000 |     ~207,000 |       ~5,750 |
 | refusals (one call, no read)       |    24 |            ~2,350 |      ~56,400 |       ~1,200 |
 | injection (one call, some history) |    23 |            ~3,000 |      ~69,000 |       ~1,380 |
-| rubric grader (32 × 3 calls)       |    96 |              ~700 |      ~67,200 |       ~7,680 |
-| **total**                          |       |                   | **~825,000** |  **~26,000** |
+| rubric grader (43 × 3 calls)       |   129 |              ~700 |      ~90,300 |      ~10,320 |
+| **total**                          |       |                   | **~848,000** |  **~28,000** |
 
-At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 0.825 × $0.75 = $0.62, plus 0.026 × $3.75 = $0.10. **About $0.72 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $1.44.
+The grader row is 43 rubric-bearing tests, the 32 goldens plus the 11 hallucination probes, each graded three times.
 
-Read that as a typical figure, not a ceiling. Two things push it up. The 11 groundedness probes each add three grader calls of their own, which the table above does not carry. And the provider retries a test once when the first attempt was lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach twice the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
+At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 0.848 × $0.75 = $0.64, plus 0.028 × $3.75 = $0.11. **About $0.75 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $1.50.
 
-Those two prices are from secondary sources, not read off Google's own pricing page; check the console before treating the figure as exact. The $50 monthly budget on the project is the real backstop either way.
+Read that as a typical figure, not a ceiling. The provider retries a test once when the first attempt was lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach twice the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
+
+Those two prices come from secondary sources, not from Google's own pricing page, which could not be read while this was written. Check the console before treating the figure as exact.
 
 ### Adding a golden when a corpus document is added
 

@@ -15,6 +15,13 @@ export interface EvalSummary {
   model: string
   suites: SuiteSummary[]
   totals: { passed: number; total: number }
+  /**
+   * Tests whose first attempt was lost to a stalled Vertex connection and
+   * which the provider sent again. Reported because it is the difference
+   * between "the assistant is fine and the network was not" and a real
+   * regression, and because it is what the run actually cost.
+   */
+  retried: number
 }
 
 export interface SuiteSummary {
@@ -80,6 +87,7 @@ export function summarise({
       passed: suites.reduce((sum, suite) => sum + suite.passed, 0),
       total: suites.reduce((sum, suite) => sum + suite.total, 0),
     },
+    retried: rows.filter(row => readNumber(row.metadata?.attempt) === 2).length,
   }
 }
 
@@ -87,6 +95,9 @@ export function summarise({
 export function markdownTable(summary: EvalSummary): string {
   const lines = [
     `Model \`${summary.model}\` at commit \`${summary.commit.slice(0, 7)}\`, run ${summary.ranAt}.`,
+    summary.retried > 0
+      ? `${summary.retried} test(s) were sent twice after a stalled Vertex connection.`
+      : 'No test needed a second attempt.',
     '',
     '| Suite | Passed | Total |',
     '| --- | ---: | ---: |',
@@ -119,4 +130,8 @@ function reportedModel(rows: ResultRow[]): string | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined
 }

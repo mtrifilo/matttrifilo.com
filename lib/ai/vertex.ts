@@ -81,11 +81,16 @@ export const VERCEL_FEDERATION_ENV_NAMES = [
  * On the route the message reaches no log: `logFailure` records an error's
  * name and never its text, because a provider message can carry the prompt.
  * It is written for the caller that does surface it, which is the MTC-32 eval
- * provider: it asks this question itself before building a handler, so a
- * half-configured shell fails once, loudly, instead of a hundred times as
- * `unavailable`.
+ * provider: it asks this question itself before building a handler, so every
+ * row of a red run names the missing variable instead of saying `unavailable`
+ * a hundred times over.
  */
 export function usesVercelFederation(source: EnvSource = process.env): boolean {
+  // On a deployment the federation is the only identity there is. Saying so
+  // before counting variables keeps the ADC fallback out of production
+  // entirely: a deployment missing one still fails through `readEnv` with
+  // that variable's name, exactly as it did before this branch existed.
+  if (source.VERCEL) return true
   const set = VERCEL_FEDERATION_ENV_NAMES.filter(name => Boolean(source[name]))
   if (set.length === 0) return false
   if (set.length === VERCEL_FEDERATION_ENV_NAMES.length) return true

@@ -25,11 +25,16 @@
   metadata:
     suite: groundedness
     smoke: true
+    expectReadsAny: [owned-systems-and-operations, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -41,11 +46,16 @@
   metadata:
     suite: groundedness
     smoke: true
+    expectReadsAny: [team-throughput-study-2025-2026, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -57,11 +67,20 @@
   metadata:
     suite: groundedness
     smoke: true
+    expectReadsAny:
+      [
+        plugin-marketplaces-and-sme-knowledge-bases,
+        owned-systems-and-operations,
+      ]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -72,11 +91,16 @@
     question: What research sat behind his talk on context management?
   metadata:
     suite: groundedness
+    expectReadsAny: [talks-and-teaching]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -87,11 +111,16 @@
     question: What is the AI Email Engagement Summary and how quickly did it ship?
   metadata:
     suite: groundedness
+    expectReadsAny: [resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -102,11 +131,16 @@
     question: How many services did the team move onto independent deploys, and how long did it take?
   metadata:
     suite: groundedness
+    expectReadsAny: [resume, owned-systems-and-operations]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -117,11 +151,16 @@
     question: Where does the decant repository live?
   metadata:
     suite: groundedness
+    expectReadsAny: [open-source]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -132,11 +171,16 @@
     question: When did Matt receive the Thryv Accelerator Award?
   metadata:
     suite: groundedness
+    expectReadsAny: [resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -147,11 +191,16 @@
     question: What authentication change did the compliance migration require?
   metadata:
     suite: groundedness
+    expectReadsAny: [post-acquisition-integration]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -162,11 +211,16 @@
     question: What is Matt's rule for building context for an agent?
   metadata:
     suite: groundedness
+    expectReadsAny: [engineering-philosophy]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -177,11 +231,16 @@
     question: How does Matt measure AI adoption on his team, and what are the limits?
   metadata:
     suite: groundedness
+    expectReadsAny: [team-throughput-study-2025-2026, ai-tooling-leadership]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -192,11 +251,16 @@
     question: What has Matt owned for Black Friday and Cyber Monday?
   metadata:
     suite: groundedness
+    expectReadsAny: [resume, owned-systems-and-operations]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript

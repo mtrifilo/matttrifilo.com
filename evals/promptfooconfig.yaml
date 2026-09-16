@@ -2,13 +2,15 @@
 #
 # The target is ./provider.ts, which calls the chat route's own handler in
 # process. There is no server: the suites exercise the real policy, the real
-# read budget and the real knowledge corpus, and the only model call is the
-# one the route itself makes.
+# read budget and the real knowledge corpus, and the answers under test come
+# from the same model call the route itself makes. The grader configured below
+# adds calls of its own, three per rubric-bearing test.
 #
 # Deterministic assertions are the gate. `llm-rubric` appears only where a
-# question needs judgement about whether an answer is right, and each of those
-# is graded three times inside an assert-set with a 0.67 threshold, so one
-# stray grade cannot redden a merge.
+# question needs judgement, and each of those is graded three times inside an
+# assert-set at `threshold: 0.6`, so one stray grade cannot redden a merge.
+# 0.6 and not 0.67 because an assert-set scores on the weighted mean of its
+# members: two of three average 0.666..., which 0.67 would reject.
 #
 # Run it: `bun run evals` (all suites) or `bun run evals:smoke` (three tests a
 # suite). See docs/career-assistant-operations.md for credentials and cost.

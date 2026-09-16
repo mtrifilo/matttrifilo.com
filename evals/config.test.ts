@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
+import { historyFrom } from './route-request'
 
 /**
  * Guards on the suite files themselves (MTC-32).
@@ -101,6 +102,7 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   'assertReadsWithinIndex',
   'assertDeclineOrWithholds',
   'assertCitesOnlyWhatItRead',
+  'assertChipsMatchReads',
 ])
 
 function toArray(value: unknown): string[] {
@@ -119,6 +121,23 @@ describe('promptfooconfig.yaml', () => {
     expect(config.defaultTest.options.provider.id).toBe(
       `vertex:${DEFAULT_GEMINI_MODEL}`
     )
+  })
+
+  test('every assert-set threshold is one two of three grades can clear', () => {
+    // An assert-set scores on the weighted MEAN of its members, so 0.67 would
+    // reject 2/3 = 0.666... and demand three of three. Pinned here because the
+    // YAML is the only place the number lives.
+    const thresholds = SUITES.flatMap(name =>
+      readFileSync(join(EVALS, `suites/${name}.yaml`), 'utf8')
+        .split('\n')
+        .filter(line => line.includes('threshold:'))
+        .map(line => Number(line.split('threshold:')[1].trim()))
+    )
+    expect(thresholds.length).toBeGreaterThan(0)
+    for (const threshold of thresholds) {
+      expect(threshold).toBeLessThan(2 / 3)
+      expect(threshold).toBeGreaterThan(1 / 3)
+    }
   })
 
   test('lists every suite file, and only those', () => {
@@ -212,6 +231,19 @@ for (const name of SUITES) {
           // would go green against an assistant that said nothing at all.
           expect(names).toContain('assertAnswered')
         }
+      }
+    })
+
+    test('every replayed turn is one the provider will actually send', () => {
+      for (const item of suite) {
+        const history = item.vars?.history
+        if (history === undefined) continue
+        expect(Array.isArray(history)).toBe(true)
+        // historyFrom drops anything malformed, so a typo here would quietly
+        // turn a multi-turn escalation into a single-turn test that still
+        // passes. The parsed turns have to match what was written.
+        const written = history as unknown[]
+        expect(historyFrom({ history: written })).toHaveLength(written.length)
       }
     })
 

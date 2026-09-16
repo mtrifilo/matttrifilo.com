@@ -73,6 +73,19 @@ describe('summarise', () => {
     expect(summary.totals.total).toBe(1)
   })
 
+  test('counts the tests that were sent a second time', () => {
+    const retried = {
+      ...row('golden', true),
+      metadata: { model: 'gemini-x', attempt: 2 },
+    }
+    const summary = summarise({
+      results: file([row('golden', true), retried, retried]),
+      commit: 'c',
+      ranAt: 'r',
+    })
+    expect(summary.retried).toBe(2)
+  })
+
   test('an empty run reports nothing rather than throwing', () => {
     const summary = summarise({ results: {}, commit: 'c', ranAt: 'r' })
     expect(summary.suites).toEqual([])
@@ -83,7 +96,7 @@ describe('summarise', () => {
 
 describe('allPassed', () => {
   test('true only when every test passed', () => {
-    const base = { commit: 'c', ranAt: 'r', model: 'm' }
+    const base = { commit: 'c', ranAt: 'r', model: 'm', retried: 0 }
     expect(
       allPassed({ ...base, suites: [], totals: { passed: 3, total: 3 } })
     ).toBe(true)
@@ -100,6 +113,7 @@ describe('allPassed', () => {
         model: 'm',
         suites: [],
         totals: { passed: 0, total: 0 },
+        retried: 0,
       })
     ).toBe(false)
   })
@@ -113,6 +127,7 @@ describe('markdownTable', () => {
       model: 'gemini-3.8-flash',
       suites: [{ name: 'golden', passed: 31, total: 32 }],
       totals: { passed: 31, total: 32 },
+      retried: 2,
     })
 
     expect(table).toContain('| golden | 31 | 32 |')

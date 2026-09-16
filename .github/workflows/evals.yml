@@ -57,7 +57,7 @@ jobs:
           # gate should do.
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
           if printf '%s\n' "$changed" \
-            | grep -E '^(content/knowledge/|lib/chat/|lib/knowledge/|lib/ai/vertex\.ts|evals/|\.github/workflows/evals\.yml)' \
+            | grep -E '^(content/knowledge/|lib/chat/|lib/knowledge/|lib/ai/|lib/env\.ts|app/api/chat/|evals/|\.github/workflows/evals\.yml)' \
             > /dev/null; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -172,10 +172,15 @@ jobs:
           # promptfoo's own Vertex provider, which grades the llm-rubric
           # assertions, resolves its project separately from ours.
           VERTEX_PROJECT_ID: ${{ steps.project.outputs.id }}
-          # promptfoo keys its cache on the prompt and the vars. The provider's
-          # real input also includes the corpus and the policy, neither of
-          # which is in that key, so a cached result after a corpus change
-          # would be a false pass. Every run here is a real run.
+          # Load-bearing, and not for the reason it looks like: promptfoo does
+          # not cache a custom provider's calls at all, so this does nothing to
+          # the chat route. What it turns off is the GRADER cache, which is
+          # keyed on the request body. The three rubric members of every
+          # assert-set send byte-identical prompts at temperature 0, so with
+          # the cache on, grades two and three are hits of grade one and the
+          # two-of-three tolerance the 0.6 threshold exists for collapses to a
+          # single opinion. The npm scripts set it too, so a local re-run means
+          # what the runbook says it means. Do not remove it.
           PROMPTFOO_CACHE_ENABLED: 'false'
           # Nothing about a run leaves the runner. promptfoo's telemetry sends
           # only command and version metadata, but a project whose position is

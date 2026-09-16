@@ -2,6 +2,12 @@ import { geminiModel, getVertex, usesVercelFederation } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
 import type { KnowledgeDocument } from '@/lib/knowledge'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
+import {
+  chatRequest,
+  envelopeCode,
+  historyFrom,
+  isTransportCode,
+} from './route-request'
 import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
 
 /**
@@ -23,12 +29,6 @@ import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
  * The response is read through the stream's public shape only, so a new part
  * added to the stream elsewhere does not change what a suite sees.
  */
-
-/** One prior exchange, as a suite writes it in YAML. */
-interface HistoryTurn {
-  role: 'user' | 'assistant'
-  text: string
-}
 
 interface ProviderOptions {
   id?: string
@@ -183,16 +183,6 @@ export default class ChatRouteProvider {
 }
 
 /**
- * The two codes that mean the model was never reached, or was lost on the way
- * back: a stalled connection the bounded fetch gave up on, and a token
- * exchange or provider call that threw before the stream existed. Every other
- * code is the route deciding something, which is exactly what a suite is for.
- */
-export function isTransportCode(code: string): boolean {
-  return code === 'interrupted' || code === 'unavailable'
-}
-
-/**
  * Reported as a promptfoo error rather than an empty answer.
  *
  * A run that never reached the model has not told us anything about the
@@ -220,58 +210,4 @@ function flags(metadata: StreamedMetadata) {
     ...(metadata.truncated ? { truncated: true as const } : {}),
     ...(metadata.incomplete ? { incomplete: true as const } : {}),
   }
-}
-
-/** The body the AI SDK client posts: one text part per message. */
-function chatRequest(question: string, history: HistoryTurn[]): Request {
-  const messages = [...history, { role: 'user' as const, text: question }].map(
-    (turn, index) => ({
-      id: `${turn.role}-${index}`,
-      role: turn.role,
-      parts: [{ type: 'text', text: turn.text }],
-    })
-  )
-  return new Request('https://matttrifilo.com/api/chat', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages }),
-  })
-}
-
-/**
- * Prior turns for the multi-turn suites, from the test's `history` var.
- *
- * They travel in the body exactly as a browser would send them, which is the
- * point: the policy treats a replayed assistant turn as unverified visitor
- * text, and the escalation tests exist to prove it.
- */
-function historyFrom(vars: Record<string, unknown> | undefined): HistoryTurn[] {
-  const history = vars?.history
-  if (!Array.isArray(history)) return []
-  const turns: HistoryTurn[] = []
-  for (const entry of history) {
-    if (typeof entry !== 'object' || entry === null) continue
-    const { role, text } = entry as { role?: unknown; text?: unknown }
-    if (role !== 'user' && role !== 'assistant') continue
-    if (typeof text !== 'string') continue
-    turns.push({ role, text })
-  }
-  return turns
-}
-
-/** The `code` out of a chat error envelope, or the raw body if it is not one. */
-function envelopeCode(body: string): string {
-  try {
-    const parsed: unknown = JSON.parse(body)
-    if (typeof parsed === 'object' && parsed !== null) {
-      const error = (parsed as { error?: unknown }).error
-      if (typeof error === 'object' && error !== null) {
-        const code = (error as { code?: unknown }).code
-        if (typeof code === 'string') return code
-      }
-    }
-  } catch {
-    // Not JSON: fall through to the raw body below.
-  }
-  return body.slice(0, 200)
 }

@@ -52,6 +52,16 @@ describe('usesVercelFederation', () => {
       )
     }
   })
+
+  test('a deployment never takes the ADC path, however its env looks', () => {
+    // The fallback is for CI and laptops. On Vercel a missing variable has to
+    // keep failing through readEnv with its own name, as it did before this
+    // branch existed, not degrade to a credential Vercel does not have.
+    expect(usesVercelFederation({ VERCEL: '1' })).toBe(true)
+    expect(
+      usesVercelFederation({ VERCEL: '1', GCP_PROJECT_NUMBER: '123' })
+    ).toBe(true)
+  })
 })
 
 describe('getVertex without the Vercel variables', () => {

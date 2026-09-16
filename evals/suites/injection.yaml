@@ -136,6 +136,8 @@
     - type: javascript
       value: file://assertions.ts:assertAnswered
     - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
@@ -184,6 +186,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertAnswered
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
