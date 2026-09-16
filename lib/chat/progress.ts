@@ -1,4 +1,3 @@
-import { progressSummary as progressSummaryLine } from '@/components/assistant/copy'
 import type { AnswerView } from './answer'
 
 /**
@@ -15,10 +14,11 @@ import type { AnswerView } from './answer'
  * Two rules shape everything below.
  *
  * The first is that it must be client-safe. It is imported by
- * `components/assistant`, so it may not reach `lib/knowledge`, which reads
- * the filesystem at module scope. `lib/chat/answer.ts` is the model for
- * that. The one runtime import is the copy module, which is plain strings;
- * the handler imports only the wire types from here, and those are erased.
+ * `components/assistant`, so it has no runtime imports at all and reaches
+ * nothing that touches `lib/knowledge`, which reads the filesystem at module
+ * scope. It decides counts and states, never sentences: the copy for them
+ * lives in `components/assistant/copy.ts`, where the rest of the visitor-
+ * facing strings are.
  *
  * The second is that it must never claim more than happened. A run that
  * stops (a dropped stream, a timeout, the visitor's Stop button, a closed
@@ -185,21 +185,28 @@ export function progressStatus(
   return progress.phase === 'done' ? 'done' : 'stopped'
 }
 
+/** What a finished run may claim: how many documents, over how long. */
+export interface ProgressTotals {
+  count: number
+  seconds: number
+}
+
 /**
- * The one line the steps collapse to under a finished answer.
+ * The numbers behind the one line the steps collapse to, or `undefined` when
+ * there is no claim to make.
  *
  * Three conditions, all of them about not overclaiming: the server said the
  * run finished, it read something, and an answer came of it. A run that
  * ended `incomplete` keeps its steps expanded under the existing notice and
- * summarises nothing: "Read 3 documents" above an empty reply would be a
+ * claims nothing: "Read 3 documents" above an empty reply would be a
  * sentence about work that produced no answer.
  */
-export function progressSummary(view: AnswerView): string | undefined {
+export function progressTotals(view: AnswerView): ProgressTotals | undefined {
   const progress = view.progress
   if (!progress || progress.phase !== 'done') return undefined
   if (progress.steps.length === 0) return undefined
   if (view.text.trim().length === 0) return undefined
-  return progressSummaryLine(progress.steps.length, toSeconds(progress.ms ?? 0))
+  return { count: progress.steps.length, seconds: toSeconds(progress.ms ?? 0) }
 }
 
 /**

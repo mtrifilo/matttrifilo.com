@@ -12,11 +12,12 @@ import type { ChatErrorCode } from './validate'
  * asserted without a browser, a stream, or a model.
  *
  * It is one of the two modules in lib/chat that the client bundle may import,
- * and that is why its only runtime import is the other one. prompt.ts,
- * validate.ts and handler.ts all reach lib/knowledge, which reads the
- * filesystem at module scope; pulling any of them into a client component
- * would break the build. The type imports above are erased at compile time,
- * so the shapes stay defined once and the bytes stay on the server.
+ * and ./progress, which has no runtime imports of its own, is the only thing
+ * it pulls in at runtime. prompt.ts, validate.ts and handler.ts all reach
+ * lib/knowledge, which reads the filesystem at module scope; pulling any of
+ * them into a client component would break the build. The type imports above
+ * are erased at compile time, so the shapes stay defined once and the bytes
+ * stay on the server.
  */
 
 /**

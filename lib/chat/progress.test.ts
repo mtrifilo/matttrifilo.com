@@ -3,7 +3,7 @@ import { announcementFor, type AnswerView } from './answer'
 import {
   PROGRESS_PART_TYPE,
   progressStatus,
-  progressSummary,
+  progressTotals,
   toProgressView,
   type ChatProgressPhase,
   type ProgressView,
@@ -173,49 +173,44 @@ describe('progressStatus', () => {
   })
 })
 
-describe('progressSummary', () => {
+describe('progressTotals', () => {
   test('counts the documents and the seconds', () => {
-    expect(progressSummary(viewWith(done(3, 14_200)))).toBe(
-      'Read 3 documents in 14s'
-    )
-  })
-
-  test('says document, singular, for one', () => {
-    expect(progressSummary(viewWith(done(1, 9_400)))).toBe(
-      'Read 1 document in 9s'
-    )
+    expect(progressTotals(viewWith(done(3, 14_200)))).toEqual({
+      count: 3,
+      seconds: 14,
+    })
   })
 
   test('rounds to the nearest second, and never to none', () => {
-    expect(progressSummary(viewWith(done(1, 9_600)))).toContain('10s')
-    expect(progressSummary(viewWith(done(1, 400)))).toContain('1s')
-    expect(progressSummary(viewWith(done(1, 0)))).toContain('1s')
+    expect(progressTotals(viewWith(done(1, 9_600)))?.seconds).toBe(10)
+    expect(progressTotals(viewWith(done(1, 400)))?.seconds).toBe(1)
+    expect(progressTotals(viewWith(done(1, 0)))?.seconds).toBe(1)
   })
 
   test('claims nothing when the run produced no answer', () => {
     // The incomplete case: the reads happened, but "Read 3 documents" above
     // an empty reply describes work that came to nothing.
-    expect(progressSummary(viewWith(done(3, 14_000), ''))).toBeUndefined()
-    expect(progressSummary(viewWith(done(3, 14_000), '   '))).toBeUndefined()
+    expect(progressTotals(viewWith(done(3, 14_000), ''))).toBeUndefined()
+    expect(progressTotals(viewWith(done(3, 14_000), '   '))).toBeUndefined()
   })
 
   test('claims nothing before the run has ended', () => {
-    expect(progressSummary(viewWith(reading('Résumé')))).toBeUndefined()
+    expect(progressTotals(viewWith(reading('Résumé')))).toBeUndefined()
     expect(
-      progressSummary(viewWith({ phase: 'writing', steps: [step('a', 'A')] }))
+      progressTotals(viewWith({ phase: 'writing', steps: [step('a', 'A')] }))
     ).toBeUndefined()
   })
 
   test('claims nothing when nothing was read', () => {
-    expect(progressSummary(viewWith(done(0, 4_000)))).toBeUndefined()
-    expect(progressSummary(viewWith(undefined))).toBeUndefined()
+    expect(progressTotals(viewWith(done(0, 4_000)))).toBeUndefined()
+    expect(progressTotals(viewWith(undefined))).toBeUndefined()
   })
 
-  test('a missing duration still reads as a real span, not zero', () => {
+  test('a missing duration still counts as a real span, not zero', () => {
     const phase: ChatProgressPhase = 'done'
-    expect(progressSummary(viewWith({ phase, steps: [step('a', 'A')] }))).toBe(
-      'Read 1 document in 1s'
-    )
+    expect(
+      progressTotals(viewWith({ phase, steps: [step('a', 'A')] }))
+    ).toEqual({ count: 1, seconds: 1 })
   })
 })
 

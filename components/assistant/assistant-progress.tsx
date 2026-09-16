@@ -10,7 +10,7 @@ import {
 import type { AnswerView } from '@/lib/chat/answer'
 import {
   progressStatus,
-  progressSummary,
+  progressTotals,
   type ChatProgressStep,
   type ProgressView,
 } from '@/lib/chat/progress'
@@ -19,6 +19,7 @@ import {
   PROGRESS_THINKING,
   PROGRESS_WRITING,
   progressReading,
+  progressSummary,
 } from './copy'
 
 /**
@@ -60,18 +61,18 @@ export function AssistantProgress({
 
   if (status === 'done') {
     const steps = view.progress?.steps ?? []
-    const summary = progressSummary(view)
-    // No summary means the run finished but produced no answer for the
+    const totals = progressTotals(view)
+    // No totals means the run finished but produced no answer for the
     // reading to have gone into. The steps are still true, so they stay on
     // screen: expanded, under the "couldn't finish" notice, claiming
     // nothing about what came of them.
-    if (!summary) return <Rows rows={doneRows(steps)} />
+    if (!totals) return <Rows rows={doneRows(steps)} />
 
     return (
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
           <FileText aria-hidden="true" className="size-3.5 shrink-0" />
-          <span>{summary}</span>
+          <span>{progressSummary(totals.count, totals.seconds)}</span>
           <ChevronDown
             aria-hidden="true"
             className="size-3.5 shrink-0 transition-transform group-open:rotate-180"
