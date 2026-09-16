@@ -87,10 +87,20 @@ export interface ChatHandlerDeps {
 
 /** The part of BotID's classification the route acts on and logs. */
 export interface VisitorVerdict {
+  /**
+   * Typed boolean, but it arrives from a third-party JSON payload: an error
+   * body from the classifier leaves it undefined. The route treats anything
+   * but an explicit `false` as a bot.
+   */
   isBot: boolean
   /** A crawler on Vercel's verified list. Still refused: this is a POST. */
   isVerifiedBot: boolean
-  /** True in local development, where BotID does not run. */
+  /**
+   * Two sources. In local development BotID does not run and reports a
+   * bypass; in production the flag is whatever the classifier said. The
+   * route serves either, and logs the production case at warn level, since
+   * a production bypass is a request served without a classification.
+   */
   bypassed: boolean
 }
 
@@ -159,17 +169,34 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     // should do no work at all.
     if (isChatDisabled(env)) return rejectionResponse('disabled')
 
-    // Then the visitor, still before the body: an automated caller gets a
-    // 403 for the price of a header check, not a parse. Verified crawlers
+    // Then the visitor, still before the body. This is a network call to
+    // the classifier, not a header check, and it is the one place a
+    // third-party payload crosses into the route, so it is validated rather
+    // than trusted: only an explicit "not a bot" passes. Verified crawlers
     // are refused too; nothing they are allowed to do involves POSTing a
-    // question. The verdict is the one piece of per-request metadata that
-    // is logged beyond counts, and only as flags.
-    const visitor = await verifyVisitor()
-    if (visitor.isBot) {
-      logRejection('blocked', { verifiedBot: visitor.isVerifiedBot })
-      return errorResponse('blocked')
+    // question. A classifier that errors or stalls fails closed with the
+    // same envelope as a model outage: refusing real visitors for a minute
+    // costs less than serving every bot for as long as it is down. The
+    // verdict is the one piece of per-request metadata logged beyond
+    // counts, and only as flags.
+    let visitor: VisitorVerdict
+    try {
+      visitor = await verifyVisitor()
+    } catch (error) {
+      logFailure(error)
+      return errorResponse('unavailable')
     }
-    if (visitor.bypassed) console.info('[chat]', { botIdBypassed: true })
+    if (visitor.isBot !== false || visitor.isVerifiedBot === true) {
+      return rejectionResponse('blocked', {
+        verifiedBot: visitor.isVerifiedBot === true,
+      })
+    }
+    if (visitor.bypassed === true) {
+      console.warn('[chat]', {
+        botIdBypassed: true,
+        env: env.VERCEL_ENV ?? 'unknown',
+      })
+    }
 
     let body: unknown
     try {
@@ -447,8 +474,11 @@ function errorResponse(
 }
 
 /** A refusal the handler decides on its own, logged like any other. */
-function rejectionResponse(code: 'disabled' | 'invalid'): Response {
-  logRejection(code)
+function rejectionResponse(
+  code: 'disabled' | 'blocked' | 'invalid',
+  flags: Record<string, boolean> = {}
+): Response {
+  logRejection(code, flags)
   return errorResponse(code)
 }
 

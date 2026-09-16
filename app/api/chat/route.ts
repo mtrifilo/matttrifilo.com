@@ -1,4 +1,5 @@
 import { checkBotId } from 'botid/server'
+import { boundVerdict } from '@/lib/chat/visitor'
 import { geminiModel, getVertex } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
@@ -21,6 +22,7 @@ export const POST = createChatHandler({
   // rewrites it needs are added by withBotId in next.config.ts. Basic is
   // the free tier; Deep Analysis is a dashboard switch plus
   // `advancedOptions: { checkLevel: 'deepAnalysis' }` here, when logs show
-  // automation getting past Basic.
-  verifyVisitor: () => checkBotId(),
+  // automation getting past Basic. checkBotId has no timeout of its own;
+  // boundVerdict gives it one, and the handler fails closed on it.
+  verifyVisitor: () => boundVerdict(checkBotId()),
 })

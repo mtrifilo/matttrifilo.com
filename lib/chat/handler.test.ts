@@ -400,12 +400,14 @@ describe('bot protection', () => {
     expect(await response.json()).toEqual(chatErrorBody('blocked'))
   })
 
-  test('a verified crawler is refused too, and the flag is logged', async () => {
+  test('a verified crawler is refused even when not flagged as a bot', async () => {
+    // "Verified" is Vercel's good-crawler list. Whether such a caller also
+    // carries isBot is the vendor's call; this route refuses it either way.
     const response = await handlerWith(
       readingModel(),
       {},
       {
-        isBot: true,
+        isBot: false,
         isVerifiedBot: true,
         bypassed: false,
       }
@@ -438,10 +440,10 @@ describe('bot protection', () => {
     expect(asked).toBe(false)
   })
 
-  test('a development bypass is logged as a flag, not treated as a bot', async () => {
+  test('a bypass is served and logged with the environment', async () => {
     const response = await handlerWith(
       readingModel(),
-      {},
+      { VERCEL_ENV: 'production' },
       {
         isBot: false,
         isVerifiedBot: false,
@@ -449,7 +451,50 @@ describe('bot protection', () => {
       }
     )(post({ messages: [uiMessage('user', QUESTION)] }))
     expect(response.status).toBe(200)
-    expect(loggedText()).toContain('botIdBypassed')
+    const line = logged.find(
+      args =>
+        args[0] === '[chat]' &&
+        (args[1] as { botIdBypassed?: boolean }).botIdBypassed
+    )
+    expect(line?.[1]).toEqual({ botIdBypassed: true, env: 'production' })
+  })
+
+  test('a verdict without an explicit isBot is refused, not served', async () => {
+    // An error body from the classifier parses to a verdict with no isBot
+    // at all; the typed boolean is undefined at runtime.
+    const model = readingModel()
+    const response = await handlerWith(
+      model,
+      {},
+      {
+        isBot: undefined as never,
+        isVerifiedBot: undefined as never,
+        bypassed: undefined as never,
+      }
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual(chatErrorBody('blocked'))
+    expect(model.doStreamCalls).toHaveLength(0)
+  })
+
+  test('a classifier that fails is a 502 with the envelope, logged as a stage', async () => {
+    const model = readingModel()
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.reject(new Error('botid down')),
+      env: {},
+    })
+    const response = await handler(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual(chatErrorBody('unavailable'))
+    expect(model.doStreamCalls).toHaveLength(0)
+    expect(loggedText()).toContain('"stage"')
+    expect(loggedText()).not.toContain(QUESTION)
+    expect(loggedText()).not.toContain('botid down')
   })
 })
 

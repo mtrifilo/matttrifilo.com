@@ -19,7 +19,7 @@ import {
   toChatErrorView,
 } from '@/lib/chat/answer'
 import type { ChatUIMessage } from '@/lib/chat/handler'
-import { withRateLimitEnvelope } from '@/lib/chat/transport'
+import { createChatFetch } from '@/lib/chat/transport'
 import { AnswerShimmer } from './answer-shimmer'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
@@ -38,7 +38,7 @@ import { takePendingQuestion } from './pending-question'
 // the module can be evaluated before the browser globals exist.
 const transport = new DefaultChatTransport<ChatUIMessage>({
   api: '/api/chat',
-  fetch: withRateLimitEnvelope((input, init) => fetch(input, init)),
+  fetch: createChatFetch((input, init) => fetch(input, init)),
 })
 
 /**

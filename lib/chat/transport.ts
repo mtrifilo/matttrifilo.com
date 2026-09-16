@@ -1,25 +1,45 @@
+import { CHAT_UNKNOWN_ERROR_MESSAGE } from './answer'
 import type { ChatErrorBody } from './validate'
 
 /**
  * The browser's side of the chat route's refusals (MTC-34).
  *
- * Like answer.ts, this module is imported by the client bundle, so it has no
- * runtime imports; the one import above is a type.
+ * Like answer.ts, this module is imported by the client bundle, so its only
+ * runtime import is answer.ts, which has none.
  *
  * The route answers every refusal with the `{ error: { code, message } }`
- * envelope, and the UI renders the code. One refusal never comes from the
- * route: the Vercel WAF rate limit answers a 429 at the edge with its own
- * body, before the function runs. The AI SDK's transport keeps only a
- * response's text, not its status, so without help that 429 would render as
- * the generic "something went wrong" instead of the rate-limit notice with
- * the résumé and project links. This wrapper gives the edge's 429 the
- * envelope the UI already understands.
+ * envelope, and the UI renders the code. Two failures never come from the
+ * route, and this wrapper gives both the envelope the UI already
+ * understands:
+ *
+ * - The Vercel WAF rate limit answers a 429 at the edge with its own body,
+ *   before the function runs. The AI SDK's transport keeps only a
+ *   response's text, not its status, so without help that 429 would render
+ *   as the generic "something went wrong" instead of the rate-limit notice.
+ * - BotID patches `window.fetch` to run its challenge before a protected
+ *   request. If the challenge script fails to load, a second attempt in the
+ *   same tab can wait on it forever, and `useChat` would spin with no
+ *   request ever sent. A bound on time to response headers turns that into
+ *   the ordinary error notice.
  */
 
 /** `message` is a placeholder: the UI renders its own rate-limit copy. */
 export const RATE_LIMITED_ENVELOPE: ChatErrorBody = {
   error: { code: 'rate_limited', message: 'Rate limited.' },
 }
+
+/** What a request that never produced headers is reported as. */
+export const UNAVAILABLE_ENVELOPE: ChatErrorBody = {
+  error: { code: 'unavailable', message: CHAT_UNKNOWN_ERROR_MESSAGE },
+}
+
+/**
+ * The route returns its response as soon as the model call is started, so
+ * headers normally arrive within a few seconds even when the answer takes
+ * thirty. Twenty seconds leaves room for a slow classifier and a slow cold
+ * start and still ends a hung challenge before a visitor gives up.
+ */
+export const CHAT_HEADERS_TIMEOUT_MS = 20_000
 
 type FetchLike = (
   input: RequestInfo | URL,
@@ -28,19 +48,59 @@ type FetchLike = (
 
 type Fetch = typeof globalThis.fetch
 
+const HEADERS_TIMEOUT = Symbol('chat headers timeout')
+
+export interface ChatFetchOptions {
+  headersTimeoutMs?: number
+}
+
 /**
- * A fetch that rewrites a 429 whose body is not already the route's envelope
- * into one that is. Everything else passes through untouched, including a
- * 429 the route itself sends once MTC-34's in-app limiter exists.
+ * The fetch the chat transport uses. Everything but the two cases above
+ * passes through untouched, the original `Response` object included, so
+ * streaming is unaffected; the caller's abort signal is honoured throughout.
  *
  * Returned as the platform's `fetch` type because that is what the AI SDK's
  * transport accepts. Node's version of that type carries a `preconnect`
- * hint; it is forwarded when the wrapped fetch has one and is a no-op
- * otherwise, since nothing here preconnects.
+ * hint; nothing here preconnects, so it is a no-op.
  */
-export function withRateLimitEnvelope(fetchImpl: FetchLike): Fetch {
+export function createChatFetch(
+  fetchImpl: FetchLike,
+  { headersTimeoutMs = CHAT_HEADERS_TIMEOUT_MS }: ChatFetchOptions = {}
+): Fetch {
   const wrapped = (async (input, init) => {
-    const response = await fetchImpl(input, init)
+    const callerSignal = init?.signal ?? undefined
+    const controller = new AbortController()
+    if (callerSignal?.aborted) controller.abort(callerSignal.reason)
+    else
+      callerSignal?.addEventListener(
+        'abort',
+        () => controller.abort(callerSignal.reason),
+        { once: true }
+      )
+    const timer = setTimeout(
+      () => controller.abort(HEADERS_TIMEOUT),
+      headersTimeoutMs
+    )
+
+    let response: Response
+    try {
+      response = await fetchImpl(input, { ...init, signal: controller.signal })
+    } catch (error) {
+      // Only this wrapper's own timeout is turned into a refusal. A caller
+      // abort (the visitor pressed stop, or left) and every other failure
+      // keep their meaning for useChat.
+      if (
+        controller.signal.reason === HEADERS_TIMEOUT &&
+        !callerSignal?.aborted
+      ) {
+        return envelope(UNAVAILABLE_ENVELOPE, 502)
+      }
+      throw error
+    } finally {
+      // Headers are in: the body may take as long as it takes.
+      clearTimeout(timer)
+    }
+
     if (response.status !== 429) return response
 
     const text = await response.text()
@@ -50,16 +110,17 @@ export function withRateLimitEnvelope(fetchImpl: FetchLike): Fetch {
         headers: response.headers,
       })
     }
-    return new Response(JSON.stringify(RATE_LIMITED_ENVELOPE), {
-      status: 429,
-      headers: { 'content-type': 'application/json' },
-    })
+    return envelope(RATE_LIMITED_ENVELOPE, 429)
   }) as Fetch
-  wrapped.preconnect =
-    'preconnect' in fetchImpl
-      ? (fetchImpl as Fetch).preconnect
-      : () => undefined
+  wrapped.preconnect = () => undefined
   return wrapped
+}
+
+function envelope(body: ChatErrorBody, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
 function isEnvelope(text: string): boolean {
