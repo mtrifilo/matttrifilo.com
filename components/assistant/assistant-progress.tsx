@@ -21,6 +21,7 @@ import {
   PROGRESS_STOPPED,
   PROGRESS_THINKING,
   PROGRESS_UNFINISHED,
+  PROGRESS_WORKING,
   PROGRESS_WRITING,
   progressReading,
   progressSummary,
@@ -133,9 +134,8 @@ function headline(
 ): string {
   if (status === 'stopped') return PROGRESS_STOPPED
   if (status === 'done') return PROGRESS_UNFINISHED
-  const current = rows[rows.length - 1]
-  if (!current) return PROGRESS_THINKING
-  return label(current)
+  if (status === 'thinking' || rows.length === 0) return PROGRESS_THINKING
+  return PROGRESS_WORKING
 }
 
 /**

@@ -682,7 +682,7 @@ describe('a normal request', () => {
 
     const call = model.doStreamCalls[0]
     expect(call.temperature).toBe(0.2)
-    expect(call.maxOutputTokens).toBe(1_000)
+    expect(call.maxOutputTokens).toBe(1_600)
     expect(call.reasoning).toBe('none')
     expect(call.tools?.map(t => t.name)).toEqual([READ_DOCUMENT_TOOL_NAME])
   })
@@ -1123,8 +1123,26 @@ describe('progress on the stream', () => {
     ).text()
 
     // The narration is text, not a read: the first progress chunk is the
-    // read that follows it, not a "writing" for the preamble.
+    // read that follows it, not a "writing" for the preamble. And the
+    // preamble itself must not reach the bubble (MTC-49).
     expect(progressFrom(body)[0]?.phase).toBe('reading')
+    expect(body).not.toContain('Let me check his résumé.')
+    expect(body).toContain('He led the platform migration.')
+  })
+
+  test('text from a tool-calling step never reaches the browser', async () => {
+    const model = modelOf(
+      readsAfterSaying('I will open the FAQ next.', 'faq'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(body).not.toContain('I will open the FAQ next.')
+    expect(body).toContain('He led the platform migration.')
   })
 
   test('a stream that fails after a read never says it finished', async () => {

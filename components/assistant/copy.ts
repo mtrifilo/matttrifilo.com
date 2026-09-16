@@ -20,7 +20,7 @@ export const ASSISTANT_NAME = "Matt's Career Assistant"
 export const ASSISTANT_LABEL = 'AI assistant · answers about Matt Trifilo'
 
 export const ASSISTANT_INTRO =
-  "I'm an AI assistant for Matt Trifilo's site. Ask me about his projects, teams, or engineering leadership."
+  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work — email him if you want to talk."
 
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
@@ -80,6 +80,13 @@ export const RATE_LIMIT_NOTICE = {
 
 /** Before the first read: the model is still choosing what to open. */
 export const PROGRESS_THINKING = 'Thinking…'
+
+/**
+ * Header while documents are being read or the answer is being written.
+ * Rows underneath name the current step; repeating that label here was
+ * the duplication Cursor avoids (MTC-42 preview notes).
+ */
+export const PROGRESS_WORKING = 'Working…'
 
 /**
  * One line per document, titled from the server's index, never the model.

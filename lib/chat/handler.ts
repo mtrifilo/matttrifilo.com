@@ -59,8 +59,8 @@ import {
  *
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat:
- * with a 26k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
- * steps, the worst case is roughly 26k + 33k + 39k + 46k ≈ 144k input tokens
+ * with a 30k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
+ * steps, the worst case is roughly 30k + 37k + 43k + 50k ≈ 160k input tokens
  * for one question. Vertex's implicit cache covers the stable prefix and
  * should take a large bite out of what is billed, but the ceiling is real and
  * it is why MTC-34's rate limit is not optional.
@@ -368,6 +368,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return createUIMessageStreamResponse({
         stream: toUIMessageStream<ChatTools, ChatUIMessage>({
           stream: result.stream,
+          // T3's rule: reasoning never mutates the answer. The SDK defaults
+          // sendReasoning to true, which would put thought summaries on the
+          // wire; the allowlist below would still drop them, but the default
+          // is the wrong one to rely on.
+          sendReasoning: false,
+          sendSources: false,
           messageMetadata: ({ part }) => {
             answer.observe(part)
             if (part.type !== 'finish') return undefined
@@ -394,6 +400,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           },
         })
           .pipeThrough(withProgress({ entries: index.entries, now, started }))
+          .pipeThrough(onlyAnswerText())
           .pipeThrough(onlyClientChunks()),
       })
     } catch (error) {
@@ -463,6 +470,74 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
   return new TransformStream({
     transform(chunk, controller) {
       if (CLIENT_CHUNK_TYPES.has(chunk.type)) controller.enqueue(chunk)
+    },
+  })
+}
+
+/**
+ * Holds text from a step until that step is known to be the answer, and
+ * drops it when the step called a tool (MTC-49).
+ *
+ * Models routinely narrate before a read ("Let me check his résumé."). That
+ * prose is `text-delta`, the same chunk type as the answer, so an allowlist
+ * that forwards every text chunk puts chain-of-thought in the bubble. T3
+ * Code never lets a non-`assistant_text` delta mutate the message; this is
+ * the same gate for a one-tool loop: text from a tool-calling step is
+ * scratchpad, text from a step that only wrote is the answer.
+ *
+ * Held until `finish-step` so a live token cannot race a tool call that
+ * arrives later in the same step. The answer therefore appears when that
+ * step ends rather than token-by-token; the progress view already covers
+ * the wait. An abort or error mid-answer flushes what was held so a
+ * partial briefing is not thrown away.
+ */
+function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
+  let held: ChatUIChunk[] = []
+  let dropText = false
+
+  function flushHeld(
+    controller: TransformStreamDefaultController<ChatUIChunk>
+  ): void {
+    if (dropText) {
+      held = []
+      return
+    }
+    for (const part of held) controller.enqueue(part)
+    held = []
+  }
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (chunk.type === 'start-step') {
+        flushHeld(controller)
+        dropText = false
+        controller.enqueue(chunk)
+        return
+      }
+      if (chunk.type.startsWith('tool-')) {
+        dropText = true
+        held = []
+        controller.enqueue(chunk)
+        return
+      }
+      if (
+        chunk.type === 'text-start' ||
+        chunk.type === 'text-delta' ||
+        chunk.type === 'text-end'
+      ) {
+        if (!dropText) held.push(chunk)
+        return
+      }
+      if (chunk.type.startsWith('reasoning')) return
+      if (chunk.type === 'finish-step' || chunk.type === 'error') {
+        flushHeld(controller)
+        controller.enqueue(chunk)
+        return
+      }
+      controller.enqueue(chunk)
+    },
+    flush(controller) {
+      flushHeld(controller)
     },
   })
 }

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import {
   MATT_EMAIL,
+  PROGRESS_THINKING,
+  PROGRESS_WORKING,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   progressReading,
@@ -48,6 +50,11 @@ describe('the progress copy', () => {
     // module. This is the tripwire for the two drifting apart.
     expect(progressReading('Résumé')).toBe(`${'Reading Résumé'}…`)
     expect(PROGRESS_WRITING).toBe(`${'Writing answer'}…`)
+  })
+
+  test('the in-flight header is Working, not a repeat of the active row', () => {
+    expect(PROGRESS_WORKING).toBe('Working…')
+    expect(PROGRESS_THINKING).toBe('Thinking…')
   })
 })
 

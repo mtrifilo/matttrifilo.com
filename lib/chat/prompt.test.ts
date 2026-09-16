@@ -91,6 +91,20 @@ describe('the reading policy', () => {
     )
   })
 
+  test('forbids narration and scratchpad in the visible answer', () => {
+    expect(SYSTEM_PROMPT).toContain('Never write thinking, a plan, or narration')
+    expect(SYSTEM_PROMPT).toContain('let me check')
+    expect(SYSTEM_PROMPT).toContain(
+      'The first word the visitor sees is the briefing or the decline sentence'
+    )
+  })
+
+  test('asks for a hiring-manager briefing, not a chatbot one-liner', () => {
+    expect(SYSTEM_PROMPT).toContain('hiring manager')
+    expect(SYSTEM_PROMPT).toContain('not a chatbot one-liner')
+    expect(SYSTEM_PROMPT).not.toContain('Be brief and concrete: a few sentences')
+  })
+
   test('says the index is a catalogue, never a source', () => {
     expect(SYSTEM_PROMPT).toContain('The index is a catalogue, not a source')
     expect(SYSTEM_PROMPT).toContain('You never answer from a summary')
