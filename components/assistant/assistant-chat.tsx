@@ -1,6 +1,7 @@
 'use client'
 
 import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import { RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -18,6 +19,7 @@ import {
   toChatErrorView,
 } from '@/lib/chat/answer'
 import type { ChatUIMessage } from '@/lib/chat/handler'
+import { withRateLimitEnvelope } from '@/lib/chat/transport'
 import { AnswerShimmer } from './answer-shimmer'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
@@ -31,6 +33,13 @@ import {
   RESET_LABEL,
 } from './copy'
 import { takePendingQuestion } from './pending-question'
+
+// One transport for the page's life. `fetch` is looked up at call time so
+// the module can be evaluated before the browser globals exist.
+const transport = new DefaultChatTransport<ChatUIMessage>({
+  api: '/api/chat',
+  fetch: withRateLimitEnvelope((input, init) => fetch(input, init)),
+})
 
 /**
  * The conversation at /ask (MTC-33).
@@ -65,6 +74,7 @@ export function AssistantChat() {
     regenerate,
     clearError,
   } = useChat<ChatUIMessage>({
+    transport,
     // A refused question comes back out of the transcript and into the box.
     // `useChat` adds the question before the request and keeps it after a
     // failure, so without this the same refused body is posted on every

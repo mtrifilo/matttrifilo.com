@@ -73,9 +73,25 @@ export interface ChatHandlerDeps {
    * the build rather than one request.
    */
   model: () => LanguageModel
+  /**
+   * Classifies the request as a person or automation before the body is
+   * read (MTC-34). In production this is Vercel BotID's `checkBotId`;
+   * tests inject a verdict. Required rather than defaulted so a deployment
+   * cannot forget it and serve the model to anything that can POST.
+   */
+  verifyVisitor: () => Promise<VisitorVerdict>
   env?: EnvSource
   /** Injected so the duration in the log is assertable. */
   now?: () => number
+}
+
+/** The part of BotID's classification the route acts on and logs. */
+export interface VisitorVerdict {
+  isBot: boolean
+  /** A crawler on Vercel's verified list. Still refused: this is a POST. */
+  isVerifiedBot: boolean
+  /** True in local development, where BotID does not run. */
+  bypassed: boolean
 }
 
 // Defined with the limits it feeds; re-exported so callers of the handler
@@ -133,6 +149,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     loadKnowledgeIndex,
     readKnowledgeDocument,
     model,
+    verifyVisitor,
     env = process.env,
     now = Date.now,
   } = deps
@@ -141,6 +158,18 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     // Before anything else, including reading the body: a disabled deployment
     // should do no work at all.
     if (isChatDisabled(env)) return rejectionResponse('disabled')
+
+    // Then the visitor, still before the body: an automated caller gets a
+    // 403 for the price of a header check, not a parse. Verified crawlers
+    // are refused too; nothing they are allowed to do involves POSTing a
+    // question. The verdict is the one piece of per-request metadata that
+    // is logged beyond counts, and only as flags.
+    const visitor = await verifyVisitor()
+    if (visitor.isBot) {
+      logRejection('blocked', { verifiedBot: visitor.isVerifiedBot })
+      return errorResponse('blocked')
+    }
+    if (visitor.bypassed) console.info('[chat]', { botIdBypassed: true })
 
     let body: unknown
     try {
@@ -411,7 +440,9 @@ function flatRefusals(r: {
   }
 }
 
-function errorResponse(code: 'disabled' | 'invalid' | 'unavailable'): Response {
+function errorResponse(
+  code: 'disabled' | 'blocked' | 'invalid' | 'unavailable'
+): Response {
   return Response.json(chatErrorBody(code), { status: CHAT_ERROR_STATUS[code] })
 }
 
@@ -489,9 +520,9 @@ function logCompletion({
   else console.info('[chat]', aggregate)
 }
 
-/** Makes refused requests visible in the logs, by code and nothing else. */
-function logRejection(code: string): void {
-  console.info('[chat]', { rejected: code })
+/** Makes refused requests visible in the logs, by code and flags only. */
+function logRejection(code: string, flags: Record<string, boolean> = {}): void {
+  console.info('[chat]', { rejected: code, ...flags })
 }
 
 /**

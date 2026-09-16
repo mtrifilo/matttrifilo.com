@@ -1,3 +1,4 @@
+import { checkBotId } from 'botid/server'
 import { geminiModel, getVertex } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
@@ -16,4 +17,10 @@ export const POST = createChatHandler({
   loadKnowledgeIndex,
   readKnowledgeDocument,
   model: () => getVertex()(geminiModel()),
+  // BotID Basic (MTC-34). The client half is instrumentation-client.ts; the
+  // rewrites it needs are added by withBotId in next.config.ts. Basic is
+  // the free tier; Deep Analysis is a dashboard switch plus
+  // `advancedOptions: { checkLevel: 'deepAnalysis' }` here, when logs show
+  // automation getting past Basic.
+  verifyVisitor: () => checkBotId(),
 })

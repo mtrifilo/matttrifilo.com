@@ -165,6 +165,7 @@ export const CHAT_UNKNOWN_ERROR_MESSAGE =
 
 const CHAT_ERROR_CODES: ReadonlySet<string> = new Set<ChatErrorCode>([
   'disabled',
+  'blocked',
   'too_many_turns',
   'message_too_long',
   'budget_exceeded',

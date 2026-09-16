@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { withBotId } from 'botid/next/config'
 
 const nextConfig: NextConfig = {
   /**
@@ -53,7 +54,7 @@ const nextConfig: NextConfig = {
               "font-src 'self'",
               "worker-src 'self' blob:",
               "connect-src 'self'",
-              "frame-src https://vercel.live",
+              'frame-src https://vercel.live',
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -65,4 +66,7 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+// Adds the same-origin rewrites that serve BotID's challenge script and
+// proxy its classification calls (MTC-34), which is what keeps the CSP
+// above unchanged: nothing new is loaded from a third-party host.
+export default withBotId(nextConfig)

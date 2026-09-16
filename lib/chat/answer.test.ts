@@ -212,6 +212,7 @@ describe('toChatErrorView', () => {
 
   test.each([
     'disabled',
+    'blocked',
     'too_many_turns',
     'message_too_long',
     'budget_exceeded',
