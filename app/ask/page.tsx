@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { AssistantChat } from '@/components/assistant/assistant-chat'
 
 export const metadata: Metadata = {
@@ -17,5 +19,8 @@ export const metadata: Metadata = {
  * decided entirely in app/api/chat and lib/chat.
  */
 export default function AskPage() {
+  // The kill switch hides the page, not just the route behind it: a page
+  // whose every question is refused is worse than no page.
+  if (isChatDisabled()) notFound()
   return <AssistantChat />
 }

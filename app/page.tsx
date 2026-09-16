@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { getAllBlogPosts } from '@/lib/blog'
 import { formatDate } from '@/lib/format-date'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
@@ -54,9 +55,11 @@ export default function Home() {
 
         {/* Matt's Career Assistant: a working input, not an advert for one.
             Submitting from here opens /ask with the answer already coming. */}
-        <div className="mb-16">
-          <HomeAssistantPanel />
-        </div>
+        {!isChatDisabled() && (
+          <div className="mb-16">
+            <HomeAssistantPanel />
+          </div>
+        )}
 
         {/* Latest Posts */}
         {recentPosts.length > 0 && (
