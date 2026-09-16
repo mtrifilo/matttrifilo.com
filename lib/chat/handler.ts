@@ -31,16 +31,8 @@ import {
   type ChatProgressPhase,
   type ChatProgressStep,
 } from './progress'
-import {
-  DECLINE_SENTENCE,
-  READ_DOCUMENT_TOOL_NAME,
-  buildMessages,
-} from './prompt'
-import {
-  createReadDocumentSession,
-  type ChatSource,
-  type ReadsRefused,
-} from './read-document'
+import { READ_DOCUMENT_TOOL_NAME, buildMessages } from './prompt'
+import { createReadDocumentSession, type ReadsRefused } from './read-document'
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_OUTPUT_TOKENS,
@@ -144,14 +136,8 @@ export interface VisitorVerdict {
 export { CHAT_MAX_STEPS }
 
 /**
- * Metadata the server attaches to the streamed message, for MTC-33.
+ * Metadata the server attaches to the streamed message.
  *
- * - `sources`: the documents this request actually read, named by the server,
- *   in read order. Authoritative, and what the chips should render. The
- *   `Sources:` line the policy asks the model to write is a secondary signal —
- *   a model can forget it or cite an id it never opened, so it must not drive
- *   the chips. Absent when there is nothing to cite, on a decline, and when
- *   the run produced no answer text at all; a truncated answer keeps them.
  * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
  *   answer is partial and still worth showing under a "cut short" notice.
  * - `incomplete`: the run ended without a clean answer — no text at all, or a
@@ -163,7 +149,6 @@ export { CHAT_MAX_STEPS }
  * never a falsy `false` the UI has to distinguish from "not set".
  */
 export interface ChatMessageMetadata {
-  sources?: ChatSource[]
   truncated?: true
   incomplete?: true
 }
@@ -172,14 +157,14 @@ export interface ChatMessageMetadata {
 type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
 
 /**
- * The message MTC-33 receives: answer text and the metadata above, and
- * nothing else.
+ * The message the browser receives: the answer text, the progress narration,
+ * and the metadata above.
  *
  * The SDK would also stream a `tool-output-available` part per read, carrying
- * the document's whole text — up to KNOWLEDGE_READ_BUDGET.maxTokens of it —
+ * the document's whole text, up to KNOWLEDGE_READ_BUDGET.maxTokens of it,
  * down to the browser. `onlyClientChunks` passes only the answer text, the
- * stream framing, and the finish metadata; everything else stays server-side. The UI needs the `sources` metadata, not the bytes,
- * so sending them would be bandwidth spent on a second copy of what the
+ * progress parts, the stream framing and the finish metadata; everything else
+ * stays server-side. The document bytes would be a second copy of what the
  * answer already summarises, and a channel through which a corpus that later
  * stops being wholly public would leak without anyone editing this route.
  */
@@ -387,32 +372,14 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             if (part.type !== 'finish') return undefined
 
             const metadata: ChatMessageMetadata = {}
-            // Lets MTC-33 show "this answer was cut short" instead of leaving
-            // a half sentence and a missing Sources line looking like an
-            // answer.
+            // Lets the transcript show "this answer was cut short" instead of
+            // leaving a half sentence looking like a finished answer.
             if (part.finishReason === 'length') metadata.truncated = true
             // No text, or any finish that is not a clean stop, means the run
-            // did not end with a finished answer — most often a model that
-            // spent every step reading. Say so. A length-truncated answer is
-            // still real text that was drawn from the documents read, so it
-            // keeps its chips; only a run with no answer at all withholds
-            // them, since citations under a blank reply claim it was sourced
-            // when it was never written.
+            // did not end with a finished answer, most often a model that
+            // spent every step reading. Say so.
             if (!answer.answered() || part.finishReason !== 'stop') {
               metadata.incomplete = true
-            }
-
-            const sources = session.sources()
-            // A decline is the one answer that may be written without
-            // reading. It can still follow reads that turned out not to
-            // answer the question, and chips under "I can't answer that"
-            // would claim the opposite, so they are dropped.
-            if (
-              sources.length > 0 &&
-              !answer.isDecline() &&
-              answer.answered()
-            ) {
-              metadata.sources = sources
             }
             return Object.keys(metadata).length > 0 ? metadata : undefined
           },
@@ -438,44 +405,27 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 }
 
 /**
- * Just enough of the answer to tell whether it is the decline sentence, and
- * whether there was an answer at all.
+ * Whether the run produced an answer for the visitor to read.
  *
- * Only the opening characters are kept. The question this has to answer is
- * "did the model decline", and holding a whole answer to decide it would mean
- * this module carrying visitor-visible text further than it needs to.
- *
- * The buffer resets on every `start-step`, so only the final step's text is
- * judged. A model may narrate before a tool call ("Let me check his
- * résumé.") and that preamble is not the answer: left in, it would fill the
- * buffer and make a decline written two steps later look like prose, or the
- * reverse.
+ * No text is kept, only the flag. The flag resets on every `start-step`, so
+ * only the final step is judged: a model may narrate before a tool call
+ * ("Let me check his résumé."), and that preamble is not the answer.
  */
 class AnswerText {
-  /** The sentence plus room for whatever whitespace precedes it. */
-  private static readonly KEEP = DECLINE_SENTENCE.length + 16
-  private opening = ''
   private sawText = false
 
   observe(part: { type: string; text?: string }): void {
     if (part.type === 'start-step') {
-      this.opening = ''
       this.sawText = false
       return
     }
     if (part.type !== 'text-delta' || typeof part.text !== 'string') return
     this.sawText ||= part.text.trim().length > 0
-    if (this.opening.length >= AnswerText.KEEP) return
-    this.opening += part.text
   }
 
   /** Whether the final step produced any text for the visitor to read. */
   answered(): boolean {
     return this.sawText
-  }
-
-  isDecline(): boolean {
-    return this.opening.trimStart().startsWith(DECLINE_SENTENCE)
   }
 }
 
@@ -503,8 +453,8 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
  *
  * The SDK would otherwise stream a `read_document` input part and an output
  * part per read, the latter carrying the document's whole text. The browser
- * has no use for it: the answer is the content and `sources` names where it
- * came from. Filtering the UI chunks rather than the model stream keeps this
+ * has no use for it: the answer is the content and the progress part names
+ * what was read. Filtering the UI chunks rather than the model stream keeps this
  * a pure output concern: the tool loop, the read ledger, and the metadata
  * callback still see everything.
  */
@@ -772,8 +722,8 @@ function logCompletion({
     vertexFirstByteMs,
     ms,
   }
-  // An answer that stopped on length lost its Sources trailer mid-word, and
-  // any other non-'stop' finish means no usable answer at all. Both get their
+  // An answer that stopped on length was cut off mid-word, and any other
+  // non-'stop' finish means no usable answer at all. Both get their
   // own marker rather than hiding among the ordinary completions.
   if (finishReason === 'length') console.warn('[chat] truncated', aggregate)
   else if (finishReason !== 'stop') console.warn('[chat] incomplete', aggregate)

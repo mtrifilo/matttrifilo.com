@@ -3,22 +3,20 @@
 import { Check, Copy, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { MessageResponse } from '@/components/ai-elements/message'
-import { Source, Sources } from '@/components/ai-elements/sources'
 import { noticeFor, type AnswerView } from '@/lib/chat/answer'
 import { IncompleteNotice, TruncatedNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 
 /**
- * One assistant turn: the answer, what it was drawn from, and what can be done
- * with it (MTC-33).
+ * One assistant turn: the answer, what it was drawn from, and what can be
+ * done with it.
  *
  * The order is deliberate. What the assistant did to prepare the answer comes
- * first, because it is the only thing on screen for the ten to twenty
- * seconds before the first token, and afterwards it is one collapsed line
- * above the answer it explains (MTC-42). Then the answer, then the chips that make it
- * checkable, then any notice about how it ended, then the actions. A visitor
- * reading top to bottom meets the claim and its sources before anything asks
- * them to do something.
+ * first, because it is the only thing on screen for the ten to twenty seconds
+ * before the first token, and afterwards it is one collapsed line above the
+ * answer it explains: the documents it read, by title, which is what makes
+ * the answer checkable. Then the answer, then any notice about how it ended,
+ * then the actions.
  */
 
 export interface AssistantAnswerProps {
@@ -52,14 +50,6 @@ export function AssistantAnswer({
           answer written without a read and every refusal. */}
       <AssistantProgress elapsedMs={elapsedMs} pending={pending} view={view} />
       {hasText ? <MessageResponse>{view.text}</MessageResponse> : null}
-
-      {view.sources.length > 0 && (
-        <Sources>
-          {view.sources.map(source => (
-            <Source href={source.url} key={source.id} title={source.title} />
-          ))}
-        </Sources>
-      )}
 
       {notice === 'truncated' && <TruncatedNotice />}
       {notice === 'incomplete' && <IncompleteNotice />}

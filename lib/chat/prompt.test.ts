@@ -22,7 +22,6 @@ const index: KnowledgeIndex = {
       topic: 'roles',
       source: 'resume',
       tokenEstimate: 12,
-      url: 'https://matttrifilo.com/resume',
     },
   ],
   text: '[resume-thryv]\ntitle: Thryv\nsummary: What Matt did at Thryv.',

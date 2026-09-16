@@ -50,7 +50,6 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
  */
 const EMPTY_VIEW: AnswerView = {
   text: '',
-  sources: [],
   truncated: false,
   incomplete: false,
 }

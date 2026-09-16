@@ -1,15 +1,14 @@
 import type { ChatStatus } from 'ai'
 import type { ChatMessageMetadata } from './handler'
 import { toProgressView, type ProgressView } from './progress'
-import type { ChatSource } from './read-document'
 import type { ChatErrorCode } from './validate'
 
 /**
  * What the browser makes of a streamed answer (MTC-33).
  *
- * Every decision the transcript takes — which text to show, which chips, which
- * notice, which error copy — is made here, in one pure module, so it can be
- * asserted without a browser, a stream, or a model.
+ * Every decision the transcript takes, which text to show, which notice,
+ * which error copy, is made here, in one pure module, so it can be asserted
+ * without a browser, a stream, or a model.
  *
  * It is one of the two modules in lib/chat that the client bundle may import,
  * and ./progress, which has no runtime imports of its own, is the only thing
@@ -44,8 +43,6 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
 export interface AnswerView {
   /** The answer, with any `Sources:` trailer removed. */
   text: string
-  /** The documents the server actually read. Authoritative; may be empty. */
-  sources: readonly ChatSource[]
   /** Real text that stopped mid-sentence on the output cap. */
   truncated: boolean
   /** The run ended without a clean answer. Implied by `truncated`. */
@@ -76,9 +73,6 @@ export function toAnswerView(message: AnswerMessage): AnswerView {
     // is a check that the key is set rather than a comparison of two booleans.
     incomplete: message.metadata?.incomplete === true,
     truncated: message.metadata?.truncated === true,
-    // An answer with no chips is ordinary: a decline cites nothing, and the
-    // server withholds them from a run that produced no answer at all.
-    sources: message.metadata?.sources ?? [],
   }
 }
 
@@ -96,12 +90,12 @@ export function joinTextParts(
 /**
  * The trailer is for the model's discipline, not the reader's eyes.
  *
- * Source chips come from the server's `sources` metadata, so a `Sources:` line
- * in the prose would repeat them — in raw document ids, which mean nothing to
- * a visitor. Only a final line that opens with the literal prefix is taken,
- * which is specific enough that no sentence of a real answer is mistaken for
- * it. A half-written trailer stays on screen for the tokens it takes to finish
- * the word, which is the cost of not guessing at prefixes like "So".
+ * The trailer is raw document ids, which mean nothing to a visitor: what was
+ * read is disclosed above the answer, by title. Only a final line that opens
+ * with the literal prefix is taken, which is specific enough that no sentence
+ * of a real answer is mistaken for it. A half-written trailer stays on screen
+ * for the tokens it takes to finish the word, which is the cost of not
+ * guessing at prefixes like "So".
  */
 export function stripSourcesTrailer(text: string): string {
   // Models routinely end with a newline; without this the "final line" would

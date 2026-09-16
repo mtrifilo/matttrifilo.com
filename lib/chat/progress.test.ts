@@ -21,7 +21,7 @@ function viewWith(
   progress: ProgressView | undefined,
   text = 'He led the platform migration.'
 ): AnswerView {
-  return { text, sources: [], truncated: false, incomplete: false, progress }
+  return { text, truncated: false, incomplete: false, progress }
 }
 
 const reading = (...titles: string[]): ProgressView => ({

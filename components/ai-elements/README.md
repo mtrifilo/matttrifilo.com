@@ -1,8 +1,8 @@
 # ai-elements
 
-Forked copies of four [Vercel AI Elements](https://ai-sdk.dev/elements)
-registry components — `conversation`, `message`, `sources`, `suggestion` —
-taken from the registry on 2026-09-15 for MTC-33 and hand-maintained since.
+Forked copies of three [Vercel AI Elements](https://ai-sdk.dev/elements)
+registry components (`conversation`, `message`, `suggestion`), taken from the
+registry on 2026-09-15 for MTC-33 and hand-maintained since.
 The registry is not configured in `components.json`, on purpose: re-running
 the generator would overwrite the deviations each file's header documents.
 

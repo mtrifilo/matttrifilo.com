@@ -55,17 +55,15 @@ export const INCOMPLETE_NOTICE =
   "The assistant couldn't finish that one. Try asking again."
 
 /**
- * The one error the UI writes itself. MTC-34 owns the limiter and will send
- * its own sentence, but a visitor who has just run out of questions is the one
- * visitor for whom the static pages beat the assistant, so the links matter
- * more than whatever prose arrives with the 429.
+ * The one error the UI writes itself. The route sends its own sentence with
+ * the 429, but a visitor who has just run out of questions is the one visitor
+ * for whom the static pages beat the assistant, so the links matter more than
+ * whatever prose arrives with it.
  */
 export const RATE_LIMIT_NOTICE = {
   lead: "You've reached the limit for now. Matt's ",
   resumeLabel: 'résumé',
-  between: ' and ',
-  knowledgeLabel: 'project pages',
-  after: ' are one click away, or ',
+  between: ' is one click away, or ',
   emailLabel: 'email him directly',
   end: '.',
 } as const

@@ -19,7 +19,6 @@ const entry = (id: string, text: string): KnowledgeEntry => ({
   topic: 'roles',
   source: 'resume',
   tokenEstimate: Math.ceil(text.length / 4),
-  url: `https://matttrifilo.com/${id}`,
 })
 
 const document = (id: string, text: string): KnowledgeDocument => ({
@@ -166,10 +165,9 @@ describe('the read budget', () => {
     // this document through, so the model must not be invited to retry it.
     expect(await read(s.tool, 'huge')).toEqual({ error: 'document_too_large' })
     expect(await read(s.tool, 'huge')).toEqual({ error: 'document_too_large' })
-    // The refusal is total: nothing was sent, so nothing is charged or cited.
+    // The refusal is total: nothing was sent, so nothing is charged.
     expect(s.documentsRead()).toBe(0)
     expect(s.readTokens()).toBe(0)
-    expect(s.sources()).toEqual([])
     // Counted apart from ordinary budget refusals: only the corpus can fix it.
     expect(s.readsRefused()).toEqual({ unknown: 0, budget: 0, tooLarge: 2 })
   })
@@ -215,37 +213,18 @@ describe('the read budget', () => {
 })
 
 describe('the ledger the handler reports', () => {
-  test('sources are the documents read, in read order', async () => {
-    const s = session()
-    await read(s.tool, 'faq')
-    await read(s.tool, 'resume')
-
-    expect(s.sources()).toEqual([
-      {
-        id: 'faq',
-        title: 'Title of faq',
-        url: 'https://matttrifilo.com/faq',
-      },
-      {
-        id: 'resume',
-        title: 'Title of resume',
-        url: 'https://matttrifilo.com/resume',
-      },
-    ])
-  })
-
-  test('a document read twice is charged twice but listed once', async () => {
+  test('a document read twice is charged twice', async () => {
+    // The budget counts what was sent to the model, not how many distinct
+    // documents it asked for.
     const s = session()
     await read(s.tool, 'resume')
     await read(s.tool, 'resume')
 
     expect(s.documentsRead()).toBe(2)
-    expect(s.sources().map(source => source.id)).toEqual(['resume'])
   })
 
   test('nothing read means nothing to report', () => {
     const s = session()
-    expect(s.sources()).toEqual([])
     expect(s.documentsRead()).toBe(0)
     expect(s.readTokens()).toBe(0)
   })

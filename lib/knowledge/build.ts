@@ -69,8 +69,6 @@ export interface KnowledgeEntry {
   source: KnowledgeSource
   /** Tokens the document body would cost to read; see estimateTokens. */
   tokenEstimate: number
-  /** Where the document is published on this site: `/knowledge/${id}`. */
-  url: string
   /** The public original, when the document is a copy of one. */
   canonical?: string
 }
@@ -295,7 +293,7 @@ function parseFrontmatter(
 
   if (id !== expectedId) {
     throw new Error(
-      `${source}: id "${id}" must match the file name ("${expectedId}"), so ids stay stable and /knowledge/<id> keeps resolving`
+      `${source}: id "${id}" must match the file name ("${expectedId}"), so the id the model reads in the index names the file on disk`
     )
   }
   if (!ISO_DATE.test(updated) || !isRealDate(updated)) {
@@ -533,12 +531,17 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
 /**
  * Refuses a body that would not survive being compiled as MDX.
  *
- * /knowledge/[id] renders these documents through the same MDX pipeline as
- * the blog, and every page on this site is prerendered — so one stray `<`
- * in one document does not break one page, it fails `next build` for the
- * whole site. `{` is worse than that: `{process.env.SOMETHING}` is not a
- * syntax error, it is a valid expression that MDX evaluates on the server
- * and prints onto a public page.
+ * Nothing serves a corpus document, so most of them are never compiled. The
+ * blog twins are: each is byte-identical to a post under content/blog, which
+ * /blog/[slug] renders through the MDX pipeline, and every page on this site
+ * is prerendered, so one stray `<` in one post does not break one page, it
+ * fails the build for the whole site. `{` is worse than that:
+ * `{process.env.SOMETHING}` is not a syntax error, it is a valid expression
+ * that MDX evaluates on the server and prints onto a public page.
+ *
+ * The rule is applied to every document rather than to the twins alone, so
+ * that a document moved into blog/ later cannot carry a build break in with
+ * it, and so that the corpus stays renderable without a fresh audit.
  *
  * So both characters are refused outright outside code, including the
  * autolink form `<https://example.com>` (also an MDX error) and anything
@@ -599,10 +602,9 @@ function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
  *
  * Everywhere else it would be a trap. A `career/` document is written
  * elsewhere, approved, and pasted in whole; if a stray placeholder let the
- * build quietly delete a section from both the published page and the
- * model's copy, the failure would look like nothing at all — exit 0, no
- * output, a document that is merely missing a paragraph nobody can see is
- * missing.
+ * build quietly delete a section from the model's copy, the failure would
+ * look like nothing at all: exit 0, no output, and a document that is merely
+ * missing a paragraph nobody can see is missing.
  */
 const UNANSWERED_TOPIC = 'faq'
 
@@ -656,7 +658,7 @@ function assertNoPlaceholder(
   const found = findPlaceholder(lines)
   if (!found) return
   throw new Error(
-    `${label}:${found.line.number}: a TODO placeholder under "${found.heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the published page and the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
+    `${label}:${found.line.number}: a TODO placeholder under "${found.heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
   )
 }
 
@@ -763,7 +765,6 @@ function readDocument(
       topic,
       source: topic,
       tokenEstimate,
-      url: `/knowledge/${frontmatter.id}`,
       ...(frontmatter.canonical ? { canonical: frontmatter.canonical } : {}),
       text,
       updated: frontmatter.updated,
@@ -926,7 +927,6 @@ export function buildKnowledgeCorpus(
     topic: document.topic,
     source: document.source,
     tokenEstimate: document.tokenEstimate,
-    url: document.url,
     ...(document.canonical ? { canonical: document.canonical } : {}),
   }))
 

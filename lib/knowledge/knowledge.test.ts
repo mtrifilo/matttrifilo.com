@@ -376,9 +376,9 @@ describe('knowledge corpus structure', () => {
       expect(frontmatter, `${label} must not declare source`).not.toMatch(
         /^source:/m
       )
-      // The build enforces id === basename, which is what keeps
-      // /knowledge/<id> resolving; assert it here too so the reason is
-      // visible where the contract is described.
+      // The build enforces id === basename, so the id the model cites names
+      // the file on disk; assert it here too so the reason is visible where
+      // the contract is described.
       expect(frontmatter, `${label}: id must equal the file name`).toMatch(
         new RegExp(
           `^id:[ \\t]*['"]?${file.name.replace(/\.md$/, '')}['"]?[ \\t]*$`,
@@ -410,11 +410,10 @@ describe('knowledge corpus structure', () => {
     }
   })
 
-  test('ids are unique and each one is a page on this site', () => {
+  test('ids are unique, and a canonical is an absolute URL', () => {
     const ids = corpus.documents.map(d => d.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const document of corpus.documents) {
-      expect(document.url).toBe(`/knowledge/${document.id}`)
       if (document.canonical !== undefined) {
         expect(document.canonical.startsWith('https://')).toBe(true)
       }
@@ -506,9 +505,7 @@ describe('knowledge corpus stays in sync with its public sources', () => {
       expect(document, missingTwinMessage(slug)).toBeDefined()
       expect(document!.topic).toBe('blog')
       expect(document!.source).toBe('blog')
-      // The site page is /knowledge/<slug>; the post it was copied from is
-      // the canonical one, and that is the link the model should cite.
-      expect(document!.url).toBe(`/knowledge/${slug}`)
+      // The post it was copied from is the canonical one.
       expect(document!.canonical).toBe(`https://matttrifilo.com/blog/${slug}`)
       expect(document!.text).toBe(body.trim())
       // Frontmatter stripped: the post's own YAML must not be in the text.
@@ -889,10 +886,11 @@ describe('knowledge corpus build', () => {
 })
 
 describe('documents must survive being compiled as MDX', () => {
-  // /knowledge/[id] compiles every document with the blog's MDX pipeline,
-  // and every page on this site is prerendered — so one bad character in
-  // one document fails the build for the whole site. `{` does not even
-  // fail: it evaluates.
+  // A blog twin is byte-identical to the post /blog/[slug] compiles with the
+  // MDX pipeline, and every page on this site is prerendered, so one bad
+  // character in one twin fails the build for the whole site. `{` does not
+  // even fail: it evaluates. The rule covers every document so that one
+  // moved into blog/ later cannot carry a break in with it.
   const mdxFixture = (body: string) =>
     buildFixture([{ topic: 'career', name: 'a-role.md', body }])
 

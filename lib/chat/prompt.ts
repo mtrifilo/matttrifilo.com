@@ -51,17 +51,17 @@ export const DECLINE_SENTENCE =
 /**
  * Prefix of the machine-readable citation trailer.
  *
- * This is now the *secondary* signal for source chips: the authoritative list
- * is the `sources` message metadata the handler puts on the stream, built
- * from the reads the server actually performed. The trailer stays because it
- * makes the model name its sources inside the answer, which measurably keeps
- * it honest about which document a claim came from — but a model that forgets
- * it, or invents an id it never read, cannot mislead the UI.
+ * Nothing in the UI is built from it. The trailer is asked for because
+ * naming its sources inside the answer keeps the model honest about which
+ * document a claim came from, and the line is then stripped before the answer
+ * is shown: raw document ids mean nothing to a visitor, and what was read is
+ * disclosed above the answer by title. A model that forgets the trailer, or
+ * invents an id it never read, therefore cannot mislead anyone.
  *
  * Defined in ./answer and re-exported here so the policy prose below still
  * reads from one constant. It has to live over there because the browser is
- * the other end of this contract — it strips the line back out of the answer
- * — and this module cannot be imported from a client component: it reads
+ * the other end of this contract (it strips the line back out of the answer)
+ * and this module cannot be imported from a client component: it reads
  * lib/knowledge, which reads the filesystem.
  */
 export { SOURCES_TRAILER_PREFIX }

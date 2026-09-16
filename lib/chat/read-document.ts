@@ -52,16 +52,8 @@ export type ReadDocumentResult =
 export interface DocumentRead {
   id: string
   title: string
-  url: string
   /** Estimated tokens of the text handed back, and charged to the budget. */
   tokens: number
-}
-
-/** What the UI renders as a source chip (MTC-33). */
-export interface ChatSource {
-  id: string
-  title: string
-  url: string
 }
 
 export interface ReadDocumentSessionDeps {
@@ -79,8 +71,6 @@ export interface ReadDocumentSessionDeps {
  */
 export interface ReadDocumentSession {
   tool: Tool
-  /** Successful reads, de-duplicated, in the order each id was first read. */
-  sources(): ChatSource[]
   /** Aggregate counters for the log line. Numbers only, never text. */
   documentsRead(): number
   readTokens(): number
@@ -187,12 +177,7 @@ export function createReadDocumentSession({
     }
 
     spentTokens += tokens
-    reads.push({
-      id: document.id,
-      title: document.title,
-      url: document.url,
-      tokens,
-    })
+    reads.push({ id: document.id, title: document.title, tokens })
     return { id: document.id, title: document.title, text: document.text }
   }
 
@@ -202,18 +187,6 @@ export function createReadDocumentSession({
       inputSchema: READ_DOCUMENT_INPUT_SCHEMA,
       execute: ({ id }) => read(id),
     }),
-    sources() {
-      // A model that reads the same document twice pays for it twice, but
-      // the visitor should still see one chip for it.
-      const seen = new Set<string>()
-      const sources: ChatSource[] = []
-      for (const { id, title, url } of reads) {
-        if (seen.has(id)) continue
-        seen.add(id)
-        sources.push({ id, title, url })
-      }
-      return sources
-    },
     documentsRead: () => reads.length,
     readTokens: () => spentTokens,
     readsRefused: () => ({ ...refused }),
