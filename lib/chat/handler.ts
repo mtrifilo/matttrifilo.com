@@ -12,7 +12,7 @@ import {
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
 import {
-  createRetryCounter,
+  createVertexCallCounter,
   type BoundedFetchRetry,
 } from '@/lib/ai/bounded-fetch'
 import type { EnvSource } from '@/lib/env'
@@ -76,9 +76,16 @@ import {
  * connection for a stalled model call, and that second generation is billed
  * and spends the request's seconds while being invisible to the visitor and,
  * without this, to the `ms` on the completion line.
+ *
+ * `onVertexFirstByte` carries the other number that wrapper knows and nothing
+ * else does: how long a model call waited before Vertex said anything. The
+ * deadlines that decide whether a call is stalled or merely slow are guesses
+ * at it, and `msSinceStart` on the step line cannot stand in — that is
+ * elapsed time to the end of a step, generation included.
  */
 export interface ChatModelRequest {
   onVertexRetry: (retry: BoundedFetchRetry) => void
+  onVertexFirstByte: (ms: number) => void
 }
 
 export interface ChatHandlerDeps {
@@ -171,7 +178,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     let stepCount = 0
     // Per request, like the read session below: the count belongs to the
     // request that paid for the retries.
-    const vertexRetries = createRetryCounter()
+    const vertexCalls = createVertexCallCounter()
     try {
       const index = loadKnowledgeIndex()
       // An index over its own ceiling is a deployment fault: MTC-29 enforces
@@ -206,7 +213,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const answer = new AnswerText()
 
       const result = streamText({
-        model: model({ onVertexRetry: vertexRetries.observe }),
+        model: model({
+          onVertexRetry: vertexCalls.observeRetry,
+          onVertexFirstByte: vertexCalls.observeFirstByte,
+        }),
         messages: buildMessages({
           index,
           history: validation.history,
@@ -268,7 +278,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
-            vertexRetries: vertexRetries.count(),
+            vertexRetries: vertexCalls.retries(),
+            vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
           })
         },
@@ -284,7 +295,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
-            vertexRetries: vertexRetries.count(),
+            vertexRetries: vertexCalls.retries(),
+            vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
           })
         },
@@ -332,7 +344,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           // down the stream as text: the client reads the same shape it
           // reads from a 4xx/5xx body, and shows the same fixed copy.
           onError(error) {
-            logFailure(error)
+            logFailure(error, vertexCalls.retries())
             return JSON.stringify(chatErrorBody('interrupted'))
           },
         }).pipeThrough(onlyClientChunks()),
@@ -340,7 +352,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
       // exchange, an unknown model.
-      logFailure(error)
+      logFailure(error, vertexCalls.retries())
       return errorResponse('unavailable')
     }
   }
@@ -464,6 +476,8 @@ interface CompletionAggregates {
   readsRefused: ReadsRefused
   /** Connections the Vertex wrapper abandoned and reopened on this request. */
   vertexRetries: number
+  /** The slowest wait for a first response byte on this request. */
+  vertexFirstByteMs: number
   ms: number
 }
 
@@ -483,6 +497,7 @@ function logCompletion({
   readTokens,
   readsRefused,
   vertexRetries,
+  vertexFirstByteMs,
   ms,
 }: CompletionAggregates): void {
   const cached = cachedInputTokens(usage)
@@ -510,6 +525,11 @@ function logCompletion({
     // generation the visitor never saw: abandoning a connection does not
     // cancel the generation behind it.
     vertexRetries,
+    // What VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS
+    // are hypotheses about: the longest a model call on this request waited
+    // before Vertex sent a byte. A run of these from preview is what decides
+    // whether either bound sits in the right place.
+    vertexFirstByteMs,
     ms,
   }
   // An answer that stopped on length lost its Sources trailer mid-word, and
@@ -530,9 +550,15 @@ function logRejection(code: string): void {
  * message can contain the prompt, and the prompt contains the visitor's
  * question, which this route promises never to record.
  */
-function logFailure(error: unknown): void {
+function logFailure(error: unknown, vertexRetries: number): void {
   console.error('[chat]', {
     stage: failureStage(error),
     error: error instanceof Error ? error.name : typeof error,
+    // On the failure path above all others: a request that exhausted the
+    // wrapper's attempts reached Vertex more than once and was billed for
+    // every one of them, and a line carrying only a stage and an error name
+    // says a stalled-and-retried failure and a first-try failure cost the
+    // same.
+    vertexRetries,
   })
 }

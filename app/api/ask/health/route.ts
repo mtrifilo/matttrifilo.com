@@ -1,5 +1,5 @@
 import { generateText, streamText } from 'ai'
-import { createRetryCounter } from '@/lib/ai/bounded-fetch'
+import { createVertexCallCounter } from '@/lib/ai/bounded-fetch'
 import { geminiModel, getAuthClient, getVertex } from '@/lib/ai/vertex'
 import { runCacheProbe } from './cache-probe'
 import { failureStage, isHealthRouteEnabled, isHealthy } from './gate'
@@ -21,16 +21,22 @@ export async function GET(request: Request) {
   const cacheProbe = params.get('cache') === '1'
   const model = geminiModel()
   const started = Date.now()
-  // Per request, and reported on every response below. Without it `modelMs`
-  // is confounded: a stalled call that the wrapper abandoned and reopened
-  // spends its deadline inside that number while looking like one slow call,
-  // and the probe's "first call" would not be the single clean call it reads
-  // as (MTC-38).
-  const retries = createRetryCounter()
+  // Per request, and reported on every response below. Without the retry
+  // count `modelMs` is confounded: a stalled call that the wrapper abandoned
+  // and reopened spends its deadline inside that number while looking like
+  // one slow call, and the probe's "first call" would not be the single clean
+  // call it reads as. `firstByteMs` is the other half — the wait before
+  // Vertex said anything, which is the number the wrapper's deadlines are
+  // guesses at and which `modelMs` folds together with the generation
+  // (MTC-38).
+  const calls = createVertexCallCounter()
   try {
     // Built inside the try: it reads the five GCP_* variables, and a missing
     // one is a fault this route should classify, not a 500.
-    const vertex = getVertex({ onRetry: retries.observe })
+    const vertex = getVertex({
+      onRetry: calls.observeRetry,
+      onFirstByte: calls.observeFirstByte,
+    })
     // Phase timing: a slow preview showed every model call stalling for
     // 80 to 110 s while the same call from a laptop took 2 s. Splitting the
     // token exchange from the model call says which side owns the stall.
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
     // behind the same preview/development gate as everything else here.
     if (cacheProbe) {
       const probe = await runCacheProbe(vertex(model), {
-        retries: retries.count,
+        retries: calls.retries,
       })
       return Response.json(
         {
@@ -55,6 +61,7 @@ export async function GET(request: Request) {
           // they passed as the mode they got.
           streaming: false,
           tokenMs,
+          firstByteMs: calls.firstByteMs(),
           ms: Date.now() - started,
         },
         { status: probe.ok ? 200 : 502 }
@@ -85,7 +92,12 @@ export async function GET(request: Request) {
         modelMs: Date.now() - modelStarted,
         // Above zero means modelMs contains an abandoned connection's wait
         // and a second billed generation, not one slow call.
-        retries: retries.count(),
+        retries: calls.retries(),
+        // The slowest wait before Vertex sent a byte, which is what
+        // VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS are
+        // hypotheses about; modelMs cannot answer it, since it also contains
+        // the generation.
+        firstByteMs: calls.firstByteMs(),
         ms: Date.now() - started,
       },
       { status: ok ? 200 : 502 }
@@ -93,7 +105,14 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('[ask/health]', error)
     return Response.json(
-      { ok: false, stage: failureStage(error), retries: retries.count() },
+      {
+        ok: false,
+        stage: failureStage(error),
+        // Reported on the failure path too: a failure after a stall was
+        // billed twice, and a body carrying only a stage cannot say so.
+        retries: calls.retries(),
+        firstByteMs: calls.firstByteMs(),
+      },
       { status: 502 }
     )
   }

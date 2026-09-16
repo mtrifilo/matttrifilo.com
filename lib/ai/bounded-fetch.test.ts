@@ -8,7 +8,7 @@ import {
   VERTEX_REQUEST_WAIT_BUDGET_MS,
   VERTEX_RETRY_BACKOFF_MS,
   createBoundedFetch,
-  createRetryCounter,
+  createVertexCallCounter,
   type BoundedFetchRetry,
   type FetchLike,
 } from './bounded-fetch'
@@ -366,6 +366,82 @@ describe('createBoundedFetch', () => {
     expect(retries).toEqual([])
   })
 
+  test('a zero-length first chunk is not a first byte', async () => {
+    // A transport can open a stream with an empty frame — a keep-alive, a
+    // flushed-but-empty write. Letting that clear the deadline would hand the
+    // stall a way to look like an answer: the connection has said nothing.
+    let calls = 0
+    const { fetch } = harness(async () => {
+      calls += 1
+      let chunk = 0
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            chunk += 1
+            if (chunk === 1) return controller.enqueue(new Uint8Array(0))
+            // Longer than either deadline in the harness: if the empty chunk
+            // counted, this body would be let through and this would resolve.
+            await Bun.sleep(60)
+            controller.enqueue(encode('late'))
+            controller.close()
+          },
+        })
+      )
+    })
+
+    await expect(
+      fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+    ).rejects.toMatchObject({ name: 'TimeoutError' })
+    expect(calls).toBe(VERTEX_MAX_ATTEMPTS)
+  })
+
+  test('a non-2xx with a slow error body is handed back, not retried', async () => {
+    // The SDK reads response.ok only once it has the response, so a 429 held
+    // back here would be abandoned as a stall and retried — burning a second
+    // connection on a rate limit and hiding it from the layer that knows how
+    // to back off.
+    let calls = 0
+    const { fetch, retries } = harness(async () => {
+      calls += 1
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          // The error body never arrives; the response itself still must.
+          pull: () => new Promise<void>(() => {}),
+        }),
+        { status: 429, statusText: 'Too Many Requests' }
+      )
+    })
+
+    const response = await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+
+    expect(response.status).toBe(429)
+    expect(calls).toBe(1)
+    expect(retries).toEqual([])
+  })
+
+  test('the timeout says what the whole call spent, not the last deadline', async () => {
+    // 20 ms was the final attempt's ceiling; the call spent that plus the
+    // first attempt and the backoff, and the message that names only the
+    // ceiling reads as a much shorter wait than the one that happened.
+    const aborted = { count: 0 }
+    const stall = stalls(aborted)
+    const { fetch } = harness((input, init) => stall(input, init))
+
+    const message = await fetch(URL_UNDER_TEST, {
+      method: 'POST',
+      body: BODY,
+    }).then(
+      () => 'the call resolved instead of timing out',
+      (error: Error) => error.message
+    )
+
+    expect(message).toMatch(
+      /^Vertex sent no response byte in \d+ ms across 2 attempt\(s\)$/
+    )
+    const elapsed = Number(/in (\d+) ms/.exec(message)?.[1])
+    expect(elapsed).toBeGreaterThanOrEqual(30)
+  })
+
   test('the caller sees the request it made, minus our signal swap', async () => {
     let seen: RequestInit | undefined
     const { fetch } = harness(async (_input, init) => {
@@ -461,9 +537,9 @@ describe('the backoff the wrapper waits by default', () => {
   })
 })
 
-describe('createRetryCounter', () => {
+describe('createVertexCallCounter', () => {
   test('counts the retries a request could not otherwise see', async () => {
-    const counter = createRetryCounter()
+    const counter = createVertexCallCounter()
     const aborted = { count: 0 }
     const stall = stalls(aborted)
     let calls = 0
@@ -472,16 +548,73 @@ describe('createRetryCounter', () => {
       lastAttemptTimeoutMs: 20,
       backoffMs: [1],
       sleep: async () => {},
-      onRetry: counter.observe,
+      onRetry: counter.observeRetry,
       fetchImpl: (input, init) => {
         calls += 1
         return calls === 1 ? stall(input, init) : answers(input, init)
       },
     })
 
-    expect(counter.count()).toBe(0)
+    expect(counter.retries()).toBe(0)
     await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
-    expect(counter.count()).toBe(1)
+    expect(counter.retries()).toBe(1)
+  })
+
+  test('records how long each call waited for its first byte', async () => {
+    // The number VERTEX_FIRST_BYTE_TIMEOUT_MS is a guess at. Measured from
+    // the request to the first body byte of the attempt that produced one —
+    // so a clock that only moves inside the transport is enough to pin it.
+    const counter = createVertexCallCounter()
+    let clock = 0
+    let waitMs = 7
+    const fetch = createBoundedFetch({
+      fetchImpl: async () => {
+        clock += waitMs
+        return new Response('ok')
+      },
+      onFirstByte: counter.observeFirstByte,
+      now: () => clock,
+    })
+
+    expect(counter.firstByteMs()).toBe(0)
+    await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+    expect(counter.firstByteMs()).toBe(7)
+
+    // The slowest call on the request, not the last: a fast final step must
+    // not erase the step that came near the deadline.
+    waitMs = 900
+    await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+    waitMs = 3
+    await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+    expect(counter.firstByteMs()).toBe(900)
+  })
+
+  test('a stalled attempt reports no first byte, only the one that answers', async () => {
+    const counter = createVertexCallCounter()
+    const aborted = { count: 0 }
+    const stall = stalls(aborted)
+    const firstBytes: number[] = []
+    let calls = 0
+    const fetch = createBoundedFetch({
+      firstByteTimeoutMs: 10,
+      lastAttemptTimeoutMs: 20,
+      backoffMs: [1],
+      sleep: async () => {},
+      onRetry: counter.observeRetry,
+      onFirstByte: ms => {
+        firstBytes.push(ms)
+        counter.observeFirstByte(ms)
+      },
+      fetchImpl: (input, init) => {
+        calls += 1
+        return calls === 1 ? stall(input, init) : answers(input, init)
+      },
+    })
+
+    await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+
+    expect(firstBytes).toHaveLength(1)
+    expect(counter.retries()).toBe(1)
   })
 })
 
@@ -518,9 +651,10 @@ describe('the constants the 300 s function limit allows', () => {
     // retryWithExponentialBackoff (maxRetries = 2) rethrows abort-named
     // errors, so our stall path is never multiplied — but a retryable API
     // error above us re-enters this wrapper with a fresh budget. Three of
-    // those is over the limit, and nothing here prevents it; bounding it
-    // needs a deadline shared across the request. Written as a test so the
-    // gap is asserted rather than only described.
+    // those is over the limit, and nothing here prevents it: the lever is
+    // `maxRetries` on the streamText call, left at its default deliberately
+    // (see bounded-fetch.ts). Written as a test so the gap is asserted
+    // rather than only described.
     const sdkAttempts = 1 + 2
     expect(
       worstCasePerModelCall * CHAT_MAX_STEPS * sdkAttempts
@@ -530,7 +664,8 @@ describe('the constants the 300 s function limit allows', () => {
   test('the fast bound is a hypothesis, and sits where the episode put it', () => {
     // Healthy one-word health calls: 1 to 14 s end to end. Stalls: 80 to
     // 110 s. Nothing has yet measured a chat step's time to first byte —
-    // `[chat] step` on preview is what would.
+    // `vertexFirstByteMs` on preview is what would, and until it does both
+    // this bound and the last-attempt ceiling are arithmetic over a guess.
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(14_000)
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeLessThan(80_000)
   })

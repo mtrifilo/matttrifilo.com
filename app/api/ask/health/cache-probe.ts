@@ -128,8 +128,8 @@ export interface CacheProbeOptions {
   /** Injected so the durations are assertable. */
   now?: () => number
   /**
-   * Reads this request's retry counter (`RetryCounter.count`). The probe
-   * takes differences across it to attribute retries to calls.
+   * Reads this request's retry counter (`VertexCallCounter.retries`). The
+   * probe takes differences across it to attribute retries to calls.
    */
   retries?: () => number
 }

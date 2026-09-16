@@ -94,29 +94,41 @@ export function getAuthClient() {
 export interface VertexClientOptions {
   /**
    * Told about every retry the bounded fetch makes on this client's calls —
-   * `RetryCounter.observe` at the call sites here. A retry is invisible to
-   * the visitor and would otherwise be invisible in the logs of the request
-   * that was billed for it, so a request that wants to report its own count
-   * asks for a client of its own.
+   * `VertexCallCounter.observeRetry` at the call sites here. A retry is
+   * invisible to the visitor and would otherwise be invisible in the logs of
+   * the request that was billed for it, so a request that wants to report its
+   * own count asks for a client of its own.
    */
   onRetry?: (retry: BoundedFetchRetry) => void
+  /**
+   * Told how long each model call waited for its first response byte —
+   * `VertexCallCounter.observeFirstByte`. The two deadlines in bounded-fetch
+   * are guesses at this number, so every caller that can report it should.
+   */
+  onFirstByte?: (ms: number) => void
 }
 
 /**
  * A Vertex client. Lazily built so importing this module never throws at
  * build time.
  *
- * With `onRetry`, the client is built per call rather than shared: it closes
- * over that request's counter. The cost is an object and a closure — the
- * token cache that matters lives in the shared auth client either way.
+ * With either callback, the client is built per call rather than shared: it
+ * closes over that request's counter. The cost is an object and a closure —
+ * the token cache that matters lives in the shared auth client either way.
+ *
+ * The shared singleton is therefore the no-callback path, and since MTC-38
+ * nothing in production takes it: both callers (the chat route and the health
+ * route) pass a per-request counter. It remains for a future caller that has
+ * no request to report into, and for tests; a call that reaches it is a call
+ * whose retries and first-byte times are measured nowhere.
  */
-export function getVertex({ onRetry }: VertexClientOptions = {}) {
-  if (onRetry) return createVertexClient(onRetry)
+export function getVertex(options: VertexClientOptions = {}) {
+  if (options.onRetry || options.onFirstByte) return createVertexClient(options)
   if (!sharedVertex) sharedVertex = createVertexClient()
   return sharedVertex
 }
 
-function createVertexClient(onRetry?: (retry: BoundedFetchRetry) => void) {
+function createVertexClient(options?: VertexClientOptions) {
   return createVertex({
     project: readEnv('GCP_PROJECT_ID'),
     // Gemini 3.x is served from the global endpoint; us-central1 returned
@@ -127,6 +139,6 @@ function createVertexClient(onRetry?: (retry: BoundedFetchRetry) => void) {
     // saying anything (MTC-38). It wraps only the model call: the token
     // exchange goes through google-auth-library's own transport and measured
     // near zero throughout the episode that motivated this.
-    fetch: createBoundedFetch(onRetry ? { onRetry } : undefined),
+    fetch: createBoundedFetch(options),
   })
 }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
+import type { BoundedFetchRetry } from '@/lib/ai/bounded-fetch'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
   KNOWLEDGE_READ_BUDGET,
@@ -7,7 +8,12 @@ import {
   type KnowledgeEntry,
   type KnowledgeIndex,
 } from '@/lib/knowledge'
-import { CHAT_MAX_STEPS, cachedInputTokens, createChatHandler } from './handler'
+import {
+  CHAT_MAX_STEPS,
+  cachedInputTokens,
+  createChatHandler,
+  type ChatModelRequest,
+} from './handler'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
@@ -1118,6 +1124,82 @@ describe('logging', () => {
 
     expect(response.status).toBe(502)
     expect(loggedText()).toContain('"stage":"config"')
+  })
+})
+
+describe('the Vertex retries the visitor never sees', () => {
+  /** The numbers the fetch wrapper reports when it abandons a connection. */
+  const stalled: BoundedFetchRetry = {
+    attempt: 1,
+    firstByteTimeoutMs: 20_000,
+    backoffMs: 500,
+    attemptsLeft: 1,
+  }
+
+  /** A handler whose model factory reports into the request's counter. */
+  function handlerReporting(
+    report: (request: ChatModelRequest) => MockLanguageModelV4
+  ) {
+    return createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: report,
+      env: {},
+      now: () => 1_000,
+    })
+  }
+
+  test('a retry is counted onto the completion line, with its first-byte wait', async () => {
+    // Nothing else in the request can see either number: the retry is
+    // invisible to the visitor, and `ms` folds the abandoned connection's
+    // wait in with the generation that followed it.
+    const handler = handlerReporting(({ onVertexRetry, onVertexFirstByte }) => {
+      onVertexRetry(stalled)
+      onVertexFirstByte(18_000)
+      return readingModel()
+    })
+
+    const response = await handler(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    const text = loggedText()
+    expect(text).toContain('"vertexRetries":1')
+    expect(text).toContain('"vertexFirstByteMs":18000')
+  })
+
+  test('a stall that exhausted the attempts logs the count that was billed', async () => {
+    // The failure path is where the count matters most: this request reached
+    // Vertex twice and paid for both, and a line carrying only a stage would
+    // price it the same as a call that failed on its first try.
+    const handler = handlerReporting(({ onVertexRetry }) => {
+      onVertexRetry(stalled)
+      const exhausted = new Error(
+        'Vertex sent no response byte in 20500 ms across 2 attempt(s)'
+      )
+      exhausted.name = 'TimeoutError'
+      throw exhausted
+    })
+
+    const response = await handler(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+
+    expect(response.status).toBe(502)
+    const text = loggedText()
+    expect(text).toContain('"stage":"model"')
+    expect(text).toContain('"error":"TimeoutError"')
+    expect(text).toContain('"vertexRetries":1')
+  })
+
+  test('a clean request reports zero rather than leaving the field out', async () => {
+    const response = await handlerWith(readingModel())(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    expect(loggedText()).toContain('"vertexRetries":0')
   })
 })
 
