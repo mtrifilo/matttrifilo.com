@@ -1,5 +1,6 @@
 import type { ChatStatus } from 'ai'
 import type { ChatMessageMetadata } from './handler'
+import { toProgressView, type ProgressView } from './progress'
 import type { ChatSource } from './read-document'
 import type { ChatErrorCode } from './validate'
 
@@ -10,12 +11,12 @@ import type { ChatErrorCode } from './validate'
  * notice, which error copy — is made here, in one pure module, so it can be
  * asserted without a browser, a stream, or a model.
  *
- * It is also the one module in lib/chat that the client bundle may import, and
- * that is why it has no runtime imports at all. prompt.ts, validate.ts and
- * handler.ts all reach lib/knowledge, which reads the filesystem at module
- * scope; pulling any of them into a client component would break the build.
- * The three imports above are erased at compile time, so the shapes stay
- * defined once and the bytes stay on the server.
+ * It is one of the two modules in lib/chat that the client bundle may import,
+ * and that is why its only runtime import is the other one. prompt.ts,
+ * validate.ts and handler.ts all reach lib/knowledge, which reads the
+ * filesystem at module scope; pulling any of them into a client component
+ * would break the build. The type imports above are erased at compile time,
+ * so the shapes stay defined once and the bytes stay on the server.
  */
 
 /**
@@ -48,6 +49,13 @@ export interface AnswerView {
   truncated: boolean
   /** The run ended without a clean answer. Implied by `truncated`. */
   incomplete: boolean
+  /**
+   * The steps the server narrated while the answer was being prepared, and
+   * how the run ended (MTC-42). Absent when the server sent no progress part
+   * (a refusal that never opened a stream, or a run that answered without
+   * reading anything), and absent when the part it did send was malformed.
+   */
+  progress?: ProgressView
 }
 
 /** The parts of a UI message this module needs. Structural on purpose. */
@@ -60,6 +68,9 @@ export function toAnswerView(message: AnswerMessage): AnswerView {
   const text = stripSourcesTrailer(joinTextParts(message.parts))
   return {
     text,
+    // Lenient: a progress part this module cannot read costs the visitor the
+    // step list and nothing else. See lib/chat/progress.ts.
+    progress: toProgressView(message.parts),
     // The flags are present-or-absent on the wire, never `false`, so `=== true`
     // is a check that the key is set rather than a comparison of two booleans.
     incomplete: message.metadata?.incomplete === true,
@@ -123,21 +134,45 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
 /**
  * What the visually hidden status region says, if anything.
  *
- * Three words, because the transcript itself must not be a live region: with
+ * A few words, because the transcript itself must not be a live region: with
  * `aria-live` on it, a screen reader would re-read the whole growing answer on
  * every streamed token. This announces that something is happening, that it
  * finished, or that it failed, and leaves the reading to the reader.
+ *
+ * While a run is in flight it narrates the step instead of the bare
+ * "Responding" (MTC-42), so a reader who cannot see the progress list is told
+ * the same thing it shows. One announcement per step: the region re-reads
+ * whenever this string changes, which is why the elapsed seconds are never in
+ * it. A ticking counter would re-announce every second and bury the steps.
  *
  * Empty until there is something to report, so a page that has only just
  * loaded announces nothing at all.
  */
 export function announcementFor(
   status: ChatStatus,
-  hasAnswer: boolean
-): 'Responding' | 'Response complete' | 'Error' | '' {
+  hasAnswer: boolean,
+  progress?: ProgressView
+): string {
   if (status === 'error') return 'Error'
-  if (status === 'submitted' || status === 'streaming') return 'Responding'
+  if (status === 'submitted' || status === 'streaming') {
+    return stepAnnouncement(progress) ?? 'Responding'
+  }
   return hasAnswer ? 'Response complete' : ''
+}
+
+/**
+ * The current step, said plainly. `undefined` when the run has not narrated
+ * anything yet, or has already reported itself done. In both cases the
+ * caller's "Responding" is the truthful thing to say.
+ */
+function stepAnnouncement(
+  progress: ProgressView | undefined
+): string | undefined {
+  if (!progress) return undefined
+  if (progress.phase === 'writing') return 'Writing answer'
+  if (progress.phase !== 'reading') return undefined
+  const current = progress.steps[progress.steps.length - 1]
+  return current ? `Reading ${current.title}` : undefined
 }
 
 /** An error the transcript has to say something about. */

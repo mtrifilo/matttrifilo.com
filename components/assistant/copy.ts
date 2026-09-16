@@ -69,3 +69,32 @@ export const RATE_LIMIT_NOTICE = {
   emailLabel: 'email him directly',
   end: '.',
 } as const
+
+/*
+ * The in-progress view: what the assistant says it is doing while the
+ * visitor waits, and what it says it did once the answer is there (MTC-42).
+ *
+ * These are Matt's to change, like every other line in this file. They are
+ * deliberately plain: the visitor is reading them for ten to twenty seconds
+ * and a clever phrase wears out fast. Nothing here names a model, a tool or
+ * a step count the run did not actually reach.
+ */
+
+/** Before the first read: the model is still choosing what to open. */
+export const PROGRESS_THINKING = 'Thinking…'
+
+/** One line per document, titled from the server's index, never the model. */
+export const progressReading = (title: string) => `Reading ${title}…`
+
+/** The last step: the reading is done and the answer is being written. */
+export const PROGRESS_WRITING = 'Writing answer…'
+
+/**
+ * Appended to whichever step was in flight when a run ended without an
+ * answer. The timer beside it is frozen, and no count is claimed.
+ */
+export const PROGRESS_STOPPED = 'Stopped'
+
+/** The collapsed line above a finished answer. Only ever shown truthfully. */
+export const progressSummary = (count: number, seconds: number) =>
+  `Read ${count} ${count === 1 ? 'document' : 'documents'} in ${seconds}s`

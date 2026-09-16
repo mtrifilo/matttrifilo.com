@@ -3,11 +3,11 @@ import {
   stepCountIs,
   streamText,
   toUIMessageStream,
+  type InferUIMessageChunk,
   type InferUITools,
   type LanguageModel,
   type LanguageModelUsage,
   type Tool,
-  type UIDataTypes,
   type UIMessage,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
@@ -18,9 +18,19 @@ import {
 import type { EnvSource } from '@/lib/env'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
+  KNOWLEDGE_READ_BUDGET,
   type KnowledgeDocument,
+  type KnowledgeEntry,
   type KnowledgeIndex,
 } from '@/lib/knowledge'
+import {
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  type ChatDataParts,
+  type ChatProgress,
+  type ChatProgressPhase,
+  type ChatProgressStep,
+} from './progress'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
@@ -175,9 +185,12 @@ type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
  */
 export type ChatUIMessage = UIMessage<
   ChatMessageMetadata,
-  UIDataTypes,
+  ChatDataParts,
   InferUITools<ChatTools>
 >
+
+/** One chunk of the stream this route writes, as the SDK types it. */
+type ChatUIChunk = InferUIMessageChunk<ChatUIMessage>
 
 export function createChatHandler(deps: ChatHandlerDeps) {
   const {
@@ -411,7 +424,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             logFailure(error, { vertexRetries: vertexCalls.retries() })
             return JSON.stringify(chatErrorBody('interrupted'))
           },
-        }).pipeThrough(onlyClientChunks()),
+        })
+          .pipeThrough(withProgress({ entries: index.entries, now, started }))
+          .pipeThrough(onlyClientChunks()),
       })
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
@@ -465,9 +480,12 @@ class AnswerText {
 }
 
 // Only these chunk types reach the browser: the answer text, the stream
-// framing, and the metadata carried on `finish`. An allowlist, not a
-// denylist: a future chunk type that carries model-visible content
-// (reasoning, tool output, source parts) stays server-side by default.
+// framing, the metadata carried on `finish`, and this route's own progress
+// narration (MTC-42), which is written by `withProgress` a few lines below
+// out of the server's own index and never out of model output. An allowlist,
+// not a denylist: a future chunk type that carries model-visible content
+// (reasoning, tool output, source parts) stays server-side by default, and
+// the tool chunks that carry whole documents stay filtered.
 const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'start',
   'start-step',
@@ -477,6 +495,7 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'text-delta',
   'text-end',
   'error',
+  PROGRESS_PART_TYPE,
 ])
 
 /**
@@ -495,6 +514,158 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
       if (CLIENT_CHUNK_TYPES.has(chunk.type)) controller.enqueue(chunk)
     },
   })
+}
+
+/**
+ * Narrates the run to the browser as one data part that it rewrites in place
+ * (MTC-42).
+ *
+ * The visitor waits ten to twenty seconds for the first token, because the
+ * model reads one to three documents before it writes a word. This is where
+ * that wait gets a voice: a step per read, then "writing", then how long the
+ * whole thing took.
+ *
+ * Three properties are the whole design.
+ *
+ * It is an observer. Every chunk it sees is forwarded unchanged; nothing the
+ * SDK produced is dropped or rewritten here. Filtering is `onlyClientChunks`'
+ * job, one stage further down the pipe, which is why this one sees the tool
+ * chunks the browser never will.
+ *
+ * Titles come from the index, never from the model. `tool-input-available`
+ * carries an id the model chose, and that id is looked up in the same
+ * `entries` the read tool validates against. An id that is not there yields
+ * no step at all: the read is about to be refused as `unknown_document`, and
+ * a step for a document that was never opened is the one thing this view must
+ * not show.
+ *
+ * Silence is how a stopped run is reported. `done` is emitted once, just
+ * before the stream's finish chunk, and only if the visitor was already
+ * watching a progress part and nothing failed. Any other ending, whether an
+ * error chunk, a cancelled request, or a connection that simply stops, emits
+ * nothing more, so the last part the browser holds says `reading` or
+ * `writing` forever. The client reads that absence as "stopped": no spinner, no running
+ * timer, no claim about documents read. Saying nothing is the only ending
+ * that cannot lie, and an error chunk is the case worth spelling out: the SDK
+ * still writes a finish chunk after one, so `done` has to be withheld
+ * deliberately rather than by never arriving.
+ */
+function withProgress({
+  entries,
+  now,
+  started,
+}: {
+  entries: readonly KnowledgeEntry[]
+  now: () => number
+  started: number
+}): TransformStream<ChatUIChunk, ChatUIChunk> {
+  const titles = new Map(entries.map(entry => [entry.id, entry.title]))
+  const steps: ChatProgressStep[] = []
+  const listed = new Set<string>()
+  /** Reads the session will have accepted, duplicates included, as it counts. */
+  let reads = 0
+  let phase: ChatProgressPhase = 'reading'
+  let emitted = false
+  let failed = false
+
+  function emit(
+    controller: TransformStreamDefaultController<ChatUIChunk>,
+    ms?: number
+  ): void {
+    const data: ChatProgress = { steps: [...steps], phase }
+    if (ms !== undefined) data.ms = ms
+    // The same id every time. The SDK replaces a data part's payload in place
+    // when type and id match an existing part, so this is one growing part
+    // rather than a part per step, which matters because the client replays
+    // the whole message back on the next question.
+    controller.enqueue({
+      type: PROGRESS_PART_TYPE,
+      id: PROGRESS_PART_ID,
+      data,
+    })
+    emitted = true
+  }
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      switch (chunk.type) {
+        case 'tool-input-available': {
+          const step = toStep(chunk, titles, reads)
+          if (!step) break
+          // Spent whether or not it earns a row: the read session charges a
+          // repeat to the budget the same as any other read.
+          reads += 1
+          if (listed.has(step.id)) break
+          listed.add(step.id)
+          steps.push(step)
+          phase = 'reading'
+          emit(controller)
+          break
+        }
+        case 'text-start': {
+          // A run that answers without reading anything needs no progress
+          // part: there are no steps to narrate, and an empty one would only
+          // put a spinner where the answer is already arriving. A model that
+          // narrates before a tool call hits this first, too, and is ignored
+          // for the same reason.
+          if ((emitted || steps.length > 0) && phase !== 'writing') {
+            phase = 'writing'
+            emit(controller)
+          }
+          break
+        }
+        case 'error': {
+          // A model that fails mid-run still reaches the finish chunk below,
+          // so the failure has to be remembered here: without this flag an
+          // interrupted answer would be stamped `done` and summarised as a
+          // finished read of N documents.
+          failed = true
+          break
+        }
+        case 'finish': {
+          // Before the finish chunk, so the browser has the final state in
+          // hand by the time the stream closes.
+          if (emitted && !failed) {
+            phase = 'done'
+            emit(controller, now() - started)
+          }
+          break
+        }
+      }
+      controller.enqueue(chunk)
+    },
+  })
+}
+
+/**
+ * The step a `read_document` call earns, if it earns one.
+ *
+ * Everything is guarded rather than asserted: this reads a chunk built from
+ * model output, and a malformed one has to yield no step instead of throwing
+ * inside a transform, where it would take the answer down with it.
+ *
+ * The document cap is predicted here rather than waited for, so the list
+ * never counts a read that cannot happen: past
+ * KNOWLEDGE_READ_BUDGET.maxDocuments the read session refuses on count
+ * alone, before it looks at the id at all. The token half of that budget is
+ * not predicted, because it depends on document text this stage has not
+ * seen, so a read refused for size would still show a step. That is the one overcount
+ * left, and it is worth less than a second copy of the budget's arithmetic
+ * living here.
+ */
+function toStep(
+  chunk: { toolName?: unknown; input?: unknown },
+  titles: ReadonlyMap<string, string>,
+  reads: number
+): ChatProgressStep | undefined {
+  if (chunk.toolName !== READ_DOCUMENT_TOOL_NAME) return undefined
+  if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
+  const input = chunk.input
+  if (typeof input !== 'object' || input === null) return undefined
+  const id = (input as { id?: unknown }).id
+  if (typeof id !== 'string') return undefined
+  const title = titles.get(id)
+  return title === undefined ? undefined : { id, title }
 }
 
 /** The refusal counters as the same three flat fields on every log path. */

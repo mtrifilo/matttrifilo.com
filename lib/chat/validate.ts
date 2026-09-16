@@ -291,6 +291,14 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
       // change what the model is asked; refusing it broke every second turn
       // on the first UI preview.
       if (part.type === 'step-start') continue
+      // Data parts are server-owned and replayed with the answer in exactly
+      // the same way (MTC-42): `data-progress` carries the step list the
+      // visitor watched, which is this route's own narration and nothing the
+      // model needs. Refusing them would break every second turn, the same
+      // bug the `step-start` line above fixes.
+      if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+        continue
+      }
       // Any other non-text part is refused rather than dropped: silently
       // ignoring one would answer a different question than the visitor
       // sees on screen.

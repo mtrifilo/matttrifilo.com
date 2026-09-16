@@ -118,6 +118,71 @@ describe('accepting a request', () => {
     ])
   })
 
+  test('accepts an assistant message replayed with a data part', () => {
+    // MTC-42's progress part rides along with the answer on every later
+    // question, exactly as `step-start` does. It is this route's own
+    // narration, so it is skipped rather than refused; refusing it would
+    // break every second turn.
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'data-progress',
+              id: 'progress',
+              data: {
+                phase: 'done',
+                steps: [{ id: 'resume', title: 'Résumé' }],
+                ms: 14_000,
+              },
+            },
+            { type: 'text', text: 'He builds platforms.' },
+          ],
+        },
+        said('user', 'Where?')
+      )
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.history).toEqual([
+      { role: 'user', text: 'What does Matt do?' },
+      { role: 'assistant', text: 'He builds platforms.' },
+    ])
+  })
+
+  test('drops an answer that is nothing but a data part', () => {
+    // A run that read documents and never wrote a word. The steps are not
+    // text, so the turn carries nothing for the model and goes the same way
+    // as an empty one.
+    const result = validate(
+      body(
+        said('user', 'What does Matt do?'),
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'data-progress',
+              id: 'progress',
+              data: { phase: 'reading', steps: [] },
+            },
+          ],
+        },
+        said('user', 'Try again?')
+      )
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.history).toEqual([
+      { role: 'user', text: 'What does Matt do?' },
+    ])
+    expect(result.userMessage).toBe('Try again?')
+  })
+
   test('accepts a replayed answer longer than a question may be', () => {
     // Answers run to CHAT_MAX_OUTPUT_TOKENS, several times the question
     // cap; the first preview's second turn was refused for exactly this.

@@ -17,15 +17,16 @@ import {
   joinTextParts,
   toAnswerView,
   toChatErrorView,
+  type AnswerView,
 } from '@/lib/chat/answer'
 import type { ChatUIMessage } from '@/lib/chat/handler'
 import { createChatFetch } from '@/lib/chat/transport'
-import { AnswerShimmer } from './answer-shimmer'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
 import { ChatErrorNotice } from './assistant-notice'
+import { AssistantProgress } from './assistant-progress'
 import {
   ASK_STARTER_QUESTIONS,
   ASSISTANT_INTRO,
@@ -33,6 +34,7 @@ import {
   RESET_LABEL,
 } from './copy'
 import { takePendingQuestion } from './pending-question'
+import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
 // the module can be evaluated before the browser globals exist.
@@ -40,6 +42,18 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
   api: '/api/chat',
   fetch: createChatFetch((input, init) => fetch(input, init)),
 })
+
+/**
+ * The question has been sent and no assistant message exists yet, so there is
+ * nothing to derive a view from. The progress component reads this as
+ * "thinking" and shows the spinner and the timer (MTC-42).
+ */
+const EMPTY_VIEW: AnswerView = {
+  text: '',
+  sources: [],
+  truncated: false,
+  incomplete: false,
+}
 
 /**
  * The conversation at /ask (MTC-33).
@@ -52,8 +66,11 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
  * Screen-reader behaviour is the one thing here worth reading twice. The
  * transcript is NOT a live region: with `aria-live` on it, every streamed
  * token would re-announce the whole growing answer. The visually hidden
- * `role="status"` below announces three states instead — working, done,
- * failed — and the reader can then move into the transcript at their own pace.
+ * `role="status"` below announces the run's state instead: which document is
+ * being read, that the answer is being written, that it is done, that it
+ * failed (MTC-42). The reader can then move into the transcript at their own
+ * pace. The elapsed timer is never in that announcement: it changes every
+ * second, and a region that re-reads every second says nothing at all.
  */
 export function AssistantChat() {
   const [input, setInput] = useState('')
@@ -99,6 +116,10 @@ export function AssistantChat() {
   const busy = status === 'submitted' || status === 'streaming'
   const errorView = useMemo(() => toChatErrorView(error), [error])
   const hasTranscript = messages.length > 0
+  // One clock for the page, started the moment a question is sent rather than
+  // when the stream opens, so the timer counts the wait the visitor is
+  // actually sitting through. It freezes wherever the run ended.
+  const elapsedMs = useElapsed(busy)
 
   const ask = useCallback(
     (question: string) => {
@@ -147,10 +168,21 @@ export function AssistantChat() {
     }
   }, [sendMessage])
 
-  const lastIsQuestion = messages.at(-1)?.role === 'user'
+  const lastMessage = messages.at(-1)
+  const lastIsQuestion = lastMessage?.role === 'user'
+  // The run in flight, for the announcement only. A screen reader hears the
+  // steps as they change instead of one flat "Responding" for twenty seconds.
+  const lastProgress = useMemo(
+    () =>
+      lastMessage && lastMessage.role === 'assistant'
+        ? toAnswerView(lastMessage).progress
+        : undefined,
+    [lastMessage]
+  )
   const announcement = announcementFor(
     status,
-    messages.some(message => message.role === 'assistant')
+    messages.some(message => message.role === 'assistant'),
+    lastProgress
   )
 
   return (
@@ -201,6 +233,10 @@ export function AssistantChat() {
                           ? { onRegenerate: handleRegenerate }
                           : undefined
                       }
+                      // Only the last answer is the one this clock is timing.
+                      // Earlier ones show the duration the server sent with
+                      // them, which is on the message itself.
+                      elapsedMs={isLast ? elapsedMs : 0}
                       pending={isLast && busy}
                       view={toAnswerView(message)}
                     />
@@ -214,7 +250,11 @@ export function AssistantChat() {
             {busy && lastIsQuestion && (
               <Message from="assistant">
                 <MessageContent>
-                  <AnswerShimmer />
+                  <AssistantProgress
+                    elapsedMs={elapsedMs}
+                    pending
+                    view={EMPTY_VIEW}
+                  />
                 </MessageContent>
               </Message>
             )}

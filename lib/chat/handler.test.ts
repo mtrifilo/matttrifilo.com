@@ -15,6 +15,11 @@ import {
   type ChatModelRequest,
 } from './handler'
 import {
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  type ChatProgress,
+} from './progress'
+import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
   SYSTEM_PROMPT,
@@ -342,6 +347,23 @@ function errorTextFrom(body: string): string | undefined {
     if (chunk.type === 'error') return chunk.errorText
   }
   return undefined
+}
+
+/** Every chunk the browser was sent, in order. */
+function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
+  const chunks: { type: string; [key: string]: unknown }[] = []
+  for (const line of body.split('\n')) {
+    if (!line.startsWith('data: ') || line.includes('[DONE]')) continue
+    chunks.push(JSON.parse(line.slice('data: '.length)))
+  }
+  return chunks
+}
+
+/** Each progress payload the route wrote, in the order it wrote them. */
+function progressFrom(body: string): ChatProgress[] {
+  return chunksFrom(body)
+    .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
+    .map(chunk => chunk.data as ChatProgress)
 }
 
 describe('kill switch', () => {
@@ -956,6 +978,212 @@ describe('sources on the stream', () => {
     // What the UI actually needs still arrives.
     expect(body).toContain('He led the platform migration.')
     expect(metadataFrom(body).sources).toHaveLength(1)
+  })
+})
+
+describe('progress on the stream', () => {
+  test('narrates the reads, the writing, and how long it took', async () => {
+    const model = modelOf(reads('resume'), reads('faq'), answers())
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    // Titles come from the index, never from the model: the model only ever
+    // sent an id.
+    expect(progressFrom(body)).toEqual([
+      { phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] },
+      {
+        phase: 'reading',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+      },
+      {
+        phase: 'writing',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+      },
+      {
+        phase: 'done',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+        ms: 0,
+      },
+    ])
+  })
+
+  test('every progress chunk carries the same part id', async () => {
+    // What makes the browser hold one part that grows, rather than a part
+    // per step that the client would then replay back on the next question.
+    const model = modelOf(reads('resume'), reads('faq'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const ids = chunksFrom(body)
+      .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
+      .map(chunk => chunk.id)
+    expect(ids).toHaveLength(4)
+    expect(new Set(ids)).toEqual(new Set([PROGRESS_PART_ID]))
+  })
+
+  test('the duration is the whole request, and arrives before the finish', async () => {
+    let clock = 5_000
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => modelOf(reads('resume'), answers()),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => (clock += 1_000),
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    const finished = progressFrom(body).at(-1)
+    expect(finished?.phase).toBe('done')
+    expect(typeof finished?.ms).toBe('number')
+    expect(finished?.ms).toBeGreaterThan(0)
+
+    // Before the finish chunk, so the browser has the final state in hand by
+    // the time the stream closes.
+    const types = chunksFrom(body).map(chunk => chunk.type)
+    expect(types.lastIndexOf(PROGRESS_PART_TYPE)).toBeLessThan(
+      types.lastIndexOf('finish')
+    )
+  })
+
+  test('the tool chunks it reads are still kept from the browser', async () => {
+    const model = modelOf(reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    // The progress view is built from `tool-input-available`, which means
+    // this stage sees the tool chunks. None of them may survive the next one.
+    for (const type of chunksFrom(body).map(chunk => chunk.type)) {
+      expect(type.startsWith('tool-')).toBe(false)
+    }
+    expect(body).not.toContain(documents[0].text)
+    expect(progressFrom(body)).not.toHaveLength(0)
+  })
+
+  test('an id the index never listed earns no step', async () => {
+    // The read is about to be refused as `unknown_document`; a step for a
+    // document that was never opened would be the one claim this must not
+    // make.
+    const model = modelOf(reads('salary-history'), reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(progressFrom(body)[0]).toEqual({
+      phase: 'reading',
+      steps: [{ id: 'resume', title: 'Résumé' }],
+    })
+    expect(JSON.stringify(progressFrom(body))).not.toContain('salary-history')
+  })
+
+  test('a read past the budget earns no step either', async () => {
+    // The read session refuses a fourth document on count alone, before it
+    // even looks at the id, so a fourth row could never become a read.
+    const model = modelOf(
+      readsAll('resume', 'faq', 'projects', 'timeline'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const finished = progressFrom(body).at(-1)
+    expect(finished?.steps.map(step => step.id)).toEqual([
+      'resume',
+      'faq',
+      'projects',
+    ])
+    expect(metadataFrom(body).sources).toHaveLength(3)
+  })
+
+  test('a document read twice is one row, as it is one chip', async () => {
+    const model = modelOf(reads('resume'), reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const finished = progressFrom(body).at(-1)
+    expect(finished?.steps).toEqual([{ id: 'resume', title: 'Résumé' }])
+    expect(metadataFrom(body).sources).toHaveLength(1)
+  })
+
+  test('a run that reads nothing narrates nothing', async () => {
+    // A decline, or any answer written straight out. An empty step list would
+    // put a spinner where the answer is already arriving.
+    const body = await (
+      await handlerWith(decliningModel())(
+        post({ messages: [uiMessage('user', 'What does Matt earn?')] })
+      )
+    ).text()
+
+    expect(progressFrom(body)).toEqual([])
+    expect(body).toContain(DECLINE_SENTENCE)
+  })
+
+  test('a preamble before the first read narrates nothing either', async () => {
+    const model = modelOf(
+      readsAfterSaying('Let me check his résumé.', 'resume'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    // The narration is text, not a read: the first progress chunk is the
+    // read that follows it, not a "writing" for the preamble.
+    expect(progressFrom(body)[0]?.phase).toBe('reading')
+  })
+
+  test('a stream that fails after a read never says it finished', async () => {
+    // The client reads the absence of `done` as "stopped": no spinner, no
+    // running timer, and no count of documents read.
+    const model = modelOf(reads('resume'), () =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: 'He led the' },
+        { type: 'error', error: new Error('upstream went away') },
+      ])
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const progress = progressFrom(body)
+    expect(progress.map(entry => entry.phase)).toEqual(['reading', 'writing'])
+    expect(progress.some(entry => entry.phase === 'done')).toBe(false)
+    expect(JSON.parse(errorTextFrom(body)!)).toEqual(
+      chatErrorBody('interrupted')
+    )
   })
 })
 
