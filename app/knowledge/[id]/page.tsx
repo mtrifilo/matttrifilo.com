@@ -5,6 +5,7 @@ import { MDXContent } from '@/components/blog/mdx-content'
 import { formatDate } from '@/lib/format-date'
 import { listKnowledgeDocuments, readKnowledgeDocument } from '@/lib/knowledge'
 import { topicLabel } from '../topic-label'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 
 interface KnowledgeDocumentPageProps {
   params: Promise<{ id: string }>
@@ -25,6 +26,7 @@ export const dynamicParams = false
 export async function generateMetadata({
   params,
 }: KnowledgeDocumentPageProps): Promise<Metadata> {
+  if (isChatDisabled()) notFound()
   const { id } = await params
   const document = readKnowledgeDocument(id)
   if (!document) return { title: 'Not Found' }
@@ -47,6 +49,7 @@ export async function generateMetadata({
 export default async function KnowledgeDocumentPage({
   params,
 }: KnowledgeDocumentPageProps) {
+  if (isChatDisabled()) notFound()
   const { id } = await params
   const document = readKnowledgeDocument(id)
   if (!document) notFound()
