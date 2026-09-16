@@ -11,6 +11,10 @@ import {
   type UIMessage,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
+import {
+  createRetryCounter,
+  type BoundedFetchRetry,
+} from '@/lib/ai/bounded-fetch'
 import type { EnvSource } from '@/lib/env'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -64,15 +68,29 @@ import {
  * Only counts, flags, and durations leave the request.
  */
 
+/**
+ * What one request asks of the model it is handed.
+ *
+ * `onVertexRetry` is how the hidden retries reach this request's own log
+ * line: the fetch wrapper under the Vertex client may open a second
+ * connection for a stalled model call, and that second generation is billed
+ * and spends the request's seconds while being invisible to the visitor and,
+ * without this, to the `ms` on the completion line.
+ */
+export interface ChatModelRequest {
+  onVertexRetry: (retry: BoundedFetchRetry) => void
+}
+
 export interface ChatHandlerDeps {
   loadKnowledgeIndex: () => KnowledgeIndex
   readKnowledgeDocument: (id: string) => KnowledgeDocument | undefined
   /**
-   * A thunk, not a model. Building the Vertex client reads required env, so
+   * A factory, not a model. Building the Vertex client reads required env, so
    * it must not run at import time — a missing variable would otherwise break
-   * the build rather than one request.
+   * the build rather than one request — and the client is per request because
+   * the retry sink above is.
    */
-  model: () => LanguageModel
+  model: (request: ChatModelRequest) => LanguageModel
   env?: EnvSource
   /** Injected so the duration in the log is assertable. */
   now?: () => number
@@ -151,6 +169,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const started = now()
     let stepCount = 0
+    // Per request, like the read session below: the count belongs to the
+    // request that paid for the retries.
+    const vertexRetries = createRetryCounter()
     try {
       const index = loadKnowledgeIndex()
       // An index over its own ceiling is a deployment fault: MTC-29 enforces
@@ -185,7 +206,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const answer = new AnswerText()
 
       const result = streamText({
-        model: model(),
+        model: model({ onVertexRetry: vertexRetries.observe }),
         messages: buildMessages({
           index,
           history: validation.history,
@@ -247,6 +268,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
+            vertexRetries: vertexRetries.count(),
             ms: now() - started,
           })
         },
@@ -262,6 +284,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
+            vertexRetries: vertexRetries.count(),
             ms: now() - started,
           })
         },
@@ -439,6 +462,8 @@ interface CompletionAggregates {
   documentsRead: number
   readTokens: number
   readsRefused: ReadsRefused
+  /** Connections the Vertex wrapper abandoned and reopened on this request. */
+  vertexRetries: number
   ms: number
 }
 
@@ -457,6 +482,7 @@ function logCompletion({
   documentsRead,
   readTokens,
   readsRefused,
+  vertexRetries,
   ms,
 }: CompletionAggregates): void {
   const cached = cachedInputTokens(usage)
@@ -479,6 +505,11 @@ function logCompletion({
     answered,
     finishReason,
     aborted: false,
+    // Zero on a healthy request. Anything above it means a model call stalled
+    // and was reopened, so this request's `ms` — and its bill — contain a
+    // generation the visitor never saw: abandoning a connection does not
+    // cancel the generation behind it.
+    vertexRetries,
     ms,
   }
   // An answer that stopped on length lost its Sources trailer mid-word, and

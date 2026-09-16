@@ -2,7 +2,7 @@ import { createVertex } from '@ai-sdk/google-vertex'
 import { getVercelOidcToken } from '@vercel/oidc'
 import { ExternalAccountClient } from 'google-auth-library'
 import { readEnv, type EnvSource } from '@/lib/env'
-import { createBoundedFetch } from './bounded-fetch'
+import { createBoundedFetch, type BoundedFetchRetry } from './bounded-fetch'
 
 /**
  * Vertex AI access from Vercel with no service-account key (MTC-30).
@@ -69,7 +69,7 @@ function createAuthClient(
   return client
 }
 
-let vertex: ReturnType<typeof createVertex> | undefined
+let sharedVertex: ReturnType<typeof createVertex> | undefined
 let authClient: ReturnType<typeof createAuthClient> | undefined
 
 /**
@@ -91,21 +91,42 @@ export function getAuthClient() {
   return authClient
 }
 
-/** Lazily built so importing this module never throws at build time. */
-export function getVertex() {
-  if (!vertex) {
-    vertex = createVertex({
-      project: readEnv('GCP_PROJECT_ID'),
-      // Gemini 3.x is served from the global endpoint; us-central1 returned
-      // "model not found" for this project on the first preview.
-      location: 'global',
-      googleAuthOptions: { authClient: getAuthClient() },
-      // Bounds time-to-first-byte and retries a connection that stalled
-      // before saying anything (MTC-38). It wraps only the model call: the
-      // token exchange goes through google-auth-library's own transport and
-      // measured near zero throughout the episode that motivated this.
-      fetch: createBoundedFetch(),
-    })
-  }
-  return vertex
+export interface VertexClientOptions {
+  /**
+   * Told about every retry the bounded fetch makes on this client's calls —
+   * `RetryCounter.observe` at the call sites here. A retry is invisible to
+   * the visitor and would otherwise be invisible in the logs of the request
+   * that was billed for it, so a request that wants to report its own count
+   * asks for a client of its own.
+   */
+  onRetry?: (retry: BoundedFetchRetry) => void
+}
+
+/**
+ * A Vertex client. Lazily built so importing this module never throws at
+ * build time.
+ *
+ * With `onRetry`, the client is built per call rather than shared: it closes
+ * over that request's counter. The cost is an object and a closure — the
+ * token cache that matters lives in the shared auth client either way.
+ */
+export function getVertex({ onRetry }: VertexClientOptions = {}) {
+  if (onRetry) return createVertexClient(onRetry)
+  if (!sharedVertex) sharedVertex = createVertexClient()
+  return sharedVertex
+}
+
+function createVertexClient(onRetry?: (retry: BoundedFetchRetry) => void) {
+  return createVertex({
+    project: readEnv('GCP_PROJECT_ID'),
+    // Gemini 3.x is served from the global endpoint; us-central1 returned
+    // "model not found" for this project on the first preview.
+    location: 'global',
+    googleAuthOptions: { authClient: getAuthClient() },
+    // Bounds time-to-first-byte and retries a connection that stalled before
+    // saying anything (MTC-38). It wraps only the model call: the token
+    // exchange goes through google-auth-library's own transport and measured
+    // near zero throughout the episode that motivated this.
+    fetch: createBoundedFetch(onRetry ? { onRetry } : undefined),
+  })
 }

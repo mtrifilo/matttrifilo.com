@@ -15,5 +15,8 @@ export const dynamic = 'force-dynamic'
 export const POST = createChatHandler({
   loadKnowledgeIndex,
   readKnowledgeDocument,
-  model: () => getVertex()(geminiModel()),
+  // A client per request, so the retries its bounded fetch hides are counted
+  // into the log line of the request that was billed for them (MTC-38).
+  model: ({ onVertexRetry }) =>
+    getVertex({ onRetry: onVertexRetry })(geminiModel()),
 })
