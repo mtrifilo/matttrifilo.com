@@ -9,7 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "knowledge:check": "bun run scripts/knowledge-check.ts"
+    "knowledge:check": "bun run scripts/knowledge-check.ts",
+    "evals": "promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2",
+    "evals:smoke": "promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2 --filter-metadata smoke=true"
   },
   "dependencies": {
     "@ai-sdk/google-vertex": "^5.0.81",
@@ -43,6 +45,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "promptfoo": "0.123.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

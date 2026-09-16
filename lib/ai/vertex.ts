@@ -48,6 +48,32 @@ export function geminiModel(source: EnvSource = process.env): string {
   return source.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
 }
 
+/**
+ * The variables the Vercel federation needs. All four or none: the external
+ * account client cannot be built from a subset.
+ */
+export const VERCEL_FEDERATION_ENV_NAMES = [
+  'GCP_PROJECT_NUMBER',
+  'GCP_WORKLOAD_IDENTITY_POOL_ID',
+  'GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID',
+  'GCP_SERVICE_ACCOUNT_EMAIL',
+] as const
+
+/**
+ * Whether this process can present a Vercel OIDC token.
+ *
+ * On Vercel it always can, and that path is unchanged. Everywhere else there
+ * is no Vercel identity to exchange, so the client is left to
+ * google-auth-library's Application Default Credentials: the credential file
+ * `google-github-actions/auth` writes for the MTC-32 eval job, or a
+ * developer's own `gcloud auth application-default login`. Without this the
+ * eval suites could only run against a deployment, which is the one thing
+ * they must not need.
+ */
+export function usesVercelFederation(source: EnvSource = process.env): boolean {
+  return VERCEL_FEDERATION_ENV_NAMES.every(name => Boolean(source[name]))
+}
+
 function createAuthClient(
   provider: WorkloadIdentityProvider,
   serviceAccountEmail: string
@@ -134,7 +160,12 @@ function createVertexClient(options?: VertexClientOptions) {
     // Gemini 3.x is served from the global endpoint; us-central1 returned
     // "model not found" for this project on the first preview.
     location: 'global',
-    googleAuthOptions: { authClient: getAuthClient() },
+    // Federated when the Vercel variables are there, Application Default
+    // Credentials when they are not. Omitting googleAuthOptions is what hands
+    // the choice to google-auth-library.
+    ...(usesVercelFederation()
+      ? { googleAuthOptions: { authClient: getAuthClient() } }
+      : {}),
     // Bounds time-to-first-byte and retries a connection that stalled before
     // saying anything (MTC-38). It wraps only the model call: the token
     // exchange goes through google-auth-library's own transport and measured

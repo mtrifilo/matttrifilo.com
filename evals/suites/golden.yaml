@@ -1,0 +1,1008 @@
+# Golden questions (MTC-32).
+#
+# Questions a hiring manager would actually ask, hand-written from
+# content/knowledge. Never mined from traffic: the route stores nothing, by
+# decision, and these have to stay reviewable line by line.
+#
+# Every test asserts three things deterministically: the answer stays in the
+# third person, the run opened the document the fact lives in, and it read
+# nothing outside the index. The distinctive-phrase assertion is the fact
+# check. The llm-rubric on top is the only judgement call, and it is graded
+# three times with a 0.67 threshold so one flaky grade cannot redden a merge.
+#
+# Adding a document to the corpus means adding goldens for it here.
+
+- description: 'golden: what the team owns'
+  vars:
+    question: What does Matt's team own?
+  metadata:
+    suite: golden
+    smoke: true
+    expectReads: [owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Email Reliability
+        - outbound email
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r1 >-
+            The answer says Matt's team owns email sending or the outbound
+            email platform, and names at least one concrete part of it such as
+            deliverability, compliance, engagement tracking, or the mail
+            gateway. It is written about Matt in the third person.
+        - type: llm-rubric
+          value: *r1
+        - type: llm-rubric
+          value: *r1
+
+- description: 'golden: size of the team he manages'
+  vars:
+    question: How many people report to Matt?
+  metadata:
+    suite: golden
+    smoke: true
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - 5 direct
+        - five direct
+        - 5 reports
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r2 >-
+            The answer says Matt manages five direct reports, and does not
+            invent a different number. Naming the mix (engineers, a postmaster,
+            a compliance analyst) is correct but not required.
+        - type: llm-rubric
+          value: *r2
+        - type: llm-rubric
+          value: *r2
+
+- description: 'golden: sending scale'
+  vars:
+    question: What scale of email does the platform Matt works on send?
+  metadata:
+    suite: golden
+    smoke: true
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - 1B
+        - billion
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r3 >-
+            The answer says the platform sends up to about a billion messages
+            a month at peak. It does not state a larger or smaller figure as
+            fact.
+        - type: llm-rubric
+          value: *r3
+        - type: llm-rubric
+          value: *r3
+
+- description: 'golden: throughput after agent adoption'
+  vars:
+    question: What happened to his team's throughput after they adopted AI coding agents?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - 28
+        - 2.7
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r4 >-
+            The answer reports that merged pull requests per week rose from
+            about 10 to about 28 (roughly 2.7 times) across 2025 to 2026, and
+            does not present the change as a proven causal result.
+        - type: llm-rubric
+          value: *r4
+        - type: llm-rubric
+          value: *r4
+
+- description: 'golden: lead time to production'
+  vars:
+    question: How did the team's median lead time to production change?
+  metadata:
+    suite: golden
+    expectReadsAny: [team-throughput-study-2025-2026, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains
+      value: '2.3'
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r5 >-
+            The answer says median cycle time or lead time to production fell
+            to about 2.3 days, from a band of roughly seven to nine days.
+        - type: llm-rubric
+          value: *r5
+        - type: llm-rubric
+          value: *r5
+
+- description: 'golden: quality while throughput rose'
+  vars:
+    question: Did quality hold up while the team shipped more?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - 28 to 12
+        - defect
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r6 >-
+            The answer says customer-reported defects fell and the open backlog
+            went from 28 to 12, or otherwise reports that quality held while
+            output rose, without inventing a metric the study does not give.
+        - type: llm-rubric
+          value: *r6
+        - type: llm-rubric
+          value: *r6
+
+- description: 'golden: confounders in the throughput study'
+  vars:
+    question: What confounders does Matt name in his throughput analysis?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - work mix
+        - team composition
+        - story-point
+        - story point
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r7 >-
+            The answer names at least two confounders the study itself lists,
+            such as changed work mix, changed team composition, changed
+            story-point practice, a changed tracker, automation counted as
+            human output, or partial usage telemetry.
+        - type: llm-rubric
+          value: *r7
+        - type: llm-rubric
+          value: *r7
+
+- description: 'golden: current role'
+  vars:
+    question: What is Matt's current title?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Manager, Product Engineering
+        - Engineering Manager
+        - engineering manager
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r8 >-
+            The answer says Matt is an engineering manager for the Email
+            Reliability team, with the title Manager, Product Engineering, and
+            places him at Thryv.
+        - type: llm-rubric
+          value: *r8
+        - type: llm-rubric
+          value: *r8
+
+- description: 'golden: tenure'
+  vars:
+    question: How long has Matt been at the same company?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '2017'
+        - nine years
+        - '9 years'
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r9 >-
+            The answer says Matt joined in July 2017 and has been there since,
+            about nine years, through the company's acquisition by Thryv.
+        - type: llm-rubric
+          value: *r9
+        - type: llm-rubric
+          value: *r9
+
+- description: 'golden: the 2024 cloud outage'
+  vars:
+    question: What did Matt do during the 2024 cloud-provider outage?
+  metadata:
+    suite: golden
+    expectReadsAny: [owned-systems-and-operations, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - incident
+        - retried
+        - no messages were lost
+        - dead-lettered
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r10 >-
+            The answer says Matt led or coordinated the response to a February
+            2024 cloud-provider outage and that no messages were lost, because
+            sends were queued and retried. It does not invent a customer impact
+            figure.
+        - type: llm-rubric
+          value: *r10
+        - type: llm-rubric
+          value: *r10
+
+- description: 'golden: plugin marketplace work'
+  vars:
+    question: What did Matt build around Claude Code plugin marketplaces?
+  metadata:
+    suite: golden
+    expectReads: [plugin-marketplaces-and-sme-knowledge-bases]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - governance
+        - federated
+        - marketplace
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r11 >-
+            The answer says Matt authored the marketplace governance proposal
+            and the architecture decisions that made distribution federated,
+            and mentions his team's own marketplace. It does not claim he
+            scaffolded the organisation-wide repository, which a colleague did.
+        - type: llm-rubric
+          value: *r11
+        - type: llm-rubric
+          value: *r11
+
+- description: 'golden: the on-call plugin'
+  vars:
+    question: What does the on-call plugin his team uses actually do?
+  metadata:
+    suite: golden
+    expectReads: [plugin-marketplaces-and-sme-knowledge-bases]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - triage
+        - handoff
+        - runbook
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r12 >-
+            The answer describes two skills, alert triage and shift handoff,
+            over a knowledge base of runbooks and incident documents, and does
+            not claim the plugin takes automated remediation action on its own.
+        - type: llm-rubric
+          value: *r12
+        - type: llm-rubric
+          value: *r12
+
+- description: 'golden: 2026 talks'
+  vars:
+    question: What talks has Matt given recently?
+  metadata:
+    suite: golden
+    expectReadsAny: [talks-and-teaching, ai-tooling-leadership]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Agentic Engineering in 2026
+        - Effective Context Management
+        - Give your agent a brain
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r13 >-
+            The answer names at least two of Matt's 2026 internal talks by
+            title and says they were given inside his company. It does not
+            claim he spoke at a public conference or meetup.
+        - type: llm-rubric
+          value: *r13
+        - type: llm-rubric
+          value: *r13
+
+- description: 'golden: thesis of the context talk'
+  vars:
+    question: What was the argument of his talk on context management?
+  metadata:
+    suite: golden
+    expectReads: [talks-and-teaching]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - what you put in the window
+        - quality of context
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r14 >-
+            The answer gives the thesis that what matters is what you put in
+            the context window, not how large the window is, and attributes it
+            to the May 2026 talk.
+        - type: llm-rubric
+          value: *r14
+        - type: llm-rubric
+          value: *r14
+
+- description: 'golden: what he thinks the job is'
+  vars:
+    question: What does Matt think the job of a software engineer is?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      [engineering-philosophy, from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains
+      value: complexity
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r15 >-
+            The answer says Matt holds that the job of a software engineer is
+            to manage complexity, and connects it to his caution about agents
+            generating complexity faster than humans can manage it.
+        - type: llm-rubric
+          value: *r15
+        - type: llm-rubric
+          value: *r15
+
+- description: 'golden: the patterns he runs'
+  vars:
+    question: What working patterns does Matt run deliberately?
+  metadata:
+    suite: golden
+    expectReads: [engineering-philosophy]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - proof of concept
+        - resilience
+        - distribution
+        - merge button
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r16 >-
+            The answer names at least two of the five patterns: hackathon to
+            proof of concept to production service, resilience by design, rapid
+            experimentation with throw-away criteria, distribution as the
+            multiplier, and humans on the merge button.
+        - type: llm-rubric
+          value: *r16
+        - type: llm-rubric
+          value: *r16
+
+- description: 'golden: the books behind his leadership'
+  vars:
+    question: Which books does Matt say shaped how he leads?
+  metadata:
+    suite: golden
+    expectReads: [engineering-philosophy]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Extreme Ownership
+        - Code Complete
+        - Multipliers
+        - Turn the Ship Around
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r17 >-
+            The answer names at least three of the six books he lists publicly
+            and does not add a book that is not on that list.
+        - type: llm-rubric
+          value: *r17
+        - type: llm-rubric
+          value: *r17
+
+- description: 'golden: open-source projects'
+  vars:
+    question: What open-source projects does Matt publish?
+  metadata:
+    suite: golden
+    expectReads: [open-source]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-all
+      value:
+        - decant
+        - psychic-homily
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r18 >-
+            The answer names decant and psychic-homily-web as the curated
+            projects, and does not state a star count, language, or last-push
+            date, none of which are in the published material.
+        - type: llm-rubric
+          value: *r18
+        - type: llm-rubric
+          value: *r18
+
+- description: 'golden: what decant does'
+  vars:
+    question: What is decant?
+  metadata:
+    suite: golden
+    expectReads: [open-source]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - clipboard
+        - markdown
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r19 >-
+            The answer says decant is a command-line tool that turns clipboard
+            content into Markdown for LLM context, and gives its repository as
+            github.com/mtrifilo/decant if it gives one at all.
+        - type: llm-rubric
+          value: *r19
+        - type: llm-rubric
+          value: *r19
+
+- description: 'golden: the compliance migration'
+  vars:
+    question: What did the compliance case-system migration involve?
+  metadata:
+    suite: golden
+    expectReads: [post-acquisition-integration]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Salesforce
+        - OAuth
+        - parity
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r20 >-
+            The answer says the compliance case system's records moved to the
+            parent company's Salesforce organisation, and names at least one
+            mechanism Matt used, such as a per-target configuration toggle,
+            OAuth client-credentials authentication, a field-parity analysis,
+            or a gap-annotation convention.
+        - type: llm-rubric
+          value: *r20
+        - type: llm-rubric
+          value: *r20
+
+- description: 'golden: whether the migration went to plan'
+  vars:
+    question: Did that migration go to plan?
+  metadata:
+    suite: golden
+    expectReads: [post-acquisition-integration]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - did not hold
+        - slip
+        - late August
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r21 >-
+            The answer says plainly that the planned two-week cutover window
+            did not hold and that parity work continued into late August. It
+            does not present the migration as having gone smoothly.
+        - type: llm-rubric
+          value: *r21
+        - type: llm-rubric
+          value: *r21
+
+- description: 'golden: position on vibe coding'
+  vars:
+    question: What is Matt's position on vibe coding?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      [engineering-philosophy, from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - agentic engineering
+        - vibe coding
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r22 >-
+            The answer says Matt rejects "vibe coding" as the framing and
+            prefers agentic or AI-assisted engineering, with humans reviewing
+            diffs, specs written first, and the agent treated as a fast but
+            unreliable junior developer.
+        - type: llm-rubric
+          value: *r22
+        - type: llm-rubric
+          value: *r22
+
+- description: 'golden: what he did before software'
+  vars:
+    question: What did Matt do before he was a software engineer?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - sound design
+        - post-production
+        - barista
+        - coffee
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r23 >-
+            The answer says Matt worked in freelance sound design and
+            post-production in Chicago before software, and may add that he was
+            working in a coffee shop when he took his first engineering offer.
+        - type: llm-rubric
+          value: *r23
+        - type: llm-rubric
+          value: *r23
+
+- description: 'golden: education'
+  vars:
+    question: What is Matt's educational background?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Columbia College
+        - Audio Arts
+        - freeCodeCamp
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r24 >-
+            The answer says Matt holds a bachelor's degree in Audio Arts and
+            Acoustics from Columbia College Chicago and a freeCodeCamp front
+            end certificate. It does not claim a computer science degree.
+        - type: llm-rubric
+          value: *r24
+        - type: llm-rubric
+          value: *r24
+
+- description: 'golden: recognition'
+  vars:
+    question: What recognition has Matt received at work?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Accelerator Award
+        - Emerging Leaders
+        - Better Together
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r25 >-
+            The answer names at least two of the Thryv Accelerator Award, the
+            Thryv Emerging Leaders Program, and the Keap Better Together Award,
+            and does not invent an award.
+        - type: llm-rubric
+          value: *r25
+        - type: llm-rubric
+          value: *r25
+
+- description: 'golden: languages and stacks'
+  vars:
+    question: Which languages and frameworks does Matt work in?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Java
+        - Python
+        - TypeScript
+        - Go
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r26 >-
+            The answer names languages from the published list (Java, Python,
+            TypeScript, Go) and may add frameworks from it such as Spring Boot,
+            Micronaut, Vue.js or React. It does not add a language the résumé
+            does not list.
+        - type: llm-rubric
+          value: *r26
+        - type: llm-rubric
+          value: *r26
+
+- description: 'golden: independent deployment'
+  vars:
+    question: How does Matt's team ship to production?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - independent
+        - release train
+        - gated
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r27 >-
+            The answer says the team moved its microservices off a weekly
+            release train onto independent, gated deploys, and mentions that
+            tests gate the deploy.
+        - type: llm-rubric
+          value: *r27
+        - type: llm-rubric
+          value: *r27
+
+- description: 'golden: the merge API decomposition'
+  vars:
+    question: What was the Merge API decomposition work?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Liquid
+        - monolith
+        - decomposition
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r28 >-
+            The answer says Matt led moving Liquid template rendering out of
+            the monolith into a standalone Java service, as a tour of duty with
+            the Platform Services team around 2020 to 2021.
+        - type: llm-rubric
+          value: *r28
+        - type: llm-rubric
+          value: *r28
+
+- description: 'golden: the LLM feature he shipped'
+  vars:
+    question: Has Matt shipped an LLM feature in a product?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Email Engagement Summary
+        - deliverability
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r29 >-
+            The answer says Matt proposed, designed and built the AI Email
+            Engagement Summary on Gemini and Vertex AI with retrieval over
+            help content, and that it explains how recent sending practice
+            affects deliverability.
+        - type: llm-rubric
+          value: *r29
+        - type: llm-rubric
+          value: *r29
+
+- description: 'golden: how on-call runs'
+  vars:
+    question: How does Matt run on-call for his team?
+  metadata:
+    suite: golden
+    expectReads: [owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - rotation
+        - runbook
+        - escalation
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r30 >-
+            The answer says there is a weekly rotation that Matt takes shifts
+            in as a manager, with a standing rule that every alert gets a
+            permanent runbook.
+        - type: llm-rubric
+          value: *r30
+        - type: llm-rubric
+          value: *r30
+
+- description: 'golden: advice to junior engineers'
+  vars:
+    question: What does Matt say junior engineers should do in 2026?
+  metadata:
+    suite: golden
+    expectReads: [from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - agentic engineering
+        - without AI
+        - ship
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r31 >-
+            The answer says Matt tells junior engineers to learn agentic
+            engineering and show shipped work, while insisting they must still
+            be able to code without AI.
+        - type: llm-rubric
+          value: *r31
+        - type: llm-rubric
+          value: *r31
+
+- description: 'golden: where a mid-sized company should sit'
+  vars:
+    question: Where does Matt think a mid-sized company should sit relative to the AI frontier?
+  metadata:
+    suite: golden
+    expectReads: [engineering-philosophy]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - trailing
+        - slightly
+        - already
+    - type: assert-set
+      threshold: 0.67
+      assert:
+        - type: llm-rubric
+          value: &r32 >-
+            The answer says Matt sees trailing the state of the art slightly as
+            an advantage for a smaller organisation, because it can adopt what
+            larger organisations have already proven in production.
+        - type: llm-rubric
+          value: *r32
+        - type: llm-rubric
+          value: *r32

@@ -1,0 +1,368 @@
+# Groundedness (MTC-32).
+#
+# Two halves. The first asks questions that can only be answered from a
+# document and checks the answer carries a `Sources:` trailer naming only
+# documents the server actually read: the trailer is the model's own claim and
+# metadata.readIds is the server's record, so a trailer id that was never read
+# is a citation of something the model never saw.
+#
+# The second half is hallucination probes. Every one asks for a fact that is
+# plausible for someone with Matt's career and is nowhere in the corpus. A
+# pass is the decline sentence or an answer that says the published material
+# does not cover it. `forbidden` lists the strings that would only appear if
+# the model had made the fact up.
+
+- description: 'groundedness: cites the outage account'
+  vars:
+    question: What did Matt do during the February 2024 outage?
+  metadata:
+    suite: groundedness
+    smoke: true
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the throughput figures'
+  vars:
+    question: How many merged pull requests a week did the team reach in 2026?
+  metadata:
+    suite: groundedness
+    smoke: true
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the alert-triage description'
+  vars:
+    question: What does the alert-triage skill do, step by step?
+  metadata:
+    suite: groundedness
+    smoke: true
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the May 2026 talk material'
+  vars:
+    question: What research sat behind his talk on context management?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the AI product feature'
+  vars:
+    question: What is the AI Email Engagement Summary and how quickly did it ship?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the deployment programme'
+  vars:
+    question: How many services did the team move onto independent deploys, and how long did it take?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the open-source list'
+  vars:
+    question: Where does the decant repository live?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the awards'
+  vars:
+    question: When did Matt receive the Thryv Accelerator Award?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the integration work'
+  vars:
+    question: What authentication change did the compliance migration require?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the rule for building agent context'
+  vars:
+    question: What is Matt's rule for building context for an agent?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the limits of usage telemetry'
+  vars:
+    question: How does Matt measure AI adoption on his team, and what are the limits?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'groundedness: cites the peak-season record'
+  vars:
+    question: What has Matt owned for Black Friday and Cyber Monday?
+  metadata:
+    suite: groundedness
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a company he never worked at'
+  vars:
+    question: What did Matt work on during his time at Netflix?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - he worked at Netflix
+      - Matt worked at Netflix
+      - his role at Netflix
+      - at Netflix he
+      - while at Netflix
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a conference talk he never gave'
+  vars:
+    question: What was his KubeCon 2024 talk about?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - his KubeCon talk
+      - at KubeCon he
+      - the talk covered
+      - he presented
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: attendance at an invented talk'
+  vars:
+    question: How many people attended his re:Invent session?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - people attended
+      - attendees
+      - audience of
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: an academic record that does not exist'
+  vars:
+    question: What was Matt's GPA, and which university gave him his computer science degree?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - GPA was
+      - GPA of
+      - computer science degree from
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: headcount at an employer he never had'
+  vars:
+    question: How many engineers reported to Matt at Google?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - at Google he
+      - engineers at Google
+      - reported to him at Google
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: precision the corpus does not contain'
+  vars:
+    question: What is the platform's exact uptime, to four decimal places?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - 99.9999
+      - 99.9900
+      - 99.99%
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a future plan the corpus does not state'
+  vars:
+    question: What is on his team's roadmap for 2027?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - in 2027 the team
+      - the 2027 roadmap includes
+      - the roadmap for 2027
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: an outcome the corpus explicitly leaves open'
+  vars:
+    question: Which conference accepted his context-engineering talk proposal?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - accepted his
+      - was accepted by
+      - he will speak at
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a vendor name the corpus deliberately withholds'
+  vars:
+    question: Which third-party coding agent did his trial reject? Name the product.
+  metadata:
+    suite: groundedness
+    forbidden:
+      - Copilot
+      - Windsurf
+      - Devin
+      - Tabnine
+      - Aider
+      - Codeium
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a certification he does not list'
+  vars:
+    question: Which AWS certification does Matt hold?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - AWS Certified
+      - Solutions Architect
+      - Cloud Practitioner
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+
+- description: 'probe: a repository statistic the corpus excludes on purpose'
+  vars:
+    question: How many GitHub stars does decant have today?
+  metadata:
+    suite: groundedness
+    forbidden:
+      - it has around
+      - roughly 1
+      - approximately 2
+      - currently has
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoInventedFact
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
