@@ -296,14 +296,18 @@ const loggedText = () =>
     )
     .join('\n')
 
+const HUMAN = { isBot: false, isVerifiedBot: false, bypassed: false }
+
 const handlerWith = (
   model: MockLanguageModelV4,
-  env: Record<string, string | undefined> = {}
+  env: Record<string, string | undefined> = {},
+  verdict = HUMAN
 ) =>
   createChatHandler({
     loadKnowledgeIndex: () => index,
     readKnowledgeDocument,
     model: () => model,
+    verifyVisitor: () => Promise.resolve(verdict),
     env,
     now: () => 1_000,
   })
@@ -351,6 +355,7 @@ describe('kill switch', () => {
   test('the index is not even loaded when chat is off', async () => {
     let loads = 0
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => {
         loads += 1
         return index
@@ -361,6 +366,135 @@ describe('kill switch', () => {
     })
     await handler(post({ messages: [uiMessage('user', QUESTION)] }))
     expect(loads).toBe(0)
+  })
+})
+
+describe('bot protection', () => {
+  const BOT = { isBot: true, isVerifiedBot: false, bypassed: false }
+
+  test('an automated caller is refused with the blocked envelope', async () => {
+    const model = readingModel()
+    const response = await handlerWith(
+      model,
+      {},
+      BOT
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual(chatErrorBody('blocked'))
+    expect(model.doStreamCalls).toHaveLength(0)
+  })
+
+  test('the verdict is checked before the body is read', async () => {
+    // A body that would otherwise be `invalid`: the bot verdict wins because
+    // nothing has been parsed yet.
+    const response = await handlerWith(
+      readingModel(),
+      {},
+      BOT
+    )(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        body: 'not json',
+      })
+    )
+    expect(await response.json()).toEqual(chatErrorBody('blocked'))
+  })
+
+  test('a verified crawler is refused even when not flagged as a bot', async () => {
+    // "Verified" is Vercel's good-crawler list. Whether such a caller also
+    // carries isBot is the vendor's call; this route refuses it either way.
+    const response = await handlerWith(
+      readingModel(),
+      {},
+      {
+        isBot: false,
+        isVerifiedBot: true,
+        bypassed: false,
+      }
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    expect(response.status).toBe(403)
+    expect(
+      logged.find(
+        args =>
+          args[0] === '[chat]' &&
+          (args[1] as { rejected?: string }).rejected === 'blocked'
+      )?.[1]
+    ).toEqual({ rejected: 'blocked', verifiedBot: true })
+    expect(loggedText()).not.toContain(QUESTION)
+  })
+
+  test('the kill switch still answers before the verdict', async () => {
+    let asked = false
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => readingModel(),
+      verifyVisitor: () => {
+        asked = true
+        return Promise.resolve(BOT)
+      },
+      env: { CHAT_DISABLED: '1' },
+    })
+    const response = await handler(post({ messages: [] }))
+    expect(response.status).toBe(503)
+    expect(asked).toBe(false)
+  })
+
+  test('a bypass is served and logged with the environment', async () => {
+    const response = await handlerWith(
+      readingModel(),
+      { VERCEL_ENV: 'production' },
+      {
+        isBot: false,
+        isVerifiedBot: false,
+        bypassed: true,
+      }
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    expect(response.status).toBe(200)
+    const line = logged.find(
+      args =>
+        args[0] === '[chat]' &&
+        (args[1] as { botIdBypassed?: boolean }).botIdBypassed
+    )
+    expect(line?.[1]).toEqual({ botIdBypassed: true, env: 'production' })
+  })
+
+  test('a verdict without an explicit isBot is refused, not served', async () => {
+    // An error body from the classifier parses to a verdict with no isBot
+    // at all; the typed boolean is undefined at runtime.
+    const model = readingModel()
+    const response = await handlerWith(
+      model,
+      {},
+      {
+        isBot: undefined as never,
+        isVerifiedBot: undefined as never,
+        bypassed: undefined as never,
+      }
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual(chatErrorBody('blocked'))
+    expect(model.doStreamCalls).toHaveLength(0)
+  })
+
+  test('a classifier that fails is a 502 with the envelope, logged as a stage', async () => {
+    const model = readingModel()
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.reject(new Error('botid down')),
+      env: {},
+    })
+    const response = await handler(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual(chatErrorBody('unavailable'))
+    expect(model.doStreamCalls).toHaveLength(0)
+    expect(loggedText()).toContain('"stage":"visitor"')
+    expect(loggedText()).not.toContain(QUESTION)
+    expect(loggedText()).not.toContain('botid down')
   })
 })
 
@@ -693,6 +827,7 @@ describe('reading documents', () => {
       text: 'x'.repeat((KNOWLEDGE_READ_BUDGET.maxTokens + 1) * 4),
     }
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => ({
         ...index,
         entries: [...index.entries, asEntry(huge)],
@@ -995,6 +1130,7 @@ describe('logging', () => {
 
   test('an index bigger than its ceiling is our fault, not theirs', async () => {
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => ({
         ...index,
         tokenEstimate: KNOWLEDGE_INDEX_TOKEN_CEILING + 1,
@@ -1016,6 +1152,7 @@ describe('logging', () => {
 
   test('an index exactly at its ceiling still serves', async () => {
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => ({
         ...index,
         tokenEstimate: KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -1036,6 +1173,7 @@ describe('logging', () => {
     // an index that could not leave room for a conversation is a deployment
     // fault (502), never a 400 that blames the visitor for asking.
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => ({
         ...index,
         tokenEstimate: CHAT_MAX_INPUT_TOKENS,
@@ -1080,6 +1218,7 @@ describe('logging', () => {
   test('a failure before the stream logs a stage but no provider text', async () => {
     const secret = 'model gemini-3.8-flash refused prompt: ' + QUESTION
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => index,
       readKnowledgeDocument,
       model: () => {
@@ -1105,6 +1244,7 @@ describe('logging', () => {
 
   test('a missing-config failure is classified before it is logged', async () => {
     const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
       loadKnowledgeIndex: () => index,
       readKnowledgeDocument,
       model: () => {

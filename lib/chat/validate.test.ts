@@ -335,6 +335,7 @@ describe('error envelopes', () => {
   test('every rejection carries renderable copy', () => {
     for (const code of [
       'disabled',
+      'blocked',
       'too_many_turns',
       'message_too_long',
       'budget_exceeded',
