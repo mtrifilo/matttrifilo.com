@@ -186,6 +186,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       logFailure(error, 'visitor')
       return errorResponse('unavailable')
     }
+    // Typed as an object, but it crosses from a third-party payload: a
+    // null or primitive here must refuse, not throw, so the type-redundant
+    // checks stay.
     if (
       typeof visitor !== 'object' ||
       visitor === null ||

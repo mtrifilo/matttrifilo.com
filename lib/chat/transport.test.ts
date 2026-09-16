@@ -113,6 +113,18 @@ describe('createChatFetch', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
 
+  test('a caller abort during a hung challenge is an abort, not a refusal', async () => {
+    // The visitor pressed stop while BotID's challenge was hanging: the
+    // fetch never settles and ignores the signal, the timer then wins the
+    // race, and the caller's own abort must be what useChat sees.
+    const hung = () => new Promise<Response>(() => {})
+    const controller = new AbortController()
+    const fetch = createChatFetch(hung, { headersTimeoutMs: 30 })
+    const pending = fetch('/api/chat', { signal: controller.signal })
+    setTimeout(() => controller.abort(), 5)
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   test('an already-aborted caller signal aborts before the request is made', async () => {
     const spy = spyFetch(200)
     const controller = new AbortController()

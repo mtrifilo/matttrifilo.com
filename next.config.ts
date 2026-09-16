@@ -72,7 +72,8 @@ const nextConfig: NextConfig = {
 // proxy its classification calls (MTC-34), so nothing is loaded from a new
 // host and script-src/connect-src above stay as they are. It also appends
 // a header rule for its own path prefix (X-Frame-Options SAMEORIGIN and
-// frame-ancestors 'self') on top of the site-wide rule above; which one
-// Next serves for that path is not verified here, and nothing is framed on
-// it under Basic.
+// frame-ancestors 'self') after the site-wide rule above. Next applies
+// header rules in order and the last match overwrites a key (its
+// resolve-routes), so on that prefix the wrapper's two headers win and the
+// rest of the site-wide set survives; that is why frame-src carries 'self'.
 export default withBotId(nextConfig)
