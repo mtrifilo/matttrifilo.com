@@ -48,8 +48,11 @@ export interface AssistantProgressProps {
   /**
    * The visitor's own clock, running since the question was sent and frozen
    * when the run ended. A finished run shows the server's duration instead,
-   * inside the headline: that one counts the whole request rather than the
-   * part of it this tab happened to be watching.
+   * inside the headline. The two do not agree: the server starts counting
+   * after it has classified the visitor and read the body, so its number is
+   * the smaller one and the header can step back a second when the answer
+   * lands. The server's is the one worth keeping, because it is the same
+   * number the logs record.
    */
   elapsedMs: number
 }

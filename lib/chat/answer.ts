@@ -147,18 +147,27 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
 export function announcementFor(
   status: ChatStatus,
   hasAnswer: boolean,
-  progress?: ProgressView
+  progress?: ProgressView,
+  stopped = false
 ): string {
   if (status === 'error') return 'Error'
   if (status === 'submitted' || status === 'streaming') {
     return stepAnnouncement(progress) ?? 'Responding'
   }
-  if (!hasAnswer) return ''
-  // A run that never reported itself done was cut off, and the reader has no
+  // A run that was cut off is never reported as finished. The reader has no
   // other way to learn it: the steps sit in the transcript, which is
   // deliberately not a live region, and the timer is hidden from them.
   // "Response complete" here would be the one false claim this view exists
   // to prevent, made in the only channel that cannot be checked by looking.
+  //
+  // Two signals, because neither covers the other. `stopped` is the visitor
+  // pressing the button, which the SDK reports as an ordinary `ready` with
+  // no error and no metadata; `wasCutOff` is a run that ended on its own
+  // without the server ever saying `done`. A run that answered without
+  // reading anything has no progress part at all, so only the first signal
+  // can speak for it.
+  if (stopped) return 'Response stopped'
+  if (!hasAnswer) return ''
   if (wasCutOff(progress)) return 'Response stopped'
   return 'Response complete'
 }

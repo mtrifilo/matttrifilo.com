@@ -292,7 +292,10 @@ export function progressRows(
 ): ProgressRow[] {
   const steps = progress?.steps ?? []
   const rows: ProgressRow[] = steps.map(step => ({
-    key: step.id,
+    // Prefixed, because the writing row's key is a literal and a document id
+    // is a file name: `content/knowledge/<topic>/writing.md` would otherwise
+    // give two rows the same React key.
+    key: `read:${step.id}`,
     title: step.title,
     state: 'complete',
   }))
@@ -310,6 +313,9 @@ export function progressRows(
 
 /** The key of the row that reports the answer being written. */
 export const WRITING_ROW_KEY = 'writing'
+
+/** How a read row's key is built, so the two can never collide. */
+export const READ_ROW_KEY_PREFIX = 'read:'
 
 /**
  * Whole seconds for the live timer, or `undefined` when there is no clock to

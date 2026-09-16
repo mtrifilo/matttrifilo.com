@@ -82,12 +82,16 @@ export function AssistantChat() {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // True when the visitor stopped a run before the server had said anything.
-  // The SDK creates the assistant message on the first chunk that carries
-  // content, so until then there is no message to mark as stopped and the
-  // placeholder row has to stay behind and say so itself. Without this the
-  // question is left sitting alone with nothing under it.
-  const [stoppedBare, setStoppedBare] = useState(false)
+  // True when the visitor stopped the most recent run. The SDK reports an
+  // abort as an ordinary `ready` with no error and no metadata, so nothing
+  // else on the page can tell that ending from a finished answer: a run that
+  // read nothing has no progress part to read it from either.
+  //
+  // It also carries the case where the stop landed before the server had
+  // said anything at all. The SDK creates the assistant message on the first
+  // chunk that carries content, so until then there is no message to mark,
+  // and the placeholder row has to stay behind and say so itself.
+  const [stopped, setStopped] = useState(false)
 
   // The question just sent, until the route has answered or refused it. It is
   // what stops the rollback in `onError` from touching a question that was
@@ -141,7 +145,7 @@ export function AssistantChat() {
       // a refused question sitting there (handed back by onError) must not
       // discard it.
       setInput(current => (current.trim() === question ? '' : current))
-      setStoppedBare(false)
+      setStopped(false)
       askedRef.current = question
       void sendMessage({ text: question })
       // The next question is usually a follow-up, and a starter question that
@@ -158,14 +162,14 @@ export function AssistantChat() {
     stop()
     clearError()
     setMessages([])
-    setStoppedBare(false)
+    setStopped(false)
     askedRef.current = null
     textareaRef.current?.focus()
   }, [clearError, setMessages, stop])
 
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
-    setStoppedBare(false)
+    setStopped(false)
     void regenerate()
   }, [regenerate])
 
@@ -197,18 +201,15 @@ export function AssistantChat() {
   )
   const announcement = announcementFor(
     status,
-    // A run stopped before its first chunk left no assistant message behind,
-    // so on a first question there is nothing in `messages` to report. It is
-    // still an ending, and the reader is told about it.
-    stoppedBare || messages.some(message => message.role === 'assistant'),
-    stoppedBare ? STOPPED_BEFORE_FIRST_STEP : lastProgress
+    messages.some(message => message.role === 'assistant'),
+    stopped && lastIsQuestion ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
+    stopped
   )
 
   const stopRun = useCallback(() => {
-    // Read before `stop`, which settles the status synchronously.
-    setStoppedBare(lastIsQuestion)
+    setStopped(true)
     stop()
-  }, [lastIsQuestion, stop])
+  }, [stop])
 
   return (
     <div className="mx-auto flex h-[calc(100svh-var(--nav-height))] w-full max-w-3xl flex-col gap-6 px-4 pt-8 pb-6 md:px-8">
@@ -272,7 +273,7 @@ export function AssistantChat() {
 
             {/* Between sending and the stream opening there is no assistant
                 message to hang the wait on, so it gets a row of its own. */}
-            {(busy || stoppedBare) && lastIsQuestion && (
+            {(busy || stopped) && lastIsQuestion && (
               <Message from="assistant">
                 <MessageContent>
                   <AssistantProgress

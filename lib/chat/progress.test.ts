@@ -22,9 +22,15 @@ const step = (id: string, title: string) => ({ id, title })
 /** An answer view with whatever progress the case is about. */
 function viewWith(
   progress: ProgressView | undefined,
-  text = 'He led the platform migration.'
+  text = 'He led the platform migration.',
+  flags: { truncated?: boolean; incomplete?: boolean } = {}
 ): AnswerView {
-  return { text, truncated: false, incomplete: false, progress }
+  return {
+    text,
+    truncated: flags.truncated ?? false,
+    incomplete: flags.incomplete ?? false,
+    progress,
+  }
 }
 
 const reading = (...titles: string[]): ProgressView => ({
@@ -223,6 +229,27 @@ describe('progressTotals', () => {
     expect(progressTotals(viewWith(undefined))).toBeUndefined()
   })
 
+  test('an answer cut off on the output cap keeps its count', () => {
+    // `truncated` implies `incomplete`, but the text is real and was drawn
+    // from the documents that were read, so the count is true. The rule is
+    // about text, not about the flag, and this is the case that separates
+    // the two readings.
+    expect(
+      progressTotals(
+        viewWith(done(3, 14_000), 'He led the mig', {
+          truncated: true,
+          incomplete: true,
+        })
+      )
+    ).toEqual({ count: 3, seconds: 14 })
+  })
+
+  test('a run flagged incomplete with no text claims nothing', () => {
+    expect(
+      progressTotals(viewWith(done(3, 14_000), '', { incomplete: true }))
+    ).toBeUndefined()
+  })
+
   test('a missing duration still counts as a real span, not zero', () => {
     const phase: ChatProgressPhase = 'done'
     expect(
@@ -287,6 +314,24 @@ describe('announcementFor, with a run in flight', () => {
     expect(announcementFor('ready', true)).toBe('Response complete')
   })
 
+  test('a stop is reported as stopped even when nothing was read', () => {
+    // The SDK reports an abort as an ordinary `ready` with no error and no
+    // metadata, and a run that answered without reading has no progress part
+    // to read the ending from. Without the explicit signal this is the one
+    // place "Response complete" gets said over a half-written sentence.
+    expect(announcementFor('ready', true, undefined, true)).toBe(
+      'Response stopped'
+    )
+    // And before the first chunk, where there is no assistant message yet.
+    expect(
+      announcementFor('ready', false, STOPPED_BEFORE_FIRST_STEP, true)
+    ).toBe('Response stopped')
+  })
+
+  test('a page nobody has asked anything on stays silent', () => {
+    expect(announcementFor('ready', false, undefined, false)).toBe('')
+  })
+
   test('never announces the seconds', () => {
     // The region re-reads whenever this string changes; a counter in it
     // would re-announce every second and bury the steps.
@@ -317,14 +362,14 @@ describe('progressRows', () => {
 
   test('while reading, the newest document is the one in flight', () => {
     expect(progressRows('reading', reading('Résumé', 'FAQ'))).toEqual([
-      { key: 'doc-0', title: 'Résumé', state: 'complete' },
-      { key: 'doc-1', title: 'FAQ', state: 'active' },
+      { key: 'read:doc-0', title: 'Résumé', state: 'complete' },
+      { key: 'read:doc-1', title: 'FAQ', state: 'active' },
     ])
   })
 
   test('while writing, every read is done and the answer is in flight', () => {
     expect(progressRows('writing', writing('Résumé'))).toEqual([
-      { key: 'doc-0', title: 'Résumé', state: 'complete' },
+      { key: 'read:doc-0', title: 'Résumé', state: 'complete' },
       { key: 'writing', state: 'active' },
     ])
   })
@@ -335,6 +380,17 @@ describe('progressRows', () => {
     const rows = progressRows('done', { ...done(2, 9_000), phase: 'done' })
     expect(rows.every(row => row.state === 'complete')).toBe(true)
     expect(rows).toHaveLength(2)
+  })
+
+  test('a document named "writing" cannot collide with the answer row', () => {
+    // Document ids are file names, so `writing.md` is a legal document. Two
+    // rows sharing a React key would let a memoised step keep the wrong
+    // label.
+    const rows = progressRows('writing', {
+      phase: 'writing',
+      steps: [step('writing', 'Writing')],
+    })
+    expect(new Set(rows.map(row => row.key)).size).toBe(rows.length)
   })
 
   test('a stopped run marks where it stopped, and never spins', () => {
