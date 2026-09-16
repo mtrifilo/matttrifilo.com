@@ -1,6 +1,8 @@
 import type { EnvSource } from '@/lib/env'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
+import { isChatDisabled } from './kill-switch'
 import { CHAT_MAX_MESSAGE_CHARS } from './answer'
+import { PROGRESS_PART_TYPE } from './progress'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
 
 export { CHAT_MAX_MESSAGE_CHARS }
@@ -31,13 +33,14 @@ export const CHAT_MAX_TURNS = 8
 export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 
 /**
- * Visible answer length. The ticket's 600 cut a "summarise every role"
- * answer mid-sentence on the first preview (the model emits no reasoning
- * tokens at its floor level, so this is all answer). 1,000 fits that
- * answer with room; the '[chat] truncated' marker shows if it is still
- * too small.
+ * Visible answer length. 600 cut a "summarise every role" answer
+ * mid-sentence; 1,000 fitted a short chatbot reply. Hiring-manager
+ * briefings (MTC-48) need room for a lead plus evidence. 1,600 fits
+ * that with the Sources trailer; the '[chat] truncated' marker shows
+ * if it is still too small. Thought tokens on Gemini 3.x still come
+ * out of this budget at the model's floor.
  */
-export const CHAT_MAX_OUTPUT_TOKENS = 1_000
+export const CHAT_MAX_OUTPUT_TOKENS = 1_600
 
 /**
  * Model calls allowed in one request: one per document the model may read,
@@ -81,14 +84,14 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * Ceiling on the estimated input tokens of the request the client posts:
  * document index plus system policy plus the conversation so far.
  *
- * 26,000 fits every conversation a visitor can have with ordinary answers:
+ * 30,000 fits every conversation a visitor can have with ordinary answers:
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
- * 1,400, CHAT_MAX_TURNS questions at CHAT_MAX_MESSAGE_CHARS are ~3,000
- * tokens, and as many answers of one step's worth of text
- * (CHAT_MAX_OUTPUT_TOKENS each) are ~8,000 — 20,400 or so against this cap.
- * "A conversation of full-length answers still fits" in validate.test.ts
- * pins that, and it is the test that should fail if the policy or the index
- * ceiling grows past the margin.
+ * 1,700 after the briefing rewrite, CHAT_MAX_TURNS questions at
+ * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
+ * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~12,800 — about
+ * 25,500 against this cap. "A conversation of full-length answers still
+ * fits" in validate.test.ts pins that, and it is the test that should fail
+ * if the policy or the index ceiling grows past the margin.
  *
  * It is deliberately below the sum of the caps, though. CHAT_MAX_ANSWER_CHARS
  * allows an answer that narrated through every step, and eight of those in
@@ -100,7 +103,7 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 26_000
+export const CHAT_MAX_INPUT_TOKENS = 30_000
 
 /** Low, because the job is reporting what the corpus says, not composing. */
 export const CHAT_TEMPERATURE = 0.2
@@ -174,10 +177,9 @@ export type ChatRequestValidation =
   | { ok: true; history: ChatTurn[]; userMessage: string }
   | { ok: false; status: number; body: ChatErrorBody }
 
-/** The kill switch. Any other value, including unset, leaves chat serving. */
-export function isChatDisabled(env: EnvSource = process.env): boolean {
-  return env.CHAT_DISABLED === '1'
-}
+// Defined in its own module so pages can read it without this file's
+// knowledge-index import; re-exported so the route keeps one import.
+export { isChatDisabled }
 
 /**
  * Coarse token estimate at four characters per token. It only has to be good
@@ -284,6 +286,7 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
     if (!Array.isArray(message.parts)) return null
 
     let text = ''
+    let dataParts = 0
     for (const part of message.parts) {
       if (!isRecord(part)) return null
       // The AI SDK marks each model step in a replayed assistant message
@@ -291,6 +294,22 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
       // change what the model is asked; refusing it broke every second turn
       // on the first UI preview.
       if (part.type === 'step-start') continue
+      // The one data part this route writes, replayed with the answer in
+      // exactly the same way `step-start` is: it carries the step list the
+      // visitor watched, which is this route's own narration and nothing the
+      // model needs. Refusing it would break every second turn, the same bug
+      // the `step-start` line above fixes.
+      //
+      // Matched exactly, and only once per message, rather than by a `data-`
+      // prefix. A prefix would let a tampered body carry unbounded `data-*`
+      // payloads that no limit below counts, since every cap here measures
+      // concatenated text: the request would reach the model and be billed
+      // where it used to be refused for free.
+      if (part.type === PROGRESS_PART_TYPE) {
+        if (dataParts > 0) return null
+        dataParts += 1
+        continue
+      }
       // Any other non-text part is refused rather than dropped: silently
       // ignoring one would answer a different question than the visitor
       // sees on screen.

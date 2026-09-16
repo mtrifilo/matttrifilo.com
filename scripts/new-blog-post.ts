@@ -139,9 +139,9 @@ export function draftSummary(draft: PostDraft): string {
  * The knowledge twin: the same body under the frontmatter contract in
  * lib/knowledge/build.ts, so a new post is answerable the day it lands.
  *
- * The twin's id is the post slug, so the assistant's copy is published at
- * /knowledge/<slug> and `canonical` points back at the post itself — the
- * URL a reader should be sent to.
+ * The twin's id is the post slug, and `canonical` points back at the post
+ * itself: the URL a reader should be sent to. Nothing serves the twin, which
+ * exists only to be read by the assistant.
  */
 export function buildKnowledgeTwin(draft: PostDraft): string {
   const slug = postSlug(draft.title, draft.date)
@@ -173,9 +173,14 @@ async function main() {
     process.exit(1)
   }
 
-  const categoriesInput = await prompt('Categories (comma-separated, optional): ')
+  const categoriesInput = await prompt(
+    'Categories (comma-separated, optional): '
+  )
   const categories = categoriesInput
-    ? categoriesInput.split(',').map(c => c.trim()).filter(Boolean)
+    ? categoriesInput
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean)
     : []
 
   const description = await prompt('Description (optional): ')

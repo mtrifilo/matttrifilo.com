@@ -15,6 +15,11 @@ import {
   type ChatModelRequest,
 } from './handler'
 import {
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  type ChatProgress,
+} from './progress'
+import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
   SYSTEM_PROMPT,
@@ -39,7 +44,6 @@ const documents: KnowledgeDocument[] = [
     topic: 'roles',
     source: 'resume',
     tokenEstimate: 11,
-    url: 'https://matttrifilo.com/resume',
     text: 'Matt led the platform migration at Thryv.',
     updated: '2026-09-01',
   },
@@ -51,7 +55,6 @@ const documents: KnowledgeDocument[] = [
     topic: 'faq',
     source: 'faq',
     tokenEstimate: 8,
-    url: 'https://matttrifilo.com/faq',
     text: 'Matt works on platform teams.',
     updated: '2026-09-01',
   },
@@ -63,7 +66,6 @@ const documents: KnowledgeDocument[] = [
     topic: 'projects',
     source: 'open-source',
     tokenEstimate: 7,
-    url: 'https://matttrifilo.com/projects',
     text: 'Matt built a hexagonal renderer.',
     updated: '2026-09-01',
   },
@@ -75,7 +77,6 @@ const documents: KnowledgeDocument[] = [
     topic: 'career',
     source: 'career',
     tokenEstimate: 6,
-    url: 'https://matttrifilo.com/timeline',
     text: 'Matt started in 2013.',
     updated: '2026-09-01',
   },
@@ -91,7 +92,6 @@ function asEntry(doc: KnowledgeDocument): KnowledgeEntry {
     topic: doc.topic,
     source: doc.source,
     tokenEstimate: doc.tokenEstimate,
-    url: doc.url,
   }
 }
 
@@ -342,6 +342,23 @@ function errorTextFrom(body: string): string | undefined {
     if (chunk.type === 'error') return chunk.errorText
   }
   return undefined
+}
+
+/** Every chunk the browser was sent, in order. */
+function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
+  const chunks: { type: string; [key: string]: unknown }[] = []
+  for (const line of body.split('\n')) {
+    if (!line.startsWith('data: ') || line.includes('[DONE]')) continue
+    chunks.push(JSON.parse(line.slice('data: '.length)))
+  }
+  return chunks
+}
+
+/** Each progress payload the route wrote, in the order it wrote them. */
+function progressFrom(body: string): ChatProgress[] {
+  return chunksFrom(body)
+    .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
+    .map(chunk => chunk.data as ChatProgress)
 }
 
 describe('kill switch', () => {
@@ -665,7 +682,7 @@ describe('a normal request', () => {
 
     const call = model.doStreamCalls[0]
     expect(call.temperature).toBe(0.2)
-    expect(call.maxOutputTokens).toBe(1_000)
+    expect(call.maxOutputTokens).toBe(1_600)
     expect(call.reasoning).toBe('none')
     expect(call.tools?.map(t => t.name)).toEqual([READ_DOCUMENT_TOOL_NAME])
   })
@@ -697,8 +714,8 @@ describe('reading documents', () => {
     )
     expect(response.status).toBe(200)
     expect(body).toContain('He led the platform migration.')
-    // Nothing was read, so nothing is claimed as a source.
-    expect(metadataFrom(body).sources).toBeUndefined()
+    // Nothing was read, so the browser is told of no step.
+    expect(progressFrom(body)).toEqual([])
   })
 
   test('a tool call that is not {id: string} reads nothing', async () => {
@@ -735,7 +752,7 @@ describe('reading documents', () => {
     expect(JSON.stringify(model.doStreamCalls[1].prompt)).not.toContain(
       documents[0].text
     )
-    expect(metadataFrom(body).sources).toBeUndefined()
+    expect(progressFrom(body)).toEqual([])
     const entry = logged.find(
       args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
     )
@@ -767,11 +784,10 @@ describe('reading documents', () => {
     expect(choices.at(-1)).toBe('none')
   })
 
-  test('a run that spends every step reading is marked incomplete, not cited', async () => {
+  test('a run that spends every step reading is marked incomplete', async () => {
     // The mock ignores toolChoice, so this is the worst case the forced step
     // is meant to prevent, with the model refusing to take the hint: reads all
-    // the way to the cap and never a word of answer. The visitor must not get
-    // an empty bubble with source chips under it.
+    // the way to the cap and never a word of answer.
     const model = modelOf(reads('resume'), reads('faq'), reads('projects'))
     const response = await handlerWith(model)(
       post({ messages: [uiMessage('user', QUESTION)] })
@@ -780,7 +796,11 @@ describe('reading documents', () => {
     const metadata = metadataFrom(body)
 
     expect(metadata.incomplete).toBe(true)
-    expect(metadata.sources).toBeUndefined()
+    // The steps happened and are reported; the client shows them expanded
+    // and claims nothing about them, because no answer came of them.
+    expect(progressFrom(body).at(-1)?.steps).toHaveLength(
+      KNOWLEDGE_READ_BUDGET.maxDocuments
+    )
 
     const marker = logged.find(args => args[0] === '[chat] incomplete')
     expect(marker?.[1]).toMatchObject({
@@ -808,7 +828,7 @@ describe('reading documents', () => {
     )
     // The document behind the refused read never reached the model.
     expect(JSON.stringify(model.doStreamCalls)).not.toContain(documents[3].text)
-    // And the visitor got a real answer, not an empty bubble with chips.
+    // And the visitor got a real answer, not an empty bubble.
     expect(body).toContain('He led the platform migration.')
 
     const entry = logged.find(
@@ -820,9 +840,6 @@ describe('reading documents', () => {
       readsRefusedUnknown: 0,
       answered: true,
     })
-    expect(metadataFrom(body).sources).toHaveLength(
-      KNOWLEDGE_READ_BUDGET.maxDocuments
-    )
   })
 
   test('a document over the token budget is refused and never sent', async () => {
@@ -857,87 +874,47 @@ describe('reading documents', () => {
     expect(JSON.stringify(model.doStreamCalls[1].prompt)).not.toContain(
       huge.text
     )
-    expect(metadataFrom(body).sources).toBeUndefined()
+    // The known overcount in the progress view: the step is announced from
+    // the tool call, before the read is judged on the size of a text the
+    // stream stage never sees, so a document refused for size still shows a
+    // row. The document itself still never reaches the browser.
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: 'huge', title: 'Huge' },
+    ])
+    expect(body).not.toContain(huge.text)
   })
 })
 
-describe('sources on the stream', () => {
-  test('lists exactly the documents read, in read order', async () => {
-    const model = modelOf(reads('faq'), reads('resume'), answers())
-    const response = await handlerWith(model)(
-      post({ messages: [uiMessage('user', QUESTION)] })
-    )
-    const body = await response.text()
-
-    expect(metadataFrom(body).sources).toEqual([
-      { id: 'faq', title: 'FAQ', url: 'https://matttrifilo.com/faq' },
-      {
-        id: 'resume',
-        title: 'Résumé',
-        url: 'https://matttrifilo.com/resume',
-      },
-    ])
-  })
-
-  test('a decline carries no sources', async () => {
-    const response = await handlerWith(decliningModel())(
-      post({ messages: [uiMessage('user', 'What does Matt earn?')] })
-    )
-    const body = await response.text()
-
-    expect(body).toContain(DECLINE_SENTENCE)
-    expect(metadataFrom(body).sources).toBeUndefined()
-  })
-
-  test('a decline after a read still carries no sources', async () => {
+describe('what the browser is told was read', () => {
+  test('a decline after a read still reports the read', async () => {
     // The model may read, find nothing that answers the question, and
-    // decline. Chips under "I can't answer that" would claim the opposite.
+    // decline. "Read 1 document" over that is a statement of activity, not a
+    // citation, so it stays.
     const model = modelOf(reads('resume'), answers(DECLINE_SENTENCE))
     const response = await handlerWith(model)(
       post({ messages: [uiMessage('user', QUESTION)] })
     )
     const body = await response.text()
 
-    expect(metadataFrom(body).sources).toBeUndefined()
-    // The read still happened, and the log still counts it.
+    expect(body).toContain(DECLINE_SENTENCE)
+    expect(progressFrom(body).at(-1)).toMatchObject({
+      phase: 'done',
+      steps: [{ id: 'resume', title: 'Résumé' }],
+    })
     const entry = logged.find(
       args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
     )
     expect(entry?.[1]).toMatchObject({ documentsRead: 1 })
   })
 
-  test('a preamble before a read does not hide a later decline', async () => {
-    // The model narrates, then reads, then declines. Only the final step's
-    // text is the answer: judging the run's first text would see the
-    // preamble, miss the decline, and put chips under "I can't answer that".
-    const model = modelOf(
-      readsAfterSaying('Let me check his résumé.', 'resume'),
-      answers(DECLINE_SENTENCE)
-    )
-    const response = await handlerWith(model)(
-      post({ messages: [uiMessage('user', QUESTION)] })
+  test('a decline written without reading reports nothing', async () => {
+    const response = await handlerWith(decliningModel())(
+      post({ messages: [uiMessage('user', 'What does Matt earn?')] })
     )
     const body = await response.text()
 
     expect(body).toContain(DECLINE_SENTENCE)
-    expect(metadataFrom(body).sources).toBeUndefined()
-  })
-
-  test('a preamble before a read does not suppress a real answer', async () => {
-    // The mirror case: the preamble must not be mistaken for the answer in
-    // the other direction either, so an ordinary reply keeps its chips.
-    const model = modelOf(
-      readsAfterSaying('Let me check his résumé.', 'resume'),
-      answers()
-    )
-    const response = await handlerWith(model)(
-      post({ messages: [uiMessage('user', QUESTION)] })
-    )
-    const body = await response.text()
-
-    expect(metadataFrom(body).sources).toEqual([
-      { id: 'resume', title: 'Résumé', url: 'https://matttrifilo.com/resume' },
-    ])
+    expect(progressFrom(body)).toEqual([])
   })
 
   test('document text is never streamed to the browser', async () => {
@@ -947,15 +924,250 @@ describe('sources on the stream', () => {
     )
     const body = await response.text()
 
-    // The model read it — the answer is drawn from it — but the browser is
-    // sent the answer and the sources, never the document itself.
+    // The model read it, and the answer is drawn from it, but the browser is
+    // sent the answer and the titles, never the document itself.
     expect(JSON.stringify(model.doStreamCalls)).toContain(documents[0].text)
     expect(body).not.toContain(documents[0].text)
     expect(body).not.toContain('tool-output-available')
     expect(body).not.toContain('tool-input-start')
     // What the UI actually needs still arrives.
     expect(body).toContain('He led the platform migration.')
-    expect(metadataFrom(body).sources).toHaveLength(1)
+    expect(progressFrom(body).at(-1)?.steps).toHaveLength(1)
+  })
+})
+
+describe('progress on the stream', () => {
+  test('narrates the reads, the writing, and how long it took', async () => {
+    const model = modelOf(reads('resume'), reads('faq'), answers())
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    // Titles come from the index, never from the model: the model only ever
+    // sent an id.
+    expect(progressFrom(body)).toEqual([
+      { phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] },
+      {
+        phase: 'reading',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+      },
+      {
+        phase: 'writing',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+      },
+      {
+        phase: 'done',
+        steps: [
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ],
+        ms: 0,
+      },
+    ])
+  })
+
+  test('every progress chunk carries the same part id', async () => {
+    // What makes the browser hold one part that grows, rather than a part
+    // per step that the client would then replay back on the next question.
+    const model = modelOf(reads('resume'), reads('faq'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const ids = chunksFrom(body)
+      .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
+      .map(chunk => chunk.id)
+    expect(ids).toHaveLength(4)
+    expect(new Set(ids)).toEqual(new Set([PROGRESS_PART_ID]))
+  })
+
+  test('the duration is the whole request, and arrives before the finish', async () => {
+    let clock = 5_000
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => modelOf(reads('resume'), answers()),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => (clock += 1_000),
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    const finished = progressFrom(body).at(-1)
+    expect(finished?.phase).toBe('done')
+    expect(typeof finished?.ms).toBe('number')
+    expect(finished?.ms).toBeGreaterThan(0)
+
+    // Before the finish chunk, so the browser has the final state in hand by
+    // the time the stream closes.
+    const types = chunksFrom(body).map(chunk => chunk.type)
+    expect(types.lastIndexOf(PROGRESS_PART_TYPE)).toBeLessThan(
+      types.lastIndexOf('finish')
+    )
+  })
+
+  test('the tool chunks it reads are still kept from the browser', async () => {
+    const model = modelOf(reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    // The progress view is built from `tool-input-available`, which means
+    // this stage sees the tool chunks. None of them may survive the next one.
+    for (const type of chunksFrom(body).map(chunk => chunk.type)) {
+      expect(type.startsWith('tool-')).toBe(false)
+    }
+    expect(body).not.toContain(documents[0].text)
+    expect(progressFrom(body)).not.toHaveLength(0)
+  })
+
+  test('an id the index never listed earns no step', async () => {
+    // The read is about to be refused as `unknown_document`; a step for a
+    // document that was never opened would be the one claim this must not
+    // make.
+    const model = modelOf(reads('salary-history'), reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(progressFrom(body)[0]).toEqual({
+      phase: 'reading',
+      steps: [{ id: 'resume', title: 'Résumé' }],
+    })
+    expect(JSON.stringify(progressFrom(body))).not.toContain('salary-history')
+  })
+
+  test('a read past the budget earns no step either', async () => {
+    // The read session refuses a fourth document on count alone, before it
+    // even looks at the id, so a fourth row could never become a read.
+    const model = modelOf(
+      readsAll('resume', 'faq', 'projects', 'timeline'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const finished = progressFrom(body).at(-1)
+    expect(finished?.steps.map(step => step.id)).toEqual([
+      'resume',
+      'faq',
+      'projects',
+    ])
+    const entry = logged.find(
+      args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
+    )
+    expect(entry?.[1]).toMatchObject({
+      documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
+      readsRefusedBudget: 1,
+    })
+  })
+
+  test('a document read twice is one row', async () => {
+    // The budget is charged twice, but the visitor read one document.
+    const model = modelOf(reads('resume'), reads('resume'), answers())
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: 'resume', title: 'Résumé' },
+    ])
+    const entry = logged.find(
+      args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
+    )
+    expect(entry?.[1]).toMatchObject({ documentsRead: 2 })
+  })
+
+  test('a run that reads nothing narrates nothing', async () => {
+    // A decline, or any answer written straight out. An empty step list would
+    // put a spinner where the answer is already arriving.
+    const body = await (
+      await handlerWith(decliningModel())(
+        post({ messages: [uiMessage('user', 'What does Matt earn?')] })
+      )
+    ).text()
+
+    expect(progressFrom(body)).toEqual([])
+    expect(body).toContain(DECLINE_SENTENCE)
+  })
+
+  test('a preamble before the first read narrates nothing either', async () => {
+    const model = modelOf(
+      readsAfterSaying('Let me check his résumé.', 'resume'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    // The narration is text, not a read: the first progress chunk is the
+    // read that follows it, not a "writing" for the preamble. And the
+    // preamble itself must not reach the bubble (MTC-49).
+    expect(progressFrom(body)[0]?.phase).toBe('reading')
+    expect(body).not.toContain('Let me check his résumé.')
+    expect(body).toContain('He led the platform migration.')
+  })
+
+  test('text from a tool-calling step never reaches the browser', async () => {
+    const model = modelOf(
+      readsAfterSaying('I will open the FAQ next.', 'faq'),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(body).not.toContain('I will open the FAQ next.')
+    expect(body).toContain('He led the platform migration.')
+  })
+
+  test('a stream that fails after a read never says it finished', async () => {
+    // The client reads the absence of `done` as "stopped": no spinner, no
+    // running timer, and no count of documents read.
+    const model = modelOf(reads('resume'), () =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: 'He led the' },
+        { type: 'error', error: new Error('upstream went away') },
+      ])
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    const progress = progressFrom(body)
+    expect(progress.map(entry => entry.phase)).toEqual(['reading', 'writing'])
+    expect(progress.some(entry => entry.phase === 'done')).toBe(false)
+    expect(JSON.parse(errorTextFrom(body)!)).toEqual(
+      chatErrorBody('interrupted')
+    )
   })
 })
 
@@ -1057,23 +1269,22 @@ describe('logging', () => {
       finishReason: 'length',
       answered: true,
     })
-    // MTC-33 reads this off the stream to show "cut short" in the UI.
+    // The transcript reads this off the stream to show "cut short".
     expect(metadataFrom(body).truncated).toBe(true)
-    // 'length' is not a clean stop, so the answer is flagged incomplete, but
-    // it is real text drawn from what was read, so it keeps its chips.
+    // 'length' is not a clean stop, so the answer is flagged incomplete; it
+    // is still real text drawn from what was read, and the read is reported.
     expect(metadataFrom(body).incomplete).toBe(true)
-    expect(
-      (metadataFrom(body).sources as { id: string }[]).map(s => s.id)
-    ).toEqual(['resume'])
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: 'resume', title: 'Résumé' },
+    ])
   })
 
-  test('a whitespace-only reply is not an answer and gets no chips', async () => {
+  test('a whitespace-only reply is not an answer', async () => {
     const response = await handlerWith(
       modelOf(reads('resume'), answers('   \n'))
     )(post({ messages: [uiMessage('user', QUESTION)] }))
     const body = await response.text()
     expect(metadataFrom(body).incomplete).toBe(true)
-    expect(metadataFrom(body).sources).toBeUndefined()
   })
 
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {

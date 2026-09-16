@@ -105,10 +105,6 @@ export function ChatErrorNotice({
         {RATE_LIMIT_NOTICE.lead}
         <NoticeLink href="/resume">{RATE_LIMIT_NOTICE.resumeLabel}</NoticeLink>
         {RATE_LIMIT_NOTICE.between}
-        <NoticeLink href="/knowledge">
-          {RATE_LIMIT_NOTICE.knowledgeLabel}
-        </NoticeLink>
-        {RATE_LIMIT_NOTICE.after}
         <NoticeLink href={MATT_MAILTO}>
           {RATE_LIMIT_NOTICE.emailLabel}
         </NoticeLink>

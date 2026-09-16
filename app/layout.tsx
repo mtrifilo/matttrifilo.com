@@ -5,6 +5,7 @@ import './globals.css'
 import { ThemeProvider, Footer } from '@/components/layout'
 import { HideOnRoutes } from '@/components/layout/hide-on-routes'
 import Nav from '@/app/nav'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generatePersonSchema } from '@/lib/seo/jsonld'
 import { JOB_TITLE } from '@/lib/seo/identity'
@@ -61,13 +62,13 @@ export default function RootLayout({
               phone with the toolbar out the two differ by the toolbar, which
               would give that page exactly the scroll it exists to avoid. */}
           <div className="flex flex-col min-h-svh relative z-10">
-            <Nav />
+            <Nav assistantDisabled={isChatDisabled()} />
             <main className="flex-1">{children}</main>
             {/* /ask fills the viewport exactly (see --nav-height in
                 globals.css); a footer below it would make the page scroll
                 and carry the composer off screen. The approved design has
                 none there. */}
-            <HideOnRoutes routes={['/ask']}>
+            <HideOnRoutes routes={isChatDisabled() ? [] : ['/ask']}>
               <Footer />
             </HideOnRoutes>
           </div>

@@ -14,8 +14,8 @@ import type {
  * request time. lib/knowledge/knowledge.test.ts is the mechanical guard on
  * what those files may contain.
  *
- * This module is the contract the chat route and the /knowledge pages
- * depend on; keep it to these exports. The build itself lives in ./build
+ * This module is the contract the chat route depends on; keep it to these
+ * exports. The build itself lives in ./build
  * so tests can rebuild without going through the cache below.
  */
 
@@ -90,7 +90,13 @@ export function readKnowledgeDocument(
   return byId!.get(id)
 }
 
-/** Every document, in index order. The /knowledge pages render from this. */
+/**
+ * Every document, in index order.
+ *
+ * Nothing renders these today: the assistant fetches one at a time by id,
+ * and no page serves them. Kept as the read side of the corpus, and covered
+ * by lib/knowledge/knowledge.test.ts.
+ */
 export function listKnowledgeDocuments(): KnowledgeDocument[] {
   return corpus().documents
 }

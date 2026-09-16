@@ -11,7 +11,7 @@ Rows marked "as of" are point-in-time observations. `vercel env ls`, the Vercel 
 | Kill switch      | `CHAT_DISABLED=1` env var on Vercel, read before the body                                                                                                                      | As of 2026-09-15: set on production; unset on preview and development |
 | BotID Basic      | `instrumentation-client.ts` (client), `withBotId` in `next.config.ts` (rewrites), `checkBotId` in `app/api/chat/route.ts` (server)                                             | In code; free on every plan                                           |
 | WAF rate limit   | Vercel dashboard, Firewall, one rule (Hobby allows one)                                                                                                                        | **Not yet created**; spec below                                       |
-| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 26k input tokens, 3 documents / 20k tokens read, 1,000 output tokens per step, 4 steps | In code since MTC-31                                                  |
+| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 30k input tokens, 3 documents / 20k tokens read, 1,600 output tokens per step, 4 steps | In code since MTC-31; output raised for briefings (MTC-48) |
 | GCP budget       | Billing budget on project `matttrifilo-com`, $50 a month                                                                                                                       | As of 2026-09-14 (MTC-30)                                             |
 | Vertex quota cap | GCP console, IAM & Admin, Quotas, `aiplatform.googleapis.com`                                                                                                                  | **Not yet applied**; see below                                        |
 
@@ -19,7 +19,7 @@ Only the WAF rule refuses at the edge. BotID, the per-request caps, and the kill
 
 ## Kill switch
 
-Setting `CHAT_DISABLED=1` on an environment makes every request to `/api/chat` answer 503 with the `disabled` envelope before the body is read or BotID is consulted. The UI shows the route's sentence and the email address.
+Setting `CHAT_DISABLED=1` on an environment makes every request to `/api/chat` answer 503 with the `disabled` envelope before the body is read or BotID is consulted, and hides the assistant from the site: the homepage panel, the nav entry, the résumé button and the sitemap entries go, and `/ask` returns 404 with the site's default metadata. The pages read the flag at build time, so the change takes effect on the next deploy. A visitor who reaches `/ask` from an old link sees the site's 404 page with the nav and the footer, so Contact and the email link are one click away; the route's `disabled` sentence is only ever seen by a client that was built while the flag was off.
 
 ```
 vercel env add CHAT_DISABLED production   # value: 1
@@ -69,7 +69,7 @@ Vercel function logs for `/api/chat`, one line per request, all numeric:
 
 ## Runbook: something is wrong
 
-1. Spend or request rate is climbing and it is not visitors: set `CHAT_DISABLED=1` on production and redeploy. Nothing user-facing breaks; the notice explains and gives the email.
+1. Spend or request rate is climbing and it is not visitors: set `CHAT_DISABLED=1` on production and redeploy. The assistant disappears from the site on that deploy (panel, nav entry, résumé button, sitemap entries; `/ask` becomes a 404) and the route refuses. Nothing else on the site changes.
 2. Check the Firewall overview for the source (rule hits, top IPs, JA4). Lower the rule's limit or add a deny rule for the JA4 if it is one client.
 3. If automation is getting past BotID Basic, turn on Deep Analysis (above).
 4. Re-enable once the pattern stops. Write down what happened in the MTC-34 ticket.

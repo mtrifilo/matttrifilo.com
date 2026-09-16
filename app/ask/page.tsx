@@ -1,11 +1,20 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { AssistantChat } from '@/components/assistant/assistant-chat'
 
-export const metadata: Metadata = {
-  title: 'Ask',
-  description:
-    "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his published work, and links the documents it used.",
-  alternates: { canonical: '/ask' },
+// A function, not a constant: a static `metadata` export resolves even when
+// the page throws notFound(), so the 404 would still carry this title,
+// description and a self-canonical. Throwing here is what makes Next resolve
+// the not-found metadata instead.
+export function generateMetadata(): Metadata {
+  if (isChatDisabled()) notFound()
+  return {
+    title: 'Ask',
+    description:
+      "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his own documents, and says which ones it read.",
+    alternates: { canonical: '/ask' },
+  }
 }
 
 /**
@@ -17,5 +26,8 @@ export const metadata: Metadata = {
  * decided entirely in app/api/chat and lib/chat.
  */
 export default function AskPage() {
+  // The kill switch hides the page, not just the route behind it: a page
+  // whose every question is refused is worse than no page.
+  if (isChatDisabled()) notFound()
   return <AssistantChat />
 }

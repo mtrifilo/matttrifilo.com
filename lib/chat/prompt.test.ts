@@ -22,7 +22,6 @@ const index: KnowledgeIndex = {
       topic: 'roles',
       source: 'resume',
       tokenEstimate: 12,
-      url: 'https://matttrifilo.com/resume',
     },
   ],
   text: '[resume-thryv]\ntitle: Thryv\nsummary: What Matt did at Thryv.',
@@ -90,6 +89,20 @@ describe('the reading policy', () => {
     expect(SYSTEM_PROMPT).toContain(
       'Answering first and reading afterwards is not allowed'
     )
+  })
+
+  test('forbids narration and scratchpad in the visible answer', () => {
+    expect(SYSTEM_PROMPT).toContain('Never write thinking, a plan, or narration')
+    expect(SYSTEM_PROMPT).toContain('let me check')
+    expect(SYSTEM_PROMPT).toContain(
+      'The first word the visitor sees is the briefing or the decline sentence'
+    )
+  })
+
+  test('asks for a hiring-manager briefing, not a chatbot one-liner', () => {
+    expect(SYSTEM_PROMPT).toContain('hiring manager')
+    expect(SYSTEM_PROMPT).toContain('not a chatbot one-liner')
+    expect(SYSTEM_PROMPT).not.toContain('Be brief and concrete: a few sentences')
   })
 
   test('says the index is a catalogue, never a source', () => {

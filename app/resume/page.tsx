@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { JOB_TITLE } from '@/lib/seo/identity'
 import { MDXContent } from '@/components/blog/mdx-content'
 import { getResumeMarkdown } from '@/lib/resume'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 
 export const metadata: Metadata = {
   title: 'Résumé',
@@ -52,12 +53,14 @@ export default function ResumePage() {
           </Button>
           {/* The assistant exists for the depth two pages cannot hold, and
               this page is where that depth is missed (MTC-33). */}
-          <Button asChild variant="outline">
-            <Link href="/ask">
-              <Sparkles aria-hidden="true" />
-              Ask about my work
-            </Link>
-          </Button>
+          {!isChatDisabled() && (
+            <Button asChild variant="outline">
+              <Link href="/ask">
+                <Sparkles aria-hidden="true" />
+                Ask about my work
+              </Link>
+            </Button>
+          )}
         </div>
 
         {/* Same Markdown the PDF is rendered from; see scripts/render-resume.sh. */}

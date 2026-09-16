@@ -9,6 +9,8 @@ export interface SiteRoute {
   label: string
   changeFrequency: ChangeFrequency
   priority: number
+  /** Matt's Career Assistant; dropped everywhere when the kill switch is on. */
+  assistant?: true
   /** Keep the page in the sitemap but out of the header nav. */
   hideFromNav?: boolean
 }
@@ -32,6 +34,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     label: 'Ask',
     changeFrequency: 'monthly',
     priority: 0.7,
+    assistant: true,
   },
   {
     href: '/open-source',
@@ -57,15 +60,17 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'yearly',
     priority: 0.5,
   },
-  {
-    // The career assistant's published corpus. In the sitemap so the
-    // documents are indexable and the assistant's answers are checkable,
-    // and out of the nav because it is reached through an answer's source
-    // chips rather than browsed: /ask is the nav entry for the assistant.
-    href: '/knowledge',
-    label: 'Knowledge',
-    changeFrequency: 'weekly',
-    priority: 0.4,
-    hideFromNav: true,
-  },
 ]
+
+/**
+ * The routes the site offers right now. With the assistant killed
+ * (`CHAT_DISABLED=1`, see lib/chat/kill-switch.ts) its page is not served, so
+ * neither the nav nor the sitemap may point at it.
+ */
+export function visibleSiteRoutes(options: {
+  assistantDisabled: boolean
+}): readonly SiteRoute[] {
+  return options.assistantDisabled
+    ? siteRoutes.filter(route => !route.assistant)
+    : siteRoutes
+}

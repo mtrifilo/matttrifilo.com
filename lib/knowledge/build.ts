@@ -69,8 +69,6 @@ export interface KnowledgeEntry {
   source: KnowledgeSource
   /** Tokens the document body would cost to read; see estimateTokens. */
   tokenEstimate: number
-  /** Where the document is published on this site: `/knowledge/${id}`. */
-  url: string
   /** The public original, when the document is a copy of one. */
   canonical?: string
 }
@@ -201,8 +199,7 @@ const FRONTMATTER_KEYS: readonly string[] = [
 /**
  * `canonical` says "the public original of this document lives here". It
  * can only be a page Matt controls: a canonical pointing somewhere else
- * hands another site the search ranking for his own words, and the
- * /knowledge page renders it as a link readers will trust.
+ * hands another site the search ranking for his own words.
  */
 const CANONICAL_HOST = /^https:\/\/(?:www\.)?matttrifilo\.com(?=[/?#]|$)/
 
@@ -295,7 +292,7 @@ function parseFrontmatter(
 
   if (id !== expectedId) {
     throw new Error(
-      `${source}: id "${id}" must match the file name ("${expectedId}"), so ids stay stable and /knowledge/<id> keeps resolving`
+      `${source}: id "${id}" must match the file name ("${expectedId}"), so the id the model reads in the index names the file on disk`
     )
   }
   if (!ISO_DATE.test(updated) || !isRealDate(updated)) {
@@ -533,12 +530,17 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
 /**
  * Refuses a body that would not survive being compiled as MDX.
  *
- * /knowledge/[id] renders these documents through the same MDX pipeline as
- * the blog, and every page on this site is prerendered — so one stray `<`
- * in one document does not break one page, it fails `next build` for the
- * whole site. `{` is worse than that: `{process.env.SOMETHING}` is not a
- * syntax error, it is a valid expression that MDX evaluates on the server
- * and prints onto a public page.
+ * Nothing serves a corpus document, so most of them are never compiled. The
+ * blog twins are: each is byte-identical to a post under content/blog, which
+ * /blog/[slug] renders through the MDX pipeline, and every page on this site
+ * is prerendered, so one stray `<` in one post does not break one page, it
+ * fails the build for the whole site. `{` is worse than that:
+ * `{process.env.SOMETHING}` is not a syntax error, it is a valid expression
+ * that MDX evaluates on the server and prints onto a public page.
+ *
+ * The rule is applied to every document rather than to the twins alone, so
+ * that a document moved into blog/ later cannot carry a build break in with
+ * it, and so that the corpus stays renderable without a fresh audit.
  *
  * So both characters are refused outright outside code, including the
  * autolink form `<https://example.com>` (also an MDX error) and anything
@@ -599,10 +601,9 @@ function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
  *
  * Everywhere else it would be a trap. A `career/` document is written
  * elsewhere, approved, and pasted in whole; if a stray placeholder let the
- * build quietly delete a section from both the published page and the
- * model's copy, the failure would look like nothing at all — exit 0, no
- * output, a document that is merely missing a paragraph nobody can see is
- * missing.
+ * build quietly delete a section from the model's copy, the failure would
+ * look like nothing at all: exit 0, no output, and a document that is merely
+ * missing a paragraph nobody can see is missing.
  */
 const UNANSWERED_TOPIC = 'faq'
 
@@ -656,7 +657,7 @@ function assertNoPlaceholder(
   const found = findPlaceholder(lines)
   if (!found) return
   throw new Error(
-    `${label}:${found.line.number}: a TODO placeholder under "${found.heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the published page and the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
+    `${label}:${found.line.number}: a TODO placeholder under "${found.heading ?? 'the introduction'}". Only content/knowledge/${UNANSWERED_TOPIC} drops unfinished sections; everywhere else a placeholder is a build error, so a section can never be deleted from the model's copy without anyone noticing. Finish it, delete it, or move it inside an HTML comment.`
   )
 }
 
@@ -737,9 +738,8 @@ function readDocument(
     assertNoPlaceholder(lines, label)
     text = body.trim()
     // Not a drop. A file with a frontmatter block and no body is a paste
-    // that went wrong, and returning null here would have removed it from
-    // the index, /knowledge, generateStaticParams and the sitemap at once,
-    // with exit 0 and nothing printed.
+    // that went wrong, and returning null here would take it out of the
+    // index the model is shown, with exit 0 and nothing printed.
     if (text === '') {
       throw new Error(
         `${label}: the body is empty; only content/knowledge/${UNANSWERED_TOPIC} drops documents, so this would otherwise vanish from the index and the site without a word. Write it, or delete the file.`
@@ -763,7 +763,6 @@ function readDocument(
       topic,
       source: topic,
       tokenEstimate,
-      url: `/knowledge/${frontmatter.id}`,
       ...(frontmatter.canonical ? { canonical: frontmatter.canonical } : {}),
       text,
       updated: frontmatter.updated,
@@ -845,7 +844,7 @@ function findDocumentFiles(
     const topic = entry.name
     if (!isTopic(topic)) {
       throw new Error(
-        `content/knowledge/${topic}: unknown topic (known: ${TOPIC_ORDER.join(', ')}). A new topic is a decision about what the assistant is for, so it is added by hand in two places: TOPIC_ORDER in lib/knowledge/build.ts, which decides where it sits in the index and is also the "source" a document reports, and OVERRIDES in app/knowledge/topic-label.ts if title-casing the directory name is not the heading you want.`
+        `content/knowledge/${topic}: unknown topic (known: ${TOPIC_ORDER.join(', ')}). A new topic is a decision about what the assistant is for, so it is added by hand: TOPIC_ORDER in lib/knowledge/build.ts, which decides where it sits in the index and is also the "source" a document reports.`
       )
     }
     const names = fs
@@ -908,7 +907,7 @@ export function buildKnowledgeCorpus(
     const previous = seen.get(document.id)
     if (previous !== undefined) {
       throw new Error(
-        `content/knowledge: duplicate id "${document.id}" in ${previous} and ${document.topic}; /knowledge/${document.id} can only be one of them`
+        `content/knowledge: duplicate id "${document.id}" in ${previous} and ${document.topic}; the model reads one document per id`
       )
     }
     seen.set(document.id, document.topic)
@@ -926,7 +925,6 @@ export function buildKnowledgeCorpus(
     topic: document.topic,
     source: document.source,
     tokenEstimate: document.tokenEstimate,
-    url: document.url,
     ...(document.canonical ? { canonical: document.canonical } : {}),
   }))
 

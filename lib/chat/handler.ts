@@ -3,11 +3,11 @@ import {
   stepCountIs,
   streamText,
   toUIMessageStream,
+  type InferUIMessageChunk,
   type InferUITools,
   type LanguageModel,
   type LanguageModelUsage,
   type Tool,
-  type UIDataTypes,
   type UIMessage,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
@@ -18,19 +18,21 @@ import {
 import type { EnvSource } from '@/lib/env'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
+  KNOWLEDGE_READ_BUDGET,
   type KnowledgeDocument,
+  type KnowledgeEntry,
   type KnowledgeIndex,
 } from '@/lib/knowledge'
 import {
-  DECLINE_SENTENCE,
-  READ_DOCUMENT_TOOL_NAME,
-  buildMessages,
-} from './prompt'
-import {
-  createReadDocumentSession,
-  type ChatSource,
-  type ReadsRefused,
-} from './read-document'
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  type ChatDataParts,
+  type ChatProgress,
+  type ChatProgressPhase,
+  type ChatProgressStep,
+} from './progress'
+import { READ_DOCUMENT_TOOL_NAME, buildMessages } from './prompt'
+import { createReadDocumentSession, type ReadsRefused } from './read-document'
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_OUTPUT_TOKENS,
@@ -57,8 +59,8 @@ import {
  *
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat:
- * with a 26k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
- * steps, the worst case is roughly 26k + 33k + 39k + 46k ≈ 144k input tokens
+ * with a 30k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
+ * steps, the worst case is roughly 30k + 37k + 43k + 50k ≈ 160k input tokens
  * for one question. Vertex's implicit cache covers the stable prefix and
  * should take a large bite out of what is billed, but the ceiling is real and
  * it is why MTC-34's rate limit is not optional.
@@ -134,14 +136,8 @@ export interface VisitorVerdict {
 export { CHAT_MAX_STEPS }
 
 /**
- * Metadata the server attaches to the streamed message, for MTC-33.
+ * Metadata the server attaches to the streamed message.
  *
- * - `sources`: the documents this request actually read, named by the server,
- *   in read order. Authoritative, and what the chips should render. The
- *   `Sources:` line the policy asks the model to write is a secondary signal —
- *   a model can forget it or cite an id it never opened, so it must not drive
- *   the chips. Absent when there is nothing to cite, on a decline, and when
- *   the run produced no answer text at all; a truncated answer keeps them.
  * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
  *   answer is partial and still worth showing under a "cut short" notice.
  * - `incomplete`: the run ended without a clean answer — no text at all, or a
@@ -153,7 +149,6 @@ export { CHAT_MAX_STEPS }
  * never a falsy `false` the UI has to distinguish from "not set".
  */
 export interface ChatMessageMetadata {
-  sources?: ChatSource[]
   truncated?: true
   incomplete?: true
 }
@@ -162,22 +157,25 @@ export interface ChatMessageMetadata {
 type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
 
 /**
- * The message MTC-33 receives: answer text and the metadata above, and
- * nothing else.
+ * The message the browser receives: the answer text, the progress narration,
+ * and the metadata above.
  *
  * The SDK would also stream a `tool-output-available` part per read, carrying
- * the document's whole text — up to KNOWLEDGE_READ_BUDGET.maxTokens of it —
+ * the document's whole text, up to KNOWLEDGE_READ_BUDGET.maxTokens of it,
  * down to the browser. `onlyClientChunks` passes only the answer text, the
- * stream framing, and the finish metadata; everything else stays server-side. The UI needs the `sources` metadata, not the bytes,
- * so sending them would be bandwidth spent on a second copy of what the
+ * progress parts, the stream framing and the finish metadata; everything else
+ * stays server-side. The document bytes would be a second copy of what the
  * answer already summarises, and a channel through which a corpus that later
  * stops being wholly public would leak without anyone editing this route.
  */
 export type ChatUIMessage = UIMessage<
   ChatMessageMetadata,
-  UIDataTypes,
+  ChatDataParts,
   InferUITools<ChatTools>
 >
+
+/** One chunk of the stream this route writes, as the SDK types it. */
+type ChatUIChunk = InferUIMessageChunk<ChatUIMessage>
 
 export function createChatHandler(deps: ChatHandlerDeps) {
   const {
@@ -293,8 +291,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // The last step has to produce the answer, so it is not offered the
         // tool. Without this a model that spends every step reading ends the
         // run on 'tool-calls' with no text at all, and the visitor gets an
-        // empty bubble — with source chips under it, which is worse than
-        // nothing because it looks like an answer that said nothing.
+        // empty bubble under a list of the documents it opened, which is
+        // worse than nothing because it looks like an answer that said
+        // nothing.
         prepareStep: ({ stepNumber }) =>
           stepNumber === CHAT_MAX_STEPS - 1
             ? { toolChoice: 'none' }
@@ -369,37 +368,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       return createUIMessageStreamResponse({
         stream: toUIMessageStream<ChatTools, ChatUIMessage>({
           stream: result.stream,
+          // T3's rule: reasoning never mutates the answer. The SDK defaults
+          // sendReasoning to true, which would put thought summaries on the
+          // wire; the allowlist below would still drop them, but the default
+          // is the wrong one to rely on.
+          sendReasoning: false,
+          sendSources: false,
           messageMetadata: ({ part }) => {
             answer.observe(part)
             if (part.type !== 'finish') return undefined
 
             const metadata: ChatMessageMetadata = {}
-            // Lets MTC-33 show "this answer was cut short" instead of leaving
-            // a half sentence and a missing Sources line looking like an
-            // answer.
+            // Lets the transcript show "this answer was cut short" instead of
+            // leaving a half sentence looking like a finished answer.
             if (part.finishReason === 'length') metadata.truncated = true
             // No text, or any finish that is not a clean stop, means the run
-            // did not end with a finished answer — most often a model that
-            // spent every step reading. Say so. A length-truncated answer is
-            // still real text that was drawn from the documents read, so it
-            // keeps its chips; only a run with no answer at all withholds
-            // them, since citations under a blank reply claim it was sourced
-            // when it was never written.
+            // did not end with a finished answer, most often a model that
+            // spent every step reading. Say so.
             if (!answer.answered() || part.finishReason !== 'stop') {
               metadata.incomplete = true
-            }
-
-            const sources = session.sources()
-            // A decline is the one answer that may be written without
-            // reading. It can still follow reads that turned out not to
-            // answer the question, and chips under "I can't answer that"
-            // would claim the opposite, so they are dropped.
-            if (
-              sources.length > 0 &&
-              !answer.isDecline() &&
-              answer.answered()
-            ) {
-              metadata.sources = sources
             }
             return Object.keys(metadata).length > 0 ? metadata : undefined
           },
@@ -411,7 +398,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             logFailure(error, { vertexRetries: vertexCalls.retries() })
             return JSON.stringify(chatErrorBody('interrupted'))
           },
-        }).pipeThrough(onlyClientChunks()),
+        })
+          .pipeThrough(withProgress({ entries: index.entries, now, started }))
+          .pipeThrough(onlyAnswerText())
+          .pipeThrough(onlyClientChunks()),
       })
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
@@ -423,51 +413,37 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 }
 
 /**
- * Just enough of the answer to tell whether it is the decline sentence, and
- * whether there was an answer at all.
+ * Whether the run produced an answer for the visitor to read.
  *
- * Only the opening characters are kept. The question this has to answer is
- * "did the model decline", and holding a whole answer to decide it would mean
- * this module carrying visitor-visible text further than it needs to.
- *
- * The buffer resets on every `start-step`, so only the final step's text is
- * judged. A model may narrate before a tool call ("Let me check his
- * résumé.") and that preamble is not the answer: left in, it would fill the
- * buffer and make a decline written two steps later look like prose, or the
- * reverse.
+ * No text is kept, only the flag. The flag resets on every `start-step`, so
+ * only the final step is judged: a model may narrate before a tool call
+ * ("Let me check his résumé."), and that preamble is not the answer.
  */
 class AnswerText {
-  /** The sentence plus room for whatever whitespace precedes it. */
-  private static readonly KEEP = DECLINE_SENTENCE.length + 16
-  private opening = ''
   private sawText = false
 
   observe(part: { type: string; text?: string }): void {
     if (part.type === 'start-step') {
-      this.opening = ''
       this.sawText = false
       return
     }
     if (part.type !== 'text-delta' || typeof part.text !== 'string') return
     this.sawText ||= part.text.trim().length > 0
-    if (this.opening.length >= AnswerText.KEEP) return
-    this.opening += part.text
   }
 
   /** Whether the final step produced any text for the visitor to read. */
   answered(): boolean {
     return this.sawText
   }
-
-  isDecline(): boolean {
-    return this.opening.trimStart().startsWith(DECLINE_SENTENCE)
-  }
 }
 
 // Only these chunk types reach the browser: the answer text, the stream
-// framing, and the metadata carried on `finish`. An allowlist, not a
-// denylist: a future chunk type that carries model-visible content
-// (reasoning, tool output, source parts) stays server-side by default.
+// framing, the metadata carried on `finish`, and this route's own progress
+// narration (MTC-42), which is written by `withProgress` a few lines below
+// out of the server's own index and never out of model output. An allowlist,
+// not a denylist: a future chunk type that carries model-visible content
+// (reasoning, tool output, source parts) stays server-side by default, and
+// the tool chunks that carry whole documents stay filtered.
 const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'start',
   'start-step',
@@ -477,6 +453,7 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'text-delta',
   'text-end',
   'error',
+  PROGRESS_PART_TYPE,
 ])
 
 /**
@@ -484,8 +461,8 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
  *
  * The SDK would otherwise stream a `read_document` input part and an output
  * part per read, the latter carrying the document's whole text. The browser
- * has no use for it: the answer is the content and `sources` names where it
- * came from. Filtering the UI chunks rather than the model stream keeps this
+ * has no use for it: the answer is the content and the progress part names
+ * what was read. Filtering the UI chunks rather than the model stream keeps this
  * a pure output concern: the tool loop, the read ledger, and the metadata
  * callback still see everything.
  */
@@ -495,6 +472,233 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
       if (CLIENT_CHUNK_TYPES.has(chunk.type)) controller.enqueue(chunk)
     },
   })
+}
+
+/**
+ * Holds text from a step until that step is known to be the answer, and
+ * drops it when the step called a tool (MTC-49).
+ *
+ * Models routinely narrate before a read ("Let me check his résumé."). That
+ * prose is `text-delta`, the same chunk type as the answer, so an allowlist
+ * that forwards every text chunk puts chain-of-thought in the bubble. T3
+ * Code never lets a non-`assistant_text` delta mutate the message; this is
+ * the same gate for a one-tool loop: text from a tool-calling step is
+ * scratchpad, text from a step that only wrote is the answer.
+ *
+ * Held until `finish-step` so a live token cannot race a tool call that
+ * arrives later in the same step. The answer therefore appears when that
+ * step ends rather than token-by-token; the progress view already covers
+ * the wait. An abort or error mid-answer flushes what was held so a
+ * partial briefing is not thrown away.
+ */
+function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
+  let held: ChatUIChunk[] = []
+  let dropText = false
+
+  function flushHeld(
+    controller: TransformStreamDefaultController<ChatUIChunk>
+  ): void {
+    if (dropText) {
+      held = []
+      return
+    }
+    for (const part of held) controller.enqueue(part)
+    held = []
+  }
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      if (chunk.type === 'start-step') {
+        flushHeld(controller)
+        dropText = false
+        controller.enqueue(chunk)
+        return
+      }
+      if (chunk.type.startsWith('tool-')) {
+        dropText = true
+        held = []
+        controller.enqueue(chunk)
+        return
+      }
+      if (
+        chunk.type === 'text-start' ||
+        chunk.type === 'text-delta' ||
+        chunk.type === 'text-end'
+      ) {
+        if (!dropText) held.push(chunk)
+        return
+      }
+      if (chunk.type.startsWith('reasoning')) return
+      if (chunk.type === 'finish-step' || chunk.type === 'error') {
+        flushHeld(controller)
+        controller.enqueue(chunk)
+        return
+      }
+      controller.enqueue(chunk)
+    },
+    flush(controller) {
+      flushHeld(controller)
+    },
+  })
+}
+
+/**
+ * Narrates the run to the browser as one data part that it rewrites in place
+ * (MTC-42).
+ *
+ * The visitor waits ten to twenty seconds for the first token, because the
+ * model reads one to three documents before it writes a word. This is where
+ * that wait gets a voice: a step per read, then "writing", then how long the
+ * whole thing took.
+ *
+ * Three properties are the whole design.
+ *
+ * It is an observer. Every chunk it sees is forwarded unchanged; nothing the
+ * SDK produced is dropped or rewritten here. Filtering is `onlyClientChunks`'
+ * job, one stage further down the pipe, which is why this one sees the tool
+ * chunks the browser never will.
+ *
+ * Titles come from the index, never from the model. `tool-input-available`
+ * carries an id the model chose, and that id is looked up in the same
+ * `entries` the read tool validates against. An id that is not there yields
+ * no step at all: the read is about to be refused as `unknown_document`, and
+ * a step for a document that was never opened is the one thing this view must
+ * not show.
+ *
+ * Silence is how a stopped run is reported. `done` is emitted once, just
+ * before the stream's finish chunk, and only if the visitor was already
+ * watching a progress part and nothing failed. Any other ending, whether an
+ * error chunk, a cancelled request, or a connection that simply stops, emits
+ * nothing more, so the last part the browser holds says `reading` or
+ * `writing` forever. The client reads that absence as "stopped": no spinner, no running
+ * timer, no claim about documents read. Saying nothing is the only ending
+ * that cannot lie, and an error chunk is the case worth spelling out: the SDK
+ * still writes a finish chunk after one, so `done` has to be withheld
+ * deliberately rather than by never arriving.
+ */
+function withProgress({
+  entries,
+  now,
+  started,
+}: {
+  entries: readonly KnowledgeEntry[]
+  now: () => number
+  started: number
+}): TransformStream<ChatUIChunk, ChatUIChunk> {
+  const titles = new Map(entries.map(entry => [entry.id, entry.title]))
+  const steps: ChatProgressStep[] = []
+  const listed = new Set<string>()
+  /** Reads the session will have accepted, duplicates included, as it counts. */
+  let reads = 0
+  let phase: ChatProgressPhase = 'reading'
+  let emitted = false
+  let failed = false
+
+  function emit(
+    controller: TransformStreamDefaultController<ChatUIChunk>,
+    ms?: number
+  ): void {
+    const data: ChatProgress = { steps: [...steps], phase }
+    if (ms !== undefined) data.ms = ms
+    // The same id every time. The SDK replaces a data part's payload in place
+    // when type and id match an existing part, so this is one growing part
+    // rather than a part per step, which matters because the client replays
+    // the whole message back on the next question.
+    controller.enqueue({
+      type: PROGRESS_PART_TYPE,
+      id: PROGRESS_PART_ID,
+      data,
+    })
+    emitted = true
+  }
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      switch (chunk.type) {
+        case 'tool-input-available': {
+          const step = toStep(chunk, titles, reads)
+          if (!step) break
+          // Spent whether or not it earns a row: the read session charges a
+          // repeat to the budget the same as any other read.
+          reads += 1
+          if (listed.has(step.id)) break
+          listed.add(step.id)
+          steps.push(step)
+          phase = 'reading'
+          emit(controller)
+          break
+        }
+        case 'text-start': {
+          // A run that answers without reading anything needs no progress
+          // part: there are no steps to narrate, and an empty one would only
+          // put a spinner where the answer is already arriving. A model that
+          // narrates before a tool call hits this first, too, and is ignored
+          // for the same reason.
+          if ((emitted || steps.length > 0) && phase !== 'writing') {
+            phase = 'writing'
+            emit(controller)
+          }
+          break
+        }
+        case 'error': {
+          // A model that fails mid-run still reaches the finish chunk below,
+          // so the failure has to be remembered here: without this flag an
+          // interrupted answer would be stamped `done` and summarised as a
+          // finished read of N documents.
+          failed = true
+          break
+        }
+        case 'finish': {
+          // Before the finish chunk, so the browser has the final state in
+          // hand by the time the stream closes.
+          if (emitted && !failed) {
+            phase = 'done'
+            emit(controller, now() - started)
+          }
+          break
+        }
+      }
+      controller.enqueue(chunk)
+    },
+  })
+}
+
+/**
+ * The step a `read_document` call earns, if it earns one.
+ *
+ * Everything is guarded rather than asserted: this reads a chunk built from
+ * model output, and a malformed one has to yield no step instead of throwing
+ * inside a transform, where it would take the answer down with it.
+ *
+ * The document cap is predicted here rather than waited for, so the list
+ * never counts a read that cannot happen: past
+ * KNOWLEDGE_READ_BUDGET.maxDocuments the read session refuses on count
+ * alone, before it looks at the id at all.
+ *
+ * The token half of that budget is not predicted, because it depends on
+ * document text this stage has not seen. A read the session refused for size
+ * would therefore both earn a row it did not deserve and spend one of the
+ * three this counter allows, hiding a later read that did happen. Tests in
+ * lib/knowledge/knowledge.test.ts keep that unreachable: one holds every
+ * document under KNOWLEDGE_DOCUMENT_TOKEN_CEILING, well under the whole-turn
+ * budget, and 'the three largest documents fit in one turn' holds both the
+ * three largest together and the worst repeated read inside it. They are
+ * load-bearing for a claim this view makes on screen, which is why they are
+ * named here rather than left to be found.
+ */
+function toStep(
+  chunk: { toolName?: unknown; input?: unknown },
+  titles: ReadonlyMap<string, string>,
+  reads: number
+): ChatProgressStep | undefined {
+  if (chunk.toolName !== READ_DOCUMENT_TOOL_NAME) return undefined
+  if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
+  const input = chunk.input
+  if (typeof input !== 'object' || input === null) return undefined
+  const id = (input as { id?: unknown }).id
+  if (typeof id !== 'string') return undefined
+  const title = titles.get(id)
+  return title === undefined ? undefined : { id, title }
 }
 
 /** The refusal counters as the same three flat fields on every log path. */
@@ -553,10 +757,10 @@ interface CompletionAggregates {
 /**
  * Numbers only. Never the question, never the answer, never a document id.
  *
- * Document ids are not secret — they are in the index and on the page as
- * source chips — but leaving them out keeps this line a fixed set of numeric
- * fields that a log query can aggregate without ever growing a text column
- * that someone later fills with something that is secret.
+ * Document ids are not secret, and the corpus lives in a public repository,
+ * but leaving them out keeps this line a fixed set of numeric fields that a
+ * log query can aggregate without ever growing a text column that someone
+ * later fills with something that is secret.
  */
 function logCompletion({
   usage,
@@ -601,8 +805,8 @@ function logCompletion({
     vertexFirstByteMs,
     ms,
   }
-  // An answer that stopped on length lost its Sources trailer mid-word, and
-  // any other non-'stop' finish means no usable answer at all. Both get their
+  // An answer that stopped on length was cut off mid-word, and any other
+  // non-'stop' finish means no usable answer at all. Both get their
   // own marker rather than hiding among the ordinary completions.
   if (finishReason === 'length') console.warn('[chat] truncated', aggregate)
   else if (finishReason !== 'stop') console.warn('[chat] incomplete', aggregate)

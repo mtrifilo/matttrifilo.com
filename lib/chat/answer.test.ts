@@ -88,7 +88,6 @@ describe('stripSourcesTrailer', () => {
 describe('noticeFor', () => {
   const view = (overrides: Partial<AnswerView>): AnswerView => ({
     text: 'He led the platform migration.',
-    sources: [],
     truncated: false,
     incomplete: false,
     ...overrides,
@@ -142,25 +141,22 @@ describe('discardsQuestion', () => {
 })
 
 describe('toAnswerView', () => {
-  test('reads the text, the chips and neither flag from a clean answer', () => {
+  test('reads the text and neither flag from a clean answer', () => {
     const view = toAnswerView(
-      answer([textPart(`Matt shipped it.\n${SOURCES_TRAILER_PREFIX}resume`)], {
-        sources: [{ id: 'resume', title: 'Résumé', url: '/knowledge/resume' }],
-      })
+      answer([textPart(`Matt shipped it.\n${SOURCES_TRAILER_PREFIX}resume`)])
     )
     expect(view).toEqual({
       text: 'Matt shipped it.',
-      sources: [{ id: 'resume', title: 'Résumé', url: '/knowledge/resume' }],
       truncated: false,
       incomplete: false,
+      progress: undefined,
     })
   })
 
-  test('has no chips when the server sent none', () => {
-    // A decline, and any run that produced no answer, arrive without sources.
+  test('a message with no metadata sets neither flag', () => {
     const view = toAnswerView(answer([textPart("That isn't something…")]))
-    expect(view.sources).toEqual([])
     expect(view.incomplete).toBe(false)
+    expect(view.truncated).toBe(false)
   })
 
   test('reports a cut-short answer as both truncated and incomplete', () => {
@@ -179,9 +175,9 @@ describe('toAnswerView', () => {
     const view = toAnswerView(answer([], { incomplete: true }))
     expect(view).toEqual({
       text: '',
-      sources: [],
       truncated: false,
       incomplete: true,
+      progress: undefined,
     })
   })
 })

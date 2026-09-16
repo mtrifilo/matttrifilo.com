@@ -1,21 +1,22 @@
 import type { ChatStatus } from 'ai'
 import type { ChatMessageMetadata } from './handler'
-import type { ChatSource } from './read-document'
+import { toProgressView, wasCutOff, type ProgressView } from './progress'
 import type { ChatErrorCode } from './validate'
 
 /**
  * What the browser makes of a streamed answer (MTC-33).
  *
- * Every decision the transcript takes — which text to show, which chips, which
- * notice, which error copy — is made here, in one pure module, so it can be
- * asserted without a browser, a stream, or a model.
+ * Every decision the transcript takes, which text to show, which notice,
+ * which error copy, is made here, in one pure module, so it can be asserted
+ * without a browser, a stream, or a model.
  *
- * It is also the one module in lib/chat that the client bundle may import, and
- * that is why it has no runtime imports at all. prompt.ts, validate.ts and
- * handler.ts all reach lib/knowledge, which reads the filesystem at module
- * scope; pulling any of them into a client component would break the build.
- * The three imports above are erased at compile time, so the shapes stay
- * defined once and the bytes stay on the server.
+ * It is one of the two modules in lib/chat that the client bundle may import,
+ * and ./progress, which has no runtime imports of its own, is the only thing
+ * it pulls in at runtime. prompt.ts, validate.ts and handler.ts all reach
+ * lib/knowledge, which reads the filesystem at module scope; pulling any of
+ * them into a client component would break the build. The type imports above
+ * are erased at compile time, so the shapes stay defined once and the bytes
+ * stay on the server.
  */
 
 /**
@@ -42,12 +43,17 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
 export interface AnswerView {
   /** The answer, with any `Sources:` trailer removed. */
   text: string
-  /** The documents the server actually read. Authoritative; may be empty. */
-  sources: readonly ChatSource[]
   /** Real text that stopped mid-sentence on the output cap. */
   truncated: boolean
   /** The run ended without a clean answer. Implied by `truncated`. */
   incomplete: boolean
+  /**
+   * The steps the server narrated while the answer was being prepared, and
+   * how the run ended (MTC-42). Absent when the server sent no progress part
+   * (a refusal that never opened a stream, or a run that answered without
+   * reading anything), and absent when the part it did send was malformed.
+   */
+  progress?: ProgressView
 }
 
 /** The parts of a UI message this module needs. Structural on purpose. */
@@ -60,13 +66,13 @@ export function toAnswerView(message: AnswerMessage): AnswerView {
   const text = stripSourcesTrailer(joinTextParts(message.parts))
   return {
     text,
+    // Lenient: a progress part this module cannot read costs the visitor the
+    // step list and nothing else. See lib/chat/progress.ts.
+    progress: toProgressView(message.parts),
     // The flags are present-or-absent on the wire, never `false`, so `=== true`
     // is a check that the key is set rather than a comparison of two booleans.
     incomplete: message.metadata?.incomplete === true,
     truncated: message.metadata?.truncated === true,
-    // An answer with no chips is ordinary: a decline cites nothing, and the
-    // server withholds them from a run that produced no answer at all.
-    sources: message.metadata?.sources ?? [],
   }
 }
 
@@ -84,12 +90,12 @@ export function joinTextParts(
 /**
  * The trailer is for the model's discipline, not the reader's eyes.
  *
- * Source chips come from the server's `sources` metadata, so a `Sources:` line
- * in the prose would repeat them — in raw document ids, which mean nothing to
- * a visitor. Only a final line that opens with the literal prefix is taken,
- * which is specific enough that no sentence of a real answer is mistaken for
- * it. A half-written trailer stays on screen for the tokens it takes to finish
- * the word, which is the cost of not guessing at prefixes like "So".
+ * The trailer is raw document ids, which mean nothing to a visitor: what was
+ * read is disclosed above the answer, by title. Only a final line that opens
+ * with the literal prefix is taken, which is specific enough that no sentence
+ * of a real answer is mistaken for it. A half-written trailer stays on screen
+ * for the tokens it takes to finish the word, which is the cost of not
+ * guessing at prefixes like "So".
  */
 export function stripSourcesTrailer(text: string): string {
   // Models routinely end with a newline; without this the "final line" would
@@ -123,21 +129,68 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
 /**
  * What the visually hidden status region says, if anything.
  *
- * Three words, because the transcript itself must not be a live region: with
+ * A few words, because the transcript itself must not be a live region: with
  * `aria-live` on it, a screen reader would re-read the whole growing answer on
  * every streamed token. This announces that something is happening, that it
  * finished, or that it failed, and leaves the reading to the reader.
+ *
+ * While a run is in flight it narrates the step instead of the bare
+ * "Responding" (MTC-42), so a reader who cannot see the progress list is told
+ * the same thing it shows, and it reports a run that was cut off as stopped
+ * rather than complete. One announcement per step: the region re-reads
+ * whenever this string changes, which is why the elapsed seconds are never in
+ * it. A ticking counter would re-announce every second and bury the steps.
  *
  * Empty until there is something to report, so a page that has only just
  * loaded announces nothing at all.
  */
 export function announcementFor(
   status: ChatStatus,
-  hasAnswer: boolean
-): 'Responding' | 'Response complete' | 'Error' | '' {
+  hasAnswer: boolean,
+  progress?: ProgressView,
+  stopped = false
+): string {
   if (status === 'error') return 'Error'
-  if (status === 'submitted' || status === 'streaming') return 'Responding'
-  return hasAnswer ? 'Response complete' : ''
+  if (status === 'submitted' || status === 'streaming') {
+    return stepAnnouncement(progress) ?? 'Responding'
+  }
+  // A run that was cut off is never reported as finished. The reader has no
+  // other way to learn it: the steps sit in the transcript, which is
+  // deliberately not a live region, and the timer is hidden from them.
+  // "Response complete" here would be the one false claim this view exists
+  // to prevent, made in the only channel that cannot be checked by looking.
+  //
+  // Two signals, because neither covers the other. `stopped` is the visitor
+  // pressing the button, which the SDK reports as an ordinary `ready` with
+  // no error and no metadata; `wasCutOff` is a run that ended on its own
+  // without the server ever saying `done`. A run that answered without
+  // reading anything has no progress part at all, so only the first signal
+  // can speak for it.
+  if (stopped) return 'Response stopped'
+  if (!hasAnswer) return ''
+  if (wasCutOff(progress)) return 'Response stopped'
+  return 'Response complete'
+}
+
+/**
+ * The current step, said plainly. `undefined` when the run has not narrated
+ * anything yet, or has already reported itself done. In both cases the
+ * caller's "Responding" is the truthful thing to say.
+ *
+ * These two verbs are the spoken half of what
+ * components/assistant/copy.ts shows on screen as "Reading {title}…" and
+ * "Writing answer…". They are written out here rather than imported because
+ * this module may not reach into components; change one and change the
+ * other, or the two channels will describe different work.
+ */
+function stepAnnouncement(
+  progress: ProgressView | undefined
+): string | undefined {
+  if (!progress) return undefined
+  if (progress.phase === 'writing') return 'Writing answer'
+  if (progress.phase !== 'reading') return undefined
+  const current = progress.steps[progress.steps.length - 1]
+  return current ? `Reading ${current.title}` : undefined
 }
 
 /** An error the transcript has to say something about. */
