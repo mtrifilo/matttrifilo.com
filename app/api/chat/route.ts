@@ -17,7 +17,13 @@ export const dynamic = 'force-dynamic'
 export const POST = createChatHandler({
   loadKnowledgeIndex,
   readKnowledgeDocument,
-  model: () => getVertex()(geminiModel()),
+  // A client per request, so the retries its bounded fetch hides — and the
+  // time it waited for each first byte — are counted into the log line of the
+  // request that was billed for them (MTC-38).
+  model: ({ onVertexRetry, onVertexFirstByte }) =>
+    getVertex({ onRetry: onVertexRetry, onFirstByte: onVertexFirstByte })(
+      geminiModel()
+    ),
   // BotID Basic (MTC-34). The client half is instrumentation-client.ts; the
   // rewrites it needs are added by withBotId in next.config.ts. Basic is
   // the free tier; Deep Analysis is a dashboard switch plus

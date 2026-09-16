@@ -11,6 +11,10 @@ import {
   type UIMessage,
 } from 'ai'
 import { failureStage } from '@/lib/ai/failure-stage'
+import {
+  createVertexCallCounter,
+  type BoundedFetchRetry,
+} from '@/lib/ai/bounded-fetch'
 import type { EnvSource } from '@/lib/env'
 import {
   KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -64,15 +68,36 @@ import {
  * Only counts, flags, and durations leave the request.
  */
 
+/**
+ * What one request asks of the model it is handed.
+ *
+ * `onVertexRetry` is how the hidden retries reach this request's own log
+ * line: the fetch wrapper under the Vertex client may open a second
+ * connection for a stalled model call, and that second generation is billed
+ * and spends the request's seconds while being invisible to the visitor and,
+ * without this, to the `ms` on the completion line.
+ *
+ * `onVertexFirstByte` carries the other number that wrapper knows and nothing
+ * else does: how long a model call waited before Vertex said anything. The
+ * deadlines that decide whether a call is stalled or merely slow are guesses
+ * at it, and `msSinceStart` on the step line cannot stand in — that is
+ * elapsed time to the end of a step, generation included.
+ */
+export interface ChatModelRequest {
+  onVertexRetry: (retry: BoundedFetchRetry) => void
+  onVertexFirstByte: (ms: number) => void
+}
+
 export interface ChatHandlerDeps {
   loadKnowledgeIndex: () => KnowledgeIndex
   readKnowledgeDocument: (id: string) => KnowledgeDocument | undefined
   /**
-   * A thunk, not a model. Building the Vertex client reads required env, so
+   * A factory, not a model. Building the Vertex client reads required env, so
    * it must not run at import time — a missing variable would otherwise break
-   * the build rather than one request.
+   * the build rather than one request — and the client is per request because
+   * the retry sink above is.
    */
-  model: () => LanguageModel
+  model: (request: ChatModelRequest) => LanguageModel
   /**
    * Classifies the request as a person or automation before the body is
    * read (MTC-34). In production this is Vercel BotID's `checkBotId`;
@@ -183,7 +208,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     try {
       visitor = await verifyVisitor()
     } catch (error) {
-      logFailure(error, 'visitor')
+      logFailure(error, { stage: 'visitor', vertexRetries: 0 })
       return errorResponse('unavailable')
     }
     // Typed as an object, but it crosses from a third-party payload: a
@@ -215,6 +240,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
     const started = now()
     let stepCount = 0
+    // Per request, like the read session below: the count belongs to the
+    // request that paid for the retries.
+    const vertexCalls = createVertexCallCounter()
     try {
       const index = loadKnowledgeIndex()
       // An index over its own ceiling is a deployment fault: MTC-29 enforces
@@ -249,7 +277,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       const answer = new AnswerText()
 
       const result = streamText({
-        model: model(),
+        model: model({
+          onVertexRetry: vertexCalls.observeRetry,
+          onVertexFirstByte: vertexCalls.observeFirstByte,
+        }),
         messages: buildMessages({
           index,
           history: validation.history,
@@ -311,6 +342,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
+            vertexRetries: vertexCalls.retries(),
+            vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
           })
         },
@@ -326,6 +359,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
+            vertexRetries: vertexCalls.retries(),
+            vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
           })
         },
@@ -373,7 +408,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           // down the stream as text: the client reads the same shape it
           // reads from a 4xx/5xx body, and shows the same fixed copy.
           onError(error) {
-            logFailure(error)
+            logFailure(error, { vertexRetries: vertexCalls.retries() })
             return JSON.stringify(chatErrorBody('interrupted'))
           },
         }).pipeThrough(onlyClientChunks()),
@@ -381,7 +416,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     } catch (error) {
       // Anything thrown before the stream exists: missing env, a refused token
       // exchange, an unknown model.
-      logFailure(error)
+      logFailure(error, { vertexRetries: vertexCalls.retries() })
       return errorResponse('unavailable')
     }
   }
@@ -508,6 +543,10 @@ interface CompletionAggregates {
   documentsRead: number
   readTokens: number
   readsRefused: ReadsRefused
+  /** Connections the Vertex wrapper abandoned and reopened on this request. */
+  vertexRetries: number
+  /** The slowest wait for a first response byte on this request. */
+  vertexFirstByteMs: number
   ms: number
 }
 
@@ -526,6 +565,8 @@ function logCompletion({
   documentsRead,
   readTokens,
   readsRefused,
+  vertexRetries,
+  vertexFirstByteMs,
   ms,
 }: CompletionAggregates): void {
   const cached = cachedInputTokens(usage)
@@ -548,6 +589,16 @@ function logCompletion({
     answered,
     finishReason,
     aborted: false,
+    // Zero on a healthy request. Anything above it means a model call stalled
+    // and was reopened, so this request's `ms` — and its bill — contain a
+    // generation the visitor never saw: abandoning a connection does not
+    // cancel the generation behind it.
+    vertexRetries,
+    // What VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS
+    // are hypotheses about: the longest a model call on this request waited
+    // before Vertex sent a byte. A run of these from preview is what decides
+    // whether either bound sits in the right place.
+    vertexFirstByteMs,
     ms,
   }
   // An answer that stopped on length lost its Sources trailer mid-word, and
@@ -568,11 +619,20 @@ function logRejection(code: string, flags: Record<string, boolean> = {}): void {
  * message can contain the prompt, and the prompt contains the visitor's
  * question, which this route promises never to record.
  */
-function logFailure(error: unknown, stage?: 'visitor'): void {
+function logFailure(
+  error: unknown,
+  { stage, vertexRetries }: { stage?: 'visitor'; vertexRetries: number }
+): void {
   console.error('[chat]', {
     // failureStage classifies the Vertex chain; a visitor-classifier failure
     // names its own stage so an operator is not sent to the wrong system.
     stage: stage ?? failureStage(error),
     error: error instanceof Error ? error.name : typeof error,
+    // On the failure path above all others: a request that exhausted the
+    // wrapper's attempts reached Vertex more than once and was billed for
+    // every one of them, and a line carrying only a stage and an error name
+    // says a stalled-and-retried failure and a first-try failure cost the
+    // same.
+    vertexRetries,
   })
 }
