@@ -70,6 +70,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'weekly',
     priority: 0.4,
     hideFromNav: true,
+    assistant: true,
   },
 ]
 

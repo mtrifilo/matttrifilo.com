@@ -1,13 +1,19 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { listKnowledgeDocuments } from '@/lib/knowledge'
 import { topicLabel } from './topic-label'
 
-export const metadata: Metadata = {
-  title: 'Knowledge',
-  description:
-    "The documents Matt's Career Assistant reads, published in full. Everything here is public.",
-  alternates: { canonical: '/knowledge' },
+// See app/ask/page.tsx: a function so the 404 carries no assistant metadata.
+export function generateMetadata(): Metadata {
+  if (isChatDisabled()) notFound()
+  return {
+    title: 'Knowledge',
+    description:
+      "The documents Matt's Career Assistant reads, published in full. Everything here is public.",
+    alternates: { canonical: '/knowledge' },
+  }
 }
 
 /**
@@ -20,6 +26,9 @@ export const metadata: Metadata = {
  * this page shows, by construction.
  */
 export default function KnowledgePage() {
+  // These pages exist to make the assistant checkable; killed, they would
+  // describe a feature that is not there.
+  if (isChatDisabled()) notFound()
   const documents = listKnowledgeDocuments()
   // Documents arrive in index order — topics in their documented order,
   // newest first inside a topic — so grouping in one pass preserves it.
