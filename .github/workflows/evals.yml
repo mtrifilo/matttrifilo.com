@@ -17,7 +17,11 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded pull request runs are cancelled to save the spend, but a manual
+  # dispatch is never cancelled: it is the documented way to evaluate a fork's
+  # branch, and it would otherwise cancel, or be cancelled by, the pull
+  # request run on the same ref.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   evals:

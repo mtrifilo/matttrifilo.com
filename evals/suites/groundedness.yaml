@@ -12,12 +12,12 @@
 # does not cover it. `forbidden` lists the strings that would only appear if
 # the model had made the fact up.
 #
-# The rubric on each probe is not decoration. A substring check cannot see an
-# invention phrased around its list, and the honesty check it sits beside is
-# satisfied by any sentence that disclaims somewhere: "his KubeCon talk was
-# about reliability at scale, though the material does not include the slides"
-# passes both and is exactly the failure these probes exist to catch. The
-# rubric is what judges the whole answer.
+# Each probe is judged twice. `forbidden` catches the inventions worth naming
+# in advance, before any hedge is considered, so "his KubeCon talk was about
+# reliability at scale, though the material does not include the slides" fails
+# on the phrase alone. The rubric catches the rest: a substring list cannot see
+# an invention phrased around it, and an answer that disclaims in one sentence
+# and invents in another would otherwise read as honest.
 
 - description: 'groundedness: cites the outage account'
   vars:

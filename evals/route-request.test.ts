@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { validateChatRequest } from '@/lib/chat/validate'
+import { chatErrorBody, validateChatRequest } from '@/lib/chat/validate'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
-import { chatErrorBody } from '@/lib/chat/validate'
 import {
   chatRequest,
   envelopeCode,

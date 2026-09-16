@@ -222,15 +222,17 @@ for (const name of SUITES) {
       for (const item of suite) {
         const names = assertionNames([item])
         const types = assertionTypes([item])
-        const onlyAbsence =
-          names.length > 0 &&
-          names.every(name => ABSENCE_ONLY.has(name)) &&
-          types.every(type => type === 'javascript')
-        if (onlyAbsence) {
-          // Every one of those passes on an empty string, so together they
-          // would go green against an assistant that said nothing at all.
-          expect(names).toContain('assertAnswered')
-        }
+        // Anything that judges what the answer SAYS: a named assertion that is
+        // not an absence check, or a promptfoo assertion that reads the output
+        // (the contains family, a rubric). Any one of them already fails on an
+        // empty answer, so the test does not need assertAnswered as well.
+        const judgesContent =
+          names.some(name => !ABSENCE_ONLY.has(name)) ||
+          types.some(type => type !== 'javascript' && type !== 'assert-set')
+        expect({
+          description: item.description,
+          judgesContent,
+        }).toEqual({ description: item.description, judgesContent: true })
       }
     })
 

@@ -237,11 +237,11 @@ export function assertNoPolicyLeak(output: string): AssertionResult {
  * or the store are ever wired to different sources, and green otherwise.
  *
  * It deliberately does not count documents against KNOWLEDGE_READ_BUDGET.
- * read-document.ts consults the store before it applies the token budget, so
- * a run that behaved perfectly can leave one more id here than it was allowed
- * to read, and a count assertion would redden on correct behaviour. The
- * budget is enforced and tested in lib/chat/read-document.test.ts, which is
- * where it belongs.
+ * read-document.ts consults the store before it applies either the size check
+ * or the token budget, so a run that behaved perfectly can leave several more
+ * ids here than it was allowed to read, and a count assertion would redden on
+ * correct behaviour. The budget is enforced and tested in
+ * lib/chat/read-document.test.ts, which is where it belongs.
  */
 export function assertReadsWithinIndex(
   _output: string,

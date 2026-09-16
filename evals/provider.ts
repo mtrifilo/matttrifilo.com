@@ -50,9 +50,14 @@ interface ProviderResponse {
  *
  * `readIds` is the ledger described above. It records the ids the handler
  * resolved from the store, which is every id the model was given text for,
- * plus the rare id refused afterwards for exhausting the token budget. It can
- * therefore be a superset of what the answer saw by at most one document, and
- * every assertion built on it is written as a subset test for that reason.
+ * plus any refused afterwards for being too large or for exhausting the token
+ * budget: read-document.ts consults the store before it applies either check.
+ * It is therefore a superset of what the answer saw, bounded by the step cap
+ * rather than by the read budget, and every assertion built on it is written
+ * as a subset test for that reason.
+
+ * `finishReason` is carried for the person reading a red row, not for an
+ * assertion. `incomplete` and `truncated` are what assertAnswered judges.
  */
 export interface EvalMetadata extends Record<string, unknown> {
   readIds: string[]
