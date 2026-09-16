@@ -119,6 +119,7 @@ export type ChatErrorCode = ChatRejectionCode | 'rate_limited' | 'interrupted'
 /** Codes a request can be refused with before any model call is made. */
 export type ChatRejectionCode =
   | 'disabled'
+  | 'blocked'
   | 'too_many_turns'
   | 'message_too_long'
   | 'budget_exceeded'
@@ -134,6 +135,9 @@ export const CHAT_ERROR_STATUS: Record<
   number
 > = {
   disabled: 503,
+  // BotID classified the request as automated (MTC-34). 403, not 429: it
+  // is not a limit the same caller can wait out.
+  blocked: 403,
   too_many_turns: 400,
   message_too_long: 400,
   budget_exceeded: 400,
@@ -152,6 +156,8 @@ export const CHAT_ERROR_MESSAGE: Record<
 > = {
   disabled:
     "Matt's Career Assistant is switched off at the moment. Email Matt at matt.trifilo@gmail.com and he'll answer himself.",
+  blocked:
+    "That request looked automated, so the assistant didn't answer it. If you're a person, reload the page and try again, or email Matt at matt.trifilo@gmail.com.",
   too_many_turns: `This conversation has reached its limit of ${CHAT_MAX_TURNS} questions. Start a new one to keep going, or email Matt at matt.trifilo@gmail.com.`,
   message_too_long: `That question is longer than ${CHAT_MAX_MESSAGE_CHARS.toLocaleString('en-US')} characters. Trim it a little and send it again.`,
   budget_exceeded:

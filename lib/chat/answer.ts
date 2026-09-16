@@ -163,16 +163,21 @@ export interface ChatErrorView {
 export const CHAT_UNKNOWN_ERROR_MESSAGE =
   'Something went wrong reaching the assistant. Try again in a moment, or email Matt at matt.trifilo@gmail.com.'
 
-const CHAT_ERROR_CODES: ReadonlySet<string> = new Set<ChatErrorCode>([
-  'disabled',
-  'too_many_turns',
-  'message_too_long',
-  'budget_exceeded',
-  'rate_limited',
-  'invalid',
-  'unavailable',
-  'interrupted',
-])
+// A Record, not a list, so a code added to ChatErrorCode without being
+// added here is a type error rather than a silent fall-through to the
+// unknown-error copy.
+const KNOWN_CODES: Record<ChatErrorCode, true> = {
+  disabled: true,
+  blocked: true,
+  too_many_turns: true,
+  message_too_long: true,
+  budget_exceeded: true,
+  rate_limited: true,
+  invalid: true,
+  unavailable: true,
+  interrupted: true,
+}
+const CHAT_ERROR_CODES: ReadonlySet<string> = new Set(Object.keys(KNOWN_CODES))
 
 /**
  * Refusals that were about the question just sent, not about the assistant.

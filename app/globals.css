@@ -242,15 +242,8 @@
 
 @media (min-width: 56rem) {
   .hex-canvas {
-    -webkit-mask-image: linear-gradient(
-      to right,
-      black 0,
-      black calc(50% - var(--reading-column) / 2 - var(--veil-edge)),
-      rgba(0, 0, 0, 0.08) calc(50% - var(--reading-column) / 2),
-      rgba(0, 0, 0, 0.08) calc(50% + var(--reading-column) / 2),
-      black calc(50% + var(--reading-column) / 2 + var(--veil-edge)),
-      black 100%
-    );
+    /* Unprefixed only; the optimiser adds -webkit-mask-image (see the nav
+       rule below for why a hand-written prefix is a hazard). */
     mask-image: linear-gradient(
       to right,
       black 0,
@@ -263,10 +256,23 @@
   }
 }
 
-/* Nav blur-on-scroll */
+/*
+ * Nav blur-on-scroll (MTC-36).
+ *
+ * Only the unprefixed property is written, here and everywhere in this
+ * file. Every pipeline runs the CSS through Lightning CSS: Tailwind's
+ * optimise pass in a production build, Turbopack's pass in development.
+ * Given a hand-written `-webkit-backdrop-filter` after `backdrop-filter`,
+ * it keeps the later, prefixed declaration and drops the standard one;
+ * Chrome then reports `backdrop-filter: none` and the nav never blurs, in
+ * dev and in production alike. Lightning adds the prefix itself from the
+ * targets hardcoded in @tailwindcss/node's optimiser (Safari 16.4, Chrome
+ * 111, Firefox 128 as of 4.1; there is no browserslist in this repo), so
+ * the shipped rule carries both. lib/globals-css.test.ts runs this rule
+ * through that optimiser and fails if either declaration goes missing.
+ */
 nav[data-scrolled='true'] {
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   background-color: rgba(255, 255, 255, 0.8);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
