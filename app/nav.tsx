@@ -14,15 +14,19 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { siteRoutes } from '@/lib/site-routes'
+import { visibleSiteRoutes } from '@/lib/site-routes'
 
-// Shared with the sitemap so a new page cannot be added to one and
-// forgotten in the other.
-const navLinks = siteRoutes
-  .filter(route => !route.hideFromNav)
-  .map(({ href, label }) => ({ href, label }))
-
-export default function Nav() {
+export default function Nav({
+  assistantDisabled,
+}: {
+  /** Read from the environment by the layout; this is a client component. */
+  assistantDisabled: boolean
+}) {
+  // Shared with the sitemap so a new page cannot be added to one and
+  // forgotten in the other.
+  const navLinks = visibleSiteRoutes({ assistantDisabled })
+    .filter(route => !route.hideFromNav)
+    .map(({ href, label }) => ({ href, label }))
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const pathname = usePathname()

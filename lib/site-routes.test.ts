@@ -3,7 +3,8 @@ import fs from 'fs'
 import path from 'path'
 import sitemap from '@/app/sitemap'
 import { getBlogSlugs } from './blog'
-import { siteRoutes } from './site-routes'
+import { siteRoutes, visibleSiteRoutes } from './site-routes'
+import { isChatDisabled } from './chat/kill-switch'
 
 const BASE = 'https://matttrifilo.com'
 const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
@@ -49,8 +50,14 @@ describe('siteRoutes', () => {
 describe('sitemap', () => {
   test('includes every static route', () => {
     const urls = new Set(sitemap().map(entry => entry.url))
+    // The environment decides whether the assistant's pages exist, so the
+    // expectation reads the same switch the sitemap does (a `vercel env
+    // pull` puts production's CHAT_DISABLED=1 into .env.local).
+    const expected = visibleSiteRoutes({ assistantDisabled: isChatDisabled() })
+    for (const route of expected) expect(urls.has(toUrl(route.href))).toBe(true)
     for (const route of siteRoutes)
-      expect(urls.has(toUrl(route.href))).toBe(true)
+      if (!expected.includes(route))
+        expect(urls.has(toUrl(route.href))).toBe(false)
   })
 
   test('includes every blog post on disk', () => {
@@ -68,5 +75,24 @@ describe('sitemap', () => {
     for (const entry of sitemap()) {
       expect(entry.url).not.toContain('/knowledge')
     }
+  })
+})
+
+describe('visibleSiteRoutes', () => {
+  test('drops the assistant route, and only that, when the kill switch is on', () => {
+    const visible = visibleSiteRoutes({ assistantDisabled: true })
+    expect(visible.some(route => route.href === '/ask')).toBe(false)
+    expect(visible.length).toBe(siteRoutes.length - 1)
+    expect(visible.every(route => !route.assistant)).toBe(true)
+  })
+
+  test('offers every route when the assistant is serving', () => {
+    expect(visibleSiteRoutes({ assistantDisabled: false })).toBe(siteRoutes)
+  })
+
+  test('the assistant route is /ask', () => {
+    expect(
+      siteRoutes.filter(route => route.assistant).map(route => route.href)
+    ).toEqual(['/ask'])
   })
 })

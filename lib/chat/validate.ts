@@ -1,5 +1,6 @@
 import type { EnvSource } from '@/lib/env'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
+import { isChatDisabled } from './kill-switch'
 import { CHAT_MAX_MESSAGE_CHARS } from './answer'
 import { PROGRESS_PART_TYPE } from './progress'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
@@ -176,10 +177,9 @@ export type ChatRequestValidation =
   | { ok: true; history: ChatTurn[]; userMessage: string }
   | { ok: false; status: number; body: ChatErrorBody }
 
-/** The kill switch. Any other value, including unset, leaves chat serving. */
-export function isChatDisabled(env: EnvSource = process.env): boolean {
-  return env.CHAT_DISABLED === '1'
-}
+// Defined in its own module so pages can read it without this file's
+// knowledge-index import; re-exported so the route keeps one import.
+export { isChatDisabled }
 
 /**
  * Coarse token estimate at four characters per token. It only has to be good
