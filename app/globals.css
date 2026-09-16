@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/*
+ * Streamdown renders the assistant's Markdown with Tailwind classes of its
+ * own — heading sizes, blockquote rules, the link-safety dialog's backdrop.
+ * Tailwind does not scan node_modules, so without this those classes are
+ * never generated and the answers render half-styled.
+ */
+@source '../node_modules/streamdown/dist';
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -155,6 +163,38 @@
   animation-timeline: scroll();
 }
 
+/*
+ * Career assistant: the wait before the first token (MTC-33).
+ *
+ * The model reads one to three documents before it writes anything, so this
+ * gap is seconds long and has to look like work in progress. The bars are
+ * `muted` so they read as placeholder rather than content; the sweep is a
+ * lighter band travelling across them.
+ */
+@keyframes assistant-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.assistant-shimmer {
+  background-color: var(--muted);
+  /* The travelling band is the foreground colour at a low alpha, so one rule
+     works in both themes without a second set of tokens. */
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 18%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: assistant-shimmer 1.6s linear infinite;
+}
+
 /* Reduced motion overrides */
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-in-up {
@@ -162,6 +202,11 @@
   }
   .reading-progress-bar {
     display: none;
+  }
+  /* Still three bars where the answer will be, just not moving. */
+  .assistant-shimmer {
+    animation: none;
+    background-image: none;
   }
 }
 
@@ -184,6 +229,15 @@
 :root {
   --reading-column: 48rem; /* keep equal to max-w-3xl used by every page */
   --veil-edge: 2rem;
+  /*
+   * Height of the sticky nav: py-3 (12px twice) around a 36px control, plus
+   * the 1px bottom border it has while the page is unscrolled. Only /ask
+   * needs it — it is the one page that fills the viewport exactly, so that
+   * its composer can sit at the bottom without the page scrolling behind the
+   * transcript (its footer is left out for the same reason; see
+   * app/layout.tsx). Keep it equal to what app/nav.tsx renders.
+   */
+  --nav-height: calc(3.75rem + 1px);
 }
 
 @media (min-width: 56rem) {

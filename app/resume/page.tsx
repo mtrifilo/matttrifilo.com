@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { Download } from 'lucide-react'
+import Link from 'next/link'
+import { Download, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { JOB_TITLE } from '@/lib/seo/identity'
 import { MDXContent } from '@/components/blog/mdx-content'
@@ -42,12 +43,22 @@ export default function ResumePage() {
           </a>
           .
         </p>
-        <Button asChild variant="outline">
-          <a href={RESUME_PDF} download="Matt-Trifilo-Resume.pdf">
-            <Download aria-hidden="true" />
-            Download the PDF
-          </a>
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="outline">
+            <a href={RESUME_PDF} download="Matt-Trifilo-Resume.pdf">
+              <Download aria-hidden="true" />
+              Download the PDF
+            </a>
+          </Button>
+          {/* The assistant exists for the depth two pages cannot hold, and
+              this page is where that depth is missed (MTC-33). */}
+          <Button asChild variant="outline">
+            <Link href="/ask">
+              <Sparkles aria-hidden="true" />
+              Ask about my work
+            </Link>
+          </Button>
+        </div>
 
         {/* Same Markdown the PDF is rendered from; see scripts/render-resume.sh. */}
         <article className="mt-12 border-t border-border pt-8 text-base leading-relaxed">
