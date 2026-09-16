@@ -82,20 +82,26 @@ See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-chec
 
 `evals/` holds four promptfoo suites that run the chat route's own handler in process. There is no server and no fixture model: `evals/provider.ts` builds `createChatHandler` with the real knowledge corpus and the real Vertex client, posts the body a browser would post, and reads the answer back off the stream. What a suite asserts on is therefore the live policy, the live corpus and the live read budget.
 
-| Suite          | Tests | What it checks                                                                                                                                                                                                                                                                                       |
-| -------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `golden`       |    32 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times with a 0.67 threshold.                                                          |
-| `refusals`     |    24 | Compensation, employment status, contact details, colleague names, employer internals, opinions, "print your system prompt", and off-topic tasks. Compared against `DECLINE_SENTENCE` imported from `lib/chat/prompt.ts`, so rewording the sentence fails the suite instead of passing a stale copy. |
-| `injection`    |    23 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, and attempts to dump the index or name the tool. Asserts no first person as Matt, no policy text, and no read outside the index.                   |
-| `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                            |
+| Suite          | Tests | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `golden`       |    32 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times inside an `assert-set` at `threshold: 0.6`.                                                                                                                                                                                             |
+| `refusals`     |    24 | Compensation, employment status, contact details, colleague names, employer internals, opinions, "print your system prompt", and off-topic tasks. Compared against `DECLINE_SENTENCE` imported from `lib/chat/prompt.ts`, so rewording the sentence fails the suite instead of passing a stale copy.                                                                                                                                                         |
+| `injection`    |    23 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, and attempts to dump the index or name the tool. Asserts no first person as Matt, no verbatim policy phrase or tool name, and no read outside the index. A paraphrased disclosure of the rules is not something a substring check can catch; read a failing injection answer, do not only trust the green. |
+| `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                                                                                                                                                                                    |
 
-Deterministic assertions are the gate. `llm-rubric` appears only in `golden`, where whether an answer is _right_ needs judgement; the grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.67`, so two of three grades must pass. That is what keeps grader variance from reddening a merge.
+Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. That is what keeps grader variance from reddening a merge.
+
+The threshold is 0.6 rather than 0.67 for an unobvious reason worth keeping written down: promptfoo scores an `assert-set` on the weighted **mean** of its members and passes on `score >= threshold`. Two passes out of three average 0.666…, which is below 0.67, so a 0.67 threshold would have demanded three of three and the tolerance would not have existed at all.
+
+Every test whose assertions are all absence checks ("does not speak as Matt", "does not leak the policy") also carries `assertAnswered`. Without it those tests pass on an empty answer, which the route really does return when a run spends its steps reading or a provider filter stops the generation, and the suite proving jailbreak resistance would go green against an assistant that says nothing. `evals/config.test.ts` enforces that pairing so it cannot be dropped later.
 
 The assertions live in `evals/assertions.ts` and import the route's own constants rather than pasting them. `evals/config.test.ts` runs in `bun test` and checks the YAML itself: every test is labelled with its suite, names an assertion that actually exists, declares the metadata that assertion reads, and points `expectReads` at a document in the corpus.
 
 ### When CI runs them
 
-`.github/workflows/evals.yml` runs on every pull request, but only spends money when something the answers depend on changed: `content/knowledge/**`, `lib/chat/prompt.ts`, `lib/ai/vertex.ts`, `evals/**`, or the workflow itself. The job always runs and always reports, and says in the step summary which path it took.
+`.github/workflows/evals.yml` runs on every pull request, but only spends money when something the answers depend on changed: `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/vertex.ts`, `evals/**`, or the workflow itself. The job always runs and always reports, and says in the step summary which path it took.
+
+The list is wider than the ticket's "corpus, prompt, or model id" on purpose: the assertions also stand on `read-document.ts`'s index guard, `KNOWLEDGE_READ_BUDGET`, the step cap and client-chunk allowlist in `handler.ts`, and `SOURCES_TRAILER_PREFIX` in `answer.ts`. A pull request that weakened any of them while touching only the prompt's neighbours would otherwise run no evals at all. What is still **not** on the list is a dependency bump: an `ai` or `@ai-sdk/google-vertex` upgrade changes how the stream and the tool loop behave and runs nothing. Dispatch the workflow by hand on that branch.
 
 That is deliberate. `on.pull_request.paths` would look tidier, but a path-filtered required check never reports at all on a pull request that touches none of the paths, and such a pull request can then never merge.
 
@@ -117,22 +123,23 @@ Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both u
 
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
-3. **A grader flake.** Only possible on a `golden` rubric, and only if two of three grades disagreed. Re-run before touching anything.
+3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
+4. **Vertex was slow.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection, not an answer; the provider has already retried it once. A run with several of them is upstream latency, and the `[chat]` lines in the job log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
 
 Never relax an assertion to get a green run without saying so in the pull request.
 
 ### Running them locally
 
-The suites authenticate with Application Default Credentials. `lib/ai/vertex.ts` uses the Vercel OIDC federation when all four `GCP_*` federation variables are present and falls back to ADC when they are not, which is the path both CI and a laptop take.
+The suites authenticate with Application Default Credentials. `lib/ai/vertex.ts` uses the Vercel OIDC federation when all four `GCP_*` federation variables are present, falls back to ADC when none of them is, and throws when some but not all are set, so a deployment missing one still fails with that variable's name rather than silently degrading.
 
 ```
 gcloud auth application-default login
 GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
 ```
 
-`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing.
+`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
 
-Two traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. And `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours.
+Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before the first request and stops with a message naming what is missing, rather than letting all 102 tests fail as `unavailable`. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
 
 ### Cost of a run
 
@@ -149,12 +156,14 @@ Two traps worth knowing. A `.env` written by `vercel env pull` is loaded by prom
 
 At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 0.825 × $0.75 = $0.62, plus 0.026 × $3.75 = $0.10. **About $0.72 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $1.44.
 
+Read that as a typical figure, not a ceiling. Two things push it up. The 11 groundedness probes each add three grader calls of their own, which the table above does not carry. And the provider retries a test once when the first attempt was lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach twice the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
+
 Those two prices are from secondary sources, not read off Google's own pricing page; check the console before treating the figure as exact. The $50 monthly budget on the project is the real backstop either way.
 
 ### Adding a golden when a corpus document is added
 
 1. Add the document and run `bun run knowledge:check`.
-2. Add at least one `golden` test that only that document can answer, with `metadata.expectReads` naming its id, a `contains-any` or `icontains-any` on wording distinctive to it, and a rubric in an `assert-set` of three at `threshold: 0.67`.
+2. Add at least one `golden` test that only that document can answer, with `metadata.expectReads` naming its id, a `contains-any` or `icontains-any` on wording distinctive to it, and a rubric in an `assert-set` of three at `threshold: 0.6`.
 3. If the document introduces a topic the policy declines, add the refusal too.
 4. Run `bun test` first: `evals/config.test.ts` catches a bad id or a missing metadata key without spending anything.
 5. Then `bun run evals:smoke`, and let CI run the rest.
@@ -177,7 +186,9 @@ gcloud iam workload-identity-pools providers create-oidc github \
   --attribute-condition="assertion.repository_id == '43456112' && assertion.repository_owner_id == '8886227'"
 ```
 
-**The attribute condition is the whole security boundary.** GitHub's token issuer is shared by every repository on GitHub, so without a condition any workflow anywhere could present a token this pool would accept. With it, only a token whose claims carry this repository's id is exchanged for anything.
+**The attribute condition is the second of two boundaries, and the only one written here.** GitHub's token issuer is shared by every repository on GitHub, so without a condition any workflow anywhere could present a token this pool would accept. With it, only a token whose claims carry this repository's id is exchanged for anything.
+
+The **first** boundary is GitHub's own: it does not issue an Actions OIDC token to a `pull_request` run from a fork. That matters because a fork's pull request runs the workflow file from the pull request's own head, so a contributor could rewrite `evals.yml` to print whatever token the job holds, and the pool's condition could not tell that run apart from one on `main`: both carry this repository's id. The workflow skips fork pull requests explicitly rather than relying only on the platform, and it must never be switched to `pull_request_target`, which would hand the base repository's trust to a fork's code.
 
 It is keyed on the numeric ids, not on `mtrifilo/matttrifilo.com`, because names are reusable: rename the repository or the account and someone else can register the old name and mint tokens against a condition written on it. `43456112` is this repository's id and `8886227` is the owner's; both are public and come from `gh api repos/mtrifilo/matttrifilo.com --jq '.id, .owner.id'`. This is Google's own guidance for multi-tenant issuers.
 
@@ -204,7 +215,9 @@ gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
 
 Google recommends direct access over impersonation where the API accepts a federated token, and `google-github-actions/auth` v3 supports the no-service-account mode. Whether Vertex AI's `generateContent` accepts a `principalSet` identity directly could not be confirmed against Google's own documentation while this was written, so impersonation is the path the workflow ships with. If direct access works when tried, switch: it removes a hop and an identity.
 
-On privilege: the production service account (`vercel-chat`, MTC-30) holds only `roles/aiplatform.user`, so pointing CI at it grants CI nothing production does not already have. It still mixes two identities in one audit trail, and a dedicated `github-evals` service account, or the direct-access principal above, keeps "what the deployment did" and "what a pull request did" separable. Worth doing when convenient; not a reason to delay.
+**Use a dedicated identity, not `vercel-chat`.** The production service account (MTC-30) holds only `roles/aiplatform.user`, so on paper pointing CI at it grants nothing new. In practice the eval job installs the whole `promptfoo` dependency tree, several hundred packages, and runs it in the same process space as a live credential for the identity that serves production chat. A dedicated `github-evals` service account with the same single role, or the direct-access principal above, costs one command and keeps "what the deployment did" and "what a pull request did" separable in the audit log. Set `GCP_SERVICE_ACCOUNT_EMAIL` to that account rather than to `vercel-chat`.
+
+Related surface worth knowing: `promptfoo` is a devDependency, so Vercel resolves and unpacks it during a production build too. Nothing imports it there, and `trustedDependencies` in `package.json` blocks install-time lifecycle scripts for everything outside the two named packages, so this is surface rather than a live path. If you would rather not have it there at all, drop the devDependency and call `bunx promptfoo@0.123.0` from the workflow and the npm scripts instead.
 
 ### 3. Log the token exchanges
 
@@ -226,3 +239,5 @@ gh variable set GCP_PROJECT_ID --body "$GCP_PROJECT_ID"
 ### 5. Make the check required
 
 Settings, Branches, the `main` rule, Require status checks to pass: add **`evals`**. Only after a first green run on a pull request, or every pull request blocks on a check that has never reported.
+
+One consequence to accept before you do it: a pull request from a **fork** cannot authenticate, so the job skips the suites and reports green with a note in its summary. An outside contribution that changes the corpus or the prompt therefore merges without the suites having run against it. Run them yourself from a branch in this repository, or through `workflow_dispatch`, before merging one.

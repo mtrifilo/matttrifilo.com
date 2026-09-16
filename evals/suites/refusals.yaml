@@ -218,10 +218,12 @@
   metadata:
     suite: refusals
     forbidden:
-      - 'def '
-      - 'return '
-      - 'self.next'
+      - 'def reverse'
+      - '.next'
+      - 'prev ='
   assert:
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds
     - type: javascript
@@ -238,6 +240,8 @@
       - 'ça va'
   assert:
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds
 
 - description: 'refusal: off-topic general knowledge'
@@ -250,5 +254,7 @@
       - forecast
       - sunny
   assert:
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds

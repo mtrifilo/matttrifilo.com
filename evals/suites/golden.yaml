@@ -8,7 +8,13 @@
 # third person, the run opened the document the fact lives in, and it read
 # nothing outside the index. The distinctive-phrase assertion is the fact
 # check. The llm-rubric on top is the only judgement call, and it is graded
-# three times with a 0.67 threshold so one flaky grade cannot redden a merge.
+# three times inside an assert-set so one flaky grade cannot redden a merge.
+#
+# The threshold is 0.6 and not 0.67, because promptfoo scores an assert-set on
+# the weighted MEAN of its members and passes on `score >= threshold`. Two
+# grades out of three average 0.666..., which is below 0.67 by a hair: the
+# tolerance this pattern exists for would not have existed. 0.6 also leaves
+# room for a grader that returns a fractional score on a pass.
 #
 # Adding a document to the corpus means adding goldens for it here.
 
@@ -31,7 +37,7 @@
         - Email Reliability
         - outbound email
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r1 >-
@@ -64,7 +70,7 @@
         - five direct
         - 5 reports
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r2 >-
@@ -95,7 +101,7 @@
         - 1B
         - billion
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r3 >-
@@ -125,7 +131,7 @@
         - 28
         - 2.7
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r4 >-
@@ -153,7 +159,7 @@
     - type: icontains
       value: '2.3'
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r5 >-
@@ -182,7 +188,7 @@
         - 28 to 12
         - defect
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r6 >-
@@ -214,7 +220,7 @@
         - story-point
         - story point
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r7 >-
@@ -246,7 +252,7 @@
         - Engineering Manager
         - engineering manager
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r8 >-
@@ -277,7 +283,7 @@
         - nine years
         - '9 years'
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r9 >-
@@ -308,7 +314,7 @@
         - no messages were lost
         - dead-lettered
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r10 >-
@@ -340,7 +346,7 @@
         - federated
         - marketplace
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r11 >-
@@ -372,7 +378,7 @@
         - handoff
         - runbook
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r12 >-
@@ -403,7 +409,7 @@
         - Effective Context Management
         - Give your agent a brain
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r13 >-
@@ -433,7 +439,7 @@
         - what you put in the window
         - quality of context
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r14 >-
@@ -462,7 +468,7 @@
     - type: icontains
       value: complexity
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r15 >-
@@ -494,7 +500,7 @@
         - distribution
         - merge button
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r16 >-
@@ -527,7 +533,7 @@
         - Multipliers
         - Turn the Ship Around
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r17 >-
@@ -556,7 +562,7 @@
         - decant
         - psychic-homily
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r18 >-
@@ -586,7 +592,7 @@
         - clipboard
         - markdown
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r19 >-
@@ -617,7 +623,7 @@
         - OAuth
         - parity
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r20 >-
@@ -650,7 +656,7 @@
         - slip
         - late August
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r21 >-
@@ -681,7 +687,7 @@
         - agentic engineering
         - vibe coding
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r22 >-
@@ -714,7 +720,7 @@
         - barista
         - coffee
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r23 >-
@@ -745,7 +751,7 @@
         - Audio Arts
         - freeCodeCamp
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r24 >-
@@ -776,7 +782,7 @@
         - Emerging Leaders
         - Better Together
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r25 >-
@@ -808,7 +814,7 @@
         - TypeScript
         - Go
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r26 >-
@@ -840,7 +846,7 @@
         - release train
         - gated
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r27 >-
@@ -871,7 +877,7 @@
         - monolith
         - decomposition
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r28 >-
@@ -901,7 +907,7 @@
         - Email Engagement Summary
         - deliverability
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r29 >-
@@ -933,7 +939,7 @@
         - runbook
         - escalation
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r30 >-
@@ -964,7 +970,7 @@
         - without AI
         - ship
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r31 >-
@@ -995,7 +1001,7 @@
         - slightly
         - already
     - type: assert-set
-      threshold: 0.67
+      threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r32 >-

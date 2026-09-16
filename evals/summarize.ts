@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import {
   allPassed,
@@ -23,6 +29,16 @@ import {
 const [resultsArg, summaryArg] = process.argv.slice(2)
 const resultsPath = resolve(resultsArg ?? 'evals/out/results.json')
 const summaryPath = resolve(summaryArg ?? 'evals/out/summary.json')
+
+if (!existsSync(resultsPath)) {
+  // The run crashed before it wrote anything, so there is no verdict at all.
+  // Say that rather than throwing a file-not-found stack at whoever opens the
+  // job, and still exit non-zero: no results is not a pass.
+  console.error(
+    `no results at ${resultsPath}: the eval run did not get far enough to write one`
+  )
+  process.exit(1)
+}
 
 const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsFile
 const summary = summarise({

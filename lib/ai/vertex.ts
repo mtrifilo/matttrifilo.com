@@ -62,16 +62,39 @@ export const VERCEL_FEDERATION_ENV_NAMES = [
 /**
  * Whether this process can present a Vercel OIDC token.
  *
- * On Vercel it always can, and that path is unchanged. Everywhere else there
- * is no Vercel identity to exchange, so the client is left to
- * google-auth-library's Application Default Credentials: the credential file
- * `google-github-actions/auth` writes for the MTC-32 eval job, or a
- * developer's own `gcloud auth application-default login`. Without this the
- * eval suites could only run against a deployment, which is the one thing
- * they must not need.
+ * On Vercel all four variables are set and that path is unchanged. Where none
+ * of them is set there is no Vercel identity to exchange, so the client is
+ * left to google-auth-library's Application Default Credentials: the
+ * credential file `google-github-actions/auth` writes for the MTC-32 eval
+ * job, or a developer's own `gcloud auth application-default login`. Without
+ * that the eval suites could only run against a deployment, which is the one
+ * thing they must not need.
+ *
+ * A partial set throws, and that is the point of the three-valued answer.
+ * Treating it as "no federation" would send a deployment that lost one
+ * variable down the ADC path instead, where it would fail against a metadata
+ * server Vercel does not have: still closed, but failing for a reason that
+ * has nothing to do with the cause. Throwing keeps the behaviour the route
+ * had before this branch existed, when `readEnv` threw on the first missing
+ * name.
+ *
+ * On the route the message reaches no log: `logFailure` records an error's
+ * name and never its text, because a provider message can carry the prompt.
+ * It is written for the caller that does surface it, which is the MTC-32 eval
+ * provider: it asks this question itself before building a handler, so a
+ * half-configured shell fails once, loudly, instead of a hundred times as
+ * `unavailable`.
  */
 export function usesVercelFederation(source: EnvSource = process.env): boolean {
-  return VERCEL_FEDERATION_ENV_NAMES.every(name => Boolean(source[name]))
+  const set = VERCEL_FEDERATION_ENV_NAMES.filter(name => Boolean(source[name]))
+  if (set.length === 0) return false
+  if (set.length === VERCEL_FEDERATION_ENV_NAMES.length) return true
+  const missing = VERCEL_FEDERATION_ENV_NAMES.filter(
+    name => !Boolean(source[name])
+  )
+  throw new Error(
+    `Vercel OIDC federation is partly configured: ${missing.join(', ')} not set. Set all of ${VERCEL_FEDERATION_ENV_NAMES.join(', ')} or none of them.`
+  )
 }
 
 function createAuthClient(

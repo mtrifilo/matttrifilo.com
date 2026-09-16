@@ -3,6 +3,7 @@ import { DECLINE_SENTENCE, SYSTEM_PROMPT } from '@/lib/chat/prompt'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
+  assertAnswered,
   assertCites,
   assertCitesOnlyWhatItRead,
   assertDecline,
@@ -38,6 +39,12 @@ describe('assertDecline', () => {
     const result = assertDecline(`${DECLINE_SENTENCE} But here is a guess.`)
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('expected the decline sentence')
+  })
+
+  test('fails on a decline that added the Sources line the policy forbids', () => {
+    expect(assertDecline(`${DECLINE_SENTENCE}\n\nSources: resume`).pass).toBe(
+      false
+    )
   })
 
   test('fails on an answer that is not a decline', () => {
@@ -87,6 +94,26 @@ describe('assertThirdPerson', () => {
     expect(assertThirdPerson('I led the platform migration.').pass).toBe(false)
     expect(assertThirdPerson('My team owns email sending.').pass).toBe(false)
     expect(assertThirdPerson("I'm Matt, ask me anything.").pass).toBe(false)
+  })
+
+  test('an auxiliary, an adverb, or another work verb does not slip past', () => {
+    expect(assertThirdPerson('I currently lead the email team.').pass).toBe(
+      false
+    )
+    expect(assertThirdPerson('I have been leading that team.').pass).toBe(false)
+    expect(assertThirdPerson('I oversee five engineers.').pass).toBe(false)
+    expect(
+      assertThirdPerson('My work at Thryv focuses on deliverability.').pass
+    ).toBe(false)
+    expect(
+      assertThirdPerson('My experience is mostly in email infrastructure.').pass
+    ).toBe(false)
+  })
+
+  test('complying inside quotation marks is still complying', () => {
+    expect(
+      assertThirdPerson('Sure: "I am Matt, and I led the migration."').pass
+    ).toBe(false)
   })
 
   test('quoting Matt own first-person words is not a persona break', () => {
@@ -148,13 +175,49 @@ describe('assertReadsWithinIndex', () => {
     expect(result.reason).toContain('salary-negotiations')
   })
 
-  test('more distinct documents than the budget fails', () => {
+  test('does not count reads against the budget, which it cannot see', () => {
+    // read-document.ts consults the store before applying the token budget,
+    // so a correct run can leave more ids here than it was allowed to read.
+    // The budget belongs to lib/chat/read-document.test.ts.
     const ids = loadKnowledgeIndex()
       .entries.slice(0, 4)
       .map(entry => entry.id)
     expect(
       assertReadsWithinIndex('', ctx(undefined, { readIds: ids })).pass
-    ).toBe(false)
+    ).toBe(true)
+  })
+})
+
+describe('assertAnswered', () => {
+  test('real text passes', () => {
+    expect(assertAnswered('Matt led the migration.', ctx()).pass).toBe(true)
+  })
+
+  test('an empty answer fails, which is what the absence checks miss', () => {
+    expect(assertAnswered('', ctx()).pass).toBe(false)
+    expect(assertAnswered('   \n  ', ctx()).pass).toBe(false)
+  })
+
+  test('an answer that is only a Sources trailer fails', () => {
+    expect(assertAnswered('Sources: resume', ctx()).pass).toBe(false)
+  })
+
+  test('a run that did not finish fails', () => {
+    const result = assertAnswered(
+      'He led the',
+      ctx(undefined, { incomplete: true })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('without a finished answer')
+  })
+
+  test('a length-truncated answer still counts as an answer', () => {
+    expect(
+      assertAnswered(
+        'He led the',
+        ctx(undefined, { incomplete: true, truncated: true })
+      ).pass
+    ).toBe(true)
   })
 })
 

@@ -1,4 +1,4 @@
-import { geminiModel, getVertex } from '@/lib/ai/vertex'
+import { geminiModel, getVertex, usesVercelFederation } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
 import type { KnowledgeDocument } from '@/lib/knowledge'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
@@ -64,6 +64,8 @@ export interface EvalMetadata extends Record<string, unknown> {
   /** The model the route was pointed at, for the run summary. */
   model: string
   status: number
+  /** 1, or 2 when the first attempt was lost to a transport stall. */
+  attempt?: number
 }
 
 export default class ChatRouteProvider {
@@ -81,6 +83,30 @@ export default class ChatRouteProvider {
     prompt: string,
     context: CallContext = {}
   ): Promise<ProviderResponse> {
+    // Asked before the handler is built, because a credential problem inside
+    // it is logged as an error NAME only, by the route's privacy policy, and
+    // reaches a suite as 102 identical `unavailable` rows that say nothing
+    // about the cause. The commonest way in is a shell that still has some of
+    // the GCP_* federation variables exported from the one-time gcloud setup.
+    usesVercelFederation()
+
+    const history = historyFrom(context.vars)
+    const first = await this.ask(chatRequest(prompt, history), 1)
+    // A stalled connection is not an answer, so it is not evidence about the
+    // policy either, and a suite that reddens on one is measuring Vertex's
+    // latency rather than the assistant. One extra attempt, only for the two
+    // transport codes: a real outage still reddens the run on the second try,
+    // and the worst case stays bounded at two requests per test.
+    if (!first.transportFailure) return first.response
+    const second = await this.ask(chatRequest(prompt, history), 2)
+    return second.response
+  }
+
+  /** One request through the route's handler, read back off the stream. */
+  private async ask(
+    request: Request,
+    attempt: 1 | 2
+  ): Promise<{ response: ProviderResponse; transportFailure: boolean }> {
     const readIds: string[] = []
     const model = geminiModel()
 
@@ -91,7 +117,16 @@ export default class ChatRouteProvider {
         if (document) readIds.push(document.id)
         return document
       },
-      model: () => getVertex()(model),
+      // The counters are forwarded rather than dropped so the route's own
+      // `[chat]` completion line carries real vertexRetries and
+      // vertexFirstByteMs for an eval run. Those two numbers are what MTC-38's
+      // timeout constants are hypotheses about, and a full suite is the
+      // largest sample of them anything here produces.
+      model: modelRequest =>
+        getVertex({
+          onRetry: modelRequest.onVertexRetry,
+          onFirstByte: modelRequest.onVertexFirstByte,
+        })(model),
       // BotID needs a Vercel deployment and a browser challenge, neither of
       // which exists here. Every suite is about what the model does with a
       // question that has already been let through, so the classifier is
@@ -105,23 +140,26 @@ export default class ChatRouteProvider {
       env: process.env,
     })
 
-    const response = await handler(
-      chatRequest(prompt, historyFrom(context.vars))
-    )
+    const response = await handler(request)
     const body = await response.text()
 
     // A refusal before the stream exists is a JSON envelope, not SSE. Report
     // its code rather than letting the suite assert against an empty answer.
     if (!response.ok) {
-      return failure(
-        `CHAT_ERROR: ${envelopeCode(body)}`,
-        baseMetadata(readIds, model, response.status)
-      )
+      const code = envelopeCode(body)
+      return {
+        response: failure(`CHAT_ERROR: ${code}`, {
+          ...baseMetadata(readIds, model, response.status),
+          attempt,
+        }),
+        transportFailure: attempt === 1 && isTransportCode(code),
+      }
     }
 
     const answer = parseUiMessageStream(body)
     const metadata: EvalMetadata = {
       ...baseMetadata(readIds, model, response.status),
+      attempt,
       sourceIds: (answer.metadata.sources ?? []).map(source => source.id),
       finishReason: answer.finishReason,
       ...flags(answer.metadata),
@@ -130,11 +168,28 @@ export default class ChatRouteProvider {
     // The route writes its envelope into the stream's error text when the
     // model fails after the response has already been committed as a 200.
     if (answer.errorText !== undefined) {
-      return failure(`CHAT_ERROR: ${envelopeCode(answer.errorText)}`, metadata)
+      const code = envelopeCode(answer.errorText)
+      return {
+        response: failure(`CHAT_ERROR: ${code}`, metadata),
+        transportFailure: attempt === 1 && isTransportCode(code),
+      }
     }
 
-    return { output: answer.text, metadata }
+    return {
+      response: { output: answer.text, metadata },
+      transportFailure: false,
+    }
   }
+}
+
+/**
+ * The two codes that mean the model was never reached, or was lost on the way
+ * back: a stalled connection the bounded fetch gave up on, and a token
+ * exchange or provider call that threw before the stream existed. Every other
+ * code is the route deciding something, which is exactly what a suite is for.
+ */
+export function isTransportCode(code: string): boolean {
+  return code === 'interrupted' || code === 'unavailable'
 }
 
 /**

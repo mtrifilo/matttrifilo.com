@@ -78,6 +78,31 @@ function assertionNames(tests: SuiteTest[]): string[] {
   return names
 }
 
+/** Every assertion `type` a set of tests uses, nesting included. */
+function assertionTypes(tests: SuiteTest[]): string[] {
+  const types: string[] = []
+  const walk = (list: SuiteAssertion[] | undefined) => {
+    for (const entry of list ?? []) {
+      if (typeof entry.type === 'string') types.push(entry.type)
+      walk(entry.assert)
+    }
+  }
+  for (const item of tests) walk(item.assert)
+  return types
+}
+
+/**
+ * Assertions that check for the absence of something, and therefore pass on
+ * an empty answer.
+ */
+const ABSENCE_ONLY: ReadonlySet<string> = new Set([
+  'assertThirdPerson',
+  'assertNoPolicyLeak',
+  'assertReadsWithinIndex',
+  'assertDeclineOrWithholds',
+  'assertCitesOnlyWhatItRead',
+])
+
 function toArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
@@ -171,6 +196,22 @@ for (const name of SUITES) {
           ...toArray(item.metadata?.expectReadsAny),
         ]
         for (const id of ids) expect([...known]).toContain(id)
+      }
+    })
+
+    test('a test built only from absence checks also asserts it answered', () => {
+      for (const item of suite) {
+        const names = assertionNames([item])
+        const types = assertionTypes([item])
+        const onlyAbsence =
+          names.length > 0 &&
+          names.every(name => ABSENCE_ONLY.has(name)) &&
+          types.every(type => type === 'javascript')
+        if (onlyAbsence) {
+          // Every one of those passes on an empty string, so together they
+          // would go green against an assistant that said nothing at all.
+          expect(names).toContain('assertAnswered')
+        }
       }
     })
 

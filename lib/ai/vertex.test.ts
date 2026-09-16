@@ -36,14 +36,20 @@ describe('usesVercelFederation', () => {
     VERCEL_FEDERATION_ENV_NAMES.map(name => [name, 'set'])
   )
 
-  test('needs every federation variable, not a subset', () => {
+  test('all four means federation, none means ADC', () => {
     expect(usesVercelFederation(complete)).toBe(true)
     expect(usesVercelFederation({})).toBe(false)
+    expect(usesVercelFederation({ UNRELATED: 'x' })).toBe(false)
+  })
+
+  test('a partial set throws and names what is missing', () => {
     for (const name of VERCEL_FEDERATION_ENV_NAMES) {
-      expect(usesVercelFederation({ ...complete, [name]: undefined })).toBe(
-        false
+      expect(() =>
+        usesVercelFederation({ ...complete, [name]: undefined })
+      ).toThrow(name)
+      expect(() => usesVercelFederation({ ...complete, [name]: '' })).toThrow(
+        name
       )
-      expect(usesVercelFederation({ ...complete, [name]: '' })).toBe(false)
     }
   })
 })
