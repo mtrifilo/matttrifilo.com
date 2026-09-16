@@ -12,6 +12,9 @@ interface KnowledgeDocumentPageProps {
 }
 
 export function generateStaticParams() {
+  // Killed, there is nothing to prerender: every id 404s anyway under
+  // dynamicParams = false, so the list is empty rather than ten 404 pages.
+  if (isChatDisabled()) return []
   return listKnowledgeDocuments().map(document => ({ id: document.id }))
 }
 

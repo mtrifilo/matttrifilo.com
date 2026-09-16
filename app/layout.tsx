@@ -68,7 +68,7 @@ export default function RootLayout({
                 globals.css); a footer below it would make the page scroll
                 and carry the composer off screen. The approved design has
                 none there. */}
-            <HideOnRoutes routes={['/ask']}>
+            <HideOnRoutes routes={isChatDisabled() ? [] : ['/ask']}>
               <Footer />
             </HideOnRoutes>
           </div>
