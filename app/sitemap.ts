@@ -29,14 +29,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // something already published (a post, the résumé), its page declares
   // that original as its canonical, so listing both is not a duplicate
   // claim. `updated` is the author's own date, which is what changed.
-  const knowledgePages: MetadataRoute.Sitemap = listKnowledgeDocuments().map(
-    document => ({
-      url: `${baseUrl}${document.url}`,
-      lastModified: new Date(document.updated),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    })
-  )
+  const knowledgePages: MetadataRoute.Sitemap = isChatDisabled()
+    ? []
+    : listKnowledgeDocuments().map(document => ({
+        url: `${baseUrl}${document.url}`,
+        lastModified: new Date(document.updated),
+        changeFrequency: 'monthly',
+        priority: 0.4,
+      }))
 
   return [...staticPages, ...blogPages, ...knowledgePages]
 }
