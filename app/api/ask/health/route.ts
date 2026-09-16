@@ -1,5 +1,6 @@
 import { generateText, streamText } from 'ai'
 import { geminiModel, getAuthClient, getVertex } from '@/lib/ai/vertex'
+import { runCacheProbe } from './cache-probe'
 import { failureStage, isHealthRouteEnabled, isHealthy } from './gate'
 
 // Proves the keyless Vertex AI path end to end (MTC-30 acceptance): one
@@ -11,9 +12,12 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   if (!isHealthRouteEnabled()) return new Response('Not found', { status: 404 })
+  const params = new URL(request.url).searchParams
   // ?stream=1 drives the same prompt through streamText and drains it, so
   // a streaming stall can be told apart from a non-streaming one.
-  const streaming = new URL(request.url).searchParams.get('stream') === '1'
+  const streaming = params.get('stream') === '1'
+  // ?cache=1 answers a different question — see cache-probe.ts.
+  const cacheProbe = params.get('cache') === '1'
   const model = geminiModel()
   const started = Date.now()
   try {
@@ -23,6 +27,17 @@ export async function GET(request: Request) {
     const tokenStarted = Date.now()
     await getAuthClient().getAccessToken()
     const tokenMs = Date.now() - tokenStarted
+    // Two identical calls, reported per call, rather than one: this mode is
+    // asking whether the second one was billed cached input tokens. It costs
+    // two model calls with a ~4k-token prefix, which is why it is opt-in and
+    // behind the same preview/development gate as everything else here.
+    if (cacheProbe) {
+      const probe = await runCacheProbe(getVertex()(model))
+      return Response.json(
+        { ...probe, model, tokenMs, ms: Date.now() - started },
+        { status: probe.ok ? 200 : 502 }
+      )
+    }
     const modelStarted = Date.now()
     const result = streaming
       ? await drainStream(model)

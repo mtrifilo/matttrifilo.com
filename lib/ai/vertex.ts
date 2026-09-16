@@ -2,6 +2,7 @@ import { createVertex } from '@ai-sdk/google-vertex'
 import { getVercelOidcToken } from '@vercel/oidc'
 import { ExternalAccountClient } from 'google-auth-library'
 import { readEnv, type EnvSource } from '@/lib/env'
+import { createBoundedFetch } from './bounded-fetch'
 
 /**
  * Vertex AI access from Vercel with no service-account key (MTC-30).
@@ -99,6 +100,11 @@ export function getVertex() {
       // "model not found" for this project on the first preview.
       location: 'global',
       googleAuthOptions: { authClient: getAuthClient() },
+      // Bounds time-to-first-byte and retries a connection that stalled
+      // before saying anything (MTC-38). It wraps only the model call: the
+      // token exchange goes through google-auth-library's own transport and
+      // measured near zero throughout the episode that motivated this.
+      fetch: createBoundedFetch(),
     })
   }
   return vertex
