@@ -70,8 +70,7 @@ export function AssistantProgress({
   elapsedMs,
 }: AssistantProgressProps) {
   // Null until the visitor takes a view of their own, so the panel follows
-  // the run (open while it works, shut once it has answered) and then stops
-  // second-guessing them the moment they touch it.
+  // the run and then stops second-guessing them the moment they touch it.
   const [override, setOverride] = useState<boolean | null>(null)
 
   const status = progressStatus(view, pending)
@@ -86,7 +85,11 @@ export function AssistantProgress({
   return (
     <ChainOfThought
       onOpenChange={setOverride}
-      open={override ?? status !== 'done'}
+      // Shut once there is a summary standing in for the steps, open every
+      // other time there is something to say: while the run works, after one
+      // that was cut off, and after one that finished without an answer,
+      // where the steps are all the account there is.
+      open={override ?? summary === undefined}
     >
       <ChainOfThoughtHeader
         // Nothing has been read yet, so there is nothing to open.

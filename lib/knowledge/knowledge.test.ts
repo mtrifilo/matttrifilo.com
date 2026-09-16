@@ -3,6 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { openSourceRepos } from '@/content/open-source'
+import { MAX_TITLE_CHARS } from '@/lib/chat/progress'
 import {
   buildKnowledgeCorpus,
   estimateTokens,
@@ -809,6 +810,20 @@ describe('knowledge corpus build', () => {
         document.tokenEstimate,
         `${document.id} is too large to read alongside two others`
       ).toBeLessThanOrEqual(KNOWLEDGE_DOCUMENT_TOKEN_CEILING)
+    }
+  })
+
+  test('every title fits the progress view that shows it', () => {
+    // The browser drops a step whose title is longer than MAX_TITLE_CHARS,
+    // on the grounds that no index title is that long. A title that reached
+    // it would vanish from the list above the answer and take a document off
+    // the count, which is the same false claim in the other direction. Half
+    // the cap is the tripwire: a title anywhere near it is a mistake.
+    for (const document of corpus.documents) {
+      expect(
+        document.title.length,
+        `${document.id}: title is too long to disclose above an answer`
+      ).toBeLessThan(MAX_TITLE_CHARS / 2)
     }
   })
 

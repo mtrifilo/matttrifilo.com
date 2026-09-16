@@ -1,6 +1,7 @@
 import type { EnvSource } from '@/lib/env'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
 import { CHAT_MAX_MESSAGE_CHARS } from './answer'
+import { PROGRESS_PART_TYPE } from './progress'
 import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
 
 export { CHAT_MAX_MESSAGE_CHARS }
@@ -284,6 +285,7 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
     if (!Array.isArray(message.parts)) return null
 
     let text = ''
+    let dataParts = 0
     for (const part of message.parts) {
       if (!isRecord(part)) return null
       // The AI SDK marks each model step in a replayed assistant message
@@ -291,12 +293,20 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
       // change what the model is asked; refusing it broke every second turn
       // on the first UI preview.
       if (part.type === 'step-start') continue
-      // Data parts are server-owned and replayed with the answer in exactly
-      // the same way (MTC-42): `data-progress` carries the step list the
+      // The one data part this route writes, replayed with the answer in
+      // exactly the same way `step-start` is: it carries the step list the
       // visitor watched, which is this route's own narration and nothing the
-      // model needs. Refusing them would break every second turn, the same
-      // bug the `step-start` line above fixes.
-      if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+      // model needs. Refusing it would break every second turn, the same bug
+      // the `step-start` line above fixes.
+      //
+      // Matched exactly, and only once per message, rather than by a `data-`
+      // prefix. A prefix would let a tampered body carry unbounded `data-*`
+      // payloads that no limit below counts, since every cap here measures
+      // concatenated text: the request would reach the model and be billed
+      // where it used to be refused for free.
+      if (part.type === PROGRESS_PART_TYPE) {
+        if (dataParts > 0) return null
+        dataParts += 1
         continue
       }
       // Any other non-text part is refused rather than dropped: silently

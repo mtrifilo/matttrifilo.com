@@ -9,19 +9,14 @@ const nextConfig: NextConfig = {
    * they are left out of the serverless bundle and the route throws ENOENT
    * in production while passing every check locally.
    *
-   * Routes listed here: /api/chat is the chat route (being built on its
-   * own branch), /ask is the page that calls it (MTC-33), and
-   * /knowledge/** are the pages that publish the corpus. Those pages are
-   * statically generated today, so they read the files at build time — but
-   * they are listed anyway, because which routes are static is a decision
-   * that can change without anyone remembering this file. Keep this in
-   * step with wherever the corpus is loaded; a preview deploy is the only
-   * thing that actually proves the files shipped.
+   * Routes listed here: /api/chat is the chat route, and /ask is the page
+   * that calls it. Nothing renders a corpus document, so no other route
+   * needs the files. Keep this in step with wherever the corpus is loaded;
+   * a preview deploy is the only thing that actually proves they shipped.
    */
   outputFileTracingIncludes: {
     '/api/chat': ['./content/knowledge/**/*.md'],
     '/ask': ['./content/knowledge/**/*.md'],
-    '/knowledge/**': ['./content/knowledge/**/*.md'],
   },
   experimental: {
     optimizePackageImports: [

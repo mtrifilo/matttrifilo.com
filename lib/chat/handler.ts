@@ -291,8 +291,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // The last step has to produce the answer, so it is not offered the
         // tool. Without this a model that spends every step reading ends the
         // run on 'tool-calls' with no text at all, and the visitor gets an
-        // empty bubble — with source chips under it, which is worse than
-        // nothing because it looks like an answer that said nothing.
+        // empty bubble under a list of the documents it opened, which is
+        // worse than nothing because it looks like an answer that said
+        // nothing.
         prepareStep: ({ stepNumber }) =>
           stepNumber === CHAT_MAX_STEPS - 1
             ? { toolChoice: 'none' }
@@ -597,11 +598,17 @@ function withProgress({
  * The document cap is predicted here rather than waited for, so the list
  * never counts a read that cannot happen: past
  * KNOWLEDGE_READ_BUDGET.maxDocuments the read session refuses on count
- * alone, before it looks at the id at all. The token half of that budget is
- * not predicted, because it depends on document text this stage has not
- * seen, so a read refused for size would still show a step. That is the one overcount
- * left, and it is worth less than a second copy of the budget's arithmetic
- * living here.
+ * alone, before it looks at the id at all.
+ *
+ * The token half of that budget is not predicted, because it depends on
+ * document text this stage has not seen. A read the session refused for size
+ * would therefore both earn a row it did not deserve and spend one of the
+ * three this counter allows, hiding a later read that did happen. Two tests
+ * in lib/knowledge/knowledge.test.ts keep that unreachable: one holds every
+ * document under KNOWLEDGE_DOCUMENT_TOKEN_CEILING, well under the whole-turn
+ * budget, and one holds the three largest together inside it. They are
+ * load-bearing for a claim this view makes on screen, which is why they are
+ * named here rather than left to be found.
  */
 function toStep(
   chunk: { toolName?: unknown; input?: unknown },
@@ -674,10 +681,10 @@ interface CompletionAggregates {
 /**
  * Numbers only. Never the question, never the answer, never a document id.
  *
- * Document ids are not secret — they are in the index and on the page as
- * source chips — but leaving them out keeps this line a fixed set of numeric
- * fields that a log query can aggregate without ever growing a text column
- * that someone later fills with something that is secret.
+ * Document ids are not secret, and the corpus lives in a public repository,
+ * but leaving them out keeps this line a fixed set of numeric fields that a
+ * log query can aggregate without ever growing a text column that someone
+ * later fills with something that is secret.
  */
 function logCompletion({
   usage,

@@ -154,6 +154,40 @@ describe('accepting a request', () => {
     ])
   })
 
+  test('refuses a data part this route never writes', () => {
+    // Skipping by a `data-` prefix would let a tampered body carry payloads
+    // that none of the caps below count, because every one of them measures
+    // concatenated text. Only the route's own part is skipped.
+    const result = validate(
+      body({
+        id: 'u1',
+        role: 'user',
+        parts: [
+          { type: 'data-junk', data: { blob: 'x'.repeat(100) } },
+          { type: 'text', text: 'What does Matt do?' },
+        ],
+      })
+    )
+    expect(codeOf(result)).toBe('invalid')
+  })
+
+  test('refuses a second progress part on one message', () => {
+    // The route writes exactly one, under a fixed id. More than one is a
+    // body no run produced, and the cheapest place to stop it is here.
+    const result = validate(
+      body({
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'data-progress', id: 'progress', data: { phase: 'done' } },
+          { type: 'data-progress', id: 'progress', data: { phase: 'done' } },
+          { type: 'text', text: 'He builds platforms.' },
+        ],
+      })
+    )
+    expect(codeOf(result)).toBe('invalid')
+  })
+
   test('drops an answer that is nothing but a data part', () => {
     // A run that read documents and never wrote a word. The steps are not
     // text, so the turn carries nothing for the model and goes the same way

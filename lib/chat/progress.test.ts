@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { announcementFor, type AnswerView } from './answer'
 import {
   PROGRESS_PART_TYPE,
+  STOPPED_BEFORE_FIRST_STEP,
   progressStatus,
   progressTotals,
   toProgressView,
@@ -166,6 +167,20 @@ describe('progressStatus', () => {
     ).toBe('stopped')
   })
 
+  test('a run stopped before its first step reads as stopped', () => {
+    // The visitor pressed Stop while the header still said "Thinking...".
+    // No assistant message was ever created, so the transcript hands this
+    // view in for the placeholder row; it must not read as `none`, which
+    // would leave the question sitting alone with nothing under it.
+    expect(progressStatus(viewWith(STOPPED_BEFORE_FIRST_STEP, ''), false)).toBe(
+      'stopped'
+    )
+    // While it is still running, the same view is the ordinary wait.
+    expect(progressStatus(viewWith(STOPPED_BEFORE_FIRST_STEP, ''), true)).toBe(
+      'thinking'
+    )
+  })
+
   test('is none when the server narrated nothing', () => {
     // A refusal before the stream opened, and an answer written with no
     // reads at all. Neither has anything to show.
@@ -248,6 +263,26 @@ describe('announcementFor, with a run in flight', () => {
       'Response complete'
     )
     expect(announcementFor('error', true, reading('Résumé'))).toBe('Error')
+  })
+
+  test('a run that was cut off is never announced as complete', () => {
+    // The only channel that reports the ending to a reader who cannot see
+    // the steps: the transcript is deliberately not a live region and the
+    // timer is hidden from assistive tech.
+    expect(announcementFor('ready', true, reading('Résumé'))).toBe(
+      'Response stopped'
+    )
+    expect(
+      announcementFor('ready', true, { phase: 'writing', steps: [] })
+    ).toBe('Response stopped')
+    expect(announcementFor('ready', true, STOPPED_BEFORE_FIRST_STEP)).toBe(
+      'Response stopped'
+    )
+  })
+
+  test('an answer with no progress at all still completes', () => {
+    // A run that read nothing narrates nothing, and it answered.
+    expect(announcementFor('ready', true)).toBe('Response complete')
   })
 
   test('never announces the seconds', () => {

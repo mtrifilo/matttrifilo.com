@@ -34,6 +34,11 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   the view honest, so it is part of the component rather than a caller's
  *   className: muted, never a spinner. An `active` step spins its icon, so the
  *   caller passes a spinner icon and the component turns it.
+ * - There is one `Collapsible` root, in `ChainOfThought`, rather than one
+ *   around the trigger and a second around the content. Radix derives the
+ *   content's id per root and stamps it on the trigger as `aria-controls`, so
+ *   two roots leave the trigger pointing at an id that is not in the document
+ *   and the button is never associated with the region it opens.
  * - Every animation class is paired with `motion-reduce:animate-none`.
  */
 
@@ -84,12 +89,14 @@ export const ChainOfThought = memo(
 
     return (
       <ChainOfThoughtContext.Provider value={chainOfThoughtContext}>
-        <div
-          className={cn("not-prose max-w-prose space-y-4", className)}
-          {...props}
-        >
-          {children}
-        </div>
+        <Collapsible onOpenChange={setIsOpen} open={isOpen}>
+          <div
+            className={cn("not-prose max-w-prose space-y-4", className)}
+            {...props}
+          >
+            {children}
+          </div>
+        </Collapsible>
       </ChainOfThoughtContext.Provider>
     );
   }
@@ -104,31 +111,29 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
 
 export const ChainOfThoughtHeader = memo(
   ({ className, children, timer, ...props }: ChainOfThoughtHeaderProps) => {
-    const { isOpen, setIsOpen } = useChainOfThought();
+    const { isOpen } = useChainOfThought();
 
     return (
-      <Collapsible onOpenChange={setIsOpen} open={isOpen}>
-        <CollapsibleTrigger
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          className
+        )}
+        {...props}
+      >
+        <span className="min-w-0 flex-1 truncate text-left">{children}</span>
+        {timer !== undefined && (
+          <span aria-hidden="true" className="shrink-0 tabular-nums">
+            {timer}
+          </span>
+        )}
+        <ChevronDownIcon
           className={cn(
-            "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
-            className
+            "size-4 shrink-0 transition-transform",
+            isOpen ? "rotate-180" : "rotate-0"
           )}
-          {...props}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">{children}</span>
-          {timer !== undefined && (
-            <span aria-hidden="true" className="shrink-0 tabular-nums">
-              {timer}
-            </span>
-          )}
-          <ChevronDownIcon
-            className={cn(
-              "size-4 shrink-0 transition-transform",
-              isOpen ? "rotate-180" : "rotate-0"
-            )}
-          />
-        </CollapsibleTrigger>
-      </Collapsible>
+        />
+      </CollapsibleTrigger>
     );
   }
 );
@@ -194,24 +199,16 @@ export type ChainOfThoughtContentProps = ComponentProps<
 >;
 
 export const ChainOfThoughtContent = memo(
-  ({ className, children, ...props }: ChainOfThoughtContentProps) => {
-    const { isOpen } = useChainOfThought();
-
-    return (
-      <Collapsible open={isOpen}>
-        <CollapsibleContent
-          className={cn(
-            "mt-2 space-y-3",
-            "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
-            className
-          )}
-          {...props}
-        >
-          {children}
-        </CollapsibleContent>
-      </Collapsible>
-    );
-  }
+  ({ className, ...props }: ChainOfThoughtContentProps) => (
+    <CollapsibleContent
+      className={cn(
+        "mt-2 space-y-3",
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
+        className
+      )}
+      {...props}
+    />
+  )
 );
 
 ChainOfThought.displayName = "ChainOfThought";

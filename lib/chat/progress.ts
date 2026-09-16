@@ -87,8 +87,12 @@ export interface ProgressView {
  * in the corpus is a few words, so it is a part worth distrusting rather than
  * rendering. Dropped rather than truncated: a step whose name cannot be
  * shown honestly is better left out than shown cut in half.
+ *
+ * Dropping one would undercount the documents read, which is the same kind of
+ * false claim this module exists to prevent, so the corpus is held well below
+ * it: `lib/knowledge/knowledge.test.ts` fails if any title comes close.
  */
-const MAX_TITLE_CHARS = 200
+export const MAX_TITLE_CHARS = 200
 
 const PHASES: ReadonlySet<string> = new Set<ChatProgressPhase>([
   'reading',
@@ -146,6 +150,23 @@ function readSteps(steps: readonly unknown[]): ChatProgressStep[] {
     kept.push({ id, title })
   }
   return kept
+}
+
+/**
+ * The progress of a run the visitor stopped before the server narrated a
+ * single step.
+ *
+ * Nothing arrives on that path: the stream carries no chunk that would make
+ * the SDK create an assistant message, so there is no message to derive a
+ * view from and no part to read. What the visitor did is still a real
+ * ending, and it needs the same terminal state as any other, so the
+ * transcript hands this in for the placeholder row. "Reading, no steps" is
+ * exactly what an in-flight run that never got anywhere looks like, and
+ * `progressStatus` reads it as `stopped` once the run is no longer pending.
+ */
+export const STOPPED_BEFORE_FIRST_STEP: ProgressView = {
+  phase: 'reading',
+  steps: [],
 }
 
 /* ------------------------------------------------------------------ *

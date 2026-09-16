@@ -14,7 +14,9 @@ import { useEffect, useState } from 'react'
  *
  * Once a second, deliberately. Sub-second precision buys nothing a visitor
  * can read, and a 60 Hz counter would re-render the whole transcript, the
- * streaming answer included, for every frame of it.
+ * streaming answer included, for every frame of it. The value it freezes on
+ * is read from the clock at that moment, not from the last tick, so a run
+ * that ended while the tab was backgrounded still reports its real length.
  *
  * The reset is done in render rather than in an effect. React's rule for
  * adjusting state when a prop changes, and the repo's lint enforces the other
@@ -27,21 +29,31 @@ export function useElapsed(active: boolean): number {
   // One state, holding both halves, so the two can never disagree about
   // which run the milliseconds belong to.
   const [run, setRun] = useState({ active: false, ms: 0 })
+
   if (run.active !== active) {
-    // Starting: back to zero. Stopping: keep what the last tick recorded.
-    setRun({ active, ms: active ? 0 : run.ms })
+    // Structural only, because the clock may not be read during render:
+    // starting zeroes the display, stopping holds whatever the last tick
+    // wrote until the cleanup below corrects it.
+    setRun(current => ({ ...current, active, ms: active ? 0 : current.ms }))
   }
 
   useEffect(() => {
     if (!active) return
     const startedAt = Date.now()
-    // Measured against a timestamp rather than counted in ticks: an interval
-    // that a background tab throttled would otherwise under-report the wait
-    // by however long the tab was asleep.
+    // Measured against a timestamp rather than counted in ticks: a
+    // background tab has its intervals throttled to about one a minute, and
+    // a counter would lose every tick the tab slept through.
     const timer = setInterval(() => {
       setRun({ active: true, ms: Date.now() - startedAt })
     }, 1000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      // The run is over: read the clock once more, because the last tick can
+      // be tens of seconds stale for exactly the same throttling reason, and
+      // a frozen row that under-reports its own wait is the kind of wrong
+      // this view exists to avoid.
+      setRun({ active: false, ms: Date.now() - startedAt })
+    }
   }, [active])
 
   return run.ms

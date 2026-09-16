@@ -136,7 +136,8 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
  *
  * While a run is in flight it narrates the step instead of the bare
  * "Responding" (MTC-42), so a reader who cannot see the progress list is told
- * the same thing it shows. One announcement per step: the region re-reads
+ * the same thing it shows, and it reports a run that was cut off as stopped
+ * rather than complete. One announcement per step: the region re-reads
  * whenever this string changes, which is why the elapsed seconds are never in
  * it. A ticking counter would re-announce every second and bury the steps.
  *
@@ -152,7 +153,14 @@ export function announcementFor(
   if (status === 'submitted' || status === 'streaming') {
     return stepAnnouncement(progress) ?? 'Responding'
   }
-  return hasAnswer ? 'Response complete' : ''
+  if (!hasAnswer) return ''
+  // A run that never reported itself done was cut off, and the reader has no
+  // other way to learn it: the steps sit in the transcript, which is
+  // deliberately not a live region, and the timer is hidden from them.
+  // "Response complete" here would be the one false claim this view exists
+  // to prevent, made in the only channel that cannot be checked by looking.
+  if (progress && progress.phase !== 'done') return 'Response stopped'
+  return 'Response complete'
 }
 
 /**

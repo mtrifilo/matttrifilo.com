@@ -846,7 +846,7 @@ function findDocumentFiles(
     const topic = entry.name
     if (!isTopic(topic)) {
       throw new Error(
-        `content/knowledge/${topic}: unknown topic (known: ${TOPIC_ORDER.join(', ')}). A new topic is a decision about what the assistant is for, so it is added by hand in two places: TOPIC_ORDER in lib/knowledge/build.ts, which decides where it sits in the index and is also the "source" a document reports, and OVERRIDES in app/knowledge/topic-label.ts if title-casing the directory name is not the heading you want.`
+        `content/knowledge/${topic}: unknown topic (known: ${TOPIC_ORDER.join(', ')}). A new topic is a decision about what the assistant is for, so it is added by hand: TOPIC_ORDER in lib/knowledge/build.ts, which decides where it sits in the index and is also the "source" a document reports.`
       )
     }
     const names = fs
