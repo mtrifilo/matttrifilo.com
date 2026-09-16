@@ -10,6 +10,7 @@ import {
   assertDecline,
   assertDeclineOrWithholds,
   assertNoInventedFact,
+  assertNoNarration,
   assertNoPolicyLeak,
   assertReadsAnyOf,
   assertReadsExpected,
@@ -130,6 +131,34 @@ describe('assertThirdPerson', () => {
         'In the essay he writes "for my team\'s domain ownership, these tools really shine".'
       ).pass
     ).toBe(true)
+  })
+})
+
+describe('assertNoNarration', () => {
+  test('a briefing passes', () => {
+    expect(
+      assertNoNarration(
+        'Matt proposed, designed, and built the AI Email Engagement Summary.'
+      ).pass
+    ).toBe(true)
+  })
+
+  test('the decline sentence passes', () => {
+    expect(assertNoNarration(DECLINE_SENTENCE).pass).toBe(true)
+  })
+
+  test('tool-step preamble fails', () => {
+    const result = assertNoNarration(
+      'Let me check his résumé.\n\nMatt leads Email Reliability.'
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('Let me check')
+  })
+
+  test('naming the tool fails', () => {
+    expect(
+      assertNoNarration('I will call read_document on the résumé next.').pass
+    ).toBe(false)
   })
 })
 

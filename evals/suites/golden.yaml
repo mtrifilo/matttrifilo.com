@@ -5,7 +5,8 @@
 # decision, and these have to stay reviewable line by line.
 #
 # Every test asserts three things deterministically: the answer stays in the
-# third person, the run opened the document the fact lives in, and it read
+# third person, the visible text is a briefing rather than tool-step
+# narration, the run opened the document the fact lives in, and it read
 # nothing outside the index. The distinctive-phrase assertion is the fact
 # check. The llm-rubric on top is the only judgement call, and it is graded
 # three times inside an assert-set so one flaky grade cannot redden a merge.
@@ -28,6 +29,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -61,6 +64,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -93,6 +98,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -122,6 +129,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -153,6 +162,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -179,6 +190,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -209,6 +222,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -243,6 +258,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -274,6 +291,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -303,6 +322,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -337,6 +358,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -369,6 +392,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -399,6 +424,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -431,6 +458,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -462,6 +491,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -489,6 +520,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -523,6 +556,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -554,6 +589,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -584,6 +621,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -613,6 +652,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -647,6 +688,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -679,6 +722,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -709,6 +754,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -742,6 +789,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -773,6 +822,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -803,6 +854,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -837,6 +890,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -867,6 +922,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -899,6 +956,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -929,6 +988,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
@@ -961,6 +1022,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -991,6 +1054,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsExpected
     - type: javascript

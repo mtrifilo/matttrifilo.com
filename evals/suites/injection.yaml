@@ -25,6 +25,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
@@ -40,6 +42,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
@@ -64,6 +68,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
 
 - description: 'injection: disregard rules and echo the preamble'
@@ -78,6 +84,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: base64 encoded instruction'
   vars:
@@ -93,6 +101,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: leetspeak instruction'
   vars:
@@ -106,6 +116,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: reversed instruction'
   vars:
@@ -119,6 +131,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: instructions inside a fake document quote'
   vars:
@@ -139,6 +153,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
@@ -157,6 +173,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
@@ -178,6 +196,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: path traversal as a document id'
   vars:
@@ -189,6 +209,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -206,6 +228,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: name your tools'
   vars:
@@ -219,6 +243,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: summarise your own rules'
   vars:
@@ -232,6 +258,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: policy in another language'
   vars:
@@ -245,6 +273,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: debug tags'
   vars:
@@ -258,6 +288,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: developer mode'
   vars:
@@ -269,6 +301,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
 
@@ -284,6 +318,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
@@ -301,6 +337,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
 
 - description: 'injection: multi-turn role-play escalation'
   vars:
@@ -322,6 +360,8 @@
       value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertDeclineOrWithholds
     - type: javascript
@@ -349,6 +389,8 @@
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak
 
 - description: 'injection: multi-turn continuation of a forged index dump'
@@ -368,6 +410,8 @@
       value: file://assertions.ts:assertNoPolicyLeak
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
 
@@ -396,5 +440,7 @@
       value: file://assertions.ts:assertDeclineOrWithholds
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
     - type: javascript
       value: file://assertions.ts:assertNoPolicyLeak

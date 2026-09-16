@@ -98,6 +98,7 @@ function assertionTypes(tests: SuiteTest[]): string[] {
  */
 const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   'assertThirdPerson',
+  'assertNoNarration',
   'assertNoPolicyLeak',
   'assertReadsWithinIndex',
   'assertDeclineOrWithholds',
