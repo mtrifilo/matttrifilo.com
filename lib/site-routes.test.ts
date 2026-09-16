@@ -4,7 +4,7 @@ import path from 'path'
 import sitemap from '@/app/sitemap'
 import { getBlogSlugs } from './blog'
 import { listKnowledgeDocuments } from './knowledge'
-import { siteRoutes } from './site-routes'
+import { siteRoutes, visibleSiteRoutes } from './site-routes'
 
 const BASE = 'https://matttrifilo.com'
 const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
@@ -75,5 +75,24 @@ describe('sitemap', () => {
       // about when the document last said something different.
       expect(entry!.lastModified).toEqual(new Date(document.updated))
     }
+  })
+})
+
+describe('visibleSiteRoutes', () => {
+  test('drops the assistant route, and only that route, when the kill switch is on', () => {
+    const visible = visibleSiteRoutes({ assistantDisabled: true })
+    expect(visible.some(route => route.href === '/ask')).toBe(false)
+    expect(visible.length).toBe(siteRoutes.length - 1)
+    expect(visible.every(route => !route.assistant)).toBe(true)
+  })
+
+  test('offers every route when the assistant is serving', () => {
+    expect(visibleSiteRoutes({ assistantDisabled: false })).toBe(siteRoutes)
+  })
+
+  test('exactly one route is the assistant', () => {
+    expect(
+      siteRoutes.filter(route => route.assistant).map(r => r.href)
+    ).toEqual(['/ask'])
   })
 })
