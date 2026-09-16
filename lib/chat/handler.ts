@@ -183,12 +183,17 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     try {
       visitor = await verifyVisitor()
     } catch (error) {
-      logFailure(error)
+      logFailure(error, 'visitor')
       return errorResponse('unavailable')
     }
-    if (visitor.isBot !== false || visitor.isVerifiedBot === true) {
+    if (
+      typeof visitor !== 'object' ||
+      visitor === null ||
+      visitor.isBot !== false ||
+      visitor.isVerifiedBot === true
+    ) {
       return rejectionResponse('blocked', {
-        verifiedBot: visitor.isVerifiedBot === true,
+        verifiedBot: visitor?.isVerifiedBot === true,
       })
     }
     if (visitor.bypassed === true) {
@@ -560,9 +565,11 @@ function logRejection(code: string, flags: Record<string, boolean> = {}): void {
  * message can contain the prompt, and the prompt contains the visitor's
  * question, which this route promises never to record.
  */
-function logFailure(error: unknown): void {
+function logFailure(error: unknown, stage?: 'visitor'): void {
   console.error('[chat]', {
-    stage: failureStage(error),
+    // failureStage classifies the Vertex chain; a visitor-classifier failure
+    // names its own stage so an operator is not sent to the wrong system.
+    stage: stage ?? failureStage(error),
     error: error instanceof Error ? error.name : typeof error,
   })
 }

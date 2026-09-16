@@ -54,7 +54,9 @@ const nextConfig: NextConfig = {
               "font-src 'self'",
               "worker-src 'self' blob:",
               "connect-src 'self'",
-              'frame-src https://vercel.live',
+              // 'self' for BotID's same-origin challenge path (MTC-34), which
+              // the wrapper below marks frameable by this origin.
+              "frame-src 'self' https://vercel.live",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -67,6 +69,10 @@ const nextConfig: NextConfig = {
 }
 
 // Adds the same-origin rewrites that serve BotID's challenge script and
-// proxy its classification calls (MTC-34), which is what keeps the CSP
-// above unchanged: nothing new is loaded from a third-party host.
+// proxy its classification calls (MTC-34), so nothing is loaded from a new
+// host and script-src/connect-src above stay as they are. It also appends
+// a header rule for its own path prefix (X-Frame-Options SAMEORIGIN and
+// frame-ancestors 'self') on top of the site-wide rule above; which one
+// Next serves for that path is not verified here, and nothing is framed on
+// it under Basic.
 export default withBotId(nextConfig)

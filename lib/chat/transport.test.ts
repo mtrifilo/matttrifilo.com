@@ -87,13 +87,10 @@ describe('createChatFetch', () => {
   })
 
   test('a request that never produces headers becomes the unavailable envelope', async () => {
-    // A hung BotID challenge: the patched fetch never resolves.
-    const hung = (_input: RequestInfo | URL, init?: RequestInit) =>
-      new Promise<Response>((_, reject) => {
-        init?.signal?.addEventListener('abort', () =>
-          reject(new DOMException('aborted', 'AbortError'))
-        )
-      })
+    // A hung BotID challenge: the patched fetch never settles, and it does
+    // not consult the abort signal while it waits, so nothing but a race
+    // against the promise can end the wait.
+    const hung = () => new Promise<Response>(() => {})
     const fetch = createChatFetch(hung, { headersTimeoutMs: 10 })
     const response = await fetch('/api/chat', { method: 'POST' })
     expect(response.status).toBe(502)
@@ -102,6 +99,7 @@ describe('createChatFetch', () => {
   })
 
   test('the caller’s own abort is not turned into a refusal', async () => {
+    // A request that did start honours the signal, as real fetch does.
     const hung = (_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener('abort', () =>

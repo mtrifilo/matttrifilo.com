@@ -492,7 +492,7 @@ describe('bot protection', () => {
     expect(response.status).toBe(502)
     expect(await response.json()).toEqual(chatErrorBody('unavailable'))
     expect(model.doStreamCalls).toHaveLength(0)
-    expect(loggedText()).toContain('"stage"')
+    expect(loggedText()).toContain('"stage":"visitor"')
     expect(loggedText()).not.toContain(QUESTION)
     expect(loggedText()).not.toContain('botid down')
   })

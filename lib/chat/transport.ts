@@ -19,8 +19,11 @@ import type { ChatErrorBody } from './validate'
  * - BotID patches `window.fetch` to run its challenge before a protected
  *   request. If the challenge script fails to load, a second attempt in the
  *   same tab can wait on it forever, and `useChat` would spin with no
- *   request ever sent. A bound on time to response headers turns that into
- *   the ordinary error notice.
+ *   request ever sent. That wait happens before the real fetch starts, so
+ *   an abort signal cannot end it: the patched fetch does not look at the
+ *   signal until it hands the request on. The bound below therefore races
+ *   the promise itself, and only aborts the controller as a courtesy for
+ *   a request that did start.
  */
 
 /** `message` is a placeholder: the UI renders its own rate-limit copy. */
@@ -77,27 +80,27 @@ export function createChatFetch(
         () => controller.abort(callerSignal.reason),
         { once: true }
       )
-    const timer = setTimeout(
-      () => controller.abort(HEADERS_TIMEOUT),
-      headersTimeoutMs
-    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timedOut = new Promise<typeof HEADERS_TIMEOUT>(resolve => {
+      timer = setTimeout(() => resolve(HEADERS_TIMEOUT), headersTimeoutMs)
+    })
 
     let response: Response
     try {
-      response = await fetchImpl(input, { ...init, signal: controller.signal })
-    } catch (error) {
-      // Only this wrapper's own timeout is turned into a refusal. A caller
-      // abort (the visitor pressed stop, or left) and every other failure
-      // keep their meaning for useChat.
-      if (
-        controller.signal.reason === HEADERS_TIMEOUT &&
-        !callerSignal?.aborted
-      ) {
+      const outcome = await Promise.race([
+        fetchImpl(input, { ...init, signal: controller.signal }),
+        timedOut,
+      ])
+      if (outcome === HEADERS_TIMEOUT) {
+        // Cancel the request if it ever started; then answer for it. A
+        // caller abort that raced in first keeps its own meaning below.
+        if (callerSignal?.aborted) throw callerSignal.reason
+        controller.abort(HEADERS_TIMEOUT)
         return envelope(UNAVAILABLE_ENVELOPE, 502)
       }
-      throw error
+      response = outcome
     } finally {
-      // Headers are in: the body may take as long as it takes.
+      // Headers are in, or the wait is over either way.
       clearTimeout(timer)
     }
 
