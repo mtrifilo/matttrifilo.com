@@ -33,14 +33,17 @@ export const CHAT_MAX_TURNS = 8
 export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 
 /**
- * Visible answer length. 600 cut a "summarise every role" answer
- * mid-sentence; 1,000 fitted a short chatbot reply. Hiring-manager
- * briefings (MTC-48) need room for a lead plus evidence. 1,600 fits
- * that with the Sources trailer; the '[chat] truncated' marker shows
- * if it is still too small. Thought tokens on Gemini 3.x still come
- * out of this budget at the model's floor.
+ * Visible answer length, shared with Gemini 3.x thought tokens.
+ *
+ * 600 cut a "summarise every role" answer mid-sentence; 1,000 fitted a
+ * short chatbot reply; 1,600 fitted a briefing at thinking `low`. Medium
+ * thinking (the correctness default below) spends more of this budget
+ * before the first visible token, so 2,048 is the headroom that still
+ * lets a conversation of full-length answers fit under
+ * CHAT_MAX_INPUT_TOKENS. The '[chat] truncated' marker shows if it is
+ * still too small.
  */
-export const CHAT_MAX_OUTPUT_TOKENS = 1_600
+export const CHAT_MAX_OUTPUT_TOKENS = 2_048
 
 /**
  * Model calls allowed in one request: one per document the model may read,
@@ -88,8 +91,8 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
  * 1,700 after the briefing rewrite, CHAT_MAX_TURNS questions at
  * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
- * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~12,800 — about
- * 25,500 against this cap. "A conversation of full-length answers still
+ * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~16,400 — about
+ * 29,100 against this cap. "A conversation of full-length answers still
  * fits" in validate.test.ts pins that, and it is the test that should fail
  * if the policy or the index ceiling grows past the margin.
  *
@@ -105,8 +108,29 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  */
 export const CHAT_MAX_INPUT_TOKENS = 30_000
 
-/** Low, because the job is reporting what the corpus says, not composing. */
+/**
+ * Left low in case a future model honours sampling. Gemini 3.x ignores
+ * temperature, top_p, and top_k; thinking level is the correctness lever.
+ */
 export const CHAT_TEMPERATURE = 0.2
+
+/**
+ * Gemini 3.8 Flash thinking levels the chat route will send.
+ *
+ * `none` is not on this list: the AI SDK clamps it to the model's floor
+ * (`low` here), which is the latency setting, not the correctness one.
+ * Google's default and recommendation for agentic first-pass accuracy is
+ * `medium`. `CHAT_REASONING` overrides for eval comparison runs.
+ */
+export const CHAT_REASONING_LEVELS = ['low', 'medium', 'high'] as const
+export type ChatReasoning = (typeof CHAT_REASONING_LEVELS)[number]
+export const DEFAULT_CHAT_REASONING: ChatReasoning = 'medium'
+
+export function chatReasoning(source: EnvSource = process.env): ChatReasoning {
+  const value = source.CHAT_REASONING
+  if (value === 'low' || value === 'medium' || value === 'high') return value
+  return DEFAULT_CHAT_REASONING
+}
 
 /**
  * Every code the client may receive.

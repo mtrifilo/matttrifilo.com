@@ -159,6 +159,18 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID || steps.auth.outputs.project_id }}
 
+      # IAM impersonation can 403 for a short window after the OIDC exchange
+      # succeeds. Without this, the first goldens record CHAT_ERROR:
+      # interrupted and the rest of the suite is evidence about Vertex, not
+      # the assistant. Fatal on purpose: a run that cannot mint a token will
+      # fail every test the same way, and the suites step would still spend
+      # the rest of the budget producing 102 identical red rows.
+      - if: steps.gate.outputs.run == 'true'
+        name: Wait until Vertex accepts this identity
+        run: bun run evals/warmup.ts
+        env:
+          GCP_PROJECT_ID: ${{ steps.project.outputs.id }}
+
       # Non-fatal on purpose: promptfoo exits 100 when a test fails, and the
       # summarise step below is the gate. Letting this step fail the job would
       # skip the summary and the artifact for exactly the runs that need them.

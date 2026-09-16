@@ -78,12 +78,16 @@ describe('summarise', () => {
       ...row('golden', true),
       metadata: { model: 'gemini-x', attempt: 2 },
     }
+    const third = {
+      ...row('golden', true),
+      metadata: { model: 'gemini-x', attempt: 3 },
+    }
     const summary = summarise({
-      results: file([row('golden', true), retried, retried]),
+      results: file([row('golden', true), retried, retried, third]),
       commit: 'c',
       ranAt: 'r',
     })
-    expect(summary.retried).toBe(2)
+    expect(summary.retried).toBe(3)
   })
 
   test('an empty run reports nothing rather than throwing', () => {

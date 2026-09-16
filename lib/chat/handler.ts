@@ -39,6 +39,7 @@ import {
   CHAT_MAX_STEPS,
   CHAT_TEMPERATURE,
   chatErrorBody,
+  chatReasoning,
   isChatDisabled,
   validateChatRequest,
 } from './validate'
@@ -308,13 +309,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // with no log line and a generation still being billed.
         abortSignal: request.signal,
         temperature: CHAT_TEMPERATURE,
-        // 'none' does not disable thinking on Gemini 3.x. The provider clamps
-        // it to the model's minimum thinking level — 'low' for
-        // gemini-3.8-flash, 'minimal' below 3.7 — and those thought tokens
-        // come out of maxOutputTokens. Changing GEMINI_MODEL changes that
-        // floor and so the answer budget left over; the '[chat] truncated'
-        // marker below is how a too-small budget shows up in the logs.
-        reasoning: 'none',
+        // Gemini 3.8 Flash ignores temperature. thinking_level is the
+        // correctness lever: 'medium' is Google's default for agentic
+        // first-pass accuracy. 'none' would clamp to 'low' on this model.
+        // Thought tokens still come out of maxOutputTokens.
+        reasoning: chatReasoning(env),
         maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
         // One numeric line per model call, so a slow request shows which
         // step (a read, or the final answer) the time went to. A preview

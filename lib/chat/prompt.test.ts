@@ -117,6 +117,9 @@ describe('the reading policy', () => {
     expect(SYSTEM_PROMPT).toContain(
       'Then answer only from the text those calls returned'
     )
+    expect(SYSTEM_PROMPT).toContain(
+      'Do not answer a neighbouring question the documents happen to support'
+    )
   })
 
   test('states the read budget the server enforces', () => {
@@ -130,6 +133,13 @@ describe('the reading policy', () => {
     // guessing what to do with one.
     expect(SYSTEM_PROMPT).toContain('{"error": "document_too_large"}')
     expect(SYSTEM_PROMPT).toContain('Do not ask for it again')
+  })
+
+  test('tells the model to finish the whole decline sentence', () => {
+    expect(SYSTEM_PROMPT).toContain(
+      'Write the entire sentence, including the email address'
+    )
+    expect(SYSTEM_PROMPT).toContain('never stop after the first period')
   })
 
   test('allows answering without reading only in order to decline', () => {

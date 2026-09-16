@@ -28,6 +28,7 @@ import {
 import {
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
+  CHAT_MAX_OUTPUT_TOKENS,
   CHAT_MAX_TURNS,
   chatErrorBody,
 } from './validate'
@@ -682,9 +683,18 @@ describe('a normal request', () => {
 
     const call = model.doStreamCalls[0]
     expect(call.temperature).toBe(0.2)
-    expect(call.maxOutputTokens).toBe(1_600)
-    expect(call.reasoning).toBe('none')
+    expect(call.maxOutputTokens).toBe(CHAT_MAX_OUTPUT_TOKENS)
+    expect(call.reasoning).toBe('medium')
     expect(call.tools?.map(t => t.name)).toEqual([READ_DOCUMENT_TOOL_NAME])
+  })
+
+  test('CHAT_REASONING overrides the thinking level for comparison runs', async () => {
+    const model = readingModel()
+    const response = await handlerWith(model, { CHAT_REASONING: 'high' })(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+    expect(model.doStreamCalls[0].reasoning).toBe('high')
   })
 })
 

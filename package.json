@@ -11,7 +11,8 @@
     "test": "bun test",
     "knowledge:check": "bun run scripts/knowledge-check.ts",
     "evals": "PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2",
-    "evals:smoke": "PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2 --filter-metadata smoke=true"
+    "evals:smoke": "PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2 --filter-metadata smoke=true",
+    "evals:compare": "bun run evals/compare-reasoning.ts"
   },
   "dependencies": {
     "@ai-sdk/google-vertex": "^5.0.81",

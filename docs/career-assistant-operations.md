@@ -11,7 +11,7 @@ Rows marked "as of" are point-in-time observations. `vercel env ls`, the Vercel 
 | Kill switch      | `CHAT_DISABLED=1` env var on Vercel, read before the body                                                                                                                      | As of 2026-09-15: set on production; unset on preview and development |
 | BotID Basic      | `instrumentation-client.ts` (client), `withBotId` in `next.config.ts` (rewrites), `checkBotId` in `app/api/chat/route.ts` (server)                                             | In code; free on every plan                                           |
 | WAF rate limit   | Vercel dashboard, Firewall, one rule (Hobby allows one)                                                                                                                        | **Not yet created**; spec below                                       |
-| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 30k input tokens, 3 documents / 20k tokens read, 1,600 output tokens per step, 4 steps | In code since MTC-31; output raised for briefings (MTC-48) |
+| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 30k input tokens, 3 documents / 20k tokens read, 2,048 output tokens per step (shared with Gemini 3.8 Flash thought tokens at thinking `medium`), 4 steps | In code since MTC-31; output raised for briefings (MTC-48) then for medium thinking |
 | GCP budget       | Billing budget on project `matttrifilo-com`, $50 a month                                                                                                                       | As of 2026-09-14 (MTC-30)                                             |
 | Vertex quota cap | GCP console, IAM & Admin, Quotas, `aiplatform.googleapis.com`                                                                                                                  | **Not yet applied**; see below                                        |
 
@@ -125,7 +125,7 @@ Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both u
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
-4. **Vertex was slow.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection, not an answer; the provider has already retried it once. A run with several of them is upstream latency, and the `[chat]` lines in the job log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
+4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the job log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
 
 Never relax an assertion to get a green run without saying so in the pull request.
 
@@ -138,7 +138,7 @@ gcloud auth application-default login
 GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
 ```
 
-`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
+`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing. `CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table. The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
 
 Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before it builds a handler, so every row names the missing variable instead of saying `unavailable`. The run still walks all 102 tests, but it makes no model call and costs nothing. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
 
@@ -159,7 +159,7 @@ The grader row is 43 rubric-bearing tests, the 32 goldens plus the 11 hallucinat
 
 At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 0.848 × $0.75 = $0.64, plus 0.028 × $3.75 = $0.11. **About $0.75 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $1.50.
 
-Read that as a typical figure, not a ceiling. The provider retries a test once when the first attempt was lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach twice the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
+Read that as a typical figure, not a ceiling. Medium thinking spends more output tokens than the `low` floor the route used to send. The provider retries a test twice when earlier attempts were lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach three times the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
 
 Those two prices come from secondary sources, not from Google's own pricing page, which could not be read while this was written. Check the console before treating the figure as exact.
 

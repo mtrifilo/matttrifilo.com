@@ -30,6 +30,9 @@ import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
  * added to the stream elsewhere does not change what a suite sees.
  */
 
+/** Requests per test when the first ones are lost to a transport stall. */
+export const EVAL_TRANSPORT_ATTEMPTS = 3
+
 interface ProviderOptions {
   id?: string
   config?: Record<string, unknown>
@@ -69,7 +72,7 @@ export interface EvalMetadata extends Record<string, unknown> {
   /** The model the route was pointed at, for the run summary. */
   model: string
   status: number
-  /** 1, or 2 when the first attempt was lost to a transport stall. */
+  /** 1, or higher when earlier attempts were lost to a transport stall. */
   attempt?: number
 }
 
@@ -96,21 +99,25 @@ export default class ChatRouteProvider {
     usesVercelFederation()
 
     const history = historyFrom(context.vars)
-    const first = await this.ask(chatRequest(prompt, history), 1)
     // A stalled connection is not an answer, so it is not evidence about the
     // policy either, and a suite that reddens on one is measuring Vertex's
-    // latency rather than the assistant. One extra attempt, only for the two
-    // transport codes: a real outage still reddens the run on the second try,
-    // and the worst case stays bounded at two requests per test.
-    if (!first.transportFailure) return first.response
-    const second = await this.ask(chatRequest(prompt, history), 2)
-    return second.response
+    // latency rather than the assistant. Extra attempts, only for the two
+    // transport codes: a real outage still reddens the run on the last try,
+    // and the worst case stays bounded. Two retries rather than one because
+    // CI can 403 on impersonation for a few hundred milliseconds after the
+    // identity binding is minted; warmup.ts should have absorbed that, and
+    // these attempts are the remaining margin.
+    for (let attempt = 1; attempt <= EVAL_TRANSPORT_ATTEMPTS; attempt++) {
+      const result = await this.ask(chatRequest(prompt, history), attempt)
+      if (!result.transportFailure) return result.response
+    }
+    throw new Error('EVAL_TRANSPORT_ATTEMPTS must be at least 1')
   }
 
   /** One request through the route's handler, read back off the stream. */
   private async ask(
     request: Request,
-    attempt: 1 | 2
+    attempt: number
   ): Promise<{ response: ProviderResponse; transportFailure: boolean }> {
     const readIds: string[] = []
     const model = geminiModel()
@@ -157,7 +164,8 @@ export default class ChatRouteProvider {
           ...baseMetadata(readIds, model, response.status),
           attempt,
         }),
-        transportFailure: attempt === 1 && isTransportCode(code),
+        transportFailure:
+          attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
       }
     }
 
@@ -176,7 +184,8 @@ export default class ChatRouteProvider {
       const code = envelopeCode(answer.errorText)
       return {
         response: failure(`CHAT_ERROR: ${code}`, metadata),
-        transportFailure: attempt === 1 && isTransportCode(code),
+        transportFailure:
+          attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
       }
     }
 

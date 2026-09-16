@@ -87,7 +87,8 @@ export function summarise({
       passed: suites.reduce((sum, suite) => sum + suite.passed, 0),
       total: suites.reduce((sum, suite) => sum + suite.total, 0),
     },
-    retried: rows.filter(row => readNumber(row.metadata?.attempt) === 2).length,
+    retried: rows.filter(row => (readNumber(row.metadata?.attempt) ?? 1) > 1)
+      .length,
   }
 }
 

@@ -12,6 +12,8 @@ import {
   estimateTokens,
   isChatDisabled,
   validateChatRequest,
+  chatReasoning,
+  DEFAULT_CHAT_REASONING,
 } from './validate'
 
 /** A UIMessage as the AI SDK client posts it. */
@@ -459,5 +461,20 @@ describe('estimateTokens', () => {
     expect(estimateTokens('')).toBe(0)
     expect(estimateTokens('abcd')).toBe(1)
     expect(estimateTokens('abcde')).toBe(2)
+  })
+})
+
+describe('chatReasoning', () => {
+  test('defaults to medium, the Gemini 3.8 Flash correctness setting', () => {
+    expect(DEFAULT_CHAT_REASONING).toBe('medium')
+    expect(chatReasoning({})).toBe('medium')
+    expect(chatReasoning({ CHAT_REASONING: 'none' })).toBe('medium')
+    expect(chatReasoning({ CHAT_REASONING: 'minimal' })).toBe('medium')
+  })
+
+  test('honours an explicit low, medium, or high override', () => {
+    expect(chatReasoning({ CHAT_REASONING: 'low' })).toBe('low')
+    expect(chatReasoning({ CHAT_REASONING: 'medium' })).toBe('medium')
+    expect(chatReasoning({ CHAT_REASONING: 'high' })).toBe('high')
   })
 })
