@@ -116,8 +116,12 @@ export function AssistantComposer({
           aria-invalid={overLimit || undefined}
           aria-label="Ask a question about Matt's work"
           className={cn(
-            'max-h-40 min-h-[1.625rem] flex-1 resize-none bg-transparent text-base',
-            'leading-relaxed outline-none placeholder:text-muted-foreground'
+            // min-h-9 matches the send button; py-2 + leading-5 puts the
+            // first line in the vertical centre of that 36px row. items-end
+            // on the flex keeps the button on the last line once the box
+            // grows.
+            'max-h-40 min-h-9 flex-1 resize-none bg-transparent py-2 text-base',
+            'leading-5 outline-none placeholder:text-muted-foreground'
           )}
           onChange={event => onValueChange(event.target.value)}
           onCompositionEnd={() => setComposing(false)}

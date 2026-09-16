@@ -35,15 +35,14 @@ export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 /**
  * Visible answer length, shared with Gemini 3.x thought tokens.
  *
- * 600 cut a "summarise every role" answer mid-sentence; 1,000 fitted a
- * short chatbot reply; 1,600 fitted a briefing at thinking `low`. Medium
- * thinking (the correctness default below) spends more of this budget
- * before the first visible token, so 2,048 is the headroom that still
- * lets a conversation of full-length answers fit under
- * CHAT_MAX_INPUT_TOKENS. The '[chat] truncated' marker shows if it is
- * still too small.
+ * Briefings at thinking `medium` were still being cut at 2,048 — thought
+ * tokens come out of this budget first, then the visible answer. 8,192
+ * leaves room for a hiring-manager briefing after a medium think. The
+ * input ceiling below is raised with it so a conversation of full-length
+ * answers still fits. The '[chat] truncated' marker shows if it is still
+ * too small.
  */
-export const CHAT_MAX_OUTPUT_TOKENS = 2_048
+export const CHAT_MAX_OUTPUT_TOKENS = 8_192
 
 /**
  * Model calls allowed in one request: one per document the model may read,
@@ -87,12 +86,12 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * Ceiling on the estimated input tokens of the request the client posts:
  * document index plus system policy plus the conversation so far.
  *
- * 30,000 fits every conversation a visitor can have with ordinary answers:
+ * 80,000 fits every conversation a visitor can have with ordinary answers:
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
- * 1,700 after the briefing rewrite, CHAT_MAX_TURNS questions at
+ * 1,800 after the briefing rewrite, CHAT_MAX_TURNS questions at
  * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
- * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~16,400 — about
- * 29,100 against this cap. "A conversation of full-length answers still
+ * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500 — about
+ * 78,300 against this cap. "A conversation of full-length answers still
  * fits" in validate.test.ts pins that, and it is the test that should fail
  * if the policy or the index ceiling grows past the margin.
  *
@@ -106,7 +105,7 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * It does not bound the whole generation. Documents arrive mid-loop as tool
  * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
-export const CHAT_MAX_INPUT_TOKENS = 30_000
+export const CHAT_MAX_INPUT_TOKENS = 80_000
 
 /**
  * Left low in case a future model honours sampling. Gemini 3.x ignores

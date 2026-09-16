@@ -335,6 +335,20 @@ export function progressSeconds(
   return Math.round(elapsedMs / 1000)
 }
 
+/**
+ * Where the live elapsed clock belongs.
+ *
+ * Before any document is named, the header is the only line on screen, so
+ * the clock sits there next to "Thinking…". Once steps exist, a clock on
+ * the header next to a second status line is the duplicate the visitor
+ * sees as two things working; it belongs on the active (or stopped) row.
+ */
+export function progressTimerPlacement(
+  rows: readonly ProgressRow[]
+): 'header' | 'step' {
+  return rows.length === 0 ? 'header' : 'step'
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

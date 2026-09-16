@@ -13,6 +13,7 @@ import {
   progressRows,
   progressSeconds,
   progressStatus,
+  progressTimerPlacement,
   progressTotals,
   type ProgressRow,
   type ProgressStatus,
@@ -21,7 +22,6 @@ import {
   PROGRESS_STOPPED,
   PROGRESS_THINKING,
   PROGRESS_UNFINISHED,
-  PROGRESS_WORKING,
   PROGRESS_WRITING,
   progressReading,
   progressSummary,
@@ -32,7 +32,9 @@ import {
  *
  * The model reads one to three documents before the first token, which is ten
  * to twenty seconds with nothing to look at. This fills that gap: a headline
- * that tracks the run, a step per document, and a timer. Once the answer is
+ * that tracks the run, a step per document, and a timer. The clock sits on
+ * the headline until a document is named, then moves onto the active step
+ * so "Working…" does not sit above "Reading Résumé…". Once the answer is
  * there the headline becomes "Read 3 documents in 14s" and the steps fold
  * away behind it.
  *
@@ -76,6 +78,10 @@ export function AssistantProgress({
     : undefined
   const rows = progressRows(status, view.progress)
   const seconds = progressSeconds(pending, elapsedMs)
+  const clock =
+    summary || seconds === undefined ? undefined : `${seconds}s`
+  const timerOnStep = progressTimerPlacement(rows) === 'step'
+  const headerLabel = summary ?? headline(status, rows)
 
   return (
     <ChainOfThought
@@ -86,18 +92,22 @@ export function AssistantProgress({
       // where the steps are all the account there is.
       open={override ?? summary === undefined}
     >
-      <ChainOfThoughtHeader
-        // Nothing has been read yet, so there is nothing to open.
-        disabled={rows.length === 0}
-        icon={<HeadlineIcon status={status} />}
-        timer={summary || seconds === undefined ? undefined : `${seconds}s`}
-      >
-        {summary ?? headline(status, rows)}
-      </ChainOfThoughtHeader>
+      {headerLabel !== null && (
+        <ChainOfThoughtHeader
+          // Nothing has been read yet, so there is nothing to open.
+          disabled={rows.length === 0}
+          icon={<HeadlineIcon status={status} />}
+          timer={timerOnStep ? undefined : clock}
+        >
+          {headerLabel}
+        </ChainOfThoughtHeader>
+      )}
       {/* Always rendered, even with no steps to put in it: Radix stamps the
           region's id on the trigger as `aria-controls`, and an open trigger
           pointing at an element that is not in the document is the defect
-          the component's single Collapsible root exists to avoid. */}
+          the component's single Collapsible root exists to avoid. When the
+          header is omitted (documents are being read), this region is the
+          whole account and stays open. */}
       <ChainOfThoughtContent>
         {rows.map(row => (
           <ChainOfThoughtStep
@@ -105,6 +115,12 @@ export function AssistantProgress({
             key={row.key}
             label={label(row)}
             status={row.state}
+            timer={
+              timerOnStep &&
+              (row.state === 'active' || row.state === 'stopped')
+                ? clock
+                : undefined
+            }
           />
         ))}
       </ChainOfThoughtContent>
@@ -127,22 +143,28 @@ function label(row: ProgressRow): string {
   return row.title === undefined ? PROGRESS_WRITING : progressReading(row.title)
 }
 
-/** The headline while a run is in flight, or once it ended without one. */
+/**
+ * The headline while a run is in flight, or once it ended without one.
+ *
+ * `null` while documents are being read or the answer written: the active
+ * row already names the work, and a second "Working…" above it is the
+ * duplicate.
+ */
 function headline(
   status: ProgressStatus,
   rows: readonly ProgressRow[]
-): string {
+): string | null {
   if (status === 'stopped') return PROGRESS_STOPPED
   if (status === 'done') return PROGRESS_UNFINISHED
   if (status === 'thinking' || rows.length === 0) return PROGRESS_THINKING
-  return PROGRESS_WORKING
+  return null
 }
 
 /**
- * The one thing that moves while the model works.
+ * The one thing that moves while the model works, before any step exists.
  *
- * The header carries it rather than a step row, because the longest part of
- * the wait, before the first document is chosen, has no rows at all.
+ * Once a row is active the spinner lives on that row, so this is only drawn
+ * on the header.
  */
 function HeadlineIcon({ status }: { status: ProgressStatus }) {
   if (status === 'stopped') return <CircleStop className="size-4 shrink-0" />

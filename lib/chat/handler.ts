@@ -60,8 +60,8 @@ import {
  *
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat:
- * with a 30k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
- * steps, the worst case is roughly 30k + 37k + 43k + 50k ≈ 160k input tokens
+ * with an 80k prompt cap and a 20k read budget spread over CHAT_MAX_STEPS = 4
+ * steps, the worst case is roughly 80k + 87k + 93k + 100k ≈ 360k input tokens
  * for one question. Vertex's implicit cache covers the stable prefix and
  * should take a large bite out of what is billed, but the ceiling is real and
  * it is why MTC-34's rate limit is not optional.
