@@ -60,18 +60,6 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'yearly',
     priority: 0.5,
   },
-  {
-    // The career assistant's published corpus. In the sitemap so the
-    // documents are indexable and the assistant's answers are checkable,
-    // and out of the nav because it is reached through an answer's source
-    // chips rather than browsed: /ask is the nav entry for the assistant.
-    href: '/knowledge',
-    label: 'Knowledge',
-    changeFrequency: 'weekly',
-    priority: 0.4,
-    hideFromNav: true,
-    assistant: true,
-  },
 ]
 
 /**

@@ -60,7 +60,6 @@ describe('new-blog-post scaffold', () => {
       expect(document.id).toBe(slug)
       expect(document.topic).toBe('blog')
       expect(document.source).toBe('blog')
-      expect(document.url).toBe(`/knowledge/${slug}`)
       expect(document.canonical).toBe(`https://matttrifilo.com/blog/${slug}`)
       // An apostrophe in the title must survive the frontmatter quoting.
       expect(document.title).toBe(draft.title)

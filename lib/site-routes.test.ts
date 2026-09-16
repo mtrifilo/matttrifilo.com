@@ -3,7 +3,6 @@ import fs from 'fs'
 import path from 'path'
 import sitemap from '@/app/sitemap'
 import { getBlogSlugs } from './blog'
-import { listKnowledgeDocuments } from './knowledge'
 import { siteRoutes, visibleSiteRoutes } from './site-routes'
 import { isChatDisabled } from './chat/kill-switch'
 
@@ -69,30 +68,21 @@ describe('sitemap', () => {
       expect(urls.has(`${BASE}/blog/${slug}`)).toBe(true)
   })
 
-  test('includes every knowledge document, dated by its own frontmatter', () => {
-    // Killed, the documents have no page, so the sitemap lists none.
-    if (isChatDisabled()) return
-    // /knowledge exists so the assistant's sources can be looked up; a
-    // document missing from the sitemap is a source nobody can find.
-    const documents = listKnowledgeDocuments()
-    expect(documents.length).toBeGreaterThan(0)
-    const entries = new Map(sitemap().map(entry => [entry.url, entry]))
-    for (const document of documents) {
-      const entry = entries.get(`${BASE}${document.url}`)
-      expect(entry, `${document.id} is not in the sitemap`).toBeDefined()
-      // The author's date, not the build's: a rebuild changes nothing
-      // about when the document last said something different.
-      expect(entry!.lastModified).toEqual(new Date(document.updated))
+  test('offers no corpus document, because nothing serves one', () => {
+    // Nothing renders a knowledge document any more, so a sitemap entry
+    // for one would advertise a 404. What the assistant read is disclosed
+    // in the answer instead.
+    for (const entry of sitemap()) {
+      expect(entry.url).not.toContain('/knowledge')
     }
   })
 })
 
 describe('visibleSiteRoutes', () => {
-  test('drops the assistant routes, and only those, when the kill switch is on', () => {
+  test('drops the assistant route, and only that, when the kill switch is on', () => {
     const visible = visibleSiteRoutes({ assistantDisabled: true })
     expect(visible.some(route => route.href === '/ask')).toBe(false)
-    expect(visible.some(route => route.href === '/knowledge')).toBe(false)
-    expect(visible.length).toBe(siteRoutes.length - 2)
+    expect(visible.length).toBe(siteRoutes.length - 1)
     expect(visible.every(route => !route.assistant)).toBe(true)
   })
 
@@ -100,9 +90,9 @@ describe('visibleSiteRoutes', () => {
     expect(visibleSiteRoutes({ assistantDisabled: false })).toBe(siteRoutes)
   })
 
-  test('the assistant routes are /ask and its corpus pages', () => {
+  test('the assistant route is /ask', () => {
     expect(
       siteRoutes.filter(route => route.assistant).map(route => route.href)
-    ).toEqual(['/ask', '/knowledge'])
+    ).toEqual(['/ask'])
   })
 })

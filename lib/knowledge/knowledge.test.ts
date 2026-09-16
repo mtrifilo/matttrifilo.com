@@ -3,6 +3,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { openSourceRepos } from '@/content/open-source'
+import { MAX_TITLE_CHARS } from '@/lib/chat/progress'
 import {
   buildKnowledgeCorpus,
   estimateTokens,
@@ -376,9 +377,9 @@ describe('knowledge corpus structure', () => {
       expect(frontmatter, `${label} must not declare source`).not.toMatch(
         /^source:/m
       )
-      // The build enforces id === basename, which is what keeps
-      // /knowledge/<id> resolving; assert it here too so the reason is
-      // visible where the contract is described.
+      // The build enforces id === basename, so the id the model cites names
+      // the file on disk; assert it here too so the reason is visible where
+      // the contract is described.
       expect(frontmatter, `${label}: id must equal the file name`).toMatch(
         new RegExp(
           `^id:[ \\t]*['"]?${file.name.replace(/\.md$/, '')}['"]?[ \\t]*$`,
@@ -410,11 +411,10 @@ describe('knowledge corpus structure', () => {
     }
   })
 
-  test('ids are unique and each one is a page on this site', () => {
+  test('ids are unique, and a canonical is an absolute URL', () => {
     const ids = corpus.documents.map(d => d.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const document of corpus.documents) {
-      expect(document.url).toBe(`/knowledge/${document.id}`)
       if (document.canonical !== undefined) {
         expect(document.canonical.startsWith('https://')).toBe(true)
       }
@@ -506,9 +506,7 @@ describe('knowledge corpus stays in sync with its public sources', () => {
       expect(document, missingTwinMessage(slug)).toBeDefined()
       expect(document!.topic).toBe('blog')
       expect(document!.source).toBe('blog')
-      // The site page is /knowledge/<slug>; the post it was copied from is
-      // the canonical one, and that is the link the model should cite.
-      expect(document!.url).toBe(`/knowledge/${slug}`)
+      // The post it was copied from is the canonical one.
       expect(document!.canonical).toBe(`https://matttrifilo.com/blog/${slug}`)
       expect(document!.text).toBe(body.trim())
       // Frontmatter stripped: the post's own YAML must not be in the text.
@@ -628,7 +626,7 @@ describe('knowledge corpus build', () => {
     ).toThrow(/frontmatter line is not "key: value":\s+- career/)
   })
 
-  test('refuses two documents that would claim the same /knowledge URL', () => {
+  test('refuses two documents that would answer to the same id', () => {
     expect(() =>
       buildFixture([
         { topic: 'career', name: 'twin.md' },
@@ -772,9 +770,9 @@ describe('knowledge corpus build', () => {
   })
 
   test('an empty body outside the faq is an error, not a quiet deletion', () => {
-    // Returning null here would have removed the document from the index,
-    // /knowledge, generateStaticParams and the sitemap at once, exit 0,
-    // nothing printed — the exact failure the faq scoping exists to stop.
+    // Returning null here would take the document out of the index the
+    // model is shown, exit 0, nothing printed: the exact failure the faq
+    // scoping exists to stop.
     for (const body of ['', '   \n\n  \n', '<!-- only a note -->']) {
       expect(() =>
         buildFixture([{ topic: 'career', name: 'a-role.md', body }])
@@ -815,19 +813,45 @@ describe('knowledge corpus build', () => {
     }
   })
 
+  test('every title fits the progress view that shows it', () => {
+    // The browser drops a step whose title is longer than MAX_TITLE_CHARS,
+    // on the grounds that no index title is that long. A title that reached
+    // it would vanish from the list above the answer and take a document off
+    // the count, which is the same false claim in the other direction. Half
+    // the cap is the tripwire: a title anywhere near it is a mistake.
+    for (const document of corpus.documents) {
+      expect(
+        document.title.length,
+        `${document.id}: title is too long to disclose above an answer`
+      ).toBeLessThan(MAX_TITLE_CHARS / 2)
+    }
+  })
+
   test('the three largest documents fit in one turn', () => {
     // The gate that matters, and the reason it lives here rather than only
     // in `bun run knowledge:check`: CI runs lint, typecheck, `bun test`
     // and build — not the script. The per-document ceiling cannot promise
     // this on its own (three at the ceiling would be over budget), so the
     // real sum has to be asserted somewhere CI actually looks.
-    const largest = [...corpus.documents]
-      .sort((a, b) => b.tokenEstimate - a.tokenEstimate)
-      .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
+    const sorted = [...corpus.documents].sort(
+      (a, b) => b.tokenEstimate - a.tokenEstimate
+    )
+    const largest = sorted.slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
     const worstRead = largest.reduce((sum, d) => sum + d.tokenEstimate, 0)
     expect(
       worstRead,
       `the model could not read ${largest.map(d => d.id).join(', ')} in one answer; split the largest`
+    ).toBeLessThanOrEqual(KNOWLEDGE_READ_BUDGET.maxTokens)
+
+    // A model that reads one document twice is charged for it twice but is
+    // shown one row, so this is the sequence that could put a row on screen
+    // for a read the budget then refuses: the count above an answer would
+    // claim a document that was never opened. Two of the largest plus the
+    // next is the worst it can be.
+    const repeated = 2 * sorted[0].tokenEstimate + sorted[1].tokenEstimate
+    expect(
+      repeated,
+      `re-reading ${sorted[0].id} would exhaust the budget before ${sorted[1].id}; the progress count above an answer would name a document that was refused`
     ).toBeLessThanOrEqual(KNOWLEDGE_READ_BUDGET.maxTokens)
   })
 
@@ -889,10 +913,11 @@ describe('knowledge corpus build', () => {
 })
 
 describe('documents must survive being compiled as MDX', () => {
-  // /knowledge/[id] compiles every document with the blog's MDX pipeline,
-  // and every page on this site is prerendered — so one bad character in
-  // one document fails the build for the whole site. `{` does not even
-  // fail: it evaluates.
+  // A blog twin is byte-identical to the post /blog/[slug] compiles with the
+  // MDX pipeline, and every page on this site is prerendered, so one bad
+  // character in one twin fails the build for the whole site. `{` does not
+  // even fail: it evaluates. The rule covers every document so that one
+  // moved into blog/ later cannot carry a break in with it.
   const mdxFixture = (body: string) =>
     buildFixture([{ topic: 'career', name: 'a-role.md', body }])
 

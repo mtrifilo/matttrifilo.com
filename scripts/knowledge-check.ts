@@ -38,7 +38,7 @@ console.log(index.text)
 console.log('\n--- documents the model can fetch ---\n')
 for (const document of documents) {
   console.log(
-    `  ${document.url.padEnd(48)} ${document.topic.padEnd(12)} ~${document.tokenEstimate} tokens`
+    `  ${document.id.padEnd(48)} ${document.topic.padEnd(12)} ~${document.tokenEstimate} tokens`
   )
 }
 
@@ -46,7 +46,7 @@ for (const document of documents) {
 // is indistinguishable from a file that was never read. Say what is
 // missing, every run.
 if (unanswered.length > 0 || droppedDocuments.length > 0) {
-  console.log('\n--- dropped: unanswered, so neither published nor sent ---\n')
+  console.log('\n--- dropped: unanswered, so not sent to the model ---\n')
   for (const question of unanswered) {
     console.log(`  ${question.file}  ## ${question.heading}`)
   }

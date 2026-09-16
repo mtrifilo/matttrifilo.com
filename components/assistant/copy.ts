@@ -20,7 +20,7 @@ export const ASSISTANT_NAME = "Matt's Career Assistant"
 export const ASSISTANT_LABEL = 'AI assistant · answers about Matt Trifilo'
 
 export const ASSISTANT_INTRO =
-  "I'm an AI assistant for Matt Trifilo's site. Ask me about his projects, teams, or engineering leadership."
+  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work — email him if you want to talk."
 
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
@@ -55,17 +55,67 @@ export const INCOMPLETE_NOTICE =
   "The assistant couldn't finish that one. Try asking again."
 
 /**
- * The one error the UI writes itself. MTC-34 owns the limiter and will send
- * its own sentence, but a visitor who has just run out of questions is the one
- * visitor for whom the static pages beat the assistant, so the links matter
- * more than whatever prose arrives with the 429.
+ * The one error the UI writes itself. The route sends its own sentence with
+ * the 429, but a visitor who has just run out of questions is the one visitor
+ * for whom the static pages beat the assistant, so the links matter more than
+ * whatever prose arrives with it.
  */
 export const RATE_LIMIT_NOTICE = {
   lead: "You've reached the limit for now. Matt's ",
   resumeLabel: 'résumé',
-  between: ' and ',
-  knowledgeLabel: 'project pages',
-  after: ' are one click away, or ',
+  between: ' is one click away, or ',
   emailLabel: 'email him directly',
   end: '.',
 } as const
+
+/*
+ * The in-progress view: what the assistant says it is doing while the
+ * visitor waits, and what it says it did once the answer is there (MTC-42).
+ *
+ * These are Matt's to change, like every other line in this file. They are
+ * deliberately plain: the visitor is reading them for ten to twenty seconds
+ * and a clever phrase wears out fast. Nothing here names a model, a tool or
+ * a step count the run did not actually reach.
+ */
+
+/** Before the first read: the model is still choosing what to open. */
+export const PROGRESS_THINKING = 'Thinking…'
+
+/**
+ * Header while documents are being read or the answer is being written.
+ * Rows underneath name the current step; repeating that label here was
+ * the duplication Cursor avoids (MTC-42 preview notes).
+ */
+export const PROGRESS_WORKING = 'Working…'
+
+/**
+ * One line per document, titled from the server's index, never the model.
+ *
+ * `announcementFor` in lib/chat/answer.ts speaks the same two things to a
+ * screen reader, without the ellipsis, from its own literals: that module is
+ * where the announcement strings live and it cannot import this one. Change
+ * the verb here and change it there.
+ */
+export const progressReading = (title: string) => `Reading ${title}…`
+
+/** The last step: the reading is done and the answer is being written. */
+export const PROGRESS_WRITING = 'Writing answer…'
+
+/**
+ * The header line of a run that ended without an answer. It replaces the
+ * status the header would otherwise show; the step that was in flight keeps
+ * its own label and changes only its icon. The timer beside it is frozen,
+ * and no count is claimed.
+ */
+export const PROGRESS_STOPPED = 'Stopped'
+
+/** The collapsed line above a finished answer. Only ever shown truthfully. */
+export const progressSummary = (count: number, seconds: number) =>
+  `Read ${count} ${count === 1 ? 'document' : 'documents'} in ${seconds}s`
+
+/**
+ * The header above the steps of a run that finished without writing an
+ * answer. It names the disclosure without claiming that the reading produced
+ * anything, which "Read 3 documents in 14s" over an empty reply would.
+ */
+export const PROGRESS_UNFINISHED = 'Steps taken'
