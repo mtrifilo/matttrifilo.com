@@ -96,3 +96,10 @@ export const PROGRESS_STOPPED = 'Stopped'
 /** The collapsed line above a finished answer. Only ever shown truthfully. */
 export const progressSummary = (count: number, seconds: number) =>
   `Read ${count} ${count === 1 ? 'document' : 'documents'} in ${seconds}s`
+
+/**
+ * The header above the steps of a run that finished without writing an
+ * answer. It names the disclosure without claiming that the reading produced
+ * anything, which "Read 3 documents in 14s" over an empty reply would.
+ */
+export const PROGRESS_UNFINISHED = 'Steps taken'
