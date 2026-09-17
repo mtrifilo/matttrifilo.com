@@ -6,6 +6,7 @@ import {
   progressRows,
   progressSeconds,
   progressStatus,
+  progressTimerPlacement,
   progressTotals,
   toProgressView,
   type ChatProgressPhase,
@@ -430,5 +431,17 @@ describe('progressSeconds', () => {
 
   test('a run that has ended keeps the time it took', () => {
     expect(progressSeconds(false, 12_400)).toBe(12)
+  })
+})
+
+describe('progressTimerPlacement', () => {
+  test('the clock sits on the header until a step exists', () => {
+    expect(progressTimerPlacement([])).toBe('header')
+  })
+
+  test('once a document is being read, the clock sits on that row', () => {
+    expect(
+      progressTimerPlacement(progressRows('reading', reading('Résumé')))
+    ).toBe('step')
   })
 })

@@ -1,7 +1,7 @@
 ---
 id: owned-systems-and-operations
 title: What the Email Reliability team runs, and how it runs it
-summary: The systems Matt's team owns, the scale they run at, the objectives they hold, and how on-call and incident response actually work.
+summary: The systems Matt's team owns, the scale they run at, on-call, and how the team ships to production.
 tags: [operations, on-call, sre, architecture, ownership, incident-response]
 updated: 2026-09-15
 ---
@@ -94,6 +94,14 @@ alone, which is the intended outcome.
   work.
 - **Routine defects and short-lived slowdowns** are caught by the rotation
   and fixed the same day.
+
+## How the team ships
+
+In 2026 the team moved its nine microservices (Java/Micronaut, Python, Go)
+off the weekly release train onto independent, gated production deploys,
+finishing in nine weeks, four months ahead of schedule. Any engineer can
+ship to production once end-to-end, contract, load, and manual readiness
+tests pass.
 
 ## Where the team charter is out of date
 

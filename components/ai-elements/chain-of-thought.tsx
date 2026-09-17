@@ -28,7 +28,9 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   and the icon has to be able to move while the run does. It also takes a
  *   `timer` slot, rendered right-aligned and `aria-hidden`: the elapsed
  *   seconds change every second, and a screen reader that re-read them would
- *   drown out the steps. It is still a real `CollapsibleTrigger`, so
+ *   drown out the steps. `ChainOfThoughtStep` takes the same slot so the
+ *   clock can sit on the active row once documents are being read, rather
+ *   than on a second "Working" header. It is still a real `CollapsibleTrigger`, so
  *   `aria-expanded` and keyboard behaviour come from Radix.
  * - `ChainOfThoughtStep` has a fourth status, `stopped`, for the step that was
  *   in flight when a run ended without finishing. It is the state that keeps
@@ -157,6 +159,8 @@ export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
   label: ReactNode;
   description?: ReactNode;
   status?: "complete" | "active" | "pending" | "stopped";
+  /** Right-aligned and hidden from assistive tech, same as the header timer. */
+  timer?: ReactNode;
 };
 
 export const ChainOfThoughtStep = memo(
@@ -166,6 +170,7 @@ export const ChainOfThoughtStep = memo(
     label,
     description,
     status = "complete",
+    timer,
     children,
     ...props
   }: ChainOfThoughtStepProps) => {
@@ -196,12 +201,19 @@ export const ChainOfThoughtStep = memo(
           <Icon className={cn("size-4", iconStyles[status])} />
           <div className="-mx-px absolute top-7 bottom-0 left-1/2 w-px bg-border" />
         </div>
-        <div className="flex-1 space-y-2 overflow-hidden">
-          <div>{label}</div>
-          {description && (
-            <div className="text-muted-foreground text-xs">{description}</div>
+        <div className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div>{label}</div>
+            {description && (
+              <div className="text-muted-foreground text-xs">{description}</div>
+            )}
+            {children}
+          </div>
+          {timer !== undefined && (
+            <span aria-hidden="true" className="shrink-0 tabular-nums">
+              {timer}
+            </span>
           )}
-          {children}
         </div>
       </div>
     );

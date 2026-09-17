@@ -106,26 +106,24 @@ export interface BoundedFetchOptions {
  * byte.
  *
  * This number is a hypothesis, and it is worth saying which one. It was drawn
- * from the health route's one-word, non-streaming calls: healthy ones took 1
- * to 14 s end to end on this deployment while stalls took 80 to 110 s, so
- * 20 s sits above every healthy call measured there and at a quarter of the
- * fastest stall. Nothing has yet measured the thing it is applied to — a chat
- * step carrying up to CHAT_MAX_INPUT_TOKENS of prompt plus a thinking phase
- * that emits no bytes while it runs, which can plausibly be quiet for longer
- * than a one-word call ever is. `msSinceStart` on the `[chat] step` line is
- * not that measurement — it is cumulative elapsed time to the *end* of a
- * step, generation and tool execution included. The measurement is
- * `vertexFirstByteMs`: this wrapper times each attempt from its request to
- * its first body byte and reports the largest one on the `[chat]` completion
- * line and in the health route's JSON. Both this bound and
- * VERTEX_LAST_ATTEMPT_TIMEOUT_MS are hypotheses to be checked against that
- * number on preview, and until they are, neither is evidence.
+ * from the health route's one-word, non-streaming calls at thinking `low`:
+ * healthy ones took 1 to 14 s end to end on this deployment while stalls
+ * took 80 to 110 s. Chat steps now default to thinking `medium`, and
+ * thought tokens are not streamed (`sendReasoning: false`), so the
+ * connection can stay quiet through that phase. 30 s sits above the
+ * one-word measurements and still leaves the last attempt the rest of
+ * the per-call budget. Nothing has yet measured a medium-thinking chat
+ * step's time to first byte — `vertexFirstByteMs` on preview is what
+ * would, and until it does both this bound and
+ * VERTEX_LAST_ATTEMPT_TIMEOUT_MS are hypotheses. `msSinceStart` on the
+ * `[chat] step` line is not that measurement: it is elapsed time to the
+ * *end* of a step, generation included.
  *
  * Because it is a guess, it bounds only the attempts that have a retry behind
  * them. A slow-but-healthy step that trips it is retried, not failed, and the
  * last attempt below is given room to simply be slow.
  */
-export const VERTEX_FIRST_BYTE_TIMEOUT_MS = 20_000
+export const VERTEX_FIRST_BYTE_TIMEOUT_MS = 30_000
 
 /** The platform limit every number here is carved out of. */
 export const VERCEL_FUNCTION_LIMIT_MS = 300_000
@@ -147,20 +145,21 @@ export const VERTEX_REQUEST_WAIT_BUDGET_MS = 270_000
  * and its retry loop rethrows those untouched.
  *
  * Two, not three, and the arithmetic under VERTEX_LAST_ATTEMPT_TIMEOUT_MS is
- * why: a third fast attempt would spend 20.5 s of every model call's budget,
+ * why: a third fast attempt would spend 30.5 s of every model call's budget,
  * and that budget is what the last attempt's ceiling is made of. One retry is
  * what buys back a connection that stalled on opening; a second stall in a
  * row is a deployment having a bad minute, and against that a long final
- * attempt is worth more than another 20 s probe.
+ * attempt is worth more than another 30 s probe.
  */
 export const VERTEX_MAX_ATTEMPTS = 2
 
 /**
- * How long the LAST attempt may take to send its first byte. Much larger,
- * deliberately: at this point there is no retry behind it, so a deadline that
- * fires is the visitor's failed answer. The wrapper's job flips from "cut it
- * short and try again" to "let it finish if it possibly can", and a slow call
- * degrades to slow rather than to failed-and-billed-twice.
+ * How long the LAST attempt may take to send its first byte. Longer than
+ * the probe, and it is the remainder of the per-call budget: at this point
+ * there is no retry behind it, so a deadline that fires is the visitor's
+ * failed answer. The wrapper's job flips from "cut it short and try again"
+ * to "let it finish if it possibly can", and a slow call degrades to slow
+ * rather than to failed-and-billed-twice.
  *
  * Arithmetic, down from the function limit:
  *
@@ -168,21 +167,21 @@ export const VERTEX_MAX_ATTEMPTS = 2
  *   model calls / request       4      (CHAT_MAX_STEPS, lib/chat/validate.ts)
  *   per model call         67_500 ms
  *   spent before the last attempt:
- *     first attempt        20_000 ms   (VERTEX_FIRST_BYTE_TIMEOUT_MS)
+ *     first attempt        30_000 ms   (VERTEX_FIRST_BYTE_TIMEOUT_MS)
  *     backoff                 500 ms
- *   left for the last      47_000 ms
+ *   left for the last      37_000 ms
  *
- * 45 s is that, rounded down for margin — and like the fast bound above it is
+ * 37 s is that, not rounded — and like the fast bound above it is
  * arithmetic over a hypothesis, not a measurement: `vertexFirstByteMs` on
  * preview is what should confirm it or move it.
  *
  * The worst case that arithmetic reaches — every step stalling once, then its
- * last attempt running to the ceiling — is 4 x (20 + 0.5 + 45) = 262 s. Read
- * it for what it is: 262 s of *waiting for first bytes*, containing not one
+ * last attempt running to the ceiling — is 4 x (30 + 0.5 + 37) = 270 s. Read
+ * it for what it is: 270 s of *waiting for first bytes*, containing not one
  * generated token. What the reserve outside the waiting budget has to cover
  * is everything that happens after each first byte — the streaming of up to
  * CHAT_MAX_STEPS answers, the tool execution between the steps, and the token
- * exchange at the front — none of which this wrapper bounds. So 262 s is a
+ * exchange at the front — none of which this wrapper bounds. So 270 s is a
  * ceiling on the wrapper's own waiting, not on the request; a request that
  * spends it and then streams is over the limit, which is the real reason the
  * attempt count is small. bounded-fetch.test.ts pins the waiting figure
@@ -192,7 +191,7 @@ export const VERTEX_MAX_ATTEMPTS = 2
  * A body that cannot be replayed gets one attempt, and that attempt is the
  * last one, so it is given this ceiling too.
  */
-export const VERTEX_LAST_ATTEMPT_TIMEOUT_MS = 45_000
+export const VERTEX_LAST_ATTEMPT_TIMEOUT_MS = 37_000
 
 /**
  * Backoff between attempts. Short on purpose: the answer's budget is being

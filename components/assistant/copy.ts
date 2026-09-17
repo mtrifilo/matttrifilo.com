@@ -82,13 +82,6 @@ export const RATE_LIMIT_NOTICE = {
 export const PROGRESS_THINKING = 'Thinking…'
 
 /**
- * Header while documents are being read or the answer is being written.
- * Rows underneath name the current step; repeating that label here was
- * the duplication Cursor avoids (MTC-42 preview notes).
- */
-export const PROGRESS_WORKING = 'Working…'
-
-/**
  * One line per document, titled from the server's index, never the model.
  *
  * `announcementFor` in lib/chat/answer.ts speaks the same two things to a

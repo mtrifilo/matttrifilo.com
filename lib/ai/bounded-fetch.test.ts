@@ -670,9 +670,9 @@ describe('the constants the 300 s function limit allows', () => {
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeLessThan(80_000)
   })
 
-  test('the last attempt is given materially more room than the earlier ones', () => {
+  test('the last attempt is given the remainder of the per-call budget', () => {
     expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(
-      VERTEX_FIRST_BYTE_TIMEOUT_MS * 2
+      VERTEX_FIRST_BYTE_TIMEOUT_MS
     )
   })
 })

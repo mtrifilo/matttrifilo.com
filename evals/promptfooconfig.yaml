@@ -1,0 +1,54 @@
+# Matt's Career Assistant eval suites (MTC-32).
+#
+# The target is ./provider.ts, which calls the chat route's own handler in
+# process. There is no server: the suites exercise the real policy, the real
+# read budget and the real knowledge corpus, and the answers under test come
+# from the same model call the route itself makes. The grader configured below
+# adds calls of its own, three per rubric-bearing test.
+#
+# Deterministic assertions are the gate. `llm-rubric` appears only where a
+# question needs judgement, and each of those is graded three times inside an
+# assert-set at `threshold: 0.6`, so one stray grade cannot redden a merge.
+# 0.6 and not 0.67 because an assert-set scores on the weighted mean of its
+# members: two of three average 0.666..., which 0.67 would reject.
+#
+# Run it: `bun run evals` (all suites) or `bun run evals:smoke` (three tests a
+# suite). See docs/career-assistant-operations.md for credentials and cost.
+
+description: "Matt's Career Assistant: golden, refusals, injection, groundedness"
+
+providers:
+  - id: file://provider.ts
+    label: chat-route
+
+# The question travels as the rendered prompt; prior turns travel in
+# `vars.history`, which the provider puts in the request body the way a
+# browser would.
+prompts:
+  - '{{question}}'
+
+defaultTest:
+  options:
+    # The grader for llm-rubric. Gemini on Vertex through Application Default
+    # Credentials, the same credentials the provider uses, so a run needs one
+    # identity and not two.
+    #
+    # The model id is written out rather than read from GEMINI_MODEL because
+    # promptfoo leaves an unset `{{ env.X }}` in place as literal text, which
+    # would become a nonsense model id. evals/config.test.ts pins it to
+    # DEFAULT_GEMINI_MODEL so the two cannot drift.
+    #
+    # Region `global`: Gemini 3.x is not served from us-central1, which is
+    # promptfoo's default.
+    provider:
+      id: vertex:gemini-3.8-flash
+      config:
+        region: global
+        generationConfig:
+          temperature: 0
+
+tests:
+  - file://suites/golden.yaml
+  - file://suites/refusals.yaml
+  - file://suites/injection.yaml
+  - file://suites/groundedness.yaml

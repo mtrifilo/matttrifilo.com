@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test'
 import {
   MATT_EMAIL,
   PROGRESS_THINKING,
-  PROGRESS_WORKING,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   progressReading,
@@ -52,8 +51,7 @@ describe('the progress copy', () => {
     expect(PROGRESS_WRITING).toBe(`${'Writing answer'}…`)
   })
 
-  test('the in-flight header is Working, not a repeat of the active row', () => {
-    expect(PROGRESS_WORKING).toBe('Working…')
+  test('the wait before a first read is Thinking', () => {
     expect(PROGRESS_THINKING).toBe('Thinking…')
   })
 })

@@ -50,3 +50,7 @@ next-env.d.ts
 
 # Claude Code agent worktrees (nested checkouts, never part of the site)
 .claude/worktrees/
+
+# Eval run output (MTC-32). The suites are the reviewable artefact; a run's
+# results are per-commit and land on the workflow's `evals` artifact instead.
+evals/out/
