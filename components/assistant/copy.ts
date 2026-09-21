@@ -34,9 +34,12 @@ export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
  * came from the homepage meets a different part of the row at /ask only
  * because the ticker starts it at a different offset.
  *
- * Every question here has to draw a sourced answer rather than a decline.
- * evals/suites/golden.yaml is where that is proven, one golden per question
- * subject, so adding a question means adding its golden.
+ * Every question here has to draw a sourced answer rather than a decline,
+ * and evals/suites/golden.yaml is the only place that is measured. Its
+ * coverage of this pool is partial: the second tranche has a golden each,
+ * most of the first tranche is covered by a golden on the same subject, and
+ * a handful are not covered at all. Nothing enforces the correspondence, so
+ * a question added here needs its golden added by hand.
  *
  * The cap in copy.test.ts is the pill's constraint, not a style rule: the
  * ticker renders each question on one line, so a longer one would widen the

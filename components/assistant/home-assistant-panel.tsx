@@ -8,6 +8,7 @@ import { AssistantHeader } from './assistant-header'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
 import { handOffQuestion } from './pending-question'
 import { StarterTicker } from './starter-ticker'
+import { HOME_START_AT } from './ticker-geometry'
 
 /**
  * The assistant's doorway on the homepage (MTC-33).
@@ -44,7 +45,7 @@ export function HomeAssistantPanel() {
         {ASSISTANT_NAME}
       </h2>
       <p className="leading-relaxed text-muted-foreground">{ASSISTANT_INTRO}</p>
-      <StarterTicker onPick={start} />
+      <StarterTicker onPick={start} startAt={HOME_START_AT} />
       <AssistantComposer
         onSubmit={start}
         onValueChange={setInput}

@@ -9,9 +9,14 @@ import { useCallback } from "react";
  * Vercel AI Elements `suggestion`, reshaped for this site (MTC-33).
  *
  * The registry version puts the pills in a horizontally scrolling ScrollArea.
- * There are only ever three starter questions and the design wraps them onto
- * as many lines as they need, so the scroll container (and its Radix
- * dependency) buys nothing and hides pills on narrow screens.
+ * Its one caller is the starter ticker, which owns its own scroll box, its
+ * own edge fades and its own duplicate row, so the registry's container (and
+ * its Radix dependency) buys nothing here. `Suggestions` is kept only to
+ * match the registry component it came from; nothing renders it.
+ *
+ * The pill wraps and caps its width by default. The ticker overrides both,
+ * because a moving row that reflowed would change speed as it went; keep the
+ * defaults overridable.
  */
 
 export type SuggestionsProps = ComponentProps<"div">;

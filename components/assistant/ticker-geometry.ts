@@ -27,12 +27,30 @@ export const TICKER_SPEED_PX_PER_SECOND = 35
 export const TOUCH_PAUSE_MS = 4000
 
 /**
- * Where /ask opens the loop, as a fraction of the pool.
+ * How many times the pool is laid down in the track.
  *
- * The homepage starts at the top of the pool. A visitor who submits from
- * there lands on /ask a second later, and a row that opened on the same
- * three pills would look like it had not moved.
+ * It is here rather than in the component because the keyframe encodes the
+ * same number: the track travels `100 / TICKER_COPIES` percent of its own
+ * width, which equals one copy only while these two agree. ticker-css.test.ts
+ * fails if the stylesheet and this constant ever drift apart.
  */
+export const TICKER_COPIES = 2
+
+/** The keyframe this arithmetic describes. Must match app/globals.css. */
+export const TICKER_ANIMATION_NAME = 'starter-ticker'
+
+/** The keyframe's starting transform, which is why every conversion inverts. */
+export const TICKER_KEYFRAME_FROM = `translateX(-${100 / TICKER_COPIES}%)`
+
+/**
+ * Where each surface opens the loop, as a fraction of the pool.
+ *
+ * The homepage starts at the top. A visitor who submits from there lands on
+ * /ask a second later, and a row that opened on the same three pills would
+ * look like it had not moved. Both are named so that changing one is an edit
+ * in the same place as the other.
+ */
+export const HOME_START_AT = 0
 export const ASK_START_AT = 1 / 3
 
 /**
@@ -49,11 +67,12 @@ export function loopSeconds(copyWidth: number): number | null {
  * The animation progress that opens the loop `startAt` of the way into the
  * pool.
  *
- * The keyframe runs from `translateX(-50%)` to `translateX(0)`, so the
+ * The keyframe runs from TICKER_KEYFRAME_FROM to `translateX(0)`, so the
  * content at the left edge is *earlier* in the pool as progress grows: a
  * progress of p shows the pool from (1 - p) of the way in. Inverting here is
  * what lets the surfaces name the thing they care about, which is how far
- * into the questions their row opens.
+ * into the questions their row opens. Reverse that keyframe and every
+ * conversion below is mirrored, which is why ticker-css.test.ts pins it.
  */
 export function offsetForStartAt(startAt: number): number {
   return wrapFraction(1 - startAt)

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type CSSProperties,
   type FocusEvent,
   type Ref,
@@ -17,18 +18,20 @@ import {
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  TICKER_ANIMATION_NAME,
+  TICKER_COPIES,
   TOUCH_PAUSE_MS,
 } from './ticker-geometry'
 
 /**
  * The starter questions, drifting (MTC-39).
  *
- * Three static pills could only ever show three questions, and the corpus
- * answers twenty-seven. The row shows the whole pool by moving: the pool is
- * rendered once as real buttons and once more as an inert copy behind it, and
- * a CSS keyframe slides the track by exactly one copy's width, so the frame
- * that ends the loop is the frame that starts it. Nothing here runs per
- * frame; the browser owns the motion, and app/globals.css owns the rules.
+ * Three static pills could only ever show three of the questions the corpus
+ * answers. The row shows the whole pool by moving: the pool is rendered once
+ * as real buttons and once more as an inert copy behind it, and a CSS
+ * keyframe slides the track by exactly one copy's width, so the frame that
+ * ends the loop is the frame that starts it. Nothing here runs per frame; the
+ * browser owns the motion, and app/globals.css owns the rules.
  *
  * Two things are worth reading twice.
  *
@@ -74,6 +77,10 @@ export function StarterTicker({
   // handling computes is in these pixels, so it is read, never guessed.
   const copyWidthRef = useRef(0)
   const resumeRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Computed once. After the first paint the offset belongs to the blur
+  // handler, and a re-render that wrote this value back would snap the row
+  // to where it opened.
+  const [openingOffset] = useState(() => offsetForStartAt(startAt))
 
   // One loop is one copy's width, so the duration is what holds the speed
   // steady whatever the pool says. The width changes when the font arrives
@@ -86,9 +93,25 @@ export function StarterTicker({
     const measure = () => {
       const width = copy.getBoundingClientRect().width
       const seconds = loopSeconds(width)
-      if (seconds === null) return
+      if (seconds === null || width === copyWidthRef.current) return
       copyWidthRef.current = width
+      // A running animation keeps its elapsed time when the duration
+      // changes, not its progress, so a later measurement (a font arriving,
+      // a zoom) would jump the row. Restarting it at the progress it was
+      // already at is what keeps the width a property of the pool and not of
+      // where the loop happens to be. A frozen track is left alone: the pill
+      // holding focus owns the position until it is given back.
+      const resumeAt = animationProgress(track)
+      const frozen = track.dataset.frozen === 'true'
+      if (!frozen) track.dataset.frozen = 'true'
+      // Read to flush the style change, so removing it below starts a new
+      // animation rather than amending the running one.
+      void track.offsetWidth
       track.style.setProperty('--ticker-duration', `${seconds}s`)
+      if (resumeAt !== null) {
+        track.style.setProperty('--ticker-offset', String(resumeAt))
+      }
+      if (!frozen) delete track.dataset.frozen
     }
     const observer = new ResizeObserver(measure)
     observer.observe(copy)
@@ -117,6 +140,12 @@ export function StarterTicker({
       track.dataset.frozen = 'true'
       viewport.scrollLeft = scrollLeftForProgress(progress, copyWidth)
     }
+
+    // A pointer press focuses the pill before the click completes. Moving
+    // the row now would take the pill out from under the cursor and the
+    // click would be lost, and a mouse is already holding the row still by
+    // hovering it.
+    if (!pill.matches(':focus-visible')) return
 
     viewport.scrollLeft = revealScrollLeft({
       scrollLeft: viewport.scrollLeft,
@@ -155,7 +184,7 @@ export function StarterTicker({
     track.dataset.touched = 'true'
     clearTimeout(resumeRef.current)
     resumeRef.current = setTimeout(() => {
-      track.dataset.touched = 'false'
+      delete track.dataset.touched
     }, TOUCH_PAUSE_MS)
   }, [])
 
@@ -175,32 +204,46 @@ export function StarterTicker({
       <div
         className="starter-ticker-track"
         ref={trackRef}
-        style={
-          { '--ticker-offset': offsetForStartAt(startAt) } as CSSProperties
-        }
+        style={{ '--ticker-offset': openingOffset } as CSSProperties}
       >
-        <QuestionRow onPick={onPick} ref={copyRef} />
-        <QuestionRow />
+        {Array.from({ length: TICKER_COPIES }, (_, index) => (
+          // Only the first copy is the real one. The rest exist so the loop
+          // has somewhere to come from, and the keyframe's distance is one
+          // copy because there are exactly TICKER_COPIES of them.
+          <QuestionRow
+            decorative={index > 0}
+            key={index}
+            onPick={onPick}
+            ref={index === 0 ? copyRef : undefined}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
 /**
- * One pass of the pool. Called without `onPick` it is the trailing copy: no
- * handler, nothing focusable, nothing announced.
+ * One pass of the pool.
+ *
+ * `decorative` is one word for three facts that have to agree: a trailing
+ * copy is not announced, not focusable, and not there at all under reduced
+ * motion, where nothing loops. Splitting them is how a copy ends up half
+ * hidden, which reads to a screen reader as the pool said twice.
  */
 function QuestionRow({
+  decorative,
   onPick,
   ref,
 }: {
-  onPick?: (question: string) => void
+  decorative: boolean
+  onPick: (question: string) => void
   ref?: Ref<HTMLDivElement>
 }) {
-  const decorative = onPick === undefined
   return (
     <div
       aria-hidden={decorative || undefined}
+      // The trailing gap equals the gap between pills, so the seam where the
+      // loop wraps is spaced like every other join in the row.
       className="starter-ticker-copy flex shrink-0 items-start gap-2 pr-2"
       ref={ref}
     >
@@ -211,7 +254,7 @@ function QuestionRow({
           className="max-w-none whitespace-nowrap"
           inert={decorative || undefined}
           key={question}
-          onClick={onPick}
+          onClick={decorative ? undefined : onPick}
           suggestion={question}
           tabIndex={decorative ? -1 : undefined}
         />
@@ -226,10 +269,17 @@ function QuestionRow({
  * has not started or a visitor who asked for no motion.
  */
 function animationProgress(track: Element): number | null {
-  const progress = track
-    .getAnimations()[0]
-    ?.effect?.getComputedTiming().progress
+  // By name, not by position: a transition added to this element later would
+  // sort ahead of the animation and hand back an unrelated progress.
+  const loop = track
+    .getAnimations()
+    .find(animation => animationNameOf(animation) === TICKER_ANIMATION_NAME)
+  const progress = loop?.effect?.getComputedTiming().progress
   return typeof progress === 'number' ? progress : null
+}
+
+function animationNameOf(animation: Animation): string | undefined {
+  return (animation as { animationName?: string }).animationName
 }
 
 /** The edge fade, read from the stylesheet so one number defines it. */

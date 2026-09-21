@@ -183,11 +183,16 @@
  *
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
- * one copy, so the row drifts at one speed whatever the pool says; the
- * fallback here is that width for the pool as it stands, so the first frames
- * are not wrong while the measurement lands. --ticker-offset is where in the
- * loop an instance opens, as a fraction, which is how the homepage and /ask
- * avoid showing the same pills at the same moment.
+ * one copy, so the row drifts at one speed whatever the pool says; the value
+ * declared here is that width for the pool as it stands, divided by the
+ * speed in ticker-geometry.ts, so the first frames are not wrong while the
+ * measurement lands. --ticker-offset is where in the loop an instance opens,
+ * as a fraction, which is how the homepage and /ask avoid showing the same
+ * pills at the same moment.
+ *
+ * The distance here, the copy count in starter-ticker.tsx and the
+ * conversions in ticker-geometry.ts are one decision written in three
+ * languages. lib/ticker-css.test.ts is what keeps them the same decision.
  */
 @keyframes starter-ticker {
   from {
@@ -199,10 +204,18 @@
 }
 
 .starter-ticker {
+  /* Read back by starter-ticker.tsx to place a focused pill clear of the
+     gradient, so it belongs on this element and has to stay in pixels. */
   --ticker-fade: 56px;
+  /*
+   * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
+   * a box that can still be scrolled programmatically, and scrollLeft is how
+   * a focused pill is brought into view once the track stops moving.
+   */
   overflow: hidden;
-  /* Unprefixed only; the optimiser adds -webkit-mask-image (see the nav
-     rule below for why a hand-written prefix is a hazard). */
+  /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
+     blur-on-scroll note in this file explains why a hand-written prefix is
+     a hazard, and lib/globals-css.test.ts is the guard. */
   mask-image: linear-gradient(
     to right,
     transparent 0,
@@ -224,10 +237,11 @@
   position: relative;
   display: flex;
   width: max-content;
-  animation: starter-ticker var(--ticker-duration, 340s) linear infinite;
-  animation-delay: calc(
-    var(--ticker-offset, 0) * var(--ticker-duration, 340s) * -1
-  );
+  /* Stated once; the component overrides it inline from the measurement. */
+  --ticker-duration: 340s;
+  --ticker-offset: 0;
+  animation: starter-ticker var(--ticker-duration) linear infinite;
+  animation-delay: calc(var(--ticker-offset) * var(--ticker-duration) * -1);
 }
 
 /* A pill that is being read, or reached for, holds still. */
