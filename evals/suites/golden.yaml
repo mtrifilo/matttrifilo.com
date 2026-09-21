@@ -2974,3 +2974,922 @@
           value: *r74
         - type: llm-rubric
           value: *r74
+
+# --- begin MTC-53: one golden per career document added 2026-09-21 ---
+#
+# Kept as its own delimited block so a sibling branch appending here rebases
+# without a conflict in the middle of a test.
+#
+# Each rubric names facts its own document states and forbids an inferred
+# characterisation presented as documented, because the corpus is the only
+# thing between a hiring manager's question and a confident invention.
+#
+# `mtc53: true` marks the block so it can be run alone with
+# `--filter-metadata mtc53=true`. The suites are a local command rather than
+# a CI step, so a block added in one go is the unit that gets run in one go.
+
+- description: 'golden: the AI email engagement summary'
+  vars:
+    question: How did Matt build the AI email engagement summary feature?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [ai-email-engagement-summary]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - proof of concept
+        - Vertex
+        - Gemini
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k33 >-
+            The answer says Matt proposed the feature and built it, and names
+            at least two documented facts about how: a proof of concept in
+            about one week, a production beta about five weeks from build
+            kickoff, the Gemini on Vertex AI and RAG stack, or the Promptfoo
+            eval suite that gates model changes. It stays in the third person
+            and does not present an inferred characterisation as something
+            the documents state.
+        - type: llm-rubric
+          value: *k33
+        - type: llm-rubric
+          value: *k33
+
+- description: 'golden: peak sending season track record'
+  vars:
+    question: What is Matt's track record during peak sending seasons?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [black-friday-sending-record]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Black Friday
+        - Cyber Monday
+        - peak
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k34 >-
+            The answer says Matt owned Black Friday and Cyber Monday
+            readiness for consecutive seasons with no major user-impacting
+            incidents, and names at least one documented specific such as the
+            2019 resilience library, the 2022 engagement-tracking hardening,
+            or the scale-up and deploy-freeze ritual. It does not claim a
+            season would have failed without a given change, which the
+            documents explicitly decline to claim.
+        - type: llm-rubric
+          value: *k34
+        - type: llm-rubric
+          value: *k34
+
+- description: 'golden: verifying a new API against the old one'
+  vars:
+    question: How did Matt verify a new API matched the old one before customers used it?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [contacts-api-and-shadow-comparison]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - shadow
+        - compar
+        - diff
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k35 >-
+            The answer describes the shadow-comparison approach on the
+            Contacts API: the legacy path kept serving the real response
+            while the new API was called alongside it and the two were
+            compared, without affecting the customer-facing result, and the
+            diffs found real fidelity bugs before any customer saw the new
+            path. It does not present an inferred characterisation as
+            something the documents state.
+        - type: llm-rubric
+          value: *k35
+        - type: llm-rubric
+          value: *k35
+
+- description: 'golden: deliverability protections he built'
+  vars:
+    question: What has Matt built to protect email deliverability?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [deliverability-and-sender-identity]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - tracking domain
+        - DKIM
+        - authenticat
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k36 >-
+            The answer names at least two documented deliverability
+            mechanisms Matt built, drawn from tracking-domain rotation and
+            warm-up, engagement-tracking hardening, send-time suppression of
+            spam-trap and bounced addresses, or sender-authentication
+            enforcement in the builder. It does not present an inferred
+            characterisation as something the documents state, and it does
+            not claim a measured deliverability improvement, which the
+            documents say was never measured.
+        - type: llm-rubric
+          value: *k36
+        - type: llm-rubric
+          value: *k36
+
+- description: 'golden: how he treats documentation'
+  vars:
+    question: How does Matt approach documentation and runbooks?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [documentation-and-knowledge-sharing]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - runbook
+        - troubleshoot
+        - tribal
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k37 >-
+            The answer says Matt writes the fix down when he finds a gap
+            rather than leaving it as tribal knowledge, and names at least
+            one documented instance such as the monolith troubleshooting
+            page, the front-end interview content, the compliance service
+            README, or the data-pipeline runbook and walkthrough video. It
+            does not present an inferred characterisation as something the
+            documents state.
+        - type: llm-rubric
+          value: *k37
+        - type: llm-rubric
+          value: *k37
+
+- description: 'golden: his role on the email builder replacement'
+  vars:
+    question: What was Matt's role in replacing the email builder?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [email-builder-replacement]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - contribut
+        - builder
+        - 108
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k38 >-
+            The answer says Matt contributed to the email builder replacement
+            rather than leading it, which is his own stated correction, and
+            names documented substance such as his 108 pull requests, the
+            content-risk and anti-spam compliance gates, or the file-upload
+            and tag-applying-link capabilities. It does not upgrade his role
+            to leader of the programme.
+        - type: llm-rubric
+          value: *k38
+        - type: llm-rubric
+          value: *k38
+
+- description: 'golden: building the email services lower environments'
+  vars:
+    question: How did the email services get real lower environments?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [email-lower-environments-and-ci]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - staging
+        - integration
+        - environment
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k39 >-
+            The answer says several email services had no real sandbox,
+            integration, or staging environments and that Matt built them
+            service by service along with their CI, and names at least one
+            documented specific such as the content-risk and spam-scoring
+            services, the compliance service cron migration, or the fleet-wide
+            CI fixes. It does not present an inferred characterisation as
+            something the documents state.
+        - type: llm-rubric
+          value: *k39
+        - type: llm-rubric
+          value: *k39
+
+- description: 'golden: writing business cases for engineering work'
+  vars:
+    question: Has Matt written business cases for engineering work?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [email-platform-business-case]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - business case
+        - leadership
+        - one-pager
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k40 >-
+            The answer says Matt wrote business proposals for the email
+            platform, including paired engineering and executive versions
+            delivered to senior leadership, and that he taught himself
+            business-case writing in 2026. It does not state the proposal's
+            contents, figures, or phasing, because the document says those
+            are internal and does not contain them.
+        - type: llm-rubric
+          value: *k40
+        - type: llm-rubric
+          value: *k40
+
+- description: 'golden: stabilising the mailbox sync integration'
+  vars:
+    question: What did Matt do about the email sync integration breaking?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [email-sync-and-analytics]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - watch
+        - sync
+        - expir
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k41 >-
+            The answer says mailbox sync depended on provider watch
+            subscriptions that expired silently, and names what Matt added:
+            a second independent refresh mechanism alongside the scheduled
+            job, and a visible watch-expired status so users could see and
+            act. It reflects the document's own limit, that the stabilisation
+            target was never measured, rather than claiming a proven outcome.
+        - type: llm-rubric
+          value: *k41
+        - type: llm-rubric
+          value: *k41
+
+- description: 'golden: the fault-tolerance library'
+  vars:
+    question: Tell me about the fault-tolerance library Matt built.
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [fault-tolerance-library-2019]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - resilience4j
+        - circuit breaker
+        - retry
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k42 >-
+            The answer says Matt built a shared resilience4j-based library
+            after building the same retry, circuit-breaker, and time-limiter
+            design twice in two services, and names at least one documented
+            specific such as the failure-injection test harness, the
+            runtime-tunable settings, or the architecture decision record. It
+            does not present the thousands-of-failures claim as verified,
+            since the document says it is unverified.
+        - type: llm-rubric
+          value: *k42
+        - type: llm-rubric
+          value: *k42
+
+- description: 'golden: what he does with a feature flag after it ships'
+  vars:
+    question: What does Matt do with a feature flag after the feature ships?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [feature-flag-removal-habit]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - flag
+        - removal
+        - dead code
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k43 >-
+            The answer says Matt files the flag-removal ticket at fix time
+            and comes back to delete the flag and its dead branches once the
+            change has run stably, and cites the documented shape of the
+            habit: nearly forty changes over about four years, net removing
+            roughly three lines for every one added. It does not claim a
+            reliability metric, which the document says does not exist.
+        - type: llm-rubric
+          value: *k43
+        - type: llm-rubric
+          value: *k43
+
+- description: 'golden: moving nine services off the release train'
+  vars:
+    question: How did Matt move nine services onto independent deploys?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [independent-deployment-program]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - release train
+        - nine
+        - gate
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k44 >-
+            The answer says Matt led nine microservices off the weekly
+            release train onto independent, gated production deploys and
+            finished well ahead of the December target, and names at least
+            one documented gate such as contract tests, load-test baselines,
+            benchmarks, or the backward-compatibility check. It credits the
+            readiness standard as one he adopted rather than authored, as the
+            document states.
+        - type: llm-rubric
+          value: *k44
+        - type: llm-rubric
+          value: *k44
+
+- description: 'golden: his early product front-end years'
+  vars:
+    question: What did Matt work on in his first two years at the company?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [keap-pro-frontend-2018]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Vue
+        - design system
+        - follow-up
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k45 >-
+            The answer describes Matt's early front-end work, naming at least
+            two documented items such as the campaigns page and details
+            modal, the assisted follow-up feature, the design-system
+            components, the anti-spam compliance detection in the wizard, or
+            the appointment-nurture flow. It does not present an inferred
+            characterisation as something the documents state.
+        - type: llm-rubric
+          value: *k45
+        - type: llm-rubric
+          value: *k45
+
+- description: 'golden: proving a legacy service is safe to delete'
+  vars:
+    question: How does Matt decide a legacy service is safe to delete?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [legacy-api-sunset]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - bot
+        - traffic
+        - decommission
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k46 >-
+            The answer describes Matt's documented method: characterise the
+            real traffic rather than trusting the raw request count, find the
+            consumer the inventory missed, capture evidence that the pipeline
+            is already dead, and stage the removal so a surprise is
+            recoverable. It may cite the traffic analysis that found almost
+            all remaining requests were bots and crawlers. It does not
+            present cost savings as confirmed, which the document declines to
+            claim.
+        - type: llm-rubric
+          value: *k46
+        - type: llm-rubric
+          value: *k46
+
+- description: 'golden: the merge service decomposition'
+  vars:
+    question: What was the Merge API decomposition Matt led?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [merge-api-decomposition]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Liquid
+        - monolith
+        - merge
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k47 >-
+            The answer says Matt led the extraction of Liquid template
+            merging out of the core monolith into a standalone Java service
+            as a tour of duty for the Platform Services team, and names at
+            least one documented specific such as the phased delivery, the
+            merge contexts, the asynchronous bulk path, or consumer-supplied
+            mergeables. It does not present an inferred characterisation as
+            something the documents state.
+        - type: llm-rubric
+          value: *k47
+        - type: llm-rubric
+          value: *k47
+
+- description: 'golden: why he is the merge-field expert'
+  vars:
+    question: Why do other engineers route merge-field questions to Matt?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [merge-field-engine-ownership]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - merge field
+        - Liquid
+        - defect
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k48 >-
+            The answer grounds the subject-matter-expert claim in the
+            documented record: about six years and seventy ticket-linked
+            changes on the monolith's Liquid merge-field implementation,
+            with Matt the assignee on nearly all of them, spanning custom
+            field types, locale formatting, and address merging. It does not
+            present an inferred characterisation as something the documents
+            state.
+        - type: llm-rubric
+          value: *k48
+        - type: llm-rubric
+          value: *k48
+
+- description: 'golden: rebuilding alerting on a vendor deadline'
+  vars:
+    question: How did Matt handle the move off New Relic?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [new-relic-to-cloud-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - alert
+        - dashboard
+        - Cloud
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k49 >-
+            The answer says Matt rebuilt the team's dashboards and
+            on-call-connected alerts on Google Cloud Operations under a
+            company-wide deadline, and names at least one documented design
+            decision such as the decoupled alert dashboard, the per-service
+            infrastructure module, standardised health checks, or thresholds
+            tuned against each service's real ambient error rate. It does not
+            claim alert-noise or resolution-time improvements, which the
+            document says were never measured.
+        - type: llm-rubric
+          value: *k49
+        - type: llm-rubric
+          value: *k49
+
+- description: 'golden: keeping a microservice fleet current'
+  vars:
+    question: How does Matt keep a fleet of microservices current and patched?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [platform-hygiene-and-dependency-security]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - upgrade
+        - dependenc
+        - fleet
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k50 >-
+            The answer says Matt treats each upgrade as one decision applied
+            many times across the fleet rather than letting it queue into a
+            backlog, and cites documented substance such as the framework and
+            bill-of-materials waves, the cluster API-version work, or the CI
+            image deprecations. It repeats the document's own caveat that the
+            line counts are churn rather than effort, if it cites them.
+        - type: llm-rubric
+          value: *k50
+        - type: llm-rubric
+          value: *k50
+
+- description: 'golden: recognition and leadership programmes'
+  vars:
+    question: What recognition and leadership programmes has Matt been part of?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [recognition-and-programs]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Accelerator
+        - Emerging Leaders
+        - award
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k51 >-
+            The answer names the Accelerator award in March 2026 and the 2025
+            Emerging Leaders programme, with at least one documented detail
+            about either. It repeats the document's own framing that the
+            award is corroboration rather than a performance rating, and it
+            does not describe any other person's performance.
+        - type: llm-rubric
+          value: *k51
+        - type: llm-rubric
+          value: *k51
+
+- description: 'golden: security work in 2026'
+  vars:
+    question: What security work has Matt led in 2026?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [security-and-supply-chain-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - supply chain
+        - audit
+        - vulnerabilit
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k52 >-
+            The answer names at least two of the documented threads:
+            sustained remediation throughput across hundreds of security and
+            scanner tickets, the supply-chain audit across two code-host
+            organisations that found zero active compromises, a new detection
+            capability for phishing campaigns, and an alerting audit. It does
+            not describe how any detection or blocking mechanism works, nor
+            name any specific weakness, because the document deliberately
+            does not say.
+        - type: llm-rubric
+          value: *k52
+        - type: llm-rubric
+          value: *k52
+
+- description: 'golden: the Splunk exit for email compliance'
+  vars:
+    question: What did Matt do when the company stopped using Splunk?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [splunk-exit-email-compliance]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Splunk
+        - pipeline
+        - alert
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k53 >-
+            The answer says Matt rebuilt the email compliance system's data
+            pipeline and its alerting under a hard vendor-exit deadline, and
+            names at least one documented mechanism such as the plug-in
+            registry of queries that let engineers work in parallel, the
+            feature-toggle-gated cutover that let old and new run side by
+            side, or the enable flag that let on-call silence a bad alert
+            without a deploy. It does not credit him with the company-level
+            decision, which the document says he did not originate.
+        - type: llm-rubric
+          value: *k53
+        - type: llm-rubric
+          value: *k53
+
+- description: 'golden: support escalations and one-off data fixes'
+  vars:
+    question: What happens when one customer's data breaks in a way nobody can reproduce?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [support-requests-and-data-fixes]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - root-cause
+        - root cause
+        - flag
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k54 >-
+            The answer says Matt is the person escalated to for
+            hard-to-reproduce account-specific breakage, and describes the
+            documented pattern: root-cause the mechanism rather than patch
+            the symptom, ship behind a flag, and come back to remove it once
+            production confirms it held. It does not describe any customer's
+            data or identify a customer.
+        - type: llm-rubric
+          value: *k54
+        - type: llm-rubric
+          value: *k54
+
+- description: 'golden: agents against the vulnerability backlog'
+  vars:
+    question: How does Matt use AI agents for security remediation?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [symphony-autonomous-security-remediation]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Symphony
+        - pull request
+        - review
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k55 >-
+            The answer says Matt adapted the Symphony orchestration harness
+            to dispatch Claude Code agents unattended against the team's
+            dependency-vulnerability tickets, that the agents open pull
+            requests but never merge, and that a human reviews and merges. It
+            may cite the documented first-month numbers. It repeats his own
+            caveat that a pull request opened is not a pull request merged.
+        - type: llm-rubric
+          value: *k55
+        - type: llm-rubric
+          value: *k55
+
+- description: 'golden: the stacks he actually works in'
+  vars:
+    question: What languages and platforms does Matt actually work in?
+  metadata:
+    suite: golden
+    mtc53: true
+    expectReads: [technical-expertise]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Java
+        - TypeScript
+        - Python
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &k56 >-
+            The answer names languages and platforms from the documented
+            list, such as Java on Spring Boot and Micronaut, TypeScript and
+            Node for agent work, Python, Go, Vue, and Google Cloud, and says
+            how at least one of them is used rather than listing keywords. It
+            does not add a technology the documents do not name.
+        - type: llm-rubric
+          value: *k56
+        - type: llm-rubric
+          value: *k56
+# --- end MTC-53 block ---
