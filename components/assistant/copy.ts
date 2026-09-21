@@ -35,11 +35,12 @@ export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
  * because the ticker starts it at a different offset.
  *
  * Every question here has to draw a sourced answer rather than a decline,
- * and evals/suites/golden.yaml is the only place that is measured. Its
- * coverage of this pool is partial: the second tranche has a golden each,
- * most of the first tranche is covered by a golden on the same subject, and
- * a handful are not covered at all. Nothing enforces the correspondence, so
- * a question added here needs its golden added by hand.
+ * and evals/suites/golden.yaml is the only place that is measured. Each
+ * entry needs a golden whose vars.question is this exact string; a golden on
+ * the same subject in other words does not prove the wording in the pill
+ * works. evals/config.test.ts fails `bun test` and names any entry that has
+ * none, so adding a question here means adding its golden in the same
+ * change.
  *
  * The cap in copy.test.ts is the pill's constraint, not a style rule: the
  * ticker renders each question on one line, so a longer one would widen the

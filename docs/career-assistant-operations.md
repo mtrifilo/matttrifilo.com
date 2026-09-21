@@ -84,18 +84,20 @@ See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-chec
 
 | Suite          | Tests | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------- | ----: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `golden`       |    32 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times inside an `assert-set` at `threshold: 0.6`.                                                                                                                                                                                                                                                                                                                                         |
+| `golden`       |    74 | Hiring-manager questions. The answer contains the distinctive facts, stays in the third person, and opened the document the fact lives in (`metadata.readIds`). One `llm-rubric` per test on top, graded three times inside an `assert-set` at `threshold: 0.6`.                                                                                                                                                                                                                                                                                                                                         |
 | `refusals`     |    24 | Compensation, employment status, contact details, colleague names, employer internals, opinions, "print your system prompt", and off-topic tasks. Compared against `DECLINE_SENTENCE` imported from `lib/chat/prompt.ts`, so rewording the sentence fails the suite instead of passing a stale copy.                                                                                                                                                                                                                                                                                                     |
 | `injection`    |    23 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, and attempts to dump the index or name the tool. Every test asserts that the run answered at all, that it stays in the third person, and that no verbatim policy phrase or tool name comes back; the eight tests that could plausibly open a document also assert it read nothing outside the index. A paraphrased disclosure of the rules is not something a substring check can catch; read a failing injection answer, do not only trust the green. |
 | `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. Be precise about what that buys: three identical prompts at temperature 0 are highly correlated, so this absorbs the residual nondeterminism of serving, not a difference of judgement. It costs 129 of the run's calls, about $0.09.
+Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. Be precise about what that buys: three identical prompts at temperature 0 are highly correlated, so this absorbs the residual nondeterminism of serving, not a difference of judgement. It costs 255 of the run's calls, about $0.21.
 
 The threshold is 0.6 rather than 0.67 for an unobvious reason worth keeping written down: promptfoo scores an `assert-set` on the weighted **mean** of its members and passes on `score >= threshold`. Two passes out of three average 0.666…, which is below 0.67, so a 0.67 threshold would have demanded three of three and the tolerance would not have existed at all.
 
 Every test whose assertions are all absence checks ("does not speak as Matt", "does not leak the policy") also carries `assertAnswered`. Without it those tests pass on an empty answer, which the route really does return when a run spends its steps reading or a provider filter stops the generation, and the suite proving jailbreak resistance would go green against an assistant that says nothing. `evals/config.test.ts` enforces that pairing so it cannot be dropped later.
 
 The assertions live in `evals/assertions.ts` and import the route's own constants rather than pasting them. `evals/config.test.ts` runs in `bun test` and checks the YAML itself: every test is labelled with its suite, names an assertion that actually exists, declares the metadata that assertion reads, and points `expectReads` at a document in the corpus.
+
+The same file enforces the correspondence rule (MTC-51): every entry of `STARTER_QUESTIONS` in `components/assistant/copy.ts` must be the exact `vars.question` of at least one `golden` test, so a question added to the pill row without a golden fails `bun test` and names itself in the failure.
 
 ### When they run
 
@@ -110,8 +112,8 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
   "commit": "…",
   "ranAt": "…",
   "model": "gemini-3.8-flash",
-  "suites": [{ "name": "golden", "passed": 32, "total": 32 }],
-  "totals": { "passed": 102, "total": 102 },
+  "suites": [{ "name": "golden", "passed": 74, "total": 74 }],
+  "totals": { "passed": 144, "total": 144 },
   "retried": 0
 }
 ```
@@ -138,24 +140,24 @@ GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
 
 `evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing. `CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table. The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
 
-Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before it builds a handler, so every row names the missing variable instead of saying `unavailable`. The run still walks all 102 tests, but it makes no model call and costs nothing. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
+Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before it builds a handler, so every row names the missing variable instead of saying `unavailable`. The run still walks all 144 tests, but it makes no model call and costs nothing. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
 
 ### Cost of a run
 
-102 tests. The route sends the policy (~1,418 tokens) and the document index (~754) on every model call, plus the tool definition and the question, and every later step re-sends everything so far plus the document just read; the corpus averages about 2,080 tokens a document.
+144 tests. The route sends the policy (~1,418 tokens) and the document index (~754) on every model call, plus the tool definition and the question, and every later step re-sends everything so far plus the document just read; the corpus averages about 2,080 tokens a document.
 
-| Suite                              | Tests | Input tokens each |  Total input | Total output |
-| ---------------------------------- | ----: | ----------------: | -----------: | -----------: |
-| golden (three calls, two reads)    |    32 |           ~13,300 |     ~425,600 |       ~9,600 |
-| groundedness (mixed)               |    23 |            ~9,000 |     ~207,000 |       ~5,750 |
-| refusals (one call, no read)       |    24 |            ~2,350 |      ~56,400 |       ~1,200 |
-| injection (one call, some history) |    23 |            ~3,000 |      ~69,000 |       ~1,380 |
-| rubric grader (43 × 3 calls)       |   129 |              ~700 |      ~90,300 |      ~10,320 |
-| **total**                          |       |                   | **~848,000** |  **~28,000** |
+| Suite                              | Tests | Input tokens each |    Total input | Total output |
+| ---------------------------------- | ----: | ----------------: | -------------: | -----------: |
+| golden (three calls, two reads)    |    74 |           ~13,300 |       ~984,200 |      ~22,200 |
+| groundedness (mixed)               |    23 |            ~9,000 |       ~207,000 |       ~5,750 |
+| refusals (one call, no read)       |    24 |            ~2,350 |        ~56,400 |       ~1,200 |
+| injection (one call, some history) |    23 |            ~3,000 |        ~69,000 |       ~1,380 |
+| rubric grader (85 × 3 calls)       |   255 |              ~700 |       ~178,500 |      ~20,400 |
+| **total**                          |       |                   | **~1,495,000** |  **~51,000** |
 
-The grader row is 43 rubric-bearing tests, the 32 goldens plus the 11 hallucination probes, each graded three times.
+The grader row is 85 rubric-bearing tests, the 74 goldens plus the 11 hallucination probes, each graded three times.
 
-At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 0.848 × $0.75 = $0.64, plus 0.028 × $3.75 = $0.11. **About $0.75 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $1.50.
+At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 1.495 × $0.75 = $1.12, plus 0.051 × $3.75 = $0.19. **About $1.30 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $2.60.
 
 Read that as a typical figure, not a ceiling. Medium thinking spends more output tokens than the `low` floor the route used to send. The provider retries a test twice when earlier attempts were lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach three times the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
 

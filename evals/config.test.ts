@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
@@ -145,6 +146,23 @@ describe('promptfooconfig.yaml', () => {
     expect(config.tests).toEqual(
       SUITES.map(name => `file://suites/${name}.yaml`)
     )
+  })
+})
+
+describe('starter questions', () => {
+  /**
+   * The pool is the only copy a visitor is invited to click, so a pool entry
+   * with no golden is a question shipped without anything measuring whether
+   * it draws a sourced answer or a decline. Matching on the exact string
+   * rather than the subject is the point: a golden on the same topic in
+   * different words does not prove the wording in the pill works.
+   */
+  test('every starter question is the exact question of a golden', () => {
+    const asked = new Set(
+      suites.golden.map(item => String(item.vars?.question))
+    )
+    const missing = STARTER_QUESTIONS.filter(question => !asked.has(question))
+    expect(missing).toEqual([])
   })
 })
 

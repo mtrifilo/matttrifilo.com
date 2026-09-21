@@ -1231,6 +1231,13 @@
         - type: llm-rubric
           value: *r36
 
+# The three documented sources this rubric holds the answer to:
+# engineering-philosophy, "aim to grow people rather than to be
+# indispensable"; plugin-marketplaces-and-sme-knowledge-bases, "Teammates
+# run it without him"; owned-systems-and-operations, "The knowledge base is
+# written by the whole rotation, not by Matt alone". None of the three says
+# "single point of failure", so an answer led by that phrase is asserting a
+# characterisation the corpus never made.
 - description: 'golden: a team that keeps running without him'
   vars:
     question: How does Matt build a team that keeps running without him?
@@ -1260,13 +1267,1639 @@
       assert:
         - type: llm-rubric
           value: &r37 >-
-            The answer names the mechanisms that make the work survive
-            without Matt: permanent runbooks and the on-call knowledge base
-            written by the whole rotation, the shift-handoff skill,
-            per-service knowledge bases any engineer or agent can load, or
-            the deployment gates that let any engineer ship to production.
-            It is written about Matt in the third person.
+            The answer rests on the facts the documents state, and at least
+            two of these three: that Matt's stated aim is to grow people
+            rather than to be indispensable; that teammates run the on-call
+            plugin without him, one running the handoff skill end to end and
+            another triaging an alert storm and adding a runbook for it; and
+            that the on-call knowledge base is written by the whole rotation
+            rather than by Matt alone, most incident documents having been
+            first committed by teammates. It may add the other documented
+            mechanisms: the standing rule that every alert gets a permanent
+            runbook, the shift-handoff skill, the per-service knowledge bases
+            an engineer or an agent can load, or the deployment gates that
+            let any engineer ship to production. It is written about Matt in
+            the third person. It FAILS if it asserts that Matt designs
+            himself out of being a single point of failure, or any equivalent
+            characterisation, as though the documents said so: the documents
+            never use that framing, and an inferred characterisation must not
+            be presented as a documented one.
         - type: llm-rubric
           value: *r37
         - type: llm-rubric
           value: *r37
+
+# MTC-51 block. Everything below is appended as one delimited section so a
+# sibling branch appending its own tests merges cleanly.
+#
+# Part one: one test per entry of STARTER_QUESTIONS that had none, keyed to
+# the pool's exact wording. evals/config.test.ts fails when a pool entry has
+# no test here, so a question added to the pill row cannot ship unmeasured.
+#
+# Every rubric names the documented facts the answer rests on. The comment
+# above each test cites the document and the sentence those facts come from,
+# because a rubric that drifts from the corpus is how a golden starts
+# rewarding a characterisation the documents never made.
+
+# ai-tooling-leadership: "every engineer on the team has access, and Matt
+# works alongside them using it daily"; team-throughput-study-2025-2026:
+# "from June he was running several agents in parallel on decomposition,
+# deployment readiness, and security work"; engineering-philosophy: "Agents
+# can open the pull request ... A person approves."
+- description: 'golden: how he works with coding agents himself'
+  vars:
+    question: How does Matt use AI coding agents?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - ai-tooling-leadership
+      - team-throughput-study-2025-2026
+      - engineering-philosophy
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - in parallel
+        - merge button
+        - daily
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r38 >-
+            The answer rests on facts the documents state: that Matt uses the
+            agents daily alongside his team, that from June 2026 he ran
+            several agents in parallel on decomposition, deployment readiness
+            and security work, and that his rule is agents open the pull
+            request while a person approves it. It is written about Matt in
+            the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r38
+        - type: llm-rubric
+          value: *r38
+
+# ai-tooling-leadership: "Led the Claude Code trial whose results informed
+# the organisation-wide decision to adopt Claude Code and Cursor as primary
+# tooling for roughly fifty engineers"; "The organisation's AI-tools forum:
+# founded by Matt in February 2026"; "Matt created and maintains the
+# organisation's agent-skills library".
+- description: 'golden: the org-wide AI rollout'
+  vars:
+    question: How did Matt roll out AI tooling and best practices across Thryv's engineering org?
+  metadata:
+    suite: golden
+    expectReadsAny: [ai-tooling-leadership, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - forum
+        - marketplace
+        - pilot
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r39 >-
+            The answer names at least two documented mechanisms: the Claude
+            Code trial whose results informed the organisation-wide decision
+            to adopt Claude Code and Cursor for roughly fifty engineers, the
+            AI-tools forum he founded in February 2026, the agent-skills
+            library he created and maintains, the plugin marketplace
+            governance he authored, the brown-bag talks, or the weekly
+            developer-experience demo series. It is written about Matt in the
+            third person, and it must not present an inferred characterisation
+            as a documented one.
+        - type: llm-rubric
+          value: *r39
+        - type: llm-rubric
+          value: *r39
+
+# team-throughput-study-2025-2026: "Merged pull requests per week, five
+# engineers | 10.3 | 28.2 | 2.7x"; "Median cycle time to production | 7.0 to
+# 9.1 days | 2.3 days in Q3"; "taking the open backlog from 28 to 12"; "this
+# is a correlation story, not a controlled experiment".
+- description: 'golden: the measurable results of agent adoption'
+  vars:
+    question: What measurable results did Matt's team get from adopting AI coding agents?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '28'
+        - '2.7'
+        - '2.3'
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r40 >-
+            The answer gives at least two of the measured figures: merged
+            pull requests per week for five engineers rising from about 10 to
+            about 28, median cycle time to production falling from a seven to
+            nine day band to about 2.3 days, or the open customer-defect
+            backlog falling from 28 to 12. It carries the study's own framing
+            that this is a correlation and not a controlled experiment, or at
+            least does not assert the agents caused the change. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r40
+        - type: llm-rubric
+          value: *r40
+
+# engineering-philosophy: "Humans on the merge button. Agents can open the
+# pull request ... A person approves."; "Independent deployment without
+# contract, load, and benchmark gates is just faster breakage.";
+# team-throughput-study-2025-2026: "Automated adversarial review as a
+# repository workflow, added in August, is the mechanism for keeping that
+# true as volume grows."
+- description: 'golden: holding quality with agent-written code'
+  vars:
+    question: How does Matt keep quality high when AI agents write most of the code?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - engineering-philosophy
+      - team-throughput-study-2025-2026
+      - resume
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - merge button
+        - human review
+        - adversarial review
+        - gates
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r41 >-
+            The answer names at least two documented mechanisms: human review
+            on every change with a person on the merge button, automated
+            adversarial review as a repository workflow added in August 2026,
+            or the end-to-end, contract, load and manual readiness tests that
+            gate every independent deploy. It may add the measured result
+            that customer-reported defects fell while output roughly tripled.
+            It is written about Matt in the third person, and it must not
+            present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r41
+        - type: llm-rubric
+          value: *r41
+
+# team-throughput-study-2025-2026: "his median cycle time to production was
+# 1.0 day in the latest quarter, measured across 280 tickets, and his merged
+# pull requests went from 16 a quarter to 339".
+- description: 'golden: how much he ships as a manager'
+  vars:
+    question: How much code does Matt ship himself as an engineering manager?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '339'
+        - '280'
+        - '1.0'
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r42 >-
+            The answer gives the measured figures for Matt's own output: a
+            median cycle time to production of 1.0 day in the latest quarter
+            across 280 tickets, and merged pull requests rising from 16 a
+            quarter to 339 because he was running several agents in parallel.
+            It does not state a different number as fact. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r42
+        - type: llm-rubric
+          value: *r42
+
+# owned-systems-and-operations: "Email Reliability owns the outbound email
+# platform for the company's marketing-automation product: the sending path
+# from the core monolith through the sending API to the mail transfer
+# agents, the gateway fleet itself, engagement tracking ... the compliance
+# case system, mailbox sync ... the AI email health features".
+- description: 'golden: the Email Reliability charter'
+  vars:
+    question: What does Matt's Email Reliability team own at Thryv?
+  metadata:
+    suite: golden
+    expectReadsAny: [owned-systems-and-operations, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - outbound email
+        - deliverability
+        - compliance
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r43 >-
+            The answer says the team owns the outbound email platform end to
+            end and names at least two documented parts of it, such as the
+            sending path and the mail transfer agent fleet, engagement
+            tracking, bounce and feedback-loop intake, recipient or content
+            risk scoring, domain authentication, the email data warehouse,
+            the compliance case system, mailbox sync, or the AI email health
+            features. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r43
+        - type: llm-rubric
+          value: *r43
+
+# resume: the 2026 entries, which are what "recently" means in the published
+# material: the AI Email Engagement Summary, Symphony, the plugin
+# marketplace governance, and the move to independent deploys.
+- description: 'golden: recent shipped work'
+  vars:
+    question: What did Matt ship recently?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - resume
+      - post-acquisition-integration
+      - plugin-marketplaces-and-sme-knowledge-bases
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Email Engagement Summary
+        - Symphony
+        - marketplace
+        - independent
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r44 >-
+            The answer names at least two pieces of work the documents date to
+            2025 or 2026: the AI Email Engagement Summary, the Symphony agent
+            orchestrator, the plugin marketplace governance or the team
+            marketplace, the move of nine microservices to independent gated
+            deploys, or the compliance case-system migration to the parent
+            company's Salesforce. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r44
+        - type: llm-rubric
+          value: *r44
+
+# resume: "Proposed, designed, and built the AI Email Engagement Summary,
+# one of the product's first LLM features (Gemini on Vertex AI, RAG over
+# Postmaster-written help content). It explains how a user's last 30 days of
+# sending practices are helping or hurting deliverability ... Proof of
+# concept in 1 week, beta in 5, 100% rollout 2 months after formal
+# development began."
+- description: 'golden: the engagement summary feature in detail'
+  vars:
+    question: What is the AI Email Engagement Summary feature Matt built?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - deliverability
+        - Vertex
+        - 30 days
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r45 >-
+            The answer says Matt proposed, designed and built it as one of the
+            product's first LLM features, that it runs on Gemini on Vertex AI
+            with retrieval over Postmaster-written help content, and that it
+            explains how a user's last 30 days of sending practices help or
+            hurt deliverability and recommends fixes. Naming the proof of
+            concept in one week, beta in five, and full rollout two months
+            after formal development, or the Promptfoo eval suite gating every
+            model change, is correct but not required. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r45
+        - type: llm-rubric
+          value: *r45
+
+# resume: "Built a team-scoped agent orchestrator (Symphony) that opens PRs
+# for CVE tickets the moment they are created, running the team's
+# security-ticket skill with full service context: 17 PRs across 7 services,
+# ~80% hands-free, in month one." The only place Symphony appears.
+- description: 'golden: what Symphony is and automates'
+  vars:
+    question: What is Symphony, the agent orchestrator Matt built, and what did it automate?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - CVE
+        - security-ticket
+        - hands-free
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r46 >-
+            The answer says Symphony is a team-scoped agent orchestrator Matt
+            built that opens pull requests for CVE tickets as soon as they are
+            created, by running the team's security-ticket skill with full
+            service context. Giving the month-one figures, 17 pull requests
+            across 7 services at about 80 percent hands-free, is correct but
+            not required; a different figure stated as fact is wrong. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r46
+        - type: llm-rubric
+          value: *r46
+
+# resume: "Moved all 9 team microservices (Java/Micronaut, Python, Go) off
+# the weekly release train onto independent, gated production deploys,
+# finishing in 9 weeks, 4 months ahead of schedule."
+- description: 'golden: the independent-deploy programme and its duration'
+  vars:
+    question: How did Matt's team move to independent deploys, and how long did it take?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - nine weeks
+        - 9 weeks
+        - release train
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r47 >-
+            The answer says the team moved its nine microservices off a weekly
+            release train onto independent, gated production deploys, and
+            gives the duration as nine weeks, four months ahead of schedule.
+            It may add that any engineer can now ship once end-to-end,
+            contract, load and manual readiness tests pass. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r47
+        - type: llm-rubric
+          value: *r47
+
+# owned-systems-and-operations: "A weekly rotation over roughly a dozen
+# cloud projects ... Matt has been in the rotation since his individual-
+# contributor years ... and he stayed in it as a manager."; "under a
+# standing rule that every alert, including a one-off, gets a permanent
+# runbook"; resume: "serve as escalation lead for unacknowledged alerts".
+- description: 'golden: running a 24/7 rotation for an ESP'
+  vars:
+    question: How does Matt run 24/7 on-call for an email service provider?
+  metadata:
+    suite: golden
+    expectReadsAny: [owned-systems-and-operations, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - weekly rotation
+        - runbook
+        - escalation lead
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r48 >-
+            The answer names at least two documented parts of the programme:
+            a weekly rotation covering roughly a dozen cloud projects,
+            services, data pipelines and the gateway fleet; Matt taking shifts
+            in it as a manager and serving as escalation lead for
+            unacknowledged alerts; alert policies living in code as per-
+            service modules; or the standing rule that every alert, including
+            a one-off, gets a permanent runbook. It is written about Matt in
+            the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r48
+        - type: llm-rubric
+          value: *r48
+
+# resume: "Owned Black Friday / Cyber Monday readiness four years running
+# (2022-2025) with zero major incidents; 27.7M emails sent on Cyber Monday
+# 2025."; owned-systems-and-operations: "Scaled up ahead of peak season and
+# back down after it, with a deploy freeze in between."
+- description: 'golden: peak-season readiness'
+  vars:
+    question: How does Matt prepare email sending for Black Friday and Cyber Monday?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Cyber Monday
+        - deploy freeze
+        - '27.7'
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r49 >-
+            The answer names at least two documented preparations: scaling up
+            ahead of peak season and back down after it with a deploy freeze
+            in between, hardening the engagement-tracking service before Black
+            Friday 2022, the 2023 sending-limit hardening, or the resilience
+            library that removed thousands of failed sends in 2019. It may add
+            that Matt owned readiness four years running from 2022 to 2025
+            with zero major incidents, and that 27.7 million emails went out
+            on Cyber Monday 2025. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r49
+        - type: llm-rubric
+          value: *r49
+
+# owned-systems-and-operations: "Matt was the team's point of contact,
+# fielded the escalations, wrote the initial status-page comms, checked the
+# scope against warehouse logs, and coordinated the post-outage analysis.";
+# resume: "every send retried, none dead-lettered".
+- description: 'golden: his role in the February 2024 outage'
+  vars:
+    question: How did Matt handle the February 2024 cloud-provider outage?
+  metadata:
+    suite: golden
+    expectReadsAny: [owned-systems-and-operations, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - status page
+        - status-page
+        - post-outage
+        - dead-lettered
+        - retried
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r50 >-
+            The answer says Matt was the incident lead or the team's point of
+            contact for the roughly thirty-minute February 2024 outage, and
+            names at least two things he did: fielding escalations, writing
+            the initial status-page or customer communications, checking the
+            scope against warehouse logs, or coordinating the post-outage
+            analysis. It says no messages were lost, because sends were queued
+            and retried rather than dead-lettered. It is written about Matt in
+            the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r50
+        - type: llm-rubric
+          value: *r50
+
+# resume: "Led the Merge API decomposition effort ... moved Liquid template
+# rendering out of the monolith into a standalone Java service"; "On the
+# Platform team (2019): helped decompose the Contacts domain out of the Core
+# monolith, moving Mobile's and Web's contact reads onto the new Contacts
+# API (75 PRs)."
+- description: 'golden: his share of the monolith decomposition'
+  vars:
+    question: What was Matt's part in breaking the Keap monolith into services?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Liquid
+        - Contacts
+        - monolith
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r51 >-
+            The answer distinguishes the two documented pieces of work: in
+            2019 on the Platform team he helped decompose the Contacts domain
+            out of the Core monolith and move Mobile's and Web's contact reads
+            onto the new Contacts API, and from 2020 to 2021 he led the Merge
+            API decomposition as a tour of duty, moving Liquid template
+            rendering into a standalone Java service. It does not claim he led
+            the Contacts decomposition. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r51
+        - type: llm-rubric
+          value: *r51
+
+# from-typing-code-to-agent-factories: "The new bottleneck today is how fast
+# humans can make decisions, and how fast we can review and test the code.";
+# "The role of Software Engineers is to Manage Complexity"; "the Software
+# Developer role ... is going extinct".
+- description: 'golden: how the job changes when agents write the code'
+  vars:
+    question: How does Matt think the engineer's job changes when agents write the code?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - from-typing-code-to-agent-factories
+      - engineering-philosophy
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - bottleneck
+        - complexity
+        - extinct
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r52 >-
+            The answer gives at least two of Matt's stated positions: that the
+            new bottleneck is how fast humans can decide and how fast they can
+            review and test the code, that the engineer's job is to manage
+            complexity and planning matters more than typing, that production
+            code still has to be read and tested by a human, or that the
+            developer role of typing code by hand with no part in product
+            planning is going extinct while agentic engineering replaces it.
+            It is written about Matt in the third person, and it must not
+            present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r52
+        - type: llm-rubric
+          value: *r52
+
+# from-typing-code-to-agent-factories: "Junior Engineers in 2026, listen
+# up."; "This does not excuse you from learning how to code without needing
+# AI. That skill is essential."
+- description: 'golden: what he tells juniors to do in 2026'
+  vars:
+    question: What is Matt's advice to junior engineers in 2026?
+  metadata:
+    suite: golden
+    expectReads: [from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - agentic engineering
+        - without AI
+        - shipped
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r53 >-
+            The answer says Matt tells junior engineers to learn agentic
+            engineering now and to put shipped work online with test coverage
+            and working UX, while insisting they must still be able to build
+            software without AI, and that they should use the latest models as
+            a teacher. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r53
+        - type: llm-rubric
+          value: *r53
+
+# resume, Skills: "Java, Python, TypeScript, Go · Spring Boot, Micronaut,
+# Flask, FastAPI · Vue.js, React, GraphQL" and "Google Cloud (GKE, Cloud
+# Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions,
+# CircleCI, Google Cloud Operations, OpsGenie".
+- description: 'golden: the team stack, languages through infrastructure'
+  vars:
+    question: What languages, frameworks, and infrastructure do Matt and his team use?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Micronaut
+        - Kubernetes
+        - Terraform
+        - Google Cloud
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r54 >-
+            The answer covers both halves of the question from the published
+            list: languages and frameworks such as Java, Python, TypeScript
+            and Go with Spring Boot, Micronaut, Flask, FastAPI, Vue.js, React
+            or GraphQL, and infrastructure such as Google Cloud, Kubernetes,
+            Terraform, GitHub Actions or CircleCI. It does not add a language
+            or platform the published material does not list. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r54
+        - type: llm-rubric
+          value: *r54
+
+# open-source: "decant ... a CLI to transform your clipboard into markdown
+# for LLM context." The same document says star counts, languages and
+# last-push dates are deliberately left out of the knowledge base.
+- description: 'golden: decant as the open-sourced CLI'
+  vars:
+    question: What is decant, the CLI Matt open-sourced?
+  metadata:
+    suite: golden
+    expectReadsAny: [open-source, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - clipboard
+        - markdown
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r55 >-
+            The answer says decant is Matt's open-source command-line tool
+            that turns clipboard content into Markdown for LLM context, and
+            gives its repository as github.com/mtrifilo/decant if it gives one
+            at all. It states no star count, primary language or last-push
+            date, which the published material deliberately omits. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r55
+        - type: llm-rubric
+          value: *r55
+
+# open-source: "a website to document and amplify new music releases, shows,
+# and cultural events from Arizona musicians and beyond."; resume:
+# "production site for Arizona music releases and shows, built solo in
+# Next.js/React and Go."
+- description: 'golden: Psychic Homily and its stack'
+  vars:
+    question: What is Psychic Homily, and what is it built with?
+  metadata:
+    suite: golden
+    expectReadsAny: [open-source, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Arizona
+        - Next.js
+        - music
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r56 >-
+            The answer says Psychic Homily is Matt's site documenting new
+            music releases, shows and cultural events from Arizona musicians,
+            and that he built it solo. If it names the stack it says Next.js
+            or React and Go, as the résumé does, and it states no star count,
+            primary language or last-push date, which the published material
+            deliberately omits. It is written about Matt in the third person,
+            and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r56
+        - type: llm-rubric
+          value: *r56
+
+# resume, Recognition: the Thryv Accelerator Award (March 2026), the Thryv
+# Emerging Leaders Program (2025), and the Keap Better Together Award
+# (December 2019). The only awards in the corpus.
+- description: 'golden: the awards list, in the pool wording'
+  vars:
+    question: What awards and recognition has Matt received?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Accelerator Award
+        - Emerging Leaders
+        - Better Together
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r57 >-
+            The answer names at least two of the three published items: the
+            Thryv Accelerator Award of March 2026, the Thryv Emerging Leaders
+            Program of 2025, and the Keap Better Together Award of December
+            2019. It does not invent an award or a year. It may add that an
+            award-winning branded film for Intel sits in his earlier sound
+            work. It is written about Matt in the third person, and it must not
+            present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r57
+        - type: llm-rubric
+          value: *r57
+
+# resume, header line: "Phoenix, AZ · Open to relocation (Chicago
+# preferred) · In-office, hybrid, or remote (US)".
+- description: 'golden: location and relocation'
+  vars:
+    question: Where is Matt based, and is he open to relocating?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Phoenix
+        - Chicago
+        - relocation
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r58 >-
+            The answer says Matt is based in Phoenix, Arizona, that he is open
+            to relocation with Chicago preferred, and that he is open to
+            in-office, hybrid or remote work in the US. It invents no timing,
+            no condition and no reason for the preference, none of which the
+            published material gives. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r58
+        - type: llm-rubric
+          value: *r58
+
+# resume: "Earlier: Freelance sound design and post-production, Chicago
+# (2009-2015), including an award-winning branded film for Intel."
+- description: 'golden: the pre-software career, in the pool wording'
+  vars:
+    question: What did Matt do before software engineering?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, from-typing-code-to-agent-factories]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - sound design
+        - post-production
+        - barista
+        - coffee
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r59 >-
+            The answer says Matt worked in freelance sound design and
+            post-production in Chicago from 2009 to 2015, including an
+            award-winning branded film for Intel. It may add that he was
+            working as a barista when he took his first engineering offer, and
+            that he has a degree in Audio Arts and Acoustics rather than
+            computer science. It is written about Matt in the third person,
+            and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r59
+        - type: llm-rubric
+          value: *r59
+
+# Part two: the questions hiring managers ask a hands-on engineering
+# manager, in a hiring manager's phrasing rather than the corpus's, drafted
+# from the MTC-39 research themes. Only questions the corpus answers are
+# here; the ones it cannot answer are collected on MTC-40.
+
+# engineering-philosophy: "Hands-on coding is a feature, not a bug, of
+# senior technical leadership ... He did not stop coding when promoted to
+# player-coach and did not stop when promoted to manager; it is a
+# deliberate, defining choice."; resume: "still ships code daily".
+- description: 'golden: still hands-on, or fully a manager'
+  vars:
+    question: Is Matt still hands-on, or has he moved fully into management?
+  metadata:
+    suite: golden
+    expectReadsAny: [engineering-philosophy, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - feature, not a bug
+        - hands-on
+        - daily
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r60 >-
+            The answer says Matt is still hands-on and that this is a
+            deliberate choice: he holds that hands-on coding is a feature and
+            not a bug of senior technical leadership, he did not stop coding
+            when promoted to player-coach or to manager, and he still ships
+            code daily. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r60
+        - type: llm-rubric
+          value: *r60
+
+# resume: "Software Engineer III / Tech Lead (player-coach), Email
+# Reliability · Jul 2022 - May 2025 - Half coding, half management for a
+# team of 5 through the Keap-to-Thryv acquisition."
+- description: 'golden: the player-coach years'
+  vars:
+    question: Has Matt worked as a player-coach, and how did he split his time?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - player-coach
+        - half coding
+        - Tech Lead
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r61 >-
+            The answer says Matt was Software Engineer III and Tech Lead as a
+            player-coach on Email Reliability from July 2022 to May 2025, half
+            coding and half management for a team of five, through the Keap to
+            Thryv acquisition. It is written about Matt in the third person,
+            and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r61
+        - type: llm-rubric
+          value: *r61
+
+# ai-tooling-leadership: the forum, the skills library, the proposals, the
+# interview panels; resume: "Wrote the governance for Thryv's Claude Code
+# plugin marketplace; the team's marketplace ... became the company
+# template."
+- description: 'golden: influence beyond his own team'
+  vars:
+    question: Has Matt led AI adoption beyond his own team, or only within it?
+  metadata:
+    suite: golden
+    expectReadsAny: [ai-tooling-leadership, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - forum
+        - organisation
+        - company template
+        - marketplace
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r62 >-
+            The answer says the work reached the wider organisation and names
+            at least two documented instances: the AI-tools forum he founded
+            as the cross-organisation channel, the agent-skills library he
+            created and maintains, the trial whose results informed
+            organisation-wide adoption for roughly fifty engineers, the
+            marketplace governance whose team marketplace became the company
+            template, the AI-champions-per-team proposal, or his invitations
+            onto organisation-wide agentic-engineering interview panels. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r62
+        - type: llm-rubric
+          value: *r62
+
+# ai-tooling-leadership: "Led a trial of a third-party coding agent in late
+# 2025 that concluded against purchase. The trial ran as a structured
+# internal programme with nine developers, trial questions, two weekly
+# check-ins, and a survey."
+- description: 'golden: a tool evaluation that said no'
+  vars:
+    question: Has Matt ever evaluated an AI tool and decided against buying it?
+  metadata:
+    suite: golden
+    expectReadsAny: [ai-tooling-leadership, talks-and-teaching]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - against purchase
+        - nine developers
+        - trial
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r63 >-
+            The answer says yes and gives the documented case: Matt led a
+            trial of a third-party coding agent in late 2025 that concluded
+            against purchase, run as a structured programme with nine
+            developers, trial questions, two weekly check-ins and a survey. It
+            does not name the tool, which the published material does not. It
+            is written about Matt in the third person, and it must not present
+            an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r63
+        - type: llm-rubric
+          value: *r63
+
+# team-throughput-study-2025-2026: "Matt built the measurement before he
+# made the claim. In February 2026 ... he stood up a metrics pipeline over
+# the issue tracker and the code host"; "Points are the weakest signal of
+# the set."; "every usage figure is a floor, not a count".
+- description: 'golden: how he measures productivity'
+  vars:
+    question: How does Matt measure engineering productivity on his team?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - metrics pipeline
+        - cycle time
+        - merged pull requests
+        - floor
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r64 >-
+            The answer says Matt stood up a metrics pipeline over the issue
+            tracker and the code host in February 2026, before making any
+            claim, and names at least two of the measurement choices the study
+            states: leaning on merged pull requests per person and cycle time
+            rather than ticket counts alone, treating story points as the
+            weakest signal, naming which of the two review measures is being
+            quoted, or treating AI usage telemetry as a floor rather than a
+            count. It is written about Matt in the third person, and it must
+            not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r64
+        - type: llm-rubric
+          value: *r64
+
+# team-throughput-study-2025-2026: "this is a correlation story, not a
+# controlled experiment"; "Gaps the study names for itself: A 2025 incident
+# baseline is not available ... Usage telemetry for the second editor was
+# requested in January 2026 and never became a pipeline. And the obvious
+# next step ... has not been done."
+- description: 'golden: what the throughput study cannot prove'
+  vars:
+    question: What can't Matt's throughput numbers prove?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - correlation
+        - controlled experiment
+        - baseline
+        - comparison group
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r65 >-
+            The answer says the study is a correlation story and not a
+            controlled experiment, and names at least one gap the study states
+            about itself: no 2025 incident baseline, usage telemetry for the
+            second editor that never became a pipeline, or the comparison
+            against other teams that has not been run. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *r65
+        - type: llm-rubric
+          value: *r65
+
+# team-throughput-study-2025-2026: "Review load more than doubled, and the
+# pooled median time to merge lengthened rather than shrank. More code
+# arrived, review kept up, and merges got slightly slower rather than being
+# rubber-stamped."
+- description: 'golden: what happened to review load'
+  vars:
+    question: What happened to code review on Matt's team once agents were writing most of the code?
+  metadata:
+    suite: golden
+    expectReads: [team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - review load
+        - rubber-stamped
+        - adversarial review
+        - slower
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r66 >-
+            The answer says review load more than doubled and that the pooled
+            median time to merge lengthened rather than shrank, so merges got
+            slightly slower rather than being rubber-stamped. It may add that
+            automated adversarial review as a repository workflow, added in
+            August 2026, is the mechanism for keeping that true as volume
+            grows, and that Matt carried a large share of the review load
+            himself. It is written about Matt in the third person, and it must
+            not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r66
+        - type: llm-rubric
+          value: *r66
+
+# resume: "serve as escalation lead for unacknowledged alerts. Separately,
+# in the Engineering Manager rotation, back up the org's Incident Commander
+# on P0/P1s."; "Incident lead for a 30-minute cloud-provider outage (Feb
+# 2024)". He backs the Incident Commander up; he is not the org's IC.
+- description: 'golden: his incident command responsibilities, stated exactly'
+  vars:
+    question: What incident command responsibilities has Matt held?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, owned-systems-and-operations]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Incident Commander
+        - escalation lead
+        - incident lead
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r67 >-
+            The answer keeps the three documented roles distinct: Matt owns
+            his team's 24/7 on-call programme and is escalation lead for
+            unacknowledged alerts; separately, in the Engineering Manager
+            rotation, he backs up the organisation's Incident Commander on P0
+            and P1 incidents; and he was incident lead for the February 2024
+            cloud-provider outage. It does not say he is the organisation's
+            Incident Commander, which the published material does not claim.
+            It is written about Matt in the third person, and it must not
+            present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r67
+        - type: llm-rubric
+          value: *r67
+
+# resume: "Forecast monthly sending volume through 2026 for the annual MTA
+# license renewal (quoted at +48%); matched the vendor's own reporting
+# within ~1% and closed at my recommended tier, roughly flat year over
+# year." The published material states no dollar amount anywhere.
+- description: 'golden: vendor negotiation and licence cost'
+  vars:
+    question: Has Matt owned a vendor negotiation or a licensing budget?
+  metadata:
+    suite: golden
+    expectReadsAny: [resume, ai-tooling-leadership]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - renewal
+        - forecast
+        - licence
+        - license
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r68 >-
+            The answer says yes and gives the documented case: Matt forecast
+            monthly sending volume through 2026 for the annual mail transfer
+            agent licence renewal, which the vendor had quoted at plus 48
+            percent, matched the vendor's own reporting within about one
+            percent, and closed at his recommended tier roughly flat year over
+            year. It may add that he owns his organisation's AI tooling access
+            and spend. It states no dollar amount, which the published
+            material never gives. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r68
+        - type: llm-rubric
+          value: *r68
+
+# resume: "Hired 2 in 2025 who became high performers within months; zero
+# voluntary attrition as manager." That outcome is the whole of what the
+# corpus says; the interview and growth process is not published.
+- description: 'golden: hiring and retention outcomes, without the process'
+  vars:
+    question: What is Matt's track record hiring and keeping engineers?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - attrition
+        - high performers
+        - hired
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r69 >-
+            The answer gives the two documented outcomes: Matt hired two
+            engineers in 2025 who became high performers within months, and
+            there has been zero voluntary attrition under him as manager. It
+            may add that he lists hiring and performance management among his
+            leadership skills, and that he believes growing people compounds.
+            It does not describe an interview process, a ramp plan or a growth
+            conversation format, none of which the published material covers;
+            where it goes beyond the outcomes it says the material does not
+            cover that. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r69
+        - type: llm-rubric
+          value: *r69
+
+# plugin-marketplaces-and-sme-knowledge-bases, "Adoption signals" and "Not
+# yet measured": engineers beyond Matt opening pull requests, a write-access
+# request from another team, a manager routing engineers to him, a template
+# another engineer built; and install counts and whether another team runs
+# an adapted copy are named as unmeasured.
+- description: 'golden: adoption of his work by other teams'
+  vars:
+    question: Have other teams picked up the tooling Matt built?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - plugin-marketplaces-and-sme-knowledge-bases
+      - ai-tooling-leadership
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - write access
+        - template
+        - marketplace
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r70 >-
+            The answer names at least two of the documented adoption signals:
+            engineers beyond Matt opening pull requests on the organisation
+            marketplace, an engineer on another team requesting write access
+            after a demo, a manager from another organisation routing
+            engineers to him for the on-call plugin, or another engineer
+            turning the pattern into a template that Matt announced
+            organisation-wide in August 2026. It does not claim another team
+            is running an adapted copy in its own rotation, which the document
+            lists as not yet measured. It is written about Matt in the third
+            person, and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *r70
+        - type: llm-rubric
+          value: *r70
+
+# plugin-marketplaces-and-sme-knowledge-bases: "This is the first of Matt's
+# workstreams where the governance, the alignment with other teams'
+# technical leads, and the per-team rollout path were built before the
+# broadcast, rather than after."; engineering-philosophy: "distribution
+# needs governance and tech-lead alignment before the broadcast, or it
+# becomes a dumping ground."
+- description: 'golden: aligning other teams before shipping a shared thing'
+  vars:
+    question: How does Matt get buy-in from other teams before rolling something out?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - plugin-marketplaces-and-sme-knowledge-bases
+      - engineering-philosophy
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - before the broadcast
+        - governance
+        - alignment
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r71 >-
+            The answer rests on the documented lesson that distribution needs
+            governance and technical-lead alignment before the broadcast or it
+            becomes a dumping ground, and names at least one concrete
+            instance: the governance proposal written before version one, the
+            demo to the developer-experience leads the week before, the
+            audience test adopted from review feedback that removed two
+            entries, or the per-team rollout path built ahead of the
+            announcement. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r71
+        - type: llm-rubric
+          value: *r71
+
+# post-acquisition-integration: "The planned two-week cutover window did not
+# hold."; engineering-philosophy: "The 2026 lesson, learned the hard way:
+# distribution needs governance and tech-lead alignment before the
+# broadcast, or it becomes a dumping ground."
+- description: 'golden: work that fell short, and what followed'
+  vars:
+    question: Can Matt point to something of his that did not go to plan?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - post-acquisition-integration
+      - engineering-philosophy
+      - team-throughput-study-2025-2026
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - did not hold
+        - dumping ground
+        - open item
+        - not yet measured
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r72 >-
+            The answer names at least one shortfall the documents state
+            plainly, and says what followed it: the planned two-week
+            compliance cutover window that did not hold, with parity work
+            carried into late August and a "done" definition named as an open
+            item; the distribution lesson learned the hard way, that
+            governance and tech-lead alignment have to come before the
+            broadcast; or the throughput study's own unmeasured gaps. It
+            invents no failure the material does not describe. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r72
+        - type: llm-rubric
+          value: *r72
+
+# resume: "Joined a founder-led company of ~400; acquired in 2024 by Thryv,
+# a public company of ~3,000."
+- description: 'golden: the size and kind of organisation he has worked in'
+  vars:
+    question: What size of engineering organisation has Matt worked in?
+  metadata:
+    suite: golden
+    expectReads: [resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '400'
+        - '3,000'
+        - founder-led
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r73 >-
+            The answer says Matt joined a founder-led company of about 400
+            people in 2017 and stayed through its 2024 acquisition by Thryv, a
+            public company of about 3,000. It may add that the AI tooling
+            rollout he led reached roughly fifty engineers. It does not state
+            an engineering headcount the published material does not give. It
+            is written about Matt in the third person, and it must not present
+            an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r73
+        - type: llm-rubric
+          value: *r73
+
+# plugin-marketplaces-and-sme-knowledge-bases: "project second brains ...
+# each carrying that project's decision records, research spikes, rollout
+# plans, and handoffs so anyone can pick the work up cold";
+# engineering-philosophy: "if I give this task to a new teammate who knows
+# nothing about our team, project, and codebase, what would I need to
+# share with them".
+- description: 'golden: ramping a person or an agent onto an unfamiliar service'
+  vars:
+    question: How does Matt get someone up to speed on a service they have never worked on?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - plugin-marketplaces-and-sme-knowledge-bases
+      - engineering-philosophy
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - second brain
+        - knowledge base
+        - cold
+        - new teammate
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r74 >-
+            The answer names at least two documented mechanisms: the
+            per-service subject-matter plugins that give each service a
+            knowledge base an engineer or an agent can load, the project
+            second brains carrying decision records, research spikes, rollout
+            plans and handoffs so anyone can pick the work up cold, the skill
+            that promotes lessons learned in tickets into the knowledge base
+            so it compounds, or Matt's own rule of asking what a new teammate
+            who knows nothing about the team, project and codebase would need
+            to be told. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *r74
+        - type: llm-rubric
+          value: *r74
