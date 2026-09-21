@@ -439,7 +439,12 @@ describe('createBoundedFetch', () => {
       /^Vertex sent no response byte in \d+ ms across 2 attempt\(s\)$/
     )
     const elapsed = Number(/in (\d+) ms/.exec(message)?.[1])
-    expect(elapsed).toBeGreaterThanOrEqual(30)
+    // Strictly more than the 20 ms final ceiling is the claim: the figure
+    // covers the first attempt and the backoff too. Not the arithmetic sum
+    // (30): the deadlines are real timers and the clock is Date.now, and
+    // under load a 10 ms timer fires in 9 ms, which failed this test in CI
+    // twice on 2026-09-21 with 29.
+    expect(elapsed).toBeGreaterThan(20)
   })
 
   test('the caller sees the request it made, minus our signal swap', async () => {
