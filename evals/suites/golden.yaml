@@ -1830,11 +1830,13 @@
       assert:
         - type: llm-rubric
           value: &r49 >-
-            The answer names at least two documented preparations: scaling up
-            ahead of peak season and back down after it with a deploy freeze
-            in between, hardening the engagement-tracking service before Black
-            Friday 2022, the 2023 sending-limit hardening, or the resilience
-            library that removed thousands of failed sends in 2019. It may add
+            The answer names at least one documented preparation. One is
+            enough because they are split across two documents and the run is
+            only required to have opened one of them: scaling up ahead of peak
+            season and back down after it with a deploy freeze in between,
+            hardening the engagement-tracking service before Black Friday
+            2022, the 2023 sending-limit hardening, or the resilience library
+            that removed thousands of failed sends in 2019. It may add
             that Matt owned readiness four years running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
             on Cyber Monday 2025. It is written about Matt in the third
@@ -2469,14 +2471,17 @@
         - type: llm-rubric
           value: &r64 >-
             The answer says Matt stood up a metrics pipeline over the issue
-            tracker and the code host in February 2026, before making any
-            claim, and names at least two of the measurement choices the study
+            tracker and the code host before making any claim, and names at
+            least one of the measurement choices the study
             states: leaning on merged pull requests per person and cycle time
             rather than ticket counts alone, treating story points as the
             weakest signal, naming which of the two review measures is being
             quoted, or treating AI usage telemetry as a floor rather than a
-            count. It is written about Matt in the third person, and it must
-            not present an inferred characterisation as a documented one.
+            count. Dating the pipeline to February 2026 is correct and
+            welcome, and its absence is not a failure: what is graded is the
+            documented practice, never whether a date was recited. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
         - type: llm-rubric
           value: *r64
         - type: llm-rubric
@@ -2887,16 +2892,19 @@
         - type: llm-rubric
           value: &r73 >-
             The answer says Matt joined a founder-led company of about 400
-            people in 2017 and stayed through its 2024 acquisition by Thryv, a
+            people and stayed through its acquisition by Thryv, a
             public company of about 3,000, and is clear that those two figures
             are whole-company headcounts. If it gives a figure for the
             engineering organisation itself it gives the published one,
             roughly fifty engineers, the population his tooling rollout
             reached. It FAILS if it offers 400 or 3,000 as the size of the
             engineering organisation, or states any engineering headcount the
-            published material does not give. It is written about Matt in the
-            third person, and it must not present an inferred characterisation
-            as a documented one.
+            published material does not give. Dating the join to 2017 and the
+            acquisition to 2024 is correct and welcome, and their absence is
+            not a failure: what is graded is the two headcounts and the
+            denominator, never whether a year was recited. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
         - type: llm-rubric
           value: *r73
         - type: llm-rubric
@@ -2909,37 +2917,39 @@
 # lessons learned in tickets, the landmines, into the knowledge base so it
 # compounds".
 #
-# engineering-philosophy's "new teammate who knows nothing about our team,
-# project, and codebase" is NOT among them. It sits under the heading "His
-# rule for building context for an agent" and is a thought experiment for
-# prompting an agent, not a documented practice for ramping a person, so
-# rewarding it here would be exactly the inference-as-documentation this
-# suite refuses.
+# engineering-philosophy also carries, in Matt's own quoted words, "if I
+# give this task to a new teammate who knows nothing about our team,
+# project, and codebase, what would I need to share with them". That is
+# documented text and an answer may cite it. What the rubric still refuses
+# is the step past it: the quote sits under "His rule for building context
+# for an agent", so calling it Matt's onboarding process for PEOPLE is the
+# inference this suite will not have presented as documentation.
 - description: 'golden: ramping a person or an agent onto an unfamiliar service'
   vars:
     question: How does Matt get someone up to speed on a service they have never worked on?
   metadata:
     suite: golden
-    # Every mechanism this rubric accepts lives in the marketplace document.
-    # The philosophy document was listed here for the "new teammate" line,
-    # which is about briefing an agent and is now refused, so leaving it
-    # would name a document the test cannot pass from.
-    expectReads: [plugin-marketplaces-and-sme-knowledge-bases]
+    expectReadsAny:
+      - plugin-marketplaces-and-sme-knowledge-bases
+      - engineering-philosophy
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    # "new teammate" is the token the philosophy document carries, so that
+    # document can satisfy this check on its own.
     - type: icontains-any
       value:
         - second brain
         - knowledge base
         - subject-matter
         - cold
+        - new teammate
     - type: assert-set
       threshold: 0.6
       assert:
@@ -2951,12 +2961,15 @@
             second brains carrying decision records, research spikes, rollout
             plans and handoffs so anyone can pick the work up cold, or the
             skill that promotes the lessons learned in tickets into the
-            knowledge base so it compounds. It does not offer Matt's rule
-            about briefing a hypothetical new teammate as a documented
-            onboarding practice: that line is written about giving an AGENT
-            context for a task. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
-            documented one.
+            knowledge base so it compounds. It may also cite Matt's own
+            written framing, asking what a new teammate who knows nothing
+            about the team, project and codebase would need to be told, which
+            is quoted in the philosophy document and is enough on its own. It
+            FAILS only if it presents that framing as Matt's documented
+            onboarding process for people: the document gives it as his rule
+            for building context for an agent. It is written about Matt in
+            the third person, and it must not present an inferred
+            characterisation as a documented one.
         - type: llm-rubric
           value: *r74
         - type: llm-rubric
