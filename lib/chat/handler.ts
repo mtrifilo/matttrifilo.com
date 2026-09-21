@@ -685,6 +685,7 @@ function withProgress({
           emit(controller)
           break
         }
+        case 'tool-output-error':
         case 'tool-output-available': {
           // The row goes up when the call starts, because narrating the wait
           // is the point; it is corrected here, when the outcome is known.
@@ -703,9 +704,18 @@ function withProgress({
             else reads += 1
             break
           }
-          // Refused. Withdraw the row unless an earlier call for the same id
-          // really did produce something.
+          // Refused. Withdraw the row unless some other call for the same id
+          // produced something, or still might: a step's tool calls run
+          // concurrently, so a model that asks for one repository twice gets
+          // one digest and one `repository_already_checked`, in either order.
+          // Withdrawing on the refusal would take the row away from a check
+          // that did happen.
           if (succeeded.has(step.id)) break
+          let stillWaiting = false
+          for (const other of inFlight.values()) {
+            if (other.id === step.id) stillWaiting = true
+          }
+          if (stillWaiting) break
           const at = steps.findIndex(listedStep => listedStep.id === step.id)
           if (at < 0) break
           steps.splice(at, 1)
@@ -809,12 +819,19 @@ function toolCallId(chunk: { toolCallId?: unknown }): string | undefined {
 /**
  * Whether a tool answered with a refusal rather than content.
  *
- * Both tools answer a refusal as `{ error: '<code>' }` and never throw, so
- * one check covers both. Read defensively: this is a chunk off a stream, and
- * an output shape this does not recognise counts as content, which leaves the
- * row where it is rather than withdrawing a step that did happen.
+ * Both tools answer a refusal as `{ error: '<code>' }` and neither throws, so
+ * one check covers both. A tool that threw anyway arrives as an error chunk
+ * rather than an output one, and the caller treats those as refusals too:
+ * without that, the safety property here would rest on "no tool ever throws",
+ * which nothing enforces, and a thrown tool would leave a row claiming work
+ * that produced nothing.
+ *
+ * Read defensively: this is a chunk off a stream, and an output shape this
+ * does not recognise counts as content, which leaves the row where it is
+ * rather than withdrawing a step that did happen.
  */
-function refusedOutput(chunk: { output?: unknown }): boolean {
+function refusedOutput(chunk: { type: string; output?: unknown }): boolean {
+  if (chunk.type !== 'tool-output-available') return true
   const output = chunk.output
   if (typeof output !== 'object' || output === null) return false
   return typeof (output as { error?: unknown }).error === 'string'

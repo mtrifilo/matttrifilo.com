@@ -459,6 +459,92 @@ export function assertHasRecentDate(output: string): AssertionResult {
 }
 
 /**
+ * The answer is dated from the repository, not from the corpus.
+ *
+ * `assertHasRecentDate` below is not enough on its own and it is worth
+ * saying why, because the pair looks redundant. That one passes on any
+ * mention of the current or previous year, and eleven corpus documents carry
+ * the current year, `content/knowledge/open-source/open-source.md` among
+ * them. An answer written entirely from documents, with GitHub never
+ * consulted, clears it. So does its sibling `assertCheckedActivity`, which
+ * reads a ledger written before the fetch. The two together were green on a
+ * run with no GitHub-derived content in it at all, which is the one thing an
+ * activity golden exists to catch.
+ *
+ * This compares what the answer says against `metadata.activityDates`, the
+ * dates the digest actually carried, at MONTH precision. Month and not day
+ * because the point is tolerance: a model may write `18 September 2026`,
+ * `September 2026` or `2026-09-18` for the same fact, and which commits
+ * landed this fortnight is not a fact about the assistant.
+ */
+export function assertDatesFromActivity(
+  output: string,
+  context: AssertionContext
+): AssertionResult {
+  const delivered = new Set(
+    stringList(context.metadata?.activityDates).map(date => date.slice(0, 7))
+  )
+  if (delivered.size === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        'no activity dates were delivered: GitHub was never reached, or the digest was empty',
+    }
+  }
+  const stated = monthsIn(answerProse(output))
+  const shared = [...stated].filter(month => delivered.has(month))
+  return {
+    pass: shared.length > 0,
+    score: shared.length > 0 ? 1 : 0,
+    reason:
+      shared.length > 0
+        ? `dated the work in ${shared.join(', ')}, which the digest carried`
+        : `states ${[...stated].join(', ') || 'no date'}; the digest carried ${[...delivered].join(', ')}`,
+  }
+}
+
+const MONTHS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+]
+
+/**
+ * Every `YYYY-MM` a piece of prose states, in any of the forms an answer
+ * actually uses: `2026-09-18`, `September 2026`, `Sept 18, 2026`,
+ * `18 September 2026`.
+ */
+function monthsIn(prose: string): Set<string> {
+  const found = new Set<string>()
+  for (const [, year, month] of prose.matchAll(/\b(\d{4})-(\d{2})-\d{2}\b/g)) {
+    found.add(`${year}-${month}`)
+  }
+  const names = MONTHS.map(month => month.slice(0, 3)).join('|')
+  const named = new RegExp(
+    `\\b(?:(\\d{1,2})\\s+)?(${names})[a-z]*\\.?,?\\s+(?:\\d{1,2},?\\s+)?(\\d{4})\\b`,
+    'gi'
+  )
+  for (const match of prose.matchAll(named)) {
+    const index = MONTHS.findIndex(month =>
+      month.startsWith(match[2].toLowerCase())
+    )
+    if (index < 0) continue
+    found.add(`${match[3]}-${String(index + 1).padStart(2, '0')}`)
+  }
+  return found
+}
+
+/**
  * No GitHub handle appears in the answer.
  *
  * Matt's decision 4: titles and dates only, and no contributor is named. The
@@ -474,6 +560,12 @@ export function assertHasRecentDate(output: string): AssertionResult {
  *
  * Addresses are removed before handles are looked for, which is what keeps
  * the decline sentence, carrying Matt's email, from reading as a handle.
+ *
+ * One known false positive, left in deliberately: a scoped npm package,
+ * `@vercel/ai`, matches. It is the right trade for the filter, which must
+ * strip anything handle-shaped, and the wrong one here, so a red row citing a
+ * package name is this assertion being too strict rather than the assistant
+ * naming a contributor. Read it that way before changing anything.
  */
 const EMAIL_ADDRESS = new RegExp(EMAIL_PATTERN, 'g')
 const GITHUB_HANDLE = new RegExp(HANDLE_PATTERN)

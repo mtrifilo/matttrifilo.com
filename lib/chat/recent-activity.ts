@@ -179,6 +179,17 @@ export function createRecentActivitySession({
    * which would tell the model to use activity it has never seen.
    */
   const outcome = new Map<string, RecentActivityError | undefined>()
+  /**
+   * Repositories whose fetch is in the air right now.
+   *
+   * Separate from `outcome`, and not merged into it as a pessimistic entry,
+   * because the two mean different things and the SDK runs a step's tool
+   * calls concurrently: a model that emits `recent_activity(decant)` twice in
+   * one step would otherwise have the second call read the first's
+   * placeholder and be told GitHub could not be reached, in the same step it
+   * was handed that repository's digest.
+   */
+  const inFlight = new Set<string>()
   const refused: ActivityRefused = { unknown: 0, duplicate: 0, budget: 0 }
   let calls = 0
   let spentTokens = 0
@@ -210,6 +221,12 @@ export function createRecentActivitySession({
       return { error: 'unknown_repository' }
     }
 
+    // A second call while the first is still waiting on GitHub. It is a
+    // duplicate, not a failure: the first call will answer.
+    if (inFlight.has(repository.id)) {
+      refused.duplicate += 1
+      return { error: 'repository_already_checked' }
+    }
     if (outcome.has(repository.id)) {
       // The recorded outcome again, whatever it was: a repository is fetched
       // once per request either way.
@@ -219,12 +236,19 @@ export function createRecentActivitySession({
       else if (error === 'activity_budget_exhausted') refused.budget += 1
       return { error }
     }
-    // Recorded before the fetch, so a repository GitHub cannot answer for
+    // Counted before the fetch, so a repository GitHub cannot answer for
     // costs one attempt rather than as many as the model has steps left.
-    outcome.set(repository.id, 'activity_unavailable')
+    inFlight.add(repository.id)
     calls += 1
 
-    const result = await fetchActivity(repository, onFailure)
+    let result: ActivityFetchResult
+    try {
+      result = await fetchActivity(repository, onFailure)
+    } finally {
+      // Whatever happened, this repository is no longer in the air. The
+      // outcome recorded below is what a later call reads.
+      inFlight.delete(repository.id)
+    }
     // `missing` and `unavailable` collapse into one code on purpose: there is
     // nothing the model could usefully do differently for a repository that
     // has been renamed, and telling it a repository it was just offered does

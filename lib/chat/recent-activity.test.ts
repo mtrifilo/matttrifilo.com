@@ -160,6 +160,33 @@ describe('the call caps', () => {
     expect(calls).toEqual([ALLOWED])
   })
 
+  test('two calls for one repository in the same step do not contradict', async () => {
+    // The SDK runs a step's tool calls concurrently, and models do emit
+    // duplicates. The second call used to read the first's pessimistic
+    // placeholder and be told GitHub could not be reached, in the same step
+    // the first was handed that repository's digest.
+    let calls = 0
+    const session = createRecentActivitySession({
+      fetchActivity: async () => {
+        calls += 1
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'ok', raw }
+      },
+    })
+
+    const [first, second] = await Promise.all([
+      run(session.tool, ALLOWED),
+      run(session.tool, ALLOWED),
+    ])
+
+    // One fetch, one digest, and a duplicate told it is a duplicate.
+    expect(calls).toBe(1)
+    const results = [first, second]
+    expect(results.filter(result => 'activity' in result)).toHaveLength(1)
+    expect(results).toContainEqual({ error: 'repository_already_checked' })
+    expect(session.activityRefused().duplicate).toBe(1)
+  })
+
   test('a repository whose digest did not fit is told that again', async () => {
     const budget = createReadBudget(10)
     const { fetchActivity } = fetcher()

@@ -19,6 +19,7 @@ import {
   assertDecline,
   assertDeclineOrWithholds,
   assertCheckedActivity,
+  assertDatesFromActivity,
   assertHasRecentDate,
   assertNoHandles,
   assertNoInventedFact,
@@ -544,5 +545,50 @@ describe('assertNoNarration, on the activity tool', () => {
     )
     expect(result.pass).toBe(false)
     expect(result.reason).toContain(RECENT_ACTIVITY_TOOL_NAME)
+  })
+})
+
+describe('assertDatesFromActivity', () => {
+  const delivered = { activityDates: ['2026-09-18', '2026-09-20'] }
+
+  test.each([
+    ['an ISO date', 'He merged the parser fix on 2026-09-18.'],
+    ['a long date', 'He merged the parser fix on 18 September 2026.'],
+    ['an American date', 'He merged it September 18, 2026.'],
+    ['an abbreviated month', 'Latest work landed Sept 2026.'],
+    ['a month alone', 'Most of the recent work is from September 2026.'],
+  ])('%s that the digest carried passes', (_label, answer) => {
+    expect(
+      assertDatesFromActivity(answer, ctx(undefined, delivered)).pass
+    ).toBe(true)
+  })
+
+  test('a date the digest did not carry fails', () => {
+    // The case the pair exists for: an answer written from the corpus, which
+    // mentions the current year all over, with GitHub never consulted.
+    const result = assertDatesFromActivity(
+      'His open-source page was last updated in March 2026.',
+      ctx(undefined, delivered)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('2026-03')
+  })
+
+  test('an undated answer fails and says the digest had dates', () => {
+    const result = assertDatesFromActivity(
+      'He has been shipping improvements to the site.',
+      ctx(undefined, delivered)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('no date')
+  })
+
+  test('a run that never reached GitHub fails rather than passing empty', () => {
+    const result = assertDatesFromActivity(
+      'He merged the parser fix on 2026-09-18.',
+      ctx(undefined, { activityDates: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('GitHub was never reached')
   })
 })

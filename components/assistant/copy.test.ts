@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { announcementFor } from '@/lib/chat/answer'
+import type { ProgressView } from '@/lib/chat/progress'
 import {
   MATT_EMAIL,
   PROGRESS_THINKING,
@@ -129,12 +131,26 @@ describe('the progress copy', () => {
   })
 
   test('the spoken and written forms differ only by the ellipsis', () => {
-    // lib/chat/answer.ts speaks "Reading {title}" and "Writing answer" to a
-    // screen reader from its own literals, because it may not import this
-    // module. This is the tripwire for the two drifting apart.
-    expect(progressReading('Résumé')).toBe(`${'Reading Résumé'}…`)
-    expect(progressChecking('decant')).toBe(`${'Checking GitHub for decant'}…`)
-    expect(PROGRESS_WRITING).toBe(`${'Writing answer'}…`)
+    // lib/chat/answer.ts speaks these lines to a screen reader from its own
+    // literals, because it may not import this module. This is the tripwire
+    // for the two drifting apart, and it reads the real announcement rather
+    // than a third copy of the words: a test that re-typed them would stay
+    // green while the two channels described different work.
+    const spoken = (progress: ProgressView) =>
+      announcementFor('streaming', false, progress)
+
+    expect(
+      spoken({ phase: 'reading', steps: [{ id: 'r', title: 'Résumé' }] })
+    ).toBe(progressReading('Résumé').replace('…', ''))
+    expect(
+      spoken({
+        phase: 'reading',
+        steps: [{ id: 'decant', title: 'decant', kind: 'activity' }],
+      })
+    ).toBe(progressChecking('decant').replace('…', ''))
+    expect(spoken({ phase: 'writing', steps: [] })).toBe(
+      PROGRESS_WRITING.replace('…', '')
+    )
   })
 
   test('the wait before a first read is Thinking', () => {

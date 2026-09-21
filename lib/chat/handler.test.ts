@@ -1128,12 +1128,14 @@ describe('reading documents', () => {
     )
     const body = await response.text()
 
-    expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(
-      'read_budget_exhausted'
-    )
-    expect(JSON.stringify(model.doStreamCalls[1].prompt)).not.toContain(
-      huge.text
-    )
+    // `document_too_large`, not `read_budget_exhausted`: the text is over the
+    // whole budget, so no amount of reading less would let it through. The
+    // distinction matters for the assertion as well as for the model, because
+    // both codes appear in the tool's own description in every prompt, and
+    // only this one is absent unless the refusal really happened.
+    const refusal = JSON.stringify(model.doStreamCalls[1].prompt)
+    expect(refusal).toContain('"error":"document_too_large"')
+    expect(refusal).not.toContain(huge.text)
     // The row is announced from the tool call, because narrating the wait is
     // the point, and withdrawn when the refusal comes back: the visitor is
     // never left with "Read 1 document" above an answer drawn from none. This

@@ -24,10 +24,13 @@ import { estimateTokens } from './validate'
  *     pattern is a denylist, so each one is a claim about a class that has to
  *     be kept true as the class grows; `github-activity.test.ts` is where
  *     that is argued out.
- *   - No author, login, avatar, URL, or SHA is carried at all (Matt's
- *     decision 4 on MTC-45). The digest cannot name a contributor because it
- *     never holds a name, which is a stronger guarantee than asking the model
- *     not to mention one.
+ *   - No author, login, avatar, URL, or SHA field is carried at all (Matt's
+ *     decision 4 on MTC-45), and the two places a name can arrive inside the
+ *     text instead are closed: `@mentions` and email addresses in
+ *     `sanitiseText`, and GitHub's merge-commit templates in `commitSubject`,
+ *     which name a contributor in the subject line itself. What is left is a
+ *     name written as an ordinary word, `thanks Jane for the report`, which
+ *     no pattern can tell from the rest of the sentence.
  *   - The digest is capped in two places: each string at
  *     ACTIVITY_TEXT_MAX_CHARS, and the whole block at ACTIVITY_MAX_TOKENS,
  *     with the oldest entries dropped first.
@@ -68,8 +71,16 @@ const FETCH_TIMEOUT_MS = 5_000
 
 const GITHUB_API = 'https://api.github.com'
 
-/** Closed pull requests asked for, before filtering to the merged ones. */
-const PULL_REQUEST_PAGE_SIZE = 20
+/**
+ * Closed pull requests asked for, before filtering to the merged ones.
+ *
+ * Far more than the eight kept, because `state=closed` includes pull requests
+ * that were closed without merging: on a repository with a run of those, a
+ * small page would yield fewer than eight merged ones and the block would
+ * present a short list as if it were the whole recent history. One request
+ * either way.
+ */
+const PULL_REQUEST_PAGE_SIZE = 50
 
 /* ------------------------------------------------------------------ *
  * What a fetch produces, before any filtering.                        *
@@ -143,6 +154,8 @@ const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/g
  */
 const SCHEME_URL = /\b[a-z][\w+.-]*:\/\/\S+/gi
 const HOST_PATH_URL = /\b[\w-]+(?:\.[\w-]+)+\/\S*/g
+/** `github.com:owner/repo`, the shape an SSH remote arrives in. */
+const SCP_REMOTE = /\b[\w-]+(?:\.[\w-]+)+:[\w-]+\/\S*/g
 const WWW_URL = /\bwww\.\S+/gi
 /**
  * An email address, removed before the mention pattern reaches it.
@@ -189,6 +202,24 @@ const MENTION = new RegExp(HANDLE_PATTERN, 'g')
 const EMOJI_SHORTCODE = /:[a-z][a-z0-9_+-]{1,30}:/gi
 
 /**
+ * One of the block's markers, as a pattern that tolerates how it is spelled.
+ *
+ * A literal `replaceAll` of the marker was not enough twice over: it ran
+ * before the whitespace collapse, so `BEGIN  REPOSITORY  ACTIVITY` with two
+ * spaces was rewritten into the exact marker AFTER the neutraliser had
+ * already gone past, and it was case-sensitive. Matching `\s+` between the
+ * words and ignoring case removes the ordering dependency entirely, which
+ * matters because the ordering was invisible: both versions passed a test
+ * that fed a single-spaced marker.
+ */
+function markerPattern(marker: string): RegExp {
+  return new RegExp(
+    marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'),
+    'gi'
+  )
+}
+
+/**
  * One third-party string, reduced to plain words.
  *
  * Order is load-bearing. Tags go before links so an anchor's `href` cannot
@@ -200,7 +231,15 @@ const EMOJI_SHORTCODE = /:[a-z][a-z0-9_+-]{1,30}:/gi
  * Link and image labels are kept while their targets are dropped: the label
  * is usually the only readable part of the title, and it is no more trusted
  * than the rest of the string, which is to say not at all. What matters is
- * that no URL survives for the model to repeat to a visitor.
+ * that nothing survives that the model could repeat to a visitor as a link.
+ *
+ * Be exact about the limit of that. A bare host with no path and no scheme,
+ * `Migrate to totally-not-matt.example`, DOES survive, and deliberately: a
+ * pattern that removed every dotted token would remove `package.json`,
+ * `README.md`, `next.js` and every source path, which is most of what a
+ * commit subject says. It is a word in a sentence rather than something a
+ * markdown renderer will turn into an anchor, and the policy separately
+ * forbids reproducing a link.
  *
  * An `@mention` is removed rather than kept, because a handle is the one
  * thing a contributor's name would arrive as (decision 4).
@@ -226,15 +265,20 @@ export function sanitiseText(value: string): string {
     .replace(HTML_TAG, ' ')
     .replace(MARKDOWN_IMAGE, '$1')
     .replace(MARKDOWN_LINK, '$1')
+    // Before the URL patterns: `jane.doe@example.com/x` matches HOST_PATH_URL
+    // from the domain onwards, which would take the address away and leave
+    // the person's name behind, which is the opposite of the point.
+    .replace(EMAIL, ' ')
     .replace(SCHEME_URL, ' ')
     .replace(WWW_URL, ' ')
+    .replace(SCP_REMOTE, ' ')
     .replace(HOST_PATH_URL, ' ')
-    .replace(EMAIL, ' ')
     .replace(MENTION, ' ')
     .replace(EMOJI_SHORTCODE, ' ')
-    .replaceAll(ACTIVITY_BLOCK_START, '[activity]')
-    .replaceAll(ACTIVITY_BLOCK_END, '[activity]')
     .replace(/\s+/g, ' ')
+    // After the collapse, and whitespace-tolerant besides: see markerPattern.
+    .replace(markerPattern(ACTIVITY_BLOCK_START), '[activity]')
+    .replace(markerPattern(ACTIVITY_BLOCK_END), '[activity]')
     .trim()
   const characters = [...stripped]
   if (characters.length <= ACTIVITY_TEXT_MAX_CHARS) return stripped
@@ -249,9 +293,42 @@ export function sanitiseText(value: string): string {
   return `${kept.trimEnd()}...`
 }
 
-/** The first line of a commit message, before it is filtered. */
+/**
+ * GitHub's own merge-commit templates, which name a contributor in the one
+ * line this module reads.
+ *
+ * `Merge pull request #42 from janedoe/fix-parser` is what the merge button
+ * writes by default, and `Merge branch 'main' of github.com:janedoe/decant`
+ * is what `git pull` writes. Both end in `<login>/<something>`, which carries
+ * no `@` and no dot before its slash, so neither the mention pattern nor the
+ * URL patterns see it: to a general-purpose filter it is indistinguishable
+ * from `lib/chat/handler.ts`, and filenames are most of what commit subjects
+ * are about.
+ *
+ * So it is handled here instead, where the text is still known to be a commit
+ * message and the templates can be matched as the fixed strings they are. The
+ * pull request number survives, because it is a fact about the work and names
+ * nobody.
+ */
+const MERGE_TEMPLATES: readonly [RegExp, string][] = [
+  [/^(Merge pull request #\d+) from \S+/, '$1'],
+  [/^(Merge branch .+?) of \S+$/, '$1'],
+  [/^(Merge) \S+\/\S+ (into \S+)$/, '$1 $2'],
+]
+
+/**
+ * The first line of a commit message, with a merge template's attribution
+ * removed, before it is filtered.
+ *
+ * Only the first line: a commit body can hold `Co-authored-by:` trailers and
+ * anything else a contributor cares to write, and none of it is read.
+ */
 export function commitSubject(message: string): string {
-  return message.split('\n', 1)[0] ?? ''
+  const first = message.split('\n', 1)[0] ?? ''
+  for (const [pattern, replacement] of MERGE_TEMPLATES) {
+    if (pattern.test(first)) return first.replace(pattern, replacement)
+  }
+  return first
 }
 
 /**

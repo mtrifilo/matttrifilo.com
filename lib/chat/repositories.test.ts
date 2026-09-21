@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { openSourceRepos } from '@/content/open-source'
+import { loadKnowledgeIndex } from '@/lib/knowledge'
 import { ASSISTANT_REPOSITORIES, assistantRepository } from './repositories'
 
 /**
@@ -56,6 +57,21 @@ describe('the assistant allowlist', () => {
       expect(curated).toBeDefined()
       expect(repo.id).not.toContain('/')
       expect(repo.slug).toBe(`${repo.owner}/${repo.id}`)
+    }
+  })
+})
+
+describe('the two id spaces the narration shares', () => {
+  test('no repository id is also a document id', () => {
+    // lib/chat/handler.ts narrates reads and checks into one step list keyed
+    // by bare id, so a collision would let one kind of work suppress the
+    // other's row, or let a refused check withdraw a completed read's. The
+    // two lists come from different files and nothing else would notice.
+    const documents = new Set(
+      loadKnowledgeIndex().entries.map(entry => entry.id)
+    )
+    for (const repository of ASSISTANT_REPOSITORIES) {
+      expect(documents.has(repository.id)).toBe(false)
     }
   })
 })
