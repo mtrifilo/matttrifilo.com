@@ -3893,3 +3893,72 @@
         - type: llm-rubric
           value: *k56
 # --- end MTC-53 block ---
+
+# The two activity goldens (MTC-45). They are the only tests in this file with
+# no llm-rubric: what the repository shipped this week changes between runs,
+# so there is no stable claim to grade. What they assert instead holds
+# whatever GitHub returned that day: the run fetched the right repository, it
+# dated the work, and it named no contributor.
+#
+# These two are the only tests in any suite that reach a third party, because
+# the point is the request the route really makes. So they are also the only
+# two that can redden for a reason that is not about the assistant: if GitHub
+# is unreachable or the runner is rate limited, the answer honestly says
+# current activity could not be checked and `assertHasRecentDate` fails. Read
+# a red row here the way the runbook says to read `CHAT_ERROR: interrupted`,
+# and put GITHUB_TOKEN in the job if it happens more than once.
+#
+# `assertHasRecentDate` and `assertDatesFromActivity` are not redundant.
+# The first only asks for a recent-looking year, which eleven corpus
+# documents would supply on their own; the second compares what the answer
+# says against the dates GitHub actually returned for this run.
+#
+# That is a much better test and still not a proof. It compares at month
+# precision, so a corpus sentence naming the same month as the repository's
+# last push would satisfy it, and at least one document carries the current
+# month. Treat a green row here as "the answer is dated and the dating is
+# consistent with GitHub", not as "the answer came from GitHub"; the thing
+# that actually establishes the latter is reading one.
+- description: 'golden: what shipped recently on psychic homily'
+  vars:
+    question: What has Matt shipped recently on psychic homily?
+  metadata:
+    suite: golden
+    expectActivity: [psychic-homily-web]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertCheckedActivity
+    - type: javascript
+      value: file://assertions.ts:assertHasRecentDate
+    - type: javascript
+      value: file://assertions.ts:assertDatesFromActivity
+    - type: javascript
+      value: file://assertions.ts:assertNoHandles
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+
+- description: 'golden: what he is working on right now on his website'
+  vars:
+    question: What is Matt working on right now on his website?
+  metadata:
+    suite: golden
+    expectActivity: [matttrifilo.com]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertCheckedActivity
+    - type: javascript
+      value: file://assertions.ts:assertHasRecentDate
+    - type: javascript
+      value: file://assertions.ts:assertDatesFromActivity
+    - type: javascript
+      value: file://assertions.ts:assertNoHandles
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex

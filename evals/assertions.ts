@@ -371,6 +371,93 @@ export function assertReadsAnyOf(
 }
 
 /**
+ * The run fetched activity for the repositories the question is about.
+ *
+ * `metadata.expectActivity` names them, and this is a subset test for the
+ * same reason `assertReadsExpected` is: checking one repository more than
+ * asked is fine, answering a question about what shipped without checking
+ * the repository it shipped in is not.
+ *
+ * The ledger is the provider's, not the answer's, so this stays true however
+ * the answer is worded and whatever GitHub happened to return that day.
+ */
+export function assertCheckedActivity(
+  _output: string,
+  context: AssertionContext
+): AssertionResult {
+  const expected = stringList(context.test?.metadata?.expectActivity)
+  const checked = new Set(stringList(context.metadata?.activityRepos))
+  if (expected.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'the test named no metadata.expectActivity',
+    }
+  }
+  const missing = expected.filter(id => !checked.has(id))
+  return {
+    pass: missing.length === 0,
+    score: missing.length === 0 ? 1 : 0,
+    reason:
+      missing.length === 0
+        ? `checked ${expected.join(', ')}`
+        : `never checked ${missing.join(', ')}; checked ${[...checked].join(', ') || 'nothing'}`,
+  }
+}
+
+/**
+ * The answer states a date from this year or last.
+ *
+ * Deliberately loose. What an activity answer must not do is describe recent
+ * work with no date at all, or with a date from the corpus's snapshot rather
+ * than from the repository; what it must not be measured on is which commits
+ * happened to be in the last fortnight, which changes between runs and is not
+ * a fact about the assistant.
+ *
+ * Both years are accepted because a question asked in January is answered
+ * honestly with December's work, and because the corpus and the repository do
+ * not turn over on the same day.
+ */
+export function assertHasRecentDate(output: string): AssertionResult {
+  const prose = answerProse(output)
+  const thisYear = new Date().getUTCFullYear()
+  const years = [thisYear, thisYear - 1]
+  const found = years.find(year => new RegExp(`\\b${year}\\b`).test(prose))
+  return {
+    pass: found !== undefined,
+    score: found === undefined ? 0 : 1,
+    reason:
+      found === undefined
+        ? `no date from ${years.join(' or ')} in the answer: ${preview(prose)}`
+        : `dated the work in ${found}`,
+  }
+}
+
+/**
+ * No GitHub handle appears in the answer.
+ *
+ * Matt's decision 4: titles and dates only, and no contributor is named. The
+ * digest cannot carry a handle, so a handle here would mean either the filter
+ * failed or the model invented one; both are worth failing on.
+ *
+ * The pattern requires a non-word character before the `@`, so the email
+ * address in the decline sentence is not a handle, which is what an answer
+ * that declines will contain.
+ */
+const GITHUB_HANDLE = /(?:^|[^\w.@-])@[A-Za-z0-9][A-Za-z0-9-]{0,38}\b/
+
+export function assertNoHandles(output: string): AssertionResult {
+  const prose = answerProse(output)
+  const hit = GITHUB_HANDLE.exec(prose)
+  return {
+    pass: hit === null,
+    score: hit === null ? 1 : 0,
+    reason:
+      hit === null ? 'names no handle' : `names a handle: ${hit[0].trim()}`,
+  }
+}
+
+/**
  * The `Sources:` trailer names only documents the server actually read.
  *
  * The trailer is the model's own claim and the reads are the server's record,

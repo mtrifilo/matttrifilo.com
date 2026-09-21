@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
 import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
+import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
+import { loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
 import { historyFrom } from './route-request'
 
@@ -113,6 +115,11 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   'assertDeclineOrWithholds',
   'assertCitesOnlyWhatItRead',
   'assertChipsMatchReads',
+  // Reads the provider's ledger, not the answer, so an empty answer clears
+  // it; `assertNoHandles` is an absence check on the text for the same
+  // reason. Neither can stand alone as the thing a test judges.
+  'assertCheckedActivity',
+  'assertNoHandles',
 ])
 
 function toArray(value: unknown): string[] {
@@ -274,11 +281,25 @@ for (const name of SUITES) {
         if (names.includes('assertReadsAnyOf')) {
           expect(Array.isArray(metadata.expectReadsAny)).toBe(true)
         }
+        if (names.includes('assertCheckedActivity')) {
+          expect(Array.isArray(metadata.expectActivity)).toBe(true)
+        }
         if (
           names.includes('assertDeclineOrWithholds') ||
           names.includes('assertNoInventedFact')
         ) {
           expect(Array.isArray(metadata.forbidden)).toBe(true)
+        }
+      }
+    })
+
+    test('every expected check names an allowlisted repository', () => {
+      // A golden pointed at a repository the route may not fetch would fail
+      // on every run for a reason that has nothing to do with the answer.
+      const allowed = ASSISTANT_REPOSITORIES.map(repository => repository.id)
+      for (const item of suite) {
+        for (const id of toArray(item.metadata?.expectActivity)) {
+          expect(allowed).toContain(id)
         }
       }
     })

@@ -1,5 +1,6 @@
 import { geminiModel, getVertex, usesVercelFederation } from '@/lib/ai/vertex'
 import { createChatHandler } from '@/lib/chat/handler'
+import { fetchRepositoryActivity } from '@/lib/chat/github-activity'
 import type { KnowledgeDocument } from '@/lib/knowledge'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
 import {
@@ -25,6 +26,8 @@ import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
  * which documents a run opened is the ground truth the groundedness suite
  * compares the answer's citations against, and nothing on the stream carries
  * it: the handler filters tool chunks out before the response leaves.
+ * `fetchActivity` is wrapped for the same reason and in the same way, so a
+ * suite can assert which repository a run checked on GitHub (MTC-45).
  *
  * The response is read through the stream's public shape only, so a new part
  * added to the stream elsewhere does not change what a suite sees.
@@ -58,12 +61,22 @@ interface ProviderResponse {
  * It is therefore a superset of what the answer saw, bounded by the step cap
  * rather than by the read budget, and every assertion built on it is written
  * as a subset test for that reason.
+ *
+ * `activityRepos` is the same kind of ledger for `recent_activity`: the
+ * repositories a run actually fetched from GitHub. Like `readIds` it records
+ * what got past the allowlist, so an id the model invented never appears in
+ * it, and a repository whose fetch then failed does. It is keyed by
+ * repository rather than being a list of tool names, because which
+ * repository was checked is the thing a golden needs to assert and a name
+ * alone cannot carry it.
 
  * `finishReason` is carried for the person reading a red row, not for an
  * assertion. `incomplete` and `truncated` are what assertAnswered judges.
  */
 export interface EvalMetadata extends Record<string, unknown> {
   readIds: string[]
+  /** Repositories this run fetched activity for, in the order it asked. */
+  activityRepos: string[]
   /** The server's authoritative source list, absent on a decline. */
   sourceIds: string[]
   finishReason?: string
@@ -120,6 +133,7 @@ export default class ChatRouteProvider {
     attempt: number
   ): Promise<{ response: ProviderResponse; transportFailure: boolean }> {
     const readIds: string[] = []
+    const activityRepos: string[] = []
     const model = geminiModel()
 
     const handler = createChatHandler({
@@ -128,6 +142,13 @@ export default class ChatRouteProvider {
         const document = readKnowledgeDocument(id)
         if (document) readIds.push(document.id)
         return document
+      },
+      // Real GitHub, wrapped only to record what was asked for: a suite about
+      // whether the assistant reports current work has to exercise the fetch
+      // it would make in production, cache and rate limit included.
+      fetchActivity: (repository, onFailure) => {
+        activityRepos.push(repository.id)
+        return fetchRepositoryActivity(repository, onFailure)
       },
       // The counters are forwarded rather than dropped so the route's own
       // `[chat]` completion line carries real vertexRetries and
@@ -161,7 +182,7 @@ export default class ChatRouteProvider {
       const code = envelopeCode(body)
       return {
         response: failure(`CHAT_ERROR: ${code}`, {
-          ...baseMetadata(readIds, model, response.status),
+          ...baseMetadata(readIds, activityRepos, model, response.status),
           attempt,
         }),
         transportFailure:
@@ -171,7 +192,7 @@ export default class ChatRouteProvider {
 
     const answer = parseUiMessageStream(body)
     const metadata: EvalMetadata = {
-      ...baseMetadata(readIds, model, response.status),
+      ...baseMetadata(readIds, activityRepos, model, response.status),
       attempt,
       sourceIds: (answer.metadata.sources ?? []).map(source => source.id),
       finishReason: answer.finishReason,
@@ -213,10 +234,11 @@ function failure(
 
 function baseMetadata(
   readIds: string[],
+  activityRepos: string[],
   model: string,
   status: number
 ): EvalMetadata {
-  return { readIds, sourceIds: [], model, status }
+  return { readIds, activityRepos, sourceIds: [], model, status }
 }
 
 function flags(metadata: StreamedMetadata) {

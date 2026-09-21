@@ -13,6 +13,9 @@ import {
   assertNoNarration,
   assertNoPolicyLeak,
   assertReadsAnyOf,
+  assertCheckedActivity,
+  assertHasRecentDate,
+  assertNoHandles,
   assertReadsExpected,
   assertReadsWithinIndex,
   assertThirdPerson,
@@ -399,5 +402,86 @@ describe('assertNoInventedFact', () => {
       assertNoInventedFact('Sure, here is a summary.', ctx({ forbidden: [] }))
         .pass
     ).toBe(false)
+  })
+})
+
+describe('assertCheckedActivity', () => {
+  test('a superset of the expected checks passes', () => {
+    expect(
+      assertCheckedActivity(
+        '',
+        ctx(
+          { expectActivity: ['psychic-homily-web'] },
+          { activityRepos: ['psychic-homily-web', 'decant'] }
+        )
+      ).pass
+    ).toBe(true)
+  })
+
+  test('a missing check fails and names the repository', () => {
+    const result = assertCheckedActivity(
+      '',
+      ctx({ expectActivity: ['decant'] }, { activityRepos: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('decant')
+  })
+
+  test('a test that named no expectation fails rather than passing vacuously', () => {
+    expect(
+      assertCheckedActivity('', ctx(undefined, { activityRepos: ['decant'] }))
+        .pass
+    ).toBe(false)
+  })
+})
+
+describe('assertHasRecentDate', () => {
+  const thisYear = new Date().getUTCFullYear()
+
+  test('this year passes', () => {
+    expect(
+      assertHasRecentDate(`He merged the parser rewrite in March ${thisYear}.`)
+        .pass
+    ).toBe(true)
+  })
+
+  test('last year passes, so a January question is not failed for honesty', () => {
+    expect(
+      assertHasRecentDate(`The last release was ${thisYear - 1}-12-02.`).pass
+    ).toBe(true)
+  })
+
+  test('an undated answer fails', () => {
+    expect(
+      assertHasRecentDate('He has been shipping improvements to the CLI.').pass
+    ).toBe(false)
+  })
+
+  test('a date from the corpus snapshot is not a recent date', () => {
+    expect(assertHasRecentDate('He joined the team in 2013.').pass).toBe(false)
+  })
+})
+
+describe('assertNoHandles', () => {
+  test('an answer with no handle passes', () => {
+    expect(
+      assertNoHandles('He merged a fix for the clipboard fallback.').pass
+    ).toBe(true)
+  })
+
+  test('the decline sentence passes: an email is not a handle', () => {
+    expect(assertNoHandles(DECLINE_SENTENCE).pass).toBe(true)
+  })
+
+  test('a contributor handle fails and is named', () => {
+    const result = assertNoHandles('The fix came from @dependabot.')
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('@dependabot')
+  })
+
+  test('a handle at the very start of the answer fails too', () => {
+    expect(assertNoHandles('@someone opened the pull request.').pass).toBe(
+      false
+    )
   })
 })
