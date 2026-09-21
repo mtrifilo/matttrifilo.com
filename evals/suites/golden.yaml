@@ -1256,12 +1256,18 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    # One token per document named in expectReadsAny, because the run is only
+    # required to have opened one of them: the first four are reachable from
+    # the operations and marketplace documents, the last two from the
+    # philosophy document.
     - type: icontains-any
       value:
         - runbook
         - knowledge base
         - handoff
         - any engineer
+        - indispensable
+        - grow people
     # Whether one exact idiom is present is not a judgement call, so it is
     # not left to the grader. No document uses this phrase; an answer that
     # leads with it is characterising rather than reporting.
@@ -1272,8 +1278,10 @@
       assert:
         - type: llm-rubric
           value: &r37 >-
-            The answer rests on the facts the documents state, and at least
-            two of these three: that Matt's stated aim is to grow people
+            The answer rests on the facts the documents state, and on at
+            least one of these three. One is enough, because each lives in a
+            different document and the run is only required to have opened
+            one of them: that Matt's stated aim is to grow people
             rather than to be indispensable; that teammates run the on-call
             plugin without him, one running the handoff skill end to end and
             another triaging an alert storm and adding a runbook for it; and
@@ -1594,12 +1602,15 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    # Salesforce is here so the integration document, which names none of the
+    # other four, can carry the answer on its own.
     - type: icontains-any
       value:
         - Email Engagement Summary
         - Symphony
         - marketplace
         - independent
+        - Salesforce
     - type: assert-set
       threshold: 0.6
       assert:
@@ -2566,14 +2577,17 @@
     question: What incident command responsibilities has Matt held?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations]
+    # All three role names are résumé-only: the operations document describes
+    # the February 2024 outage without naming any of them, so an any-of read
+    # would let a run pass the read gate from a document that cannot answer.
+    expectReads: [resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsAnyOf
+      value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -2609,14 +2623,17 @@
     question: Has Matt owned a vendor negotiation or a licensing budget?
   metadata:
     suite: golden
-    expectReadsAny: [resume, ai-tooling-leadership]
+    # The negotiation itself is résumé-only. The AI tooling document carries
+    # only the ownership sentence, which the rubric treats as an addition,
+    # so it cannot stand in for the read.
+    expectReads: [resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsAnyOf
+      value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -2678,9 +2695,11 @@
             there has been zero voluntary attrition under him as manager. It
             may add that he lists hiring and performance management among his
             leadership skills, that he believes growing people compounds, or
-            the essay's point that he has hosted many candidate interviews and
-            looks for demonstrable agentic-engineering skill and shipped work.
-            It does not describe an interview format, a ramp plan or a
+            the essay's point that he has hosted many candidate interviews,
+            has rarely seen shipped projects from candidates and does not
+            treat them as mandatory, and expects demonstrable
+            agentic-engineering skill to be where emerging potential shows
+            next. It does not describe an interview format, a ramp plan or a
             growth-conversation format, none of which the published material
             sets out; where it goes beyond what is published it says so. It is
             written about Matt in the third person, and it must not present an
@@ -2807,12 +2826,15 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    # "gaps" is here for the throughput study, whose section naming its own
+    # limits carries none of the other three phrasings.
     - type: icontains-any
       value:
         - did not hold
         - dumping ground
         - open item
         - not yet measured
+        - gaps
     - type: assert-set
       threshold: 0.6
       assert:
@@ -2898,16 +2920,18 @@
     question: How does Matt get someone up to speed on a service they have never worked on?
   metadata:
     suite: golden
-    expectReadsAny:
-      - plugin-marketplaces-and-sme-knowledge-bases
-      - engineering-philosophy
+    # Every mechanism this rubric accepts lives in the marketplace document.
+    # The philosophy document was listed here for the "new teammate" line,
+    # which is about briefing an agent and is now refused, so leaving it
+    # would name a document the test cannot pass from.
+    expectReads: [plugin-marketplaces-and-sme-knowledge-bases]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsAnyOf
+      value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any

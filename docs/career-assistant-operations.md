@@ -127,6 +127,8 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
 4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
 
+A fifth possibility is that the job ran out of time rather than failing. `.github/workflows/evals.yml` caps the job at `timeout-minutes: 90` and `bun run evals` uses `--max-concurrency 2`, so a full run is roughly 200 serial model calls: 144 route calls plus 255 grader calls, halved by the concurrency. That fits 90 minutes comfortably at normal latency, and does not fit it if the 3x retry case above holds for most of a run. A timeout kills the job rather than the step, so `continue-on-error` on the suites step does not rescue it and there is no `results.json` to read. If that happens, raise the cap or the concurrency; it is a sizing problem, not a regression. The margin halved when MTC-51 doubled the golden suite, and no wall-time has been measured since.
+
 Never relax an assertion to get a green run without saying so in the pull request.
 
 ### Running them locally

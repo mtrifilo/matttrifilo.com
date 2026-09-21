@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
-import { loadKnowledgeIndex } from '@/lib/knowledge'
+import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
 import { historyFrom } from './route-request'
 
@@ -125,6 +125,41 @@ function toArray(value: unknown): string[] {
 function duplicates(values: string[]): string[] {
   return [...new Set(values.filter((v, i) => values.indexOf(v) !== i))]
 }
+
+/** Every `icontains`/`icontains-any` needle a test carries, nesting included. */
+function containsNeedles(item: SuiteTest): string[] {
+  const needles: string[] = []
+  const walk = (list: SuiteAssertion[] | undefined) => {
+    for (const entry of list ?? []) {
+      if (entry.type === 'icontains-any' || entry.type === 'contains-any') {
+        needles.push(...toArray(entry.value))
+      }
+      if (
+        (entry.type === 'icontains' || entry.type === 'contains') &&
+        typeof entry.value === 'string'
+      ) {
+        needles.push(entry.value)
+      }
+      walk(entry.assert)
+    }
+  }
+  walk(item.assert)
+  return needles
+}
+
+/**
+ * The corpus bodies, whitespace-flattened and lowercased.
+ *
+ * Flattened because the markdown is hard-wrapped, so a phrase the assistant
+ * would say on one line is split across two in the file and a raw substring
+ * search would miss it.
+ */
+const corpusText = new Map<string, string>(
+  listKnowledgeDocuments().map(document => [
+    document.id,
+    document.text.replace(/\s+/g, ' ').toLowerCase(),
+  ])
+)
 
 describe('promptfooconfig.yaml', () => {
   test('targets the route provider and nothing else', () => {
@@ -284,14 +319,44 @@ for (const name of SUITES) {
       }
     })
 
+    test('every document a test expects can satisfy its own phrase check', () => {
+      // `assertReadsAnyOf` passes on ONE of the documents a test names, so a
+      // document listed there that contains none of the test's distinctive
+      // phrases makes the test unpassable from that document: the run clears
+      // the read gate and then fails the phrase check, which reads as a model
+      // regression rather than as the suite asking for something it cannot
+      // get. The same holds for an `expectReads` id.
+      const unreachable: unknown[] = []
+      for (const item of suite) {
+        const needles = containsNeedles(item)
+        if (needles.length === 0) continue
+        const ids = [
+          ...toArray(item.metadata?.expectReads),
+          ...toArray(item.metadata?.expectReadsAny),
+        ]
+        for (const id of ids) {
+          const text = corpusText.get(id) ?? ''
+          const reachable = needles.some(needle =>
+            text.includes(needle.toLowerCase())
+          )
+          if (!reachable)
+            unreachable.push({ description: item.description, id })
+        }
+      }
+      expect(unreachable).toEqual([])
+    })
+
     test('no anchor name is defined twice', () => {
       // Anchors are the one place in these files where two definitions
       // resolve silently: YAML takes the nearest preceding one, so a merge
       // that keeps two `&r38` blocks grades one test against the other's
       // rubric with nothing red. Read from the raw text, because a parser
       // has already collapsed them by the time it hands back objects.
+      // Matched at an anchor's only legal position, right after the `key:`
+      // it labels, so an ampersand inside rubric prose ("R&D") is not read
+      // as a declaration and cannot redden the suite with a false duplicate.
       const raw = readFileSync(join(EVALS, `suites/${name}.yaml`), 'utf8')
-      const anchors = [...raw.matchAll(/&([A-Za-z0-9_-]+)/g)].map(
+      const anchors = [...raw.matchAll(/^\s*(?:-\s*)?\w+:\s+&([\w-]+)/gm)].map(
         match => match[1]
       )
       expect(duplicates(anchors)).toEqual([])
