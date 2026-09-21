@@ -5,7 +5,9 @@ name: evals
 # request paying for a full run spent more on tokens than it caught, and a
 # one-in-a-hundred model flake reddened most runs. This workflow stays so a
 # branch can be evaluated under the deployment's own identity when that
-# question matters (an IAM change, a dependency bump, a fork's branch).
+# question matters: an IAM or federation change, or a contributor's branch
+# after its .github/ and evals/ changes have been reviewed (see the runbook).
+# A dependency bump is exercised locally like any other change.
 #
 # Never `pull_request` or `pull_request_target` here. This job holds
 # `id-token: write` and a path to a live Google credential; a pull request
@@ -15,7 +17,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # A manual dispatch is never cancelled by a later one on the same ref.
+  # A run in progress is never cancelled by a later dispatch on the same ref;
+  # a run still queued behind it can be superseded, which is GitHub's rule
+  # for a concurrency group, not something set here.
   cancel-in-progress: false
 
 jobs:
@@ -34,86 +38,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The change detection below diffs against the base branch, which is
-          # not in a shallow clone.
-          fetch-depth: 0
 
-      - id: changes
-        name: Decide whether the assistant's answers can have changed
-        run: |
-          set -euo pipefail
-          # A manual dispatch is someone asking for the suites; run them.
-          if [ "${EVENT}" = "workflow_dispatch" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git fetch --no-tags origin \
-            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-          # Collected first, never piped straight into grep: under pipefail a
-          # `grep -q` that exits on an early match kills git with SIGPIPE, and
-          # the pipeline's 141 would read as "no match". That fails OPEN, and
-          # only on large diffs that do match, which is the opposite of what a
-          # gate should do.
-          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" \
-            | grep -E '^(content/knowledge/|lib/chat/|lib/knowledge/|lib/ai/|lib/env\.ts|app/api/chat/|evals/|\.github/workflows/evals\.yml)' \
-            > /dev/null; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
-
-      # A pull request from a fork cannot reach Google at all: GitHub does not
-      # issue an Actions OIDC token to a fork's `pull_request` run, and
-      # repository variables are not passed to one either. Without this the
-      # job would fail on the auth step and, as a required check, would make
-      # every outside contribution touching the corpus unmergeable. It skips
-      # and says so; a maintainer runs the suites from the branch, or through
-      # `workflow_dispatch`, before merging.
-      - id: gate
-        name: Decide whether this run can authenticate
-        run: |
-          set -euo pipefail
-          if [ "${IS_FORK}" = "true" ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=${CHANGED}" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
-          CHANGED: ${{ steps.changes.outputs.run }}
-
-      - if: steps.gate.outputs.run != 'true'
-        name: Say why the suites did not run
-        run: |
-          set -euo pipefail
-          if [ "${IS_FORK}" = "true" ]; then
-            echo "Fork pull request: no Actions OIDC token is issued to it, so the eval suites cannot authenticate. A maintainer must run them from a branch in this repository before merging." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No change to the corpus, the prompt, the model client, or the suites. Evals skipped." >> "$GITHUB_STEP_SUMMARY"
-          fi
-        env:
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
-
-      - if: steps.gate.outputs.run == 'true'
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           # Match the Bun that wrote bun.lock and the @types/bun pin, as in
           # ci.yml. Bump all three together.
           bun-version: 1.3.3
 
-      - if: steps.gate.outputs.run == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # promptfoo's bin runs under node, not bun, and its engines field
           # requires >= 22.22.0.
           node-version: '22'
 
-      - if: steps.gate.outputs.run == 'true'
-        run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
 
       # Keyless, like production: the job presents its GitHub OIDC token to the
       # workload identity pool, which is bound to this repository's numeric id.
@@ -128,15 +66,13 @@ jobs:
       # repository's numeric id. The condition alone cannot distinguish a
       # workflow file edited inside a pull request from the one on main, so
       # the first of the two is what the fork skip above preserves.
-      - if: steps.gate.outputs.run == 'true'
-        id: auth
+      - id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      - if: steps.gate.outputs.run == 'true'
-        name: Resolve the Google Cloud project
+      - name: Resolve the Google Cloud project
         id: project
         run: |
           set -euo pipefail
@@ -160,8 +96,7 @@ jobs:
       # the assistant. Fatal on purpose: a run that cannot mint a token will
       # fail every test the same way, and the suites step would still spend
       # the rest of the budget producing 102 identical red rows.
-      - if: steps.gate.outputs.run == 'true'
-        name: Wait until Vertex accepts this identity
+      - name: Wait until Vertex accepts this identity
         run: bun run evals/warmup.ts
         env:
           GCP_PROJECT_ID: ${{ steps.project.outputs.id }}
@@ -169,8 +104,7 @@ jobs:
       # Non-fatal on purpose: promptfoo exits 100 when a test fails, and the
       # summarise step below is the gate. Letting this step fail the job would
       # skip the summary and the artifact for exactly the runs that need them.
-      - if: steps.gate.outputs.run == 'true'
-        name: Run the eval suites
+      - name: Run the eval suites
         id: suites
         continue-on-error: true
         run: |
@@ -200,17 +134,16 @@ jobs:
           PROMPTFOO_DISABLE_UPDATE: '1'
 
       # Writes the per-suite table into the job summary and summary.json beside
-      # the results, and exits non-zero if any test failed. This step is the
-      # merge gate.
-      - if: steps.gate.outputs.run == 'true'
-        name: Summarise the run
+      # the results, and exits non-zero if any test failed, so the run's
+      # verdict is the job's.
+      - name: Summarise the run
         run: bun run evals/summarize.ts evals/out/results.json evals/out/summary.json
         env:
           # The head commit, not the synthetic merge commit, so summary.json
           # names something that exists in the branch.
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GITHUB_SHA: ${{ github.sha }}
 
-      - if: always() && steps.gate.outputs.run == 'true'
+      - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evals

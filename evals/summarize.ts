@@ -20,8 +20,8 @@ import {
  * The impure half of ./summary.ts: reads the results file, writes the
  * summary, appends the table to `$GITHUB_STEP_SUMMARY` when the runner set
  * one, and prints it either way so a local run sees the same thing. Exits
- * non-zero when any test failed, so the workflow step that runs it is the
- * merge gate.
+ * non-zero when any test failed, so a local `bun run evals` and a dispatched
+ * workflow both end with the run's verdict as their exit code.
  *
  * Usage: bun run evals/summarize.ts [results.json] [summary.json]
  */
