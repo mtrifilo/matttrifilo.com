@@ -276,10 +276,17 @@ export function validateChatRequest({
     (total, turn) => total + estimateTokens(turn.text),
     0
   )
-  // The three fixed blocks the route always sends, plus the conversation.
+  // The fixed blocks the route always sends, plus the conversation.
   // REPOSITORY_BLOCK rides in the same system message as the index but is not
-  // part of its token estimate, so it is counted here or it would be the one
-  // thing the model is always sent that nothing measures.
+  // part of its token estimate, so it is counted here rather than left out.
+  //
+  // What is still not counted: the two tool definitions, which the SDK sends
+  // on every model call. They are a few hundred tokens, and
+  // `recent_activity`'s description interpolates the allowlist, so they grow
+  // when a repository is added. That is a knowing omission rather than an
+  // oversight, and it is why CHAT_MAX_INPUT_TOKENS is set below the sum of
+  // the caps rather than at it; if the allowlist ever grows past a handful,
+  // count them here instead of widening the margin again.
   const inputTokens =
     indexTokenEstimate +
     estimateTokens(SYSTEM_PROMPT) +

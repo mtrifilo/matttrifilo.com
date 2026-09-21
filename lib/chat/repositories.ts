@@ -23,11 +23,17 @@ import { openSourceRepos, type CuratedRepo } from '@/content/open-source'
  *     person wrote, not text fetched from a third party.
  */
 export interface AssistantRepository {
-  /** The short key the model uses. The curated repository name. */
+  /**
+   * The short key the model uses, and the name shown to the visitor.
+   *
+   * It is the curated repository name, and there is deliberately no second
+   * `name` field beside it: two fields that are always equal are two things
+   * to keep in step, and a later display name distinct from the GitHub one
+   * would want a field of its own rather than a quiet divergence here.
+   */
   id: string
   owner: string
-  name: string
-  /** "owner/name", assembled here so no caller builds a path of its own. */
+  /** "owner/id", assembled here so no caller builds a path of its own. */
   slug: string
   /** Matt's reviewed one-line description from the curated list. */
   description: string
@@ -48,7 +54,6 @@ function toAssistantRepository(
   return {
     id: repo.name,
     owner: repo.owner,
-    name: repo.name,
     slug: `${repo.owner}/${repo.name}`,
     description,
   }

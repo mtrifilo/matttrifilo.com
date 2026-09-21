@@ -56,7 +56,7 @@ export type ChatProgressKind = 'document' | 'activity'
 /**
  * One piece of work the model asked for, named by the server, never by the
  * model: a document's title from the index, or a repository's id from the
- * allowlist.
+ * allowlist, which is also the name the visitor is shown.
  */
 export interface ChatProgressStep {
   id: string

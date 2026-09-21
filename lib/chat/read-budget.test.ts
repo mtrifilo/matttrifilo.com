@@ -1,9 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import type { Tool } from 'ai'
-import { KNOWLEDGE_READ_BUDGET, type KnowledgeDocument } from '@/lib/knowledge'
+import {
+  KNOWLEDGE_READ_BUDGET,
+  loadKnowledgeIndex,
+  type KnowledgeDocument,
+} from '@/lib/knowledge'
+import { ACTIVITY_MAX_TOKENS } from './github-activity'
 import { createReadBudget } from './read-budget'
 import { createReadDocumentSession } from './read-document'
-import { createRecentActivitySession } from './recent-activity'
+import {
+  RECENT_ACTIVITY_MAX_CALLS,
+  createRecentActivitySession,
+} from './recent-activity'
 import { ASSISTANT_REPOSITORIES } from './repositories'
 
 /**
@@ -30,6 +38,56 @@ describe('createReadBudget', () => {
 
   test('defaults to the knowledge read budget', () => {
     expect(createReadBudget().maxTokens).toBe(KNOWLEDGE_READ_BUDGET.maxTokens)
+  })
+})
+
+describe('what the shared ceiling actually allows', () => {
+  test('the worst read and a full set of digests do not both fit', () => {
+    // Measured rather than asserted as a guarantee, because it is not one.
+    // Before MTC-45 the corpus guard in lib/knowledge/knowledge.test.ts
+    // ("the three largest documents fit in one turn") meant the token budget
+    // could not refuse a read that the progress view had already announced.
+    // Sharing the budget with the GitHub digests ends that: three digests at
+    // their cap plus the worst repeated read is over 20,000.
+    //
+    // That is a deliberate trade, not an oversight. The alternative is a
+    // second ceiling per tool, which makes the real limit the sum of the
+    // tools rather than the number written down. What makes it safe is that
+    // a refused read is now withdrawn from the narration rather than
+    // predicted (withProgress in lib/chat/handler.ts), so the visitor is
+    // never told about a document the answer did not use.
+    //
+    // If this ever needs to stop being true, raising KNOWLEDGE_READ_BUDGET
+    // .maxTokens is the lever, and this test is where the arithmetic is.
+    const sorted = [...loadKnowledgeIndex().entries].sort(
+      (a, b) => b.tokenEstimate - a.tokenEstimate
+    )
+    const worstRepeatedRead =
+      sorted[0].tokenEstimate * 2 + (sorted[1]?.tokenEstimate ?? 0)
+    const digests = RECENT_ACTIVITY_MAX_CALLS * ACTIVITY_MAX_TOKENS
+
+    expect(worstRepeatedRead).toBeLessThanOrEqual(
+      KNOWLEDGE_READ_BUDGET.maxTokens
+    )
+    expect(worstRepeatedRead + digests).toBeGreaterThan(
+      KNOWLEDGE_READ_BUDGET.maxTokens
+    )
+  })
+
+  test('an ordinary question still has room for both', () => {
+    // The case that matters in practice: the three largest documents read
+    // once each, plus one repository checked, which is what an activity
+    // question actually does.
+    const sorted = [...loadKnowledgeIndex().entries].sort(
+      (a, b) => b.tokenEstimate - a.tokenEstimate
+    )
+    const threeLargest = sorted
+      .slice(0, KNOWLEDGE_READ_BUDGET.maxDocuments)
+      .reduce((total, entry) => total + entry.tokenEstimate, 0)
+
+    expect(threeLargest + ACTIVITY_MAX_TOKENS).toBeLessThanOrEqual(
+      KNOWLEDGE_READ_BUDGET.maxTokens
+    )
   })
 })
 

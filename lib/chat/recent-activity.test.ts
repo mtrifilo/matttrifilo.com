@@ -121,20 +121,64 @@ describe('the call caps', () => {
     }
     expect(calls).toHaveLength(RECENT_ACTIVITY_MAX_CALLS)
     expect(session.activityCalls()).toBe(RECENT_ACTIVITY_MAX_CALLS)
+
+    // The cap itself, not the size of the allowlist. Today the two agree, so
+    // without this line deleting the cap leaves every assertion above green;
+    // the cap exists for the day the list is longer than it.
+    expect(await run(session.tool, ALLOWED)).toEqual({
+      error: 'activity_budget_exhausted',
+    })
+    expect(calls).toHaveLength(RECENT_ACTIVITY_MAX_CALLS)
+  })
+
+  test('the counters split the refusals by reason', async () => {
+    const { fetchActivity } = fetcher()
+    const session = createRecentActivitySession({ fetchActivity })
+    await run(session.tool, 'not-on-the-list')
+    await run(session.tool, ALLOWED)
+    await run(session.tool, ALLOWED)
+    expect(session.activityRefused()).toEqual({
+      unknown: 1,
+      duplicate: 1,
+      budget: 0,
+    })
   })
 
   test('a repository GitHub cannot answer for costs one attempt, not many', async () => {
     // Without this a model retrying a 503 would spend the visitor's whole
-    // question on an outage.
+    // question on an outage. It is told the same refusal again, and NOT
+    // `repository_already_checked`, which would send it looking for activity
+    // it was never given and is the shape an invented summary starts in.
     const { fetchActivity, calls } = fetcher({ kind: 'unavailable' })
     const session = createRecentActivitySession({ fetchActivity })
     expect(await run(session.tool, ALLOWED)).toEqual({
       error: 'activity_unavailable',
     })
     expect(await run(session.tool, ALLOWED)).toEqual({
-      error: 'repository_already_checked',
+      error: 'activity_unavailable',
     })
     expect(calls).toEqual([ALLOWED])
+  })
+
+  test('a repository whose digest did not fit is told that again', async () => {
+    const budget = createReadBudget(10)
+    const { fetchActivity } = fetcher()
+    const session = createRecentActivitySession({ fetchActivity, budget })
+    expect(await run(session.tool, ALLOWED)).toEqual({
+      error: 'activity_budget_exhausted',
+    })
+    expect(await run(session.tool, ALLOWED)).toEqual({
+      error: 'activity_budget_exhausted',
+    })
+  })
+
+  test('a repository that did answer is told it already has it', async () => {
+    const { fetchActivity } = fetcher()
+    const session = createRecentActivitySession({ fetchActivity })
+    await run(session.tool, ALLOWED)
+    expect(await run(session.tool, ALLOWED)).toEqual({
+      error: 'repository_already_checked',
+    })
   })
 
   test('a missing repository is unavailable to the model, not a throw', async () => {

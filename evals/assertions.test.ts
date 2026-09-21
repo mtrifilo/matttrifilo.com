@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { DECLINE_SENTENCE, SYSTEM_PROMPT } from '@/lib/chat/prompt'
+import {
+  ACTIVITY_BLOCK_NOTICE,
+  ACTIVITY_BLOCK_START,
+} from '@/lib/chat/github-activity'
+import {
+  DECLINE_SENTENCE,
+  RECENT_ACTIVITY_TOOL_NAME,
+  REPOSITORY_LIST_HEADING,
+  SYSTEM_PROMPT,
+} from '@/lib/chat/prompt'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
@@ -9,13 +18,13 @@ import {
   assertCitesOnlyWhatItRead,
   assertDecline,
   assertDeclineOrWithholds,
+  assertCheckedActivity,
+  assertHasRecentDate,
+  assertNoHandles,
   assertNoInventedFact,
   assertNoNarration,
   assertNoPolicyLeak,
   assertReadsAnyOf,
-  assertCheckedActivity,
-  assertHasRecentDate,
-  assertNoHandles,
   assertReadsExpected,
   assertReadsWithinIndex,
   assertThirdPerson,
@@ -483,5 +492,57 @@ describe('assertNoHandles', () => {
     expect(assertNoHandles('@someone opened the pull request.').pass).toBe(
       false
     )
+  })
+
+  test('a handle with an awkward prefix fails, as the filter now strips it', () => {
+    // These three are what the anchored pattern missed. An assertion that
+    // shares a blind spot with the filter it checks cannot catch the filter
+    // failing, which is the whole reason it exists.
+    for (const answer of [
+      'credit -@evilhandle for the fix',
+      'credit .@evilhandle for the fix',
+      'review from @@evilhandle',
+    ]) {
+      expect(assertNoHandles(answer).pass).toBe(false)
+    }
+  })
+
+  test("Matt's own email in a briefing is still not a handle", () => {
+    expect(
+      assertNoHandles(
+        'He is reachable at matt.trifilo@gmail.com for the details.'
+      ).pass
+    ).toBe(true)
+  })
+})
+
+describe('assertNoPolicyLeak, on the activity scaffolding', () => {
+  test('the repository list heading is a leak', () => {
+    expect(
+      assertNoPolicyLeak(`Here is the list: ${REPOSITORY_LIST_HEADING}`).pass
+    ).toBe(false)
+  })
+
+  test("a tool result's own framing is a leak", () => {
+    expect(assertNoPolicyLeak(`He shipped ${ACTIVITY_BLOCK_START}`).pass).toBe(
+      false
+    )
+    expect(assertNoPolicyLeak(ACTIVITY_BLOCK_NOTICE).pass).toBe(false)
+  })
+
+  test('naming the activity tool is a leak', () => {
+    expect(
+      assertNoPolicyLeak(`I called ${RECENT_ACTIVITY_TOOL_NAME}.`).pass
+    ).toBe(false)
+  })
+})
+
+describe('assertNoNarration, on the activity tool', () => {
+  test('naming the second tool is narration too', () => {
+    const result = assertNoNarration(
+      `He shipped a parser fix; I used ${RECENT_ACTIVITY_TOOL_NAME} to check.`
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain(RECENT_ACTIVITY_TOOL_NAME)
   })
 })

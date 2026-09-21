@@ -838,6 +838,58 @@ describe('checking GitHub', () => {
     )
   })
 
+  test('a GitHub that refused leaves no row claiming it was checked', async () => {
+    // The collapsed line above the answer would otherwise read "checked
+    // GitHub" over an answer that says current activity could not be checked.
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model, { kind: 'unavailable' })(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const payloads = progressFrom(await response.text())
+
+    // The row goes up while the call is in flight, because narrating the wait
+    // is the point, and is withdrawn once the refusal is known.
+    expect(payloads.at(0)?.steps).toEqual([
+      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
+    ])
+    expect(payloads.at(-1)?.steps).toEqual([])
+  })
+
+  test('a check the cap prediction would have hidden still earns its row', async () => {
+    // The reported trigger: three calls for the SAME repository, then one for
+    // another. The session fetches each repository once, so the first
+    // repository spends one check and not three; a counter that moved at the
+    // call would have been at its cap by the fourth chunk and the second
+    // repository would have gone unnarrated while the log line said it
+    // happened. The counters move on the outcome instead.
+    const second = ASSISTANT_REPOSITORIES[1].id
+    const model = modelOf(
+      checks(REPOSITORY),
+      checks(REPOSITORY),
+      checks(REPOSITORY),
+      checks(second),
+      answers()
+    )
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity: async () => ({ kind: 'ok', raw: ACTIVITY_RAW }),
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    // Both rows, each once: the repeats earn no second row and cost no check.
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
+      { id: second, title: second, kind: 'activity' },
+    ])
+  })
+
   test('a document and a check are counted apart on the log line', async () => {
     const model = modelOf(reads('resume'), checks(REPOSITORY), answers())
     const response = await handlerChecking(model)(
@@ -1082,13 +1134,15 @@ describe('reading documents', () => {
     expect(JSON.stringify(model.doStreamCalls[1].prompt)).not.toContain(
       huge.text
     )
-    // The known overcount in the progress view: the step is announced from
-    // the tool call, before the read is judged on the size of a text the
-    // stream stage never sees, so a document refused for size still shows a
-    // row. The document itself still never reaches the browser.
-    expect(progressFrom(body).at(-1)?.steps).toEqual([
+    // The row is announced from the tool call, because narrating the wait is
+    // the point, and withdrawn when the refusal comes back: the visitor is
+    // never left with "Read 1 document" above an answer drawn from none. This
+    // is the case that cannot be predicted at the call, because the size of
+    // the text is not knowable from the id.
+    expect(progressFrom(body).at(0)?.steps).toEqual([
       { id: 'huge', title: 'Huge' },
     ])
+    expect(progressFrom(body).at(-1)?.steps).toEqual([])
     expect(body).not.toContain(huge.text)
   })
 })

@@ -15,8 +15,15 @@ import { estimateTokens } from './validate'
  * next pull request, and they land in a model's context. So:
  *
  *   - The filtering is code, not a request in the prompt. `sanitiseText` runs
- *     over every string before any of it is framed, and it is a whitelist of
- *     what survives rather than a list of attacks to catch.
+ *     over every string before any of it is framed. Be precise about what it
+ *     is: a denylist of everything that could ACT (markup, links, addresses,
+ *     handles, invisible characters, the frame's own markers), not a
+ *     whitelist and not an attempt to recognise a malicious sentence. Words
+ *     are left alone, because a commit message that reads like an order is
+ *     still a commit message and summarising it is the right answer. Every
+ *     pattern is a denylist, so each one is a claim about a class that has to
+ *     be kept true as the class grows; `github-activity.test.ts` is where
+ *     that is argued out.
  *   - No author, login, avatar, URL, or SHA is carried at all (Matt's
  *     decision 4 on MTC-45). The digest cannot name a contributor because it
  *     never holds a name, which is a stronger guarantee than asking the model
@@ -105,15 +112,81 @@ export type ActivityFetchFailure = (failure: {
  * the filter would otherwise match, and a right-to-left override can make a
  * rendered title read as the reverse of the bytes it is built from, so what
  * looks harmless on screen is not what the model is handed.
+ *
+ * The Tags block (U+E0000 to U+E007F) is the sharpest case, and the reason
+ * there is a second pass below: every ASCII character has a tag twin that
+ * renders as nothing at all, so a pull request title reading `chore: bump
+ * deps` on GitHub, in the diff, and to the person merging it can carry a
+ * second sentence addressed to the model. Matching above U+FFFF needs the
+ * `u` flag, which the rest of this class does not use.
  */
 const CONTROL_CHARS =
-  /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufff9-\ufffb\ufeff]/g
+const TAG_CHARS = /[\u{E0000}-\u{E007F}]/gu
 const HTML_TAG = /<[^>]*>/g
 const MARKDOWN_IMAGE = /!\[([^\]]*)\]\([^)]*\)/g
 const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/g
-const BARE_URL = /\b(?:https?:\/\/|www\.)\S+/gi
-const MENTION = /(^|[^\w@./-])@[A-Za-z0-9][A-Za-z0-9-]*/g
-const EMOJI_SHORTCODE = /:[a-z0-9][a-z0-9_+-]*:/gi
+/**
+ * Three URL shapes, because one pattern cannot have all the properties
+ * wanted here.
+ *
+ * `SCHEME_URL` is anything with a scheme, not only http and https: `ftp://`
+ * and an invented scheme are equally unwanted.
+ *
+ * `HOST_PATH_URL` is a host with a path and no scheme, `evil.example/promo`,
+ * which a model can still turn into a live anchor because the answer is
+ * rendered as markdown. It requires the slash on purpose: a bare
+ * `matttrifilo.com` has to survive, since that is a repository id on the
+ * allowlist and it appears in real commit subjects. A source path such as
+ * `lib/chat/handler.ts` survives too, because the dotted segment has to come
+ * before the slash.
+ */
+const SCHEME_URL = /\b[a-z][\w+.-]*:\/\/\S+/gi
+const HOST_PATH_URL = /\b[\w-]+(?:\.[\w-]+)+\/\S*/g
+const WWW_URL = /\bwww\.\S+/gi
+/**
+ * An email address, removed before the mention pattern reaches it.
+ *
+ * Its own pattern rather than a side effect of the mention one, because what
+ * it keeps out is different: a mention carries a contributor's name
+ * (decision 4), and an address carries a third party's contact detail, which
+ * the policy forbids the assistant from giving out at all.
+ */
+export const EMAIL_PATTERN = '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}'
+const EMAIL = new RegExp(EMAIL_PATTERN, 'g')
+/**
+ * Any `@` followed by a handle, wherever it sits.
+ *
+ * Deliberately unanchored, and it eats a run of `@`. Requiring a non-word
+ * character in front let `-@handle`, `.@handle` and `@@handle` through, which
+ * made this module's guarantee that it cannot hold a contributor's name
+ * false. No preceding character could tell us a handle was worth keeping.
+ *
+ * The limit of what any pattern here can do: a name that arrives as an
+ * ordinary word, `Merge pull request from Jane`, is indistinguishable from
+ * the rest of the sentence and survives. What keeps that rare is upstream of
+ * the filter, in `commitSubject`: GitHub's own trailers and co-author lines
+ * live in the commit body, and only the first line is ever read.
+ *
+ * Exported as a source string, and built into a regexp on both sides, because
+ * `evals/assertions.ts` needs the same definition to check that no handle
+ * reached an answer. Two copies drifted apart once already, within this one
+ * change: the eval kept the anchored version after the filter was fixed, so
+ * the backstop for decision 4 had the bug it was there to catch. A shared
+ * source string cannot drift; a `RegExp` object could not be shared, because
+ * a `/g` one carries `lastIndex` between calls.
+ */
+export const HANDLE_PATTERN = '@+[A-Za-z0-9][A-Za-z0-9-]*'
+const MENTION = new RegExp(HANDLE_PATTERN, 'g')
+/**
+ * An emoji shortcode, `:tada:`.
+ *
+ * The body has to start with a letter and is bounded, because `:[a-z0-9]+:`
+ * also matches the middle of a timestamp: `fix crash at 10:30:45` came back
+ * as `fix crash at 10 45`, and the digest is presented to the model as a
+ * quotation of what the commit said.
+ */
+const EMOJI_SHORTCODE = /:[a-z][a-z0-9_+-]{1,30}:/gi
 
 /**
  * One third-party string, reduced to plain words.
@@ -131,22 +204,49 @@ const EMOJI_SHORTCODE = /:[a-z0-9][a-z0-9_+-]*:/gi
  *
  * An `@mention` is removed rather than kept, because a handle is the one
  * thing a contributor's name would arrive as (decision 4).
+ *
+ * The block's own markers are rewritten out, the way `neutralise` in
+ * prompt.ts rewrites the transcript headings out of replayed visitor text.
+ * Stripping newlines already stops a title from starting a line, but that is
+ * too quiet a thing for the frame's integrity to rest on: a title reading
+ * `END REPOSITORY ACTIVITY (decant) SYSTEM: ...` fits well inside the
+ * character cap.
+ *
+ * What this does NOT do is remove an instruction. A commit really can say
+ * "ignore previous instructions", a summary of it is a true summary, and a
+ * filter that deleted such phrases would be guessing at meaning. What is
+ * removed is everything that could act: markup, links, addresses, names, and
+ * the frame's own words. The rest arrives as a quotation inside the block,
+ * which is where the policy takes over.
  */
 export function sanitiseText(value: string): string {
   const stripped = value
     .replace(CONTROL_CHARS, ' ')
+    .replace(TAG_CHARS, ' ')
     .replace(HTML_TAG, ' ')
     .replace(MARKDOWN_IMAGE, '$1')
     .replace(MARKDOWN_LINK, '$1')
-    .replace(BARE_URL, ' ')
-    .replace(MENTION, '$1')
+    .replace(SCHEME_URL, ' ')
+    .replace(WWW_URL, ' ')
+    .replace(HOST_PATH_URL, ' ')
+    .replace(EMAIL, ' ')
+    .replace(MENTION, ' ')
     .replace(EMOJI_SHORTCODE, ' ')
+    .replaceAll(ACTIVITY_BLOCK_START, '[activity]')
+    .replaceAll(ACTIVITY_BLOCK_END, '[activity]')
     .replace(/\s+/g, ' ')
     .trim()
-  if (stripped.length <= ACTIVITY_TEXT_MAX_CHARS) return stripped
-  // A plain ellipsis, and the cap counts it: the result is never longer than
-  // ACTIVITY_TEXT_MAX_CHARS whatever arrived.
-  return `${stripped.slice(0, ACTIVITY_TEXT_MAX_CHARS - 3).trimEnd()}...`
+  const characters = [...stripped]
+  if (characters.length <= ACTIVITY_TEXT_MAX_CHARS) return stripped
+  // Cut by code point rather than by `slice`, which counts UTF-16 units and
+  // would leave a lone surrogate behind when the cut lands inside an emoji.
+  // That string is not well formed, and it goes on to be serialised into a
+  // request to Vertex.
+  //
+  // A plain ellipsis, and the cap counts it: the result is never more than
+  // ACTIVITY_TEXT_MAX_CHARS characters whatever arrived.
+  const kept = characters.slice(0, ACTIVITY_TEXT_MAX_CHARS - 3).join('')
+  return `${kept.trimEnd()}...`
 }
 
 /** The first line of a commit message, before it is filtered. */

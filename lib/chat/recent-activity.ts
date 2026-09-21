@@ -100,6 +100,27 @@ export interface RecentActivitySession {
   activityCalls(): number
   /** Tokens of digest charged to the shared read budget. */
   activityTokens(): number
+  /** Checks refused, by reason, so the failure modes stay distinguishable. */
+  activityRefused(): ActivityRefused
+}
+
+/**
+ * How many checks each guard turned away during one request.
+ *
+ * Split the way `ReadsRefused` is, and for the same reason: the three call
+ * for three different fixes. `unknown` means the model is guessing at ids, or
+ * the repository list in the prompt is wrong. `duplicate` means it is looping.
+ * `budget` means a GitHub call was spent and its digest then discarded for
+ * want of tokens, which is the one failure here that costs a request and
+ * yields nothing, and the only way an operator can see it.
+ *
+ * `activity_unavailable` is deliberately absent: it has its own log line,
+ * with the repository and the status, which is more use than a count.
+ */
+export interface ActivityRefused {
+  unknown: number
+  duplicate: number
+  budget: number
 }
 
 /**
@@ -147,14 +168,36 @@ export function createRecentActivitySession({
   budget = createReadBudget(),
   onFailure,
 }: RecentActivitySessionDeps = {}): RecentActivitySession {
-  const checked = new Set<string>()
+  /**
+   * What each repository's one check produced: `undefined` for a digest the
+   * model was given, or the error it was refused with.
+   *
+   * The outcome and not merely the fact, because the two refusals mean
+   * different things and repeating the wrong one is how an invented summary
+   * gets invited. A repository whose fetch failed and is asked for again is
+   * told `activity_unavailable` again, not `repository_already_checked`,
+   * which would tell the model to use activity it has never seen.
+   */
+  const outcome = new Map<string, RecentActivityError | undefined>()
+  const refused: ActivityRefused = { unknown: 0, duplicate: 0, budget: 0 }
   let calls = 0
   let spentTokens = 0
+
+  /** Records the refusal against the repository and returns it. */
+  function refuse(
+    id: string,
+    error: RecentActivityError
+  ): RecentActivityResult {
+    outcome.set(id, error)
+    if (error === 'activity_budget_exhausted') refused.budget += 1
+    return { error }
+  }
 
   async function check(id: string): Promise<RecentActivityResult> {
     // Before the id is looked at, like the read budget: once the calls are
     // spent no further fetch can happen, whatever is asked for.
     if (calls >= RECENT_ACTIVITY_MAX_CALLS) {
+      refused.budget += 1
       return { error: 'activity_budget_exhausted' }
     }
 
@@ -162,18 +205,36 @@ export function createRecentActivitySession({
     // An id off the list reaches no network at all. It costs nothing against
     // the call cap: no request was made, and the step cap already bounds how
     // often a model can guess.
-    if (!repository) return { error: 'unknown_repository' }
+    if (!repository) {
+      refused.unknown += 1
+      return { error: 'unknown_repository' }
+    }
 
-    if (checked.has(repository.id)) {
-      return { error: 'repository_already_checked' }
+    if (outcome.has(repository.id)) {
+      // The recorded outcome again, whatever it was: a repository is fetched
+      // once per request either way.
+      const previous = outcome.get(repository.id)
+      const error = previous ?? 'repository_already_checked'
+      if (error === 'repository_already_checked') refused.duplicate += 1
+      else if (error === 'activity_budget_exhausted') refused.budget += 1
+      return { error }
     }
     // Recorded before the fetch, so a repository GitHub cannot answer for
     // costs one attempt rather than as many as the model has steps left.
-    checked.add(repository.id)
+    outcome.set(repository.id, 'activity_unavailable')
     calls += 1
 
     const result = await fetchActivity(repository, onFailure)
-    if (result.kind !== 'ok') return { error: 'activity_unavailable' }
+    // `missing` and `unavailable` collapse into one code on purpose: there is
+    // nothing the model could usefully do differently for a repository that
+    // has been renamed, and telling it a repository it was just offered does
+    // not exist invites it to say so to the visitor. The two stay apart where
+    // they change what a person does: the fetch reports the 404 to the
+    // failure sink, so a permanent misconfiguration reads as a 404 in the log
+    // rather than as an outage.
+    if (result.kind !== 'ok') {
+      return refuse(repository.id, 'activity_unavailable')
+    }
 
     const digest = toActivityDigest(repository, result.raw)
     const activity = renderActivityDigest(digest)
@@ -181,10 +242,11 @@ export function createRecentActivitySession({
     // Measured on the text actually handed over, like a read: the budget
     // bounds what this request sends, so it counts what this request sends.
     if (!budget.charge(tokens)) {
-      return { error: 'activity_budget_exhausted' }
+      return refuse(repository.id, 'activity_budget_exhausted')
     }
     spentTokens += tokens
 
+    outcome.set(repository.id, undefined)
     return { repository: repository.id, activity }
   }
 
@@ -196,5 +258,6 @@ export function createRecentActivitySession({
     }),
     activityCalls: () => calls,
     activityTokens: () => spentTokens,
+    activityRefused: () => ({ ...refused }),
   }
 }

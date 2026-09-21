@@ -26,7 +26,7 @@ describe('the assistant allowlist', () => {
 
   test('every entry describes itself in Matt reviewed words', () => {
     for (const repo of ASSISTANT_REPOSITORIES) {
-      const curated = openSourceRepos.find(entry => entry.name === repo.name)
+      const curated = openSourceRepos.find(entry => entry.name === repo.id)
       expect(repo.description).toBe(String(curated?.summary?.trim()))
       expect(repo.description.length).toBeGreaterThan(0)
     }
@@ -47,11 +47,15 @@ describe('the assistant allowlist', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  test('an id is the repository name and never a path', () => {
+  test('an id is the curated repository name and never a path', () => {
+    // The id is the only thing the model is given, and it is also the name
+    // the visitor sees in the progress row, so it has to be the repository's
+    // real name and nothing that could be read as a location.
     for (const repo of ASSISTANT_REPOSITORIES) {
-      expect(repo.id).toBe(repo.name)
+      const curated = openSourceRepos.find(entry => entry.name === repo.id)
+      expect(curated).toBeDefined()
       expect(repo.id).not.toContain('/')
-      expect(repo.slug).toBe(`${repo.owner}/${repo.name}`)
+      expect(repo.slug).toBe(`${repo.owner}/${repo.id}`)
     }
   })
 })
