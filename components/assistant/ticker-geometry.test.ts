@@ -166,16 +166,20 @@ describe('bringing a focused pill into view', () => {
     expect(next).toBe(900 - 56)
   })
 
-  test('the first question of the pool needs no scroll to be legible', () => {
-    // The row is padded by one fade, so pool question 1 sits at pillStart
-    // === fade and is already clear of the gradient. Without that padding
-    // the reveal would want a negative scroll and the clamp would leave the
-    // pill faded out for as long as it held focus.
+  test('the pool\u2019s first question is the one pill the fade still covers', () => {
+    // It starts at zero with nothing to its left, so clearing the gradient
+    // would need a negative scroll. Pinned rather than fixed: giving the row
+    // a blank strip to scroll into would make the loop show that strip
+    // empty for the last seconds of every pass. Every other pill can be
+    // brought fully clear, which the cases above are.
+    expect(
+      revealScrollLeft({ ...row, scrollLeft: 0, pillStart: 0, pillWidth: 275 })
+    ).toBe(0)
     expect(
       revealScrollLeft({
         ...row,
-        scrollLeft: 0,
-        pillStart: FADE,
+        scrollLeft: 4000,
+        pillStart: 0,
         pillWidth: 275,
       })
     ).toBe(0)

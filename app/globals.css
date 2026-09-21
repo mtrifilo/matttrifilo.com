@@ -214,14 +214,18 @@
    */
   overflow: hidden;
   /*
-   * One fade's worth of room at each end, so the pool's first and last
-   * questions have somewhere to sit that is not inside the gradient. A
-   * scroll offset cannot go below zero, so without this the first pill is
-   * faded out for as long as it holds focus. scroll-padding says the same
-   * thing to the browser's own focus scrolling, which is what moves the row
-   * under prefers-reduced-motion.
+   * Keep a focused pill out of the gradient. This is what the browser's own
+   * focus scrolling obeys, which is the only thing that moves the row under
+   * prefers-reduced-motion.
+   *
+   * It is scroll-padding and NOT padding. Padding here would give the row a
+   * blank strip at each end, and the track has nothing to put in the left
+   * one for the last few seconds of every loop: the strip would fade in as
+   * an empty sliver and then snap full at the wrap. The cost of leaving it
+   * out is that the pool's first question, which starts at scroll zero and
+   * has nothing to its left, cannot be brought fully clear of the left
+   * gradient by any scroll. Every other question can.
    */
-  padding-inline: var(--ticker-fade);
   scroll-padding-inline: var(--ticker-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
      blur-on-scroll note in this file explains why a hand-written prefix is

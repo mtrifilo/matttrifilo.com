@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type FocusEvent,
+  type MouseEvent,
   type Ref,
 } from 'react'
 import { Suggestion } from '@/components/ai-elements/suggestion'
@@ -87,44 +88,50 @@ export function StarterTicker({
   // to where it opened.
   const [openingOffset] = useState(() => offsetForStartAt(startAt))
 
-  // One loop is one copy's width, so the duration is what holds the speed
-  // steady whatever the pool says. The width changes when the font arrives
-  // and when the visitor zooms, and an observer catches both without asking
-  // what caused them.
-  useEffect(() => {
+  /**
+   * One loop is one copy's width, so the duration is what holds the speed
+   * steady whatever the pool says.
+   *
+   * A running animation keeps its elapsed time when the duration changes,
+   * not its progress, so a later measurement would jump the row. Restarting
+   * it at the progress it was already at is what keeps the speed a property
+   * of the pool rather than of where the loop happens to be.
+   *
+   * A frozen track is left entirely alone, measurement included: a pill has
+   * focus, the scroll offset was computed from the width as it was, and
+   * changing that width underneath it would land the thaw on the wrong
+   * pixels. The blur handler measures again once the row is its own.
+   */
+  const measure = useCallback(() => {
     const copy = copyRef.current
     const track = trackRef.current
-    if (!copy || !track) return
-    const measure = () => {
-      const width = copy.getBoundingClientRect().width
-      const seconds = loopSeconds(width)
-      if (seconds === null || width === copyWidthRef.current) return
-      copyWidthRef.current = width
-      // A running animation keeps its elapsed time when the duration
-      // changes, not its progress, so a later measurement (a font arriving,
-      // a zoom) would jump the row. Restarting it at the progress it was
-      // already at is what keeps the width a property of the pool and not of
-      // where the loop happens to be. A frozen track is left alone: the pill
-      // holding focus owns the position until it is given back.
-      const resumeAt = animationProgress(track)
-      const frozen = track.dataset.frozen === 'true'
-      if (!frozen) track.dataset.frozen = 'true'
-      // Read to flush the style change, so removing it below starts a new
-      // animation rather than amending the running one.
-      void track.offsetWidth
-      track.style.setProperty('--ticker-duration', `${seconds}s`)
-      if (resumeAt !== null) {
-        track.style.setProperty('--ticker-offset', String(resumeAt))
-      }
-      if (!frozen) delete track.dataset.frozen
+    if (!copy || !track || track.dataset.frozen === 'true') return
+    const width = copy.getBoundingClientRect().width
+    const seconds = loopSeconds(width)
+    if (seconds === null || width === copyWidthRef.current) return
+    copyWidthRef.current = width
+    const resumeAt = animationProgress(track)
+    track.dataset.frozen = 'true'
+    // Read to flush the style change, so removing it below starts a new
+    // animation rather than amending the running one.
+    void track.offsetWidth
+    track.style.setProperty('--ticker-duration', `${seconds}s`)
+    if (resumeAt !== null) {
+      track.style.setProperty('--ticker-offset', String(resumeAt))
     }
-    // Once now, so a Tab in the first frames finds a width to work from;
-    // the observer then catches the font arriving and the visitor zooming.
+    delete track.dataset.frozen
+  }, [])
+
+  // Once now, so a Tab in the first frames finds a width to work from; the
+  // observer then catches the font arriving and the visitor zooming.
+  useEffect(() => {
+    const copy = copyRef.current
+    if (!copy) return
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(copy)
     return () => observer.disconnect()
-  }, [])
+  }, [measure])
 
   useEffect(() => () => clearTimeout(resumeRef.current), [])
 
@@ -140,10 +147,15 @@ export function StarterTicker({
     // inside the fades because the row sets scroll-padding to match them.
     if (prefersReducedMotion()) return
 
-    const fade = fadeWidth(viewport)
-    if (track.dataset.frozen !== 'true') {
+    // Nothing is moving before the first frame, and nothing is transformed
+    // either, so the row can simply be scrolled.
+    const moving = track.getAnimations().length > 0
+    if (moving && track.dataset.frozen !== 'true') {
       const progress = animationProgress(track)
       const copyWidth = copyWidthRef.current
+      // Without both of these the transform cannot be converted, and
+      // scrolling a track that is still transformed would add one offset to
+      // the other. Leaving the row where it is beats moving it wrongly.
       if (progress === null || copyWidth <= 0) return
       // Freeze first: the rule that drops the animation also drops the
       // transform, and the scroll offset below replaces it exactly.
@@ -160,32 +172,35 @@ export function StarterTicker({
     viewport.scrollLeft = revealScrollLeft({
       scrollLeft: viewport.scrollLeft,
       viewportWidth: viewport.clientWidth,
-      // The track is the pill's offset parent, and the track starts one
-      // fade in, because the row is padded by exactly the width of its own
-      // gradient. That padding is what gives the very first question
-      // somewhere to sit where it is not faded out.
-      pillStart: pill.offsetLeft + fade,
+      // The track is the pill's offset parent, so this is already the
+      // coordinate scrollLeft is measured in.
+      pillStart: pill.offsetLeft,
       pillWidth: pill.offsetWidth,
-      fade,
+      fade: fadeWidth(viewport),
       maxScrollLeft: viewport.scrollWidth - viewport.clientWidth,
     })
   }, [])
 
-  const handleBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
-    const viewport = viewportRef.current
-    const track = trackRef.current
-    if (!viewport || !track || track.dataset.frozen !== 'true') return
-    // Tabbing from one pill to the next keeps the row frozen.
-    const next = event.relatedTarget
-    if (next instanceof Node && event.currentTarget.contains(next)) return
-    const progress = progressForScrollLeft(
-      viewport.scrollLeft,
-      copyWidthRef.current
-    )
-    viewport.scrollLeft = 0
-    track.style.setProperty('--ticker-offset', String(progress))
-    delete track.dataset.frozen
-  }, [])
+  const handleBlur = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const viewport = viewportRef.current
+      const track = trackRef.current
+      if (!viewport || !track || track.dataset.frozen !== 'true') return
+      // Tabbing from one pill to the next keeps the row frozen.
+      const next = event.relatedTarget
+      if (next instanceof Node && event.currentTarget.contains(next)) return
+      const progress = progressForScrollLeft(
+        viewport.scrollLeft,
+        copyWidthRef.current
+      )
+      viewport.scrollLeft = 0
+      track.style.setProperty('--ticker-offset', String(progress))
+      delete track.dataset.frozen
+      // Any width the row grew while it was held still is taken now.
+      measure()
+    },
+    [measure]
+  )
 
   // Pausing on touch is what keeps a moving pill from being a moving target.
   // It is not behind `pointer: coarse`, because a touchstart is itself the
@@ -269,6 +284,9 @@ function QuestionRow({
           className="max-w-none whitespace-nowrap"
           key={question}
           onClick={onPick}
+          // A click still asks the question; it just does not leave focus
+          // parked inside an aria-hidden subtree on the way out.
+          onMouseDown={decorative ? preventFocus : undefined}
           suggestion={question}
           tabIndex={decorative ? -1 : undefined}
         />
@@ -300,6 +318,10 @@ function animationNameOf(animation: Animation): string | undefined {
 function fadeWidth(viewport: Element): number {
   const declared = getComputedStyle(viewport).getPropertyValue('--ticker-fade')
   return Number.parseFloat(declared) || 0
+}
+
+function preventFocus(event: MouseEvent<HTMLButtonElement>): void {
+  event.preventDefault()
 }
 
 function prefersReducedMotion(): boolean {

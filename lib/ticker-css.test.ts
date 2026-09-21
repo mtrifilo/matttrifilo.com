@@ -33,16 +33,24 @@ function ruleFor(selector: string): string {
   throw new Error(`${selector} is not closed`)
 }
 
+/** One step of a keyframe block, by its selector rather than its order. */
+function stepOf(keyframe: string, step: 'from' | 'to'): string {
+  const match = new RegExp(`\\b${step}\\s*\\{([^}]*)\\}`).exec(keyframe)
+  if (match === null) throw new Error(`the keyframe has no ${step} step`)
+  return match[1]
+}
+
 describe('the ticker keyframe', () => {
   const keyframe = ruleFor(`@keyframes ${TICKER_ANIMATION_NAME}`)
 
   test('travels one copy of the pool, in the direction the maths assumes', () => {
     // Reversing these two, which is the shape most marquees are written in,
     // mirrors every conversion in ticker-geometry.ts: a focused pill would
-    // then scroll to the opposite end of the row.
-    const [from, to] = keyframe.split('transform:').slice(1)
-    expect(from).toContain(TICKER_KEYFRAME_FROM)
-    expect(to).toContain('translateX(0)')
+    // then scroll to the opposite end of the row. Read by keyframe selector
+    // rather than by position, because swapping only the `from` and `to`
+    // labels reverses the loop just as thoroughly.
+    expect(stepOf(keyframe, 'from')).toContain(TICKER_KEYFRAME_FROM)
+    expect(stepOf(keyframe, 'to')).toContain('translateX(0)')
   })
 
   test('the distance matches the number of copies the track renders', () => {
@@ -70,14 +78,20 @@ describe('the row the component scrolls', () => {
     expect(row).not.toContain('overflow: clip')
   })
 
-  test('declares the fade width on itself, in pixels', () => {
+  test('declares the fade width on itself, in pixels, at every width', () => {
     // starter-ticker.tsx reads --ticker-fade off this element with
     // getComputedStyle and parses it as pixels. Declared on the track
     // instead it would not inherit upwards, and declared in rem it would
     // parse to a number sixteen times too small; both fail silently, and
-    // the focused pill lands under the gradient.
-    const fade = /--ticker-fade:\s*([^;]+);/.exec(row)?.[1].trim()
-    expect(fade).toMatch(/^\d+(?:\.\d+)?px$/)
+    // the focused pill lands under the gradient. Every declaration is
+    // checked, not just the first: the breakpoint override is the one that
+    // applies on the desktop the frames were drawn at.
+    expect(row).toMatch(/--ticker-fade:/)
+    const declared = [...css.matchAll(/--ticker-fade:\s*([^;]+);/g)].map(
+      match => match[1].trim()
+    )
+    expect(declared.length).toBeGreaterThanOrEqual(2)
+    for (const value of declared) expect(value).toMatch(/^\d+(?:\.\d+)?px$/)
   })
 })
 
