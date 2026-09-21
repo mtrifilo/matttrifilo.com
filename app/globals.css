@@ -176,10 +176,10 @@
 /*
  * Starter-question ticker (MTC-39).
  *
- * The row is one track carrying the question pool twice: the real buttons,
- * then an inert copy of them. The keyframe moves the track by exactly one
- * copy, so the frame that finishes the loop is the frame that starts it and
- * the seam is never visible.
+ * The row is one track carrying the question pool twice: the announced,
+ * tabbable buttons, then a silent copy of them. The keyframe moves the track
+ * by exactly one copy, so the frame that finishes the loop is the frame that
+ * starts it and the seam is never visible.
  *
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
@@ -213,6 +213,16 @@
    * a focused pill is brought into view once the track stops moving.
    */
   overflow: hidden;
+  /*
+   * One fade's worth of room at each end, so the pool's first and last
+   * questions have somewhere to sit that is not inside the gradient. A
+   * scroll offset cannot go below zero, so without this the first pill is
+   * faded out for as long as it holds focus. scroll-padding says the same
+   * thing to the browser's own focus scrolling, which is what moves the row
+   * under prefers-reduced-motion.
+   */
+  padding-inline: var(--ticker-fade);
+  scroll-padding-inline: var(--ticker-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
      blur-on-scroll note in this file explains why a hand-written prefix is
      a hazard, and lib/globals-css.test.ts is the guard. */

@@ -166,6 +166,21 @@ describe('bringing a focused pill into view', () => {
     expect(next).toBe(900 - 56)
   })
 
+  test('the first question of the pool needs no scroll to be legible', () => {
+    // The row is padded by one fade, so pool question 1 sits at pillStart
+    // === fade and is already clear of the gradient. Without that padding
+    // the reveal would want a negative scroll and the clamp would leave the
+    // pill faded out for as long as it held focus.
+    expect(
+      revealScrollLeft({
+        ...row,
+        scrollLeft: 0,
+        pillStart: FADE,
+        pillWidth: 275,
+      })
+    ).toBe(0)
+  })
+
   test('never scrolls past either end of the track', () => {
     expect(
       revealScrollLeft({ ...row, scrollLeft: 0, pillStart: 10, pillWidth: 100 })

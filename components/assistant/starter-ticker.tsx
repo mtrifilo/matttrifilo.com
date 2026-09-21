@@ -28,16 +28,21 @@ import {
  *
  * Three static pills could only ever show three of the questions the corpus
  * answers. The row shows the whole pool by moving: the pool is rendered once
- * as real buttons and once more as an inert copy behind it, and a CSS
+ * as real buttons and once more as a silent copy behind it, and a CSS
  * keyframe slides the track by exactly one copy's width, so the frame that
  * ends the loop is the frame that starts it. Nothing here runs per frame; the
  * browser owns the motion, and app/globals.css owns the rules.
  *
  * Two things are worth reading twice.
  *
- * **Tab meets each question once.** Only the first copy holds real buttons.
- * The second is `aria-hidden`, and its buttons are `inert` with
- * `tabIndex={-1}`, so it exists for the eye and for nothing else.
+ * **Tab meets each question once, and every visible pill works.** Only the
+ * first copy is announced and tabbable; the second is `aria-hidden` with
+ * `tabIndex={-1}` buttons. It is NOT `inert`, which the ticket's sketch asked
+ * for and which would have made it unclickable: the trailing copy is what the
+ * row shows while the loop wraps, and that is most of the time the pool's
+ * first questions are on screen. A dead pill under the cursor is the one
+ * thing this row must never be, so the duplicate answers a click and hands
+ * the same question over.
  *
  * **A focused pill has to be visible**, and the track's transform is what
  * makes that hard: most of the row sits at negative offsets, which no scroll
@@ -113,6 +118,9 @@ export function StarterTicker({
       }
       if (!frozen) delete track.dataset.frozen
     }
+    // Once now, so a Tab in the first frames finds a width to work from;
+    // the observer then catches the font arriving and the visitor zooming.
+    measure()
     const observer = new ResizeObserver(measure)
     observer.observe(copy)
     return () => observer.disconnect()
@@ -128,9 +136,11 @@ export function StarterTicker({
     if (!viewport || !track || !pill) return
 
     // Under reduced motion the row is an ordinary scroll container with
-    // nothing to freeze, and the browser has already done this.
+    // nothing to freeze, and the browser scrolls the pill into view itself,
+    // inside the fades because the row sets scroll-padding to match them.
     if (prefersReducedMotion()) return
 
+    const fade = fadeWidth(viewport)
     if (track.dataset.frozen !== 'true') {
       const progress = animationProgress(track)
       const copyWidth = copyWidthRef.current
@@ -150,11 +160,13 @@ export function StarterTicker({
     viewport.scrollLeft = revealScrollLeft({
       scrollLeft: viewport.scrollLeft,
       viewportWidth: viewport.clientWidth,
-      // The track is the pill's offset parent, so this is already the
-      // coordinate scrollLeft is measured in.
-      pillStart: pill.offsetLeft,
+      // The track is the pill's offset parent, and the track starts one
+      // fade in, because the row is padded by exactly the width of its own
+      // gradient. That padding is what gives the very first question
+      // somewhere to sit where it is not faded out.
+      pillStart: pill.offsetLeft + fade,
       pillWidth: pill.offsetWidth,
-      fade: fadeWidth(viewport),
+      fade,
       maxScrollLeft: viewport.scrollWidth - viewport.clientWidth,
     })
   }, [])
@@ -226,9 +238,12 @@ export function StarterTicker({
  * One pass of the pool.
  *
  * `decorative` is one word for three facts that have to agree: a trailing
- * copy is not announced, not focusable, and not there at all under reduced
- * motion, where nothing loops. Splitting them is how a copy ends up half
- * hidden, which reads to a screen reader as the pool said twice.
+ * copy is not announced, not in the tab order, and not there at all under
+ * reduced motion, where nothing loops. Splitting them is how a copy ends up
+ * half hidden, which reads to a screen reader as the pool said twice.
+ *
+ * What it is not is unclickable. Every copy answers a pointer, because the
+ * trailing one is what the row shows while the loop wraps.
  */
 function QuestionRow({
   decorative,
@@ -252,9 +267,8 @@ function QuestionRow({
         // move at a steady speed and never reflow.
         <Suggestion
           className="max-w-none whitespace-nowrap"
-          inert={decorative || undefined}
           key={question}
-          onClick={decorative ? undefined : onPick}
+          onClick={onPick}
           suggestion={question}
           tabIndex={decorative ? -1 : undefined}
         />
