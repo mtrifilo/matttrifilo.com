@@ -1,27 +1,22 @@
 name: evals
 
-# Every pull request, deliberately. `on.pull_request.paths` would make this a
-# required check that never reports on a PR touching none of the paths, and
-# such a PR can then never merge. The job runs instead, decides for itself
-# whether anything the assistant's answers depend on changed, and skips the
-# model calls when nothing did. It succeeds either way and says which in the
-# step summary.
+# On demand only. The suites are run locally during development
+# (`bun run evals`, see docs/career-assistant-operations.md); every pull
+# request paying for a full run spent more on tokens than it caught, and a
+# one-in-a-hundred model flake reddened most runs. This workflow stays so a
+# branch can be evaluated under the deployment's own identity when that
+# question matters (an IAM change, a dependency bump, a fork's branch).
 #
-# Never `pull_request_target`. This job holds `id-token: write` and a path to
-# a live Google credential, and `pull_request_target` would run it with the
-# base repository's trust against a fork's code. The credentials-missing
-# symptom on a fork PR is handled by skipping below, not by changing trigger.
+# Never `pull_request` or `pull_request_target` here. This job holds
+# `id-token: write` and a path to a live Google credential; a pull request
+# trigger would run it against code from anyone who can open one.
 on:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Superseded pull request runs are cancelled to save the spend, but a manual
-  # dispatch is never cancelled: it is the documented way to evaluate a fork's
-  # branch, and it would otherwise cancel, or be cancelled by, the pull
-  # request run on the same ref.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A manual dispatch is never cancelled by a later one on the same ref.
+  cancel-in-progress: false
 
 jobs:
   evals:

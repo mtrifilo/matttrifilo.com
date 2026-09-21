@@ -97,15 +97,13 @@ Every test whose assertions are all absence checks ("does not speak as Matt", "d
 
 The assertions live in `evals/assertions.ts` and import the route's own constants rather than pasting them. `evals/config.test.ts` runs in `bun test` and checks the YAML itself: every test is labelled with its suite, names an assertion that actually exists, declares the metadata that assertion reads, and points `expectReads` at a document in the corpus.
 
-### When CI runs them
+### When they run
 
-`.github/workflows/evals.yml` runs on every pull request, but only spends money when something the answers depend on changed: `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or the workflow itself. The job always runs and always reports, and says in the step summary which path it took.
+Locally, during development, by decision of 2026-09-21 (Matt): a full run on every pull request cost more in tokens than it caught, and a one-in-a-hundred model flake reddened most runs. Run `bun run evals:smoke` while iterating and `bun run evals` before opening a pull request that changes anything the answers depend on: `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or a bump of `ai` or `@ai-sdk/google-vertex`. Paste the summary table from the run into the pull request body; a reviewer should see the counts, not take them on faith.
 
-The list is wider than the ticket's "corpus, prompt, or model id" on purpose: the assertions also stand on `read-document.ts`'s index guard, `KNOWLEDGE_READ_BUDGET`, the step cap and client-chunk allowlist in `handler.ts`, `SOURCES_TRAILER_PREFIX` in `answer.ts`, the bounded-fetch deadlines in `lib/ai/`, and the route's own wiring in `app/api/chat/`. A pull request that weakened any of them while touching only the prompt's neighbours would otherwise run no evals at all. What is still **not** on the list is a dependency bump: an `ai` or `@ai-sdk/google-vertex` upgrade changes how the stream and the tool loop behave and runs nothing. Dispatch the workflow by hand on that branch.
+`.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change), or to evaluate a branch you do not want to run locally, such as a fork's. It is not a required check and must not become one.
 
-That is deliberate. `on.pull_request.paths` would look tidier, but a path-filtered required check never reports at all on a pull request that touches none of the paths, and such a pull request can then never merge.
-
-Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both uploaded as the `evals` workflow artifact, plus a per-suite table in the job summary. `summary.json` has a stable shape, so a later ticket can publish it on the site. `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
+Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json` (in CI also uploaded as the `evals` workflow artifact, plus a per-suite table in the job summary). `summary.json` has a stable shape, so a later ticket can publish it on the site. `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
 
 ```json
 {
@@ -118,14 +116,14 @@ Outputs: `evals/out/results.json` and a compact `evals/out/summary.json`, both u
 }
 ```
 
-### A red run blocks the merge
+### A red run
 
-`bun run evals/summarize.ts` exits non-zero when any test failed, so the job fails, and the branch-protection rule below makes that block the merge. A red run is one of four things, and the artifact's `results.json` says which:
+`bun run evals/summarize.ts` exits non-zero when any test failed. Nothing enforces that on a merge; the person opening the pull request does, by running the suites and pasting the result. A red run is one of four things, and `results.json` says which:
 
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
-4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the job log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
+4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
 
 Never relax an assertion to get a green run without saying so in the pull request.
 
@@ -169,7 +167,7 @@ Those two prices come from secondary sources, not from Google's own pricing page
 2. Add at least one `golden` test that only that document can answer, with `metadata.expectReads` naming its id, a `contains-any` or `icontains-any` on wording distinctive to it, and a rubric in an `assert-set` of three at `threshold: 0.6`.
 3. If the document introduces a topic the policy declines, add the refusal too.
 4. Run `bun test` first: `evals/config.test.ts` catches a bad id or a missing metadata key without spending anything.
-5. Then `bun run evals:smoke`, and let CI run the rest.
+5. Then `bun run evals:smoke` while iterating, and `bun run evals` before the pull request; paste the summary in its body.
 
 Goldens are hand-written from the corpus. They are never mined from traffic, because nothing is stored (decision of 2026-09-13).
 
@@ -239,8 +237,6 @@ gh variable set GCP_PROJECT_ID --body "$GCP_PROJECT_ID"
 
 `GCP_PROJECT_ID` is optional: the workflow falls back to the project id the auth action reports. Set it if that step ever fails with "No project id".
 
-### 5. Make the check required
+### 5. Do not make the check required
 
-Settings, Branches, the `main` rule, Require status checks to pass: add **`evals`**. Only after a first green run on a pull request, or every pull request blocks on a check that has never reported.
-
-One consequence to accept before you do it: a pull request from a **fork** cannot authenticate, so the job skips the suites and reports green with a note in its summary. An outside contribution that changes the corpus or the prompt therefore merges without the suites having run against it. Run them yourself from a branch in this repository, or through `workflow_dispatch`, before merging one.
+The workflow runs only on `workflow_dispatch` (decision of 2026-09-21), so there is no check to require; a required `evals` check would block every pull request forever. An outside contribution that changes the corpus or the prompt is evaluated by running `bun run evals` on a branch in this repository, or by dispatching the workflow against the fork's branch, before it merges.
