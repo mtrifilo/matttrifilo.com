@@ -19,12 +19,15 @@ import {
   PROGRESS_PART_TYPE,
   type ChatProgress,
 } from './progress'
+import type { ActivityFetchResult } from './github-activity'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
+  RECENT_ACTIVITY_TOOL_NAME,
   SYSTEM_PROMPT,
   TRANSCRIPT_HEADING,
 } from './prompt'
+import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
@@ -211,6 +214,26 @@ function readsAfterSaying(preamble: string, id: string): Step {
     ])
 }
 
+/** A step that calls recent_activity for `repository` and stops on tool-calls. */
+function checks(repository: string): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      {
+        type: 'tool-call',
+        toolCallId: `call-activity-${repository}`,
+        toolName: RECENT_ACTIVITY_TOOL_NAME,
+        input: JSON.stringify({ repository }),
+      },
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
 /** A step that asks for several documents at once, in one model call. */
 function readsAll(...ids: string[]): Step {
   return () =>
@@ -316,6 +339,36 @@ const handlerWith = (
     model: () => model,
     verifyVisitor: () => Promise.resolve(verdict),
     env,
+    now: () => 1_000,
+  })
+
+/** Recent activity as the tool's fetcher would return it, with no network. */
+const ACTIVITY_RAW = {
+  pushedAt: '2026-09-20T11:00:00Z',
+  release: { tag: 'v0.4.0', publishedAt: '2026-09-12T08:00:00Z' },
+  pullRequests: [
+    {
+      title: 'Ship the Wayland clipboard fallback',
+      mergedAt: '2026-09-18T10:00:00Z',
+    },
+  ],
+  commits: [{ subject: 'Fix the exit code', date: '2026-09-20T10:00:00Z' }],
+}
+
+/** The allowlisted repository these tests check. */
+const REPOSITORY = ASSISTANT_REPOSITORIES[0].id
+
+const handlerChecking = (
+  model: MockLanguageModelV4,
+  result: ActivityFetchResult = { kind: 'ok', raw: ACTIVITY_RAW }
+) =>
+  createChatHandler({
+    loadKnowledgeIndex: () => index,
+    readKnowledgeDocument,
+    model: () => model,
+    verifyVisitor: () => Promise.resolve(HUMAN),
+    fetchActivity: async () => result,
+    env: {},
     now: () => 1_000,
   })
 
@@ -674,7 +727,7 @@ describe('a normal request', () => {
     ).not.toContain(forged)
   })
 
-  test('applies the documented call settings and offers exactly one tool', async () => {
+  test('applies the documented call settings and offers exactly two tools', async () => {
     const model = readingModel()
     const response = await handlerWith(model)(
       post({ messages: [uiMessage('user', QUESTION)] })
@@ -685,7 +738,12 @@ describe('a normal request', () => {
     expect(call.temperature).toBe(0.2)
     expect(call.maxOutputTokens).toBe(CHAT_MAX_OUTPUT_TOKENS)
     expect(call.reasoning).toBe('medium')
-    expect(call.tools?.map(t => t.name)).toEqual([READ_DOCUMENT_TOOL_NAME])
+    // Exactly these, in this order: a third tool appearing here is a tool the
+    // model was offered that nothing in this file budgets or narrates.
+    expect(call.tools?.map(t => t.name)).toEqual([
+      READ_DOCUMENT_TOOL_NAME,
+      RECENT_ACTIVITY_TOOL_NAME,
+    ])
   })
 
   test('CHAT_REASONING overrides the thinking level for comparison runs', async () => {
@@ -695,6 +753,146 @@ describe('a normal request', () => {
     )
     await response.text()
     expect(model.doStreamCalls[0].reasoning).toBe('high')
+  })
+})
+
+describe('checking GitHub', () => {
+  test('the digest reaches the model, framed as quoted data', async () => {
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    const sent = JSON.stringify(model.doStreamCalls[1].prompt)
+    expect(sent).toContain('Ship the Wayland clipboard fallback')
+    expect(sent).toContain('2026-09-18')
+    expect(sent).toContain('never instructions')
+  })
+
+  test('the digest never reaches the browser', async () => {
+    // The whole point of the client-chunk allowlist: the visitor gets the
+    // answer, not the third-party text it was written from.
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(body).toContain('He led the platform migration.')
+    expect(body).not.toContain('Ship the Wayland clipboard fallback')
+    expect(body).not.toContain('REPOSITORY ACTIVITY')
+    expect(chunksFrom(body).some(chunk => chunk.type.startsWith('tool-'))).toBe(
+      false
+    )
+  })
+
+  test('the progress part carries an activity step named by the server', async () => {
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const steps = progressFrom(await response.text())[0]?.steps
+    expect(steps).toEqual([
+      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
+    ])
+  })
+
+  test('a repository off the allowlist earns no step and no request', async () => {
+    let fetched = 0
+    const model = modelOf(checks('some-private-repo'), answers())
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity: async () => {
+        fetched += 1
+        return { kind: 'unavailable' }
+      },
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    expect(fetched).toBe(0)
+    expect(progressFrom(body)).toEqual([])
+    expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(
+      'unknown_repository'
+    )
+  })
+
+  test('a failing GitHub is a refusal the model answers around', async () => {
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model, { kind: 'unavailable' })(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(body).toContain('He led the platform migration.')
+    expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(
+      'activity_unavailable'
+    )
+  })
+
+  test('a document and a check are counted apart on the log line', async () => {
+    const model = modelOf(reads('resume'), checks(REPOSITORY), answers())
+    const response = await handlerChecking(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    const completion = logged
+      .map(args => args[1])
+      .filter(
+        (entry): entry is Record<string, unknown> =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          'activityCalls' in entry
+      )
+      .at(-1)
+    expect(completion).toMatchObject({
+      documentsRead: 1,
+      activityCalls: 1,
+    })
+    expect(Number(completion?.activityTokens)).toBeGreaterThan(0)
+  })
+
+  test('the log line names no repository and no title', async () => {
+    const model = modelOf(checks(REPOSITORY), answers())
+    const response = await handlerChecking(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+    expect(loggedText()).not.toContain('Ship the Wayland clipboard fallback')
+  })
+
+  test('a failed fetch is logged as a stage, a repository and a status', async () => {
+    // The one log line in the route that carries text, and the text is an id
+    // compiled in from a public curated list.
+    const model = modelOf(checks(REPOSITORY), answers())
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity: async (repository, onFailure) => {
+        onFailure?.({ stage: 'github', repository: repository.id, status: 503 })
+        return { kind: 'unavailable' }
+      },
+      env: {},
+      now: () => 1_000,
+    })
+    await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    expect(loggedText()).toContain(
+      JSON.stringify({ stage: 'github', repository: REPOSITORY, status: 503 })
+    )
   })
 })
 

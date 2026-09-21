@@ -200,7 +200,8 @@ describe('progressStatus', () => {
 describe('progressTotals', () => {
   test('counts the documents and the seconds', () => {
     expect(progressTotals(viewWith(done(3, 14_200)))).toEqual({
-      count: 3,
+      documents: 3,
+      activity: 0,
       seconds: 14,
     })
   })
@@ -242,7 +243,7 @@ describe('progressTotals', () => {
           incomplete: true,
         })
       )
-    ).toEqual({ count: 3, seconds: 14 })
+    ).toEqual({ documents: 3, activity: 0, seconds: 14 })
   })
 
   test('a run flagged incomplete with no text claims nothing', () => {
@@ -255,7 +256,94 @@ describe('progressTotals', () => {
     const phase: ChatProgressPhase = 'done'
     expect(
       progressTotals(viewWith({ phase, steps: [step('a', 'A')] }))
-    ).toEqual({ count: 1, seconds: 1 })
+    ).toEqual({ documents: 1, activity: 0, seconds: 1 })
+  })
+})
+
+describe('activity steps', () => {
+  const checked = (): ProgressView => ({
+    phase: 'done',
+    steps: [
+      { id: 'resume', title: 'Résumé' },
+      { id: 'decant', title: 'decant', kind: 'activity' },
+    ],
+    ms: 11_000,
+  })
+
+  test('a step without a kind is still a document', () => {
+    // Parts written before the field existed are in transcripts a browser is
+    // replaying right now. They must keep validating, and keep counting.
+    const view = toProgressView([
+      progressPart({
+        phase: 'done',
+        steps: [{ id: 'resume', title: 'Résumé' }],
+        ms: 9_000,
+      }),
+    ])
+    expect(view?.steps).toEqual([{ id: 'resume', title: 'Résumé' }])
+    expect(progressTotals(viewWith(view))).toEqual({
+      documents: 1,
+      activity: 0,
+      seconds: 9,
+    })
+  })
+
+  test('an unknown kind reads as a document rather than being dropped', () => {
+    // Lenient on purpose: dropping the step would undercount the work, which
+    // is the kind of false claim this module exists to prevent.
+    const view = toProgressView([
+      progressPart({
+        phase: 'done',
+        steps: [{ id: 'x', title: 'X', kind: 'something-new' }],
+        ms: 1_000,
+      }),
+    ])
+    expect(view?.steps).toEqual([{ id: 'x', title: 'X' }])
+  })
+
+  test('an activity step survives validation with its kind', () => {
+    const view = toProgressView([progressPart(checked())])
+    expect(view?.steps[1]).toEqual({
+      id: 'decant',
+      title: 'decant',
+      kind: 'activity',
+    })
+  })
+
+  test('the totals count reads and checks apart', () => {
+    expect(progressTotals(viewWith(checked()))).toEqual({
+      documents: 1,
+      activity: 1,
+      seconds: 11,
+    })
+  })
+
+  test('a row carries the kind, so the view can word it', () => {
+    const rows = progressRows('done', checked())
+    expect(rows).toEqual([
+      {
+        key: 'read:resume',
+        title: 'Résumé',
+        kind: 'document',
+        state: 'complete',
+      },
+      {
+        key: 'read:decant',
+        title: 'decant',
+        kind: 'activity',
+        state: 'complete',
+      },
+    ])
+  })
+
+  test('a check in flight is announced as a check, not a read', () => {
+    const inFlight: ProgressView = {
+      phase: 'reading',
+      steps: [{ id: 'decant', title: 'decant', kind: 'activity' }],
+    }
+    expect(announcementFor('streaming', false, inFlight)).toBe(
+      'Checking GitHub for decant'
+    )
   })
 })
 
@@ -363,14 +451,24 @@ describe('progressRows', () => {
 
   test('while reading, the newest document is the one in flight', () => {
     expect(progressRows('reading', reading('Résumé', 'FAQ'))).toEqual([
-      { key: 'read:doc-0', title: 'Résumé', state: 'complete' },
-      { key: 'read:doc-1', title: 'FAQ', state: 'active' },
+      {
+        key: 'read:doc-0',
+        title: 'Résumé',
+        kind: 'document',
+        state: 'complete',
+      },
+      { key: 'read:doc-1', title: 'FAQ', kind: 'document', state: 'active' },
     ])
   })
 
   test('while writing, every read is done and the answer is in flight', () => {
     expect(progressRows('writing', writing('Résumé'))).toEqual([
-      { key: 'read:doc-0', title: 'Résumé', state: 'complete' },
+      {
+        key: 'read:doc-0',
+        title: 'Résumé',
+        kind: 'document',
+        state: 'complete',
+      },
       { key: 'writing', state: 'active' },
     ])
   })

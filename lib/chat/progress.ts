@@ -42,10 +42,35 @@ import type { AnswerView } from './answer'
  */
 export type ChatProgressPhase = 'reading' | 'writing' | 'done'
 
-/** One document the model asked for, named by the server's index. */
+/**
+ * What kind of work a step reports.
+ *
+ * `document` is a read; `activity` is a GitHub check (MTC-45). The two need
+ * different words on screen ("Reading Résumé…" against "Checking GitHub for
+ * decant…") and are counted separately in the collapsed summary, because a
+ * line that called a GitHub check a document read would be a small lie in the
+ * one view whose whole job is not telling them.
+ */
+export type ChatProgressKind = 'document' | 'activity'
+
+/**
+ * One piece of work the model asked for, named by the server, never by the
+ * model: a document's title from the index, or a repository's id from the
+ * allowlist.
+ */
 export interface ChatProgressStep {
   id: string
   title: string
+  /**
+   * Optional, and absent means `document`.
+   *
+   * The client replays the whole message back with the next question, so
+   * parts written before this field existed are still in transcripts that a
+   * browser is holding. A required field would make those parts fail
+   * validation and cost the visitor the step list above an answer they can
+   * still see.
+   */
+  kind?: ChatProgressKind
 }
 
 export interface ChatProgress {
@@ -144,15 +169,23 @@ function findProgressData(parts: ReadonlyArray<{ type: string }>): unknown {
   return undefined
 }
 
-/** Steps that name a document. A malformed entry is dropped, not fatal. */
+/**
+ * Steps that name a document or a repository. A malformed entry is dropped,
+ * not fatal.
+ *
+ * `kind` is read leniently: absent, or any value this version does not know,
+ * reads as a document. A step is still a step the server narrated, and
+ * dropping it over a label would undercount the work, which is the one kind
+ * of false claim this module exists to prevent.
+ */
 function readSteps(steps: readonly unknown[]): ChatProgressStep[] {
   const kept: ChatProgressStep[] = []
   for (const step of steps) {
     if (!isRecord(step)) continue
-    const { id, title } = step
+    const { id, title, kind } = step
     if (typeof id !== 'string' || typeof title !== 'string') continue
     if (title.length === 0 || title.length > MAX_TITLE_CHARS) continue
-    kept.push({ id, title })
+    kept.push(kind === 'activity' ? { id, title, kind } : { id, title })
   }
   return kept
 }
@@ -222,9 +255,13 @@ export function progressStatus(
   return wasCutOff(progress) ? 'stopped' : 'done'
 }
 
-/** What a finished run may claim: how many documents, over how long. */
+/**
+ * What a finished run may claim: how many documents, how many GitHub checks,
+ * over how long.
+ */
 export interface ProgressTotals {
-  count: number
+  documents: number
+  activity: number
   seconds: number
 }
 
@@ -246,7 +283,14 @@ export function progressTotals(view: AnswerView): ProgressTotals | undefined {
   if (!progress || progress.phase !== 'done') return undefined
   if (progress.steps.length === 0) return undefined
   if (view.text.trim().length === 0) return undefined
-  return { count: progress.steps.length, seconds: toSeconds(progress.ms ?? 0) }
+  const activity = progress.steps.filter(
+    step => step.kind === 'activity'
+  ).length
+  return {
+    documents: progress.steps.length - activity,
+    activity,
+    seconds: toSeconds(progress.ms ?? 0),
+  }
 }
 
 /**
@@ -267,10 +311,12 @@ export type StepState = 'complete' | 'active' | 'stopped'
 
 /** One row of the disclosure, named by the step it reports. */
 export interface ProgressRow {
-  /** The step's document id, or the fixed key of the writing row. */
+  /** The step's document id or repository id, or the writing row's key. */
   key: string
-  /** `undefined` on the writing row, which names no document. */
+  /** `undefined` on the writing row, which names nothing. */
   title?: string
+  /** Which sentence the row earns. Absent on the writing row. */
+  kind?: ChatProgressKind
   state: StepState
 }
 
@@ -294,9 +340,12 @@ export function progressRows(
   const rows: ProgressRow[] = steps.map(step => ({
     // Prefixed, because the writing row's key is a literal and a document id
     // is a file name: `content/knowledge/<topic>/writing.md` would otherwise
-    // give two rows the same React key.
-    key: `read:${step.id}`,
+    // give two rows the same React key. The prefix is the same for both
+    // kinds, and it can be: a repository id and a document id come from
+    // disjoint lists, and neither is the writing row's literal.
+    key: `${READ_ROW_KEY_PREFIX}${step.id}`,
     title: step.title,
+    kind: step.kind ?? 'document',
     state: 'complete',
   }))
   if (rows.length === 0) return rows

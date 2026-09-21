@@ -4,6 +4,7 @@ import {
   type KnowledgeDocument,
   type KnowledgeEntry,
 } from '@/lib/knowledge'
+import { createReadBudget, type ReadBudget } from './read-budget'
 import { estimateTokens } from './validate'
 
 /**
@@ -60,6 +61,12 @@ export interface ReadDocumentSessionDeps {
   /** The entries the model was shown. The only ids a read may resolve. */
   entries: readonly KnowledgeEntry[]
   readKnowledgeDocument: (id: string) => KnowledgeDocument | undefined
+  /**
+   * The request's token ledger, shared with every other tool that adds text
+   * to the conversation (MTC-45). Its own when omitted, which is what a test
+   * about reading alone wants.
+   */
+  budget?: ReadBudget
 }
 
 /**
@@ -129,10 +136,14 @@ export const READ_DOCUMENT_INPUT_SCHEMA = jsonSchema<{ id: string }>(
 export function createReadDocumentSession({
   entries,
   readKnowledgeDocument,
+  budget = createReadBudget(),
 }: ReadDocumentSessionDeps): ReadDocumentSession {
   const indexed = new Map(entries.map(entry => [entry.id, entry]))
   const reads: DocumentRead[] = []
   const refused: ReadsRefused = { unknown: 0, budget: 0, tooLarge: 0 }
+  // What this session charged, which is not what the ledger holds: another
+  // tool may have spent some of the same budget, and the log line reports the
+  // two separately.
   let spentTokens = 0
 
   function read(id: string): ReadDocumentResult {
@@ -167,11 +178,11 @@ export function createReadDocumentSession({
     // Bigger than the whole budget, so no amount of reading less would let it
     // through: the model is told that plainly rather than being invited to
     // retry, and the count is logged because only the corpus can fix it.
-    if (tokens > KNOWLEDGE_READ_BUDGET.maxTokens) {
+    if (tokens > budget.maxTokens) {
       refused.tooLarge += 1
       return { error: 'document_too_large' }
     }
-    if (spentTokens + tokens > KNOWLEDGE_READ_BUDGET.maxTokens) {
+    if (!budget.charge(tokens)) {
       refused.budget += 1
       return { error: 'read_budget_exhausted' }
     }
