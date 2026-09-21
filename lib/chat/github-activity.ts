@@ -27,10 +27,13 @@ import { estimateTokens } from './validate'
  *   - No author, login, avatar, URL, or SHA field is carried at all (Matt's
  *     decision 4 on MTC-45), and the two places a name can arrive inside the
  *     text instead are closed: `@mentions` and email addresses in
- *     `sanitiseText`, and GitHub's merge-commit templates in `commitSubject`,
- *     which name a contributor in the subject line itself. What is left is a
- *     name written as an ordinary word, `thanks Jane for the report`, which
- *     no pattern can tell from the rest of the sentence.
+ *     `sanitiseText`, and git's and GitHub's merge templates in
+ *     `commitSubject`, which put a branch or fork reference in the subject
+ *     line itself. What is left is a name written as an ordinary word,
+ *     `thanks Jane for the report`, or a branch reference in a subject that
+ *     matches no template, neither of which any pattern can tell from the
+ *     rest of the sentence. The templates are enumerated, so a spelling that
+ *     is not on the list is not covered: add it there when one turns up.
  *   - The digest is capped in two places: each string at
  *     ACTIVITY_TEXT_MAX_CHARS, and the whole block at ACTIVITY_MAX_TOKENS,
  *     with the oldest entries dropped first.
@@ -311,10 +314,22 @@ export function sanitiseText(value: string): string {
  * nobody.
  */
 const MERGE_TEMPLATES: readonly [RegExp, string][] = [
+  // GitHub's merge button.
   [/^(Merge pull request #\d+) from \S+/, '$1'],
-  [/^(Merge branch .+?) of \S+$/, '$1'],
+  // `git pull`. The quotes are git's own, and requiring them is what keeps
+  // this from truncating an ordinary sentence: `Merge branch protection
+  // rules out of settings.json` is a real subject and not a merge at all.
+  [/^(Merge(?: remote-tracking)? branch '[^']*') of \S+.*$/, '$1'],
+  // git's default merge message, which appends `into <branch>` whenever the
+  // current branch is not the default one. Both halves can be a branch named
+  // after the person who opened it, which is a widespread convention.
+  [/^(Merge(?: remote-tracking)? branch) '[^']*\/[^']*'( into \S+)?$/, '$1$2'],
+  [/^(Merge(?: remote-tracking)? branch '[^']*' into) \S+\/\S+$/, '$1'],
   [/^(Merge) \S+\/\S+ (into \S+)$/, '$1 $2'],
 ]
+
+/** `git revert`'s default subject, which quotes the subject it reverts. */
+const REVERT_TEMPLATE = /^Revert "(.*)"$/
 
 /**
  * The first line of a commit message, with a merge template's attribution
@@ -325,10 +340,28 @@ const MERGE_TEMPLATES: readonly [RegExp, string][] = [
  */
 export function commitSubject(message: string): string {
   const first = message.split('\n', 1)[0] ?? ''
+  // A revert quotes the subject it reverts, so the login is one layer in.
+  // Unwrapped first, then put back, so the line still says what it is.
+  const reverted = REVERT_TEMPLATE.exec(first)
+  if (reverted) return `Revert "${stripMergeAttribution(reverted[1])}"`
+  return stripMergeAttribution(first)
+}
+
+/**
+ * A merge subject with the branch or fork reference removed, or the subject
+ * unchanged.
+ *
+ * The references are what carry a person: `janedoe/fix-parser` is the
+ * commonest branch-naming convention there is, and to `sanitiseText` it is
+ * indistinguishable from `lib/chat/handler.ts`. Only a function that knows
+ * these are git's and GitHub's own templates can tell them apart, which is
+ * why this lives here and not in the filter.
+ */
+function stripMergeAttribution(subject: string): string {
   for (const [pattern, replacement] of MERGE_TEMPLATES) {
-    if (pattern.test(first)) return first.replace(pattern, replacement)
+    if (pattern.test(subject)) return subject.replace(pattern, replacement)
   }
-  return first
+  return subject
 }
 
 /**

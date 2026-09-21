@@ -270,6 +270,37 @@ describe('commitSubject', () => {
     )
   })
 
+  test.each([
+    [
+      "git's default merge, head branch named for a person",
+      "Merge branch 'main' into janedoe/fix-parser",
+    ],
+    [
+      'the same with the person on the other side',
+      "Merge branch 'janedoe/fix-parser' into main",
+    ],
+    ['a merge with no target branch', "Merge branch 'janedoe/fix-parser'"],
+    [
+      'a remote-tracking branch',
+      "Merge remote-tracking branch 'origin/janedoe/fix-parser'",
+    ],
+    [
+      'a pull into a named branch',
+      "Merge branch 'main' of github.com:janedoe/decant into feature",
+    ],
+  ])('%s carries no login', (_label, subject) => {
+    // `<login>/<topic>` is the commonest branch-naming convention there is,
+    // and git appends `into <branch>` whenever the current branch is not the
+    // default one, so these are ordinary subjects rather than exotic ones.
+    expect(commitSubject(subject)).not.toContain('janedoe')
+  })
+
+  test('a revert quotes the subject it reverts, login and all', () => {
+    expect(
+      commitSubject('Revert "Merge pull request #42 from janedoe/fix-parser"')
+    ).toBe('Revert "Merge pull request #42"')
+  })
+
   test('a bot account is a contributor too', () => {
     expect(
       commitSubject(
@@ -279,8 +310,15 @@ describe('commitSubject', () => {
   })
 
   test('an ordinary subject is left alone', () => {
+    // The templates require git's own quotes, which is what keeps a sentence
+    // of the shape "Merge branch ... of ..." from being truncated into a
+    // false quotation. A merge with no slash in it names nobody and is not
+    // touched either.
     for (const subject of [
-      'Merge remote-tracking branch is not a template we rewrite',
+      'Merge branch protection rules out of settings.json',
+      'Merge branch handling out of parser.ts',
+      "Merge branch 'main'",
+      "Merge branch 'main' into develop",
       'refactor lib/chat/handler.ts',
       'fix: merge the two parsers',
     ]) {

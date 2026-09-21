@@ -234,6 +234,26 @@ function checks(repository: string): Step {
     ])
 }
 
+/** A step that calls recent_activity twice for one repository, as models do. */
+function checksTwice(repository: string): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      ...[1, 2].map(n => ({
+        type: 'tool-call',
+        toolCallId: `call-activity-${n}-${repository}`,
+        toolName: RECENT_ACTIVITY_TOOL_NAME,
+        input: JSON.stringify({ repository }),
+      })),
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
 /** A step that asks for several documents at once, in one model call. */
 function readsAll(...ids: string[]): Step {
   return () =>
@@ -887,6 +907,59 @@ describe('checking GitHub', () => {
     expect(progressFrom(body).at(-1)?.steps).toEqual([
       { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
       { id: second, title: second, kind: 'activity' },
+    ])
+  })
+
+  test('a tool that throws withdraws its row rather than claiming the work', async () => {
+    // Neither tool throws, by design. The row's honesty should not rest on
+    // that: a throw arrives as a tool-error chunk rather than an output one,
+    // and without handling it the visitor would be told GitHub was checked
+    // because the call started.
+    const model = modelOf(checks(REPOSITORY), answers())
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity: () => Promise.reject(new Error('boom')),
+      env: {},
+      now: () => 1_000,
+    })
+    const payloads = progressFrom(
+      await (
+        await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+      ).text()
+    )
+
+    expect(payloads.at(0)?.steps).toEqual([
+      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
+    ])
+    expect(payloads.at(-1)?.steps).toEqual([])
+  })
+
+  test('a duplicate call in one step does not withdraw the row it shares', async () => {
+    // The SDK runs a step's tool calls concurrently. The refusal resolves
+    // first, having waited on nothing, so withdrawing the row on it would
+    // take the row away from the check that did happen.
+    const model = modelOf(checksTwice(REPOSITORY), answers())
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity: async () => {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'ok' as const, raw: ACTIVITY_RAW }
+      },
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
     ])
   })
 

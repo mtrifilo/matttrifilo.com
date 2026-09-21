@@ -472,10 +472,19 @@ export function assertHasRecentDate(output: string): AssertionResult {
  * activity golden exists to catch.
  *
  * This compares what the answer says against `metadata.activityDates`, the
- * dates the digest actually carried, at MONTH precision. Month and not day
+ * dates GitHub returned for this run, at MONTH precision. Month and not day
  * because the point is tolerance: a model may write `18 September 2026`,
  * `September 2026` or `2026-09-18` for the same fact, and which commits
  * landed this fortnight is not a fact about the assistant.
+ *
+ * Two limits worth knowing before a green row is trusted. Month precision
+ * means a corpus sentence that happens to name the same month as the
+ * repository's last push would satisfy it, and at least one document does
+ * carry the current month. And the ledger records what was FETCHED: a digest
+ * the tool then refused on the token budget still contributes dates the model
+ * never saw. Both make this weaker than "the answer quoted the digest"; it is
+ * still far stronger than asking for a recent-looking year, which the corpus
+ * supplies on its own.
  */
 export function assertDatesFromActivity(
   output: string,
@@ -489,7 +498,7 @@ export function assertDatesFromActivity(
       pass: false,
       score: 0,
       reason:
-        'no activity dates were delivered: GitHub was never reached, or the digest was empty',
+        'no activity dates were fetched: GitHub was never reached, or the digest was empty',
     }
   }
   const stated = monthsIn(answerProse(output))
@@ -526,20 +535,34 @@ const MONTHS = [
  */
 function monthsIn(prose: string): Set<string> {
   const found = new Set<string>()
-  for (const [, year, month] of prose.matchAll(/\b(\d{4})-(\d{2})-\d{2}\b/g)) {
+  for (const [, year, month] of prose.matchAll(
+    /\b(\d{4})-(\d{2})(?:-\d{2})?\b/g
+  )) {
     found.add(`${year}-${month}`)
   }
-  const names = MONTHS.map(month => month.slice(0, 3)).join('|')
+  // Full name, then the four- and three-letter abbreviations, as an explicit
+  // alternation. A three-letter prefix followed by `[a-z]*` matched any word
+  // starting with those letters: `decant` read as December, and `decant` is
+  // a repository id these answers contain by construction, so the assertion
+  // that exists to prevent a false pass had one built into its parser.
+  const names = MONTHS.flatMap(month => [
+    month,
+    month.slice(0, 4),
+    month.slice(0, 3),
+  ]).join('|')
+  // The day is optional and may carry an ordinal suffix, because "September
+  // 18th, 2026" is an ordinary thing for a model to write and a red row for
+  // spelling is a red row that teaches nobody anything.
+  const day = '(?:\\d{1,2}(?:st|nd|rd|th)?,?\\s+)?'
   const named = new RegExp(
-    `\\b(?:(\\d{1,2})\\s+)?(${names})[a-z]*\\.?,?\\s+(?:\\d{1,2},?\\s+)?(\\d{4})\\b`,
+    `\\b${day}(${names})\\.?,?\\s+${day}(\\d{4})\\b`,
     'gi'
   )
   for (const match of prose.matchAll(named)) {
-    const index = MONTHS.findIndex(month =>
-      month.startsWith(match[2].toLowerCase())
-    )
+    const spelled = match[1].toLowerCase()
+    const index = MONTHS.findIndex(month => month.startsWith(spelled))
     if (index < 0) continue
-    found.add(`${match[3]}-${String(index + 1).padStart(2, '0')}`)
+    found.add(`${match[2]}-${String(index + 1).padStart(2, '0')}`)
   }
   return found
 }

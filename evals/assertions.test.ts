@@ -563,6 +563,38 @@ describe('assertDatesFromActivity', () => {
     ).toBe(true)
   })
 
+  test.each([
+    [
+      'a repository id that starts like a month',
+      'He shipped decant, 2026 was busy.',
+    ],
+    ['another word that does', 'Marketing 2026 plans landed.'],
+    ['and another', 'Maybe 2026 is the year.'],
+  ])('%s is not a month', (_label, answer) => {
+    // `decant` read as December through a three-letter prefix, and `decant`
+    // is a repository id these answers contain by construction: the parser
+    // had the false pass this assertion exists to prevent built into it.
+    const result = assertDatesFromActivity(
+      answer,
+      ctx(undefined, {
+        activityDates: ['2026-12-01', '2026-03-02', '2026-05-03'],
+      })
+    )
+    expect(result.pass).toBe(false)
+  })
+
+  test.each([
+    ['an ordinal', 'He merged it September 18th, 2026.'],
+    ['an abbreviated ordinal', 'He merged it on Sept. 18th, 2026.'],
+    ['a year-month with no day', 'The latest push was in 2026-09.'],
+  ])('%s is still a date', (_label, answer) => {
+    // Ordinary model phrasings. A red row for spelling teaches nobody
+    // anything, and these two goldens run against a live repository.
+    expect(
+      assertDatesFromActivity(answer, ctx(undefined, delivered)).pass
+    ).toBe(true)
+  })
+
   test('a date the digest did not carry fails', () => {
     // The case the pair exists for: an answer written from the corpus, which
     // mentions the current year all over, with GitHub never consulted.

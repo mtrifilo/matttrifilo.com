@@ -76,10 +76,15 @@ interface ProviderResponse {
  * `activityDates` is what makes an activity golden mean anything. Asserting
  * that the answer carries a recent-looking year does not: eleven corpus
  * documents mention the current year, so an answer written entirely from
- * documents passes. These are the dates the digest actually delivered, so an
- * assertion can ask whether the answer is talking about what GitHub said.
- * Only successful fetches contribute, which is why a GitHub outage reddens
- * those two rows rather than passing them quietly.
+ * documents passes. These are the dates GitHub returned, so an assertion can
+ * ask whether the answer is talking about what GitHub said. Only successful
+ * fetches contribute, which is why a GitHub outage reddens those two rows
+ * rather than passing them quietly.
+ *
+ * It records what was fetched rather than what the model was handed: a digest
+ * the session then refuses on the shared token budget still contributes here.
+ * Narrow, since it needs budget exhaustion on an activity question, and the
+ * assertion that reads this says so.
 
  * `finishReason` is carried for the person reading a red row, not for an
  * assertion. `incomplete` and `truncated` are what assertAnswered judges.
