@@ -20,9 +20,17 @@ const EVALS = import.meta.dir
 const SUITES = ['golden', 'refusals', 'injection', 'groundedness'] as const
 type SuiteName = (typeof SUITES)[number]
 
-/** The floor the ticket sets for each suite. */
+/**
+ * The floor each suite has to stay above.
+ *
+ * It is a floor, not a count: a suite may grow freely, and only a change
+ * that drops one below its number has to argue for itself here. `golden`
+ * sits well above the others because the correspondence test below protects
+ * only the goldens that answer a starter question; without this number the
+ * rest of the suite is guarded by nothing.
+ */
 const MINIMUM: Record<SuiteName, number> = {
-  golden: 30,
+  golden: 70,
   refusals: 20,
   injection: 20,
   groundedness: 20,
@@ -113,6 +121,11 @@ function toArray(value: unknown): string[] {
     : []
 }
 
+/** The distinct values that appear more than once, for a failure that names them. */
+function duplicates(values: string[]): string[] {
+  return [...new Set(values.filter((v, i) => values.indexOf(v) !== i))]
+}
+
 describe('promptfooconfig.yaml', () => {
   test('targets the route provider and nothing else', () => {
     expect(config.providers).toHaveLength(1)
@@ -191,6 +204,15 @@ for (const name of SUITES) {
       expect(new Set(descriptions).size).toBe(descriptions.length)
     })
 
+    test('no two tests ask the same question', () => {
+      // Unique descriptions do not imply unique questions, and a merge that
+      // keeps both sides of two branches is how a suite acquires a duplicate:
+      // it pays for a second full run of one question and shows up as two
+      // rows nobody can tell apart.
+      const questions = suite.map(item => String(item.vars?.question))
+      expect(duplicates(questions)).toEqual([])
+    })
+
     test('the smoke subset is the first three tests', () => {
       const marked = suite
         .map((item, index) => (item.metadata?.smoke === true ? index : -1))
@@ -245,14 +267,60 @@ for (const name of SUITES) {
         // not an absence check, or a promptfoo assertion that reads the output
         // (the contains family, a rubric). Any one of them already fails on an
         // empty answer, so the test does not need assertAnswered as well.
+        // A `not-` assertion is an absence check like the named ones and
+        // passes on an empty answer, so it does not count.
         const judgesContent =
           names.some(name => !ABSENCE_ONLY.has(name)) ||
-          types.some(type => type !== 'javascript' && type !== 'assert-set')
+          types.some(
+            type =>
+              type !== 'javascript' &&
+              type !== 'assert-set' &&
+              !type.startsWith('not-')
+          )
         expect({
           description: item.description,
           judgesContent,
         }).toEqual({ description: item.description, judgesContent: true })
       }
+    })
+
+    test('no anchor name is defined twice', () => {
+      // Anchors are the one place in these files where two definitions
+      // resolve silently: YAML takes the nearest preceding one, so a merge
+      // that keeps two `&r38` blocks grades one test against the other's
+      // rubric with nothing red. Read from the raw text, because a parser
+      // has already collapsed them by the time it hands back objects.
+      const raw = readFileSync(join(EVALS, `suites/${name}.yaml`), 'utf8')
+      const anchors = [...raw.matchAll(/&([A-Za-z0-9_-]+)/g)].map(
+        match => match[1]
+      )
+      expect(duplicates(anchors)).toEqual([])
+    })
+
+    test('every assert-set grades one rubric, repeated', () => {
+      // The tolerance this pattern buys is "two of three grades of the SAME
+      // rubric". Three different rubrics inside one assert-set would still
+      // score on the mean, quietly turning a judgement into a checklist that
+      // passes at 0.6 with one part unmet.
+      const offenders: unknown[] = []
+      const walk = (
+        list: SuiteAssertion[] | undefined,
+        description: unknown
+      ) => {
+        for (const entry of list ?? []) {
+          if (entry.type === 'assert-set') {
+            const values = (entry.assert ?? []).map(member =>
+              String(member.value)
+            )
+            if (values.length < 2 || new Set(values).size !== 1) {
+              offenders.push({ description, distinct: new Set(values).size })
+            }
+          }
+          walk(entry.assert, description)
+        }
+      }
+      for (const item of suite) walk(item.assert, item.description)
+      expect(offenders).toEqual([])
     })
 
     test('every replayed turn is one the provider will actually send', () => {

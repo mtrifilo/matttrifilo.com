@@ -7,7 +7,7 @@ import { CHAT_REASONING_LEVELS } from '@/lib/chat/validate'
  *
  * The live route defaults to `medium`. This is how to check whether `low`
  * or `high` would have scored the same twelve tests differently, without
- * spending a full 102-test run three times. CI does not run it.
+ * spending a full run of every suite three times. CI does not run it.
  *
  *   bun run evals:compare
  *
@@ -81,6 +81,8 @@ for (const result of results) {
   console.log(`| ${result.level} | ${result.passed} | ${result.total} |`)
 }
 
-if (results.some(result => result.total === 0 || result.passed < result.total)) {
+if (
+  results.some(result => result.total === 0 || result.passed < result.total)
+) {
   process.exit(1)
 }

@@ -23,6 +23,10 @@ import {
  * the ticker two identical pills, and an over-long one would widen the row
  * past what a 390px screen can read. The evidence that each question is
  * answerable is the golden suite, not a unit test.
+ *
+ * Adding a question here means adding its golden in the same change:
+ * evals/config.test.ts requires a golden whose `vars.question` is the exact
+ * string, and fails naming any entry that has none.
  */
 describe('the starter questions', () => {
   /**

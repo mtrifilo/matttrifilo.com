@@ -1262,6 +1262,11 @@
         - knowledge base
         - handoff
         - any engineer
+    # Whether one exact idiom is present is not a judgement call, so it is
+    # not left to the grader. No document uses this phrase; an answer that
+    # leads with it is characterising rather than reporting.
+    - type: not-icontains
+      value: single point of failure
     - type: assert-set
       threshold: 0.6
       assert:
@@ -1334,10 +1339,12 @@
       assert:
         - type: llm-rubric
           value: &r38 >-
-            The answer rests on facts the documents state: that Matt uses the
-            agents daily alongside his team, that from June 2026 he ran
+            The answer rests on at least one of these documented facts, and
+            passes on one because each lives in a different document and the
+            run is only required to have opened one of them: that Matt uses
+            the agents daily alongside his team; that from June 2026 he ran
             several agents in parallel on decomposition, deployment readiness
-            and security work, and that his rule is agents open the pull
+            and security work; or that his rule is agents open the pull
             request while a person approves it. It is written about Matt in
             the third person, and it must not present an inferred
             characterisation as a documented one.
@@ -1564,9 +1571,11 @@
         - type: llm-rubric
           value: *r43
 
-# resume: the 2026 entries, which are what "recently" means in the published
-# material: the AI Email Engagement Summary, Symphony, the plugin
-# marketplace governance, and the move to independent deploys.
+# resume, under "Manager, Product Engineering · May 2025 - present": the AI
+# Email Engagement Summary, Symphony, the plugin marketplace governance, and
+# the move to independent deploys. The résumé dates the block, not the
+# individual entries, which is why the rubric accepts 2025 or 2026 and asks
+# for no date on any single item.
 - description: 'golden: recent shipped work'
   vars:
     question: What did Matt ship recently?
@@ -1857,8 +1866,8 @@
         - type: llm-rubric
           value: &r50 >-
             The answer says Matt was the incident lead or the team's point of
-            contact for the roughly thirty-minute February 2024 outage, and
-            names at least two things he did: fielding escalations, writing
+            contact for the February 2024 cloud-provider outage, and names at
+            least two things he did: fielding escalations, writing
             the initial status-page or customer communications, checking the
             scope against warehouse logs, or coordinating the post-outage
             analysis. It says no messages were lost, because sends were queued
@@ -2110,10 +2119,12 @@
         - type: llm-rubric
           value: &r56 >-
             The answer says Psychic Homily is Matt's site documenting new
-            music releases, shows and cultural events from Arizona musicians,
-            and that he built it solo. If it names the stack it says Next.js
-            or React and Go, as the résumé does, and it states no star count,
-            primary language or last-push date, which the published material
+            music releases, shows and cultural events from Arizona musicians.
+            The stack and the fact that he built it solo are in the résumé
+            and not in the open-source document, so an answer grounded in
+            either one passes: if it names the stack it says Next.js or React
+            and Go, as the résumé does, and it states no star count, primary
+            language or last-push date, which the published material
             deliberately omits. It is written about Matt in the third person,
             and it must not present an inferred characterisation as a
             documented one.
@@ -2276,12 +2287,16 @@
       assert:
         - type: llm-rubric
           value: &r60 >-
-            The answer says Matt is still hands-on and that this is a
-            deliberate choice: he holds that hands-on coding is a feature and
-            not a bug of senior technical leadership, he did not stop coding
-            when promoted to player-coach or to manager, and he still ships
-            code daily. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            The answer says Matt is still hands-on, and rests on at least one
+            of these documented facts. It passes on one, because the first two
+            are in the philosophy document and the third is in the résumé, and
+            the run is only required to have opened one of them: that he holds
+            hands-on coding to be a feature and not a bug of senior technical
+            leadership; that he did not stop coding when promoted to
+            player-coach or to manager and calls that a deliberate, defining
+            choice; or that he still ships code daily. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
         - type: llm-rubric
           value: *r60
         - type: llm-rubric
@@ -2662,12 +2677,14 @@
             engineers in 2025 who became high performers within months, and
             there has been zero voluntary attrition under him as manager. It
             may add that he lists hiring and performance management among his
-            leadership skills, and that he believes growing people compounds.
-            It does not describe an interview process, a ramp plan or a growth
-            conversation format, none of which the published material covers;
-            where it goes beyond the outcomes it says the material does not
-            cover that. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            leadership skills, that he believes growing people compounds, or
+            the essay's point that he has hosted many candidate interviews and
+            looks for demonstrable agentic-engineering skill and shipped work.
+            It does not describe an interview format, a ramp plan or a
+            growth-conversation format, none of which the published material
+            sets out; where it goes beyond what is published it says so. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
         - type: llm-rubric
           value: *r69
         - type: llm-rubric
@@ -2817,7 +2834,11 @@
           value: *r72
 
 # resume: "Joined a founder-led company of ~400; acquired in 2024 by Thryv,
-# a public company of ~3,000."
+# a public company of ~3,000." Those two are COMPANY headcounts. The only
+# engineering figure published is ai-tooling-leadership's "roughly fifty
+# engineers", the population the tooling rollout reached, so an answer that
+# offers 400 or 3,000 as the size of the engineering organisation is
+# substituting one denominator for another.
 - description: 'golden: the size and kind of organisation he has worked in'
   vars:
     question: What size of engineering organisation has Matt worked in?
@@ -2845,11 +2866,15 @@
           value: &r73 >-
             The answer says Matt joined a founder-led company of about 400
             people in 2017 and stayed through its 2024 acquisition by Thryv, a
-            public company of about 3,000. It may add that the AI tooling
-            rollout he led reached roughly fifty engineers. It does not state
-            an engineering headcount the published material does not give. It
-            is written about Matt in the third person, and it must not present
-            an inferred characterisation as a documented one.
+            public company of about 3,000, and is clear that those two figures
+            are whole-company headcounts. If it gives a figure for the
+            engineering organisation itself it gives the published one,
+            roughly fifty engineers, the population his tooling rollout
+            reached. It FAILS if it offers 400 or 3,000 as the size of the
+            engineering organisation, or states any engineering headcount the
+            published material does not give. It is written about Matt in the
+            third person, and it must not present an inferred characterisation
+            as a documented one.
         - type: llm-rubric
           value: *r73
         - type: llm-rubric
@@ -2857,10 +2882,17 @@
 
 # plugin-marketplaces-and-sme-knowledge-bases: "project second brains ...
 # each carrying that project's decision records, research spikes, rollout
-# plans, and handoffs so anyone can pick the work up cold";
-# engineering-philosophy: "if I give this task to a new teammate who knows
-# nothing about our team, project, and codebase, what would I need to
-# share with them".
+# plans, and handoffs so anyone can pick the work up cold", the three-tier
+# subject-matter plugin system, and the August 2026 skill that "promotes
+# lessons learned in tickets, the landmines, into the knowledge base so it
+# compounds".
+#
+# engineering-philosophy's "new teammate who knows nothing about our team,
+# project, and codebase" is NOT among them. It sits under the heading "His
+# rule for building context for an agent" and is a thought experiment for
+# prompting an agent, not a documented practice for ramping a person, so
+# rewarding it here would be exactly the inference-as-documentation this
+# suite refuses.
 - description: 'golden: ramping a person or an agent onto an unfamiliar service'
   vars:
     question: How does Matt get someone up to speed on a service they have never worked on?
@@ -2882,23 +2914,25 @@
       value:
         - second brain
         - knowledge base
+        - subject-matter
         - cold
-        - new teammate
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r74 >-
-            The answer names at least two documented mechanisms: the
+            The answer names at least one documented mechanism: the
             per-service subject-matter plugins that give each service a
             knowledge base an engineer or an agent can load, the project
             second brains carrying decision records, research spikes, rollout
-            plans and handoffs so anyone can pick the work up cold, the skill
-            that promotes lessons learned in tickets into the knowledge base
-            so it compounds, or Matt's own rule of asking what a new teammate
-            who knows nothing about the team, project and codebase would need
-            to be told. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            plans and handoffs so anyone can pick the work up cold, or the
+            skill that promotes the lessons learned in tickets into the
+            knowledge base so it compounds. It does not offer Matt's rule
+            about briefing a hypothetical new teammate as a documented
+            onboarding practice: that line is written about giving an AGENT
+            context for a task. It is written about Matt in the third person,
+            and it must not present an inferred characterisation as a
+            documented one.
         - type: llm-rubric
           value: *r74
         - type: llm-rubric
