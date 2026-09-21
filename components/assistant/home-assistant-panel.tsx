@@ -2,12 +2,12 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
-import { ASSISTANT_INTRO, ASSISTANT_NAME, HOME_STARTER_QUESTIONS } from './copy'
+import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
 import { handOffQuestion } from './pending-question'
+import { StarterTicker } from './starter-ticker'
 
 /**
  * The assistant's doorway on the homepage (MTC-33).
@@ -44,11 +44,7 @@ export function HomeAssistantPanel() {
         {ASSISTANT_NAME}
       </h2>
       <p className="leading-relaxed text-muted-foreground">{ASSISTANT_INTRO}</p>
-      <Suggestions>
-        {HOME_STARTER_QUESTIONS.map(question => (
-          <Suggestion key={question} onClick={start} suggestion={question} />
-        ))}
-      </Suggestions>
+      <StarterTicker onPick={start} />
       <AssistantComposer
         onSubmit={start}
         onValueChange={setInput}

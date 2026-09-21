@@ -174,6 +174,95 @@
 }
 
 /*
+ * Starter-question ticker (MTC-39).
+ *
+ * The row is one track carrying the question pool twice: the real buttons,
+ * then an inert copy of them. The keyframe moves the track by exactly one
+ * copy, so the frame that finishes the loop is the frame that starts it and
+ * the seam is never visible.
+ *
+ * Two custom properties carry what the stylesheet cannot know.
+ * --ticker-duration is set by starter-ticker.tsx from the measured width of
+ * one copy, so the row drifts at one speed whatever the pool says; the
+ * fallback here is that width for the pool as it stands, so the first frames
+ * are not wrong while the measurement lands. --ticker-offset is where in the
+ * loop an instance opens, as a fraction, which is how the homepage and /ask
+ * avoid showing the same pills at the same moment.
+ */
+@keyframes starter-ticker {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.starter-ticker {
+  --ticker-fade: 56px;
+  overflow: hidden;
+  /* Unprefixed only; the optimiser adds -webkit-mask-image (see the nav
+     rule below for why a hand-written prefix is a hazard). */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--ticker-fade),
+    black calc(100% - var(--ticker-fade)),
+    transparent 100%
+  );
+}
+
+@media (min-width: 48rem) {
+  .starter-ticker {
+    --ticker-fade: 72px;
+  }
+}
+
+.starter-ticker-track {
+  /* The pills measure their own offsets against this box, so the focus
+     handling and scrollLeft share one coordinate system. */
+  position: relative;
+  display: flex;
+  width: max-content;
+  animation: starter-ticker var(--ticker-duration, 340s) linear infinite;
+  animation-delay: calc(
+    var(--ticker-offset, 0) * var(--ticker-duration, 340s) * -1
+  );
+}
+
+/* A pill that is being read, or reached for, holds still. */
+.starter-ticker:hover .starter-ticker-track,
+.starter-ticker:focus-within .starter-ticker-track,
+.starter-ticker-track[data-touched='true'] {
+  animation-play-state: paused;
+}
+
+/*
+ * A focused pill has to be brought into view, and the transform is what
+ * stops that: it puts most of the row at negative offsets no scroll position
+ * can reach. Dropping the animation drops the transform with it, and
+ * starter-ticker.tsx hands the same position to scrollLeft in the same
+ * breath, so the row does not move and the browser can scroll it again.
+ */
+.starter-ticker-track[data-frozen='true'] {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starter-ticker {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .starter-ticker-track {
+    animation: none;
+  }
+  /* Nothing loops, so the second copy would just be the pool said twice. */
+  .starter-ticker-copy[aria-hidden='true'] {
+    display: none;
+  }
+}
+
+/*
  * Honeycomb treatment C — gutters (MTC-25).
  *
  * The canvas box equals the viewport (fixed inset-0, w-full h-full; the

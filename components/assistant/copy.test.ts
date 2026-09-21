@@ -4,6 +4,7 @@ import {
   PROGRESS_THINKING,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
+  STARTER_QUESTIONS,
   progressReading,
   progressSummary,
 } from './copy'
@@ -13,6 +14,64 @@ import {
  * a sentence assembled from pieces has to read as a sentence, and the two
  * counts the assistant reports have to agree with English.
  */
+
+/**
+ * The starter-question pool (MTC-39).
+ *
+ * Matt approved twenty-seven questions and the order they ship in, so these
+ * hold the shape he approved rather than the wording: a duplicate would give
+ * the ticker two identical pills, and an over-long one would widen the row
+ * past what a 390px screen can read. The evidence that each question is
+ * answerable is the golden suite, not a unit test.
+ */
+describe('the starter questions', () => {
+  /**
+   * The ticker renders each question on one line. At the body size the pills
+   * use, the longest question Matt approved is 83 characters and about 560px
+   * wide, already wider than a 390px screen; this is the ceiling that keeps
+   * the next one from being worse.
+   */
+  const LENGTH_CAP = 90
+
+  // `as const` narrows each entry to its own literal, which makes every
+  // comparison below a type error rather than a test.
+  const questions: readonly string[] = STARTER_QUESTIONS
+
+  test('ships at least the pool Matt approved', () => {
+    expect(questions.length).toBeGreaterThanOrEqual(27)
+  })
+
+  test('asks each question once', () => {
+    expect(new Set(questions).size).toBe(questions.length)
+  })
+
+  test('every question is a question, and fits on a pill', () => {
+    for (const question of questions) {
+      expect(question.trim()).not.toBe('')
+      expect(question).toBe(question.trim())
+      expect(question.length).toBeLessThanOrEqual(LENGTH_CAP)
+    }
+  })
+
+  test('opens on what a hiring manager screens for first', () => {
+    // The order is the product decision, so the head of it is pinned.
+    expect(questions[0]).toBe('How does Matt use AI coding agents?')
+  })
+
+  test('leans on no pronoun, because a pill arrives on its own', () => {
+    // A pill drifts past with no question before it to carry a "he", and a
+    // visitor who knows nothing of Matt's work meets it cold. This is the
+    // rule the pool was rewritten to in September 2026: a pronoun is only
+    // ever a second reference, inside a question that has already said who.
+    for (const question of questions) {
+      const pronoun = /\b(?:he|him|his)\b/i.exec(question)
+      if (pronoun === null) continue
+      const named = question.indexOf('Matt')
+      expect(named).toBeGreaterThanOrEqual(0)
+      expect(named).toBeLessThan(pronoun.index)
+    }
+  })
+})
 
 describe('the rate-limit notice', () => {
   test('reads as one sentence once its links are put back in', () => {

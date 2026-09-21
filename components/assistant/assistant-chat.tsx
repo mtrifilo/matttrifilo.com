@@ -10,7 +10,6 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import {
   announcementFor,
   discardsQuestion,
@@ -28,13 +27,10 @@ import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
 import { ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
-import {
-  ASK_STARTER_QUESTIONS,
-  ASSISTANT_INTRO,
-  ASSISTANT_NAME,
-  RESET_LABEL,
-} from './copy'
+import { ASSISTANT_INTRO, ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { takePendingQuestion } from './pending-question'
+import { StarterTicker } from './starter-ticker'
+import { ASK_START_AT } from './ticker-geometry'
 import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
@@ -324,11 +320,7 @@ function EmptyState({ onPick }: { onPick: (question: string) => void }) {
       <p className="max-w-xl leading-relaxed text-muted-foreground">
         {ASSISTANT_INTRO}
       </p>
-      <Suggestions>
-        {ASK_STARTER_QUESTIONS.map(question => (
-          <Suggestion key={question} onClick={onPick} suggestion={question} />
-        ))}
-      </Suggestions>
+      <StarterTicker onPick={onPick} startAt={ASK_START_AT} />
     </div>
   )
 }
