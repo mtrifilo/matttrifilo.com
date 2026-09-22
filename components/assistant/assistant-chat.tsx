@@ -104,12 +104,17 @@ export function AssistantChat() {
   const askedRef = useRef<string | null>(null)
 
   // True while a question handed over from the homepage is waiting to be
-  // asked. It is read during render, so the first frame after the hand-off
-  // is already a conversation: without it the page would paint the centred
-  // empty state and then drop the composer to the bottom, on the path most
-  // visitors arrive by. The server has no storage to read and says false;
-  // the layout effect below takes the question in the same frame, and by the
-  // next render the transcript holds it.
+  // asked. It is read during render, so on the client-side navigation the
+  // homepage makes, the first frame is already a conversation: without it
+  // the page would paint the centred empty state and then drop the composer
+  // to the bottom, on the path most visitors arrive by. The server has no
+  // storage to read and says false, so a full page load with a question
+  // waiting (a hard navigation) still paints the centred group first.
+  //
+  // Once the layout effect below takes the question this reads false again.
+  // The SDK adds the question to the transcript a few microtasks after the
+  // send, which lands before the browser paints, so the render that sees
+  // false also sees the question.
   const handingOff = useSyncExternalStore(
     subscribeToNothing,
     hasPendingQuestion,
@@ -197,8 +202,8 @@ export function AssistantChat() {
   // The homepage panel hands its question over through sessionStorage; asking
   // it here is what makes submitting from the homepage feel like one action.
   // The ref, not the storage read, is what keeps it to one send: React runs
-  // effects twice in development. A layout effect, so the docked layout is
-  // in place before the first paint.
+  // effects twice in development. A layout effect, so the question is taken
+  // and sent in the same frame the docked layout is first drawn in.
   const handedOff = useRef(false)
   useLayoutEffect(() => {
     if (handedOff.current) return

@@ -77,6 +77,10 @@ describe('the /ask column before the first question', () => {
     expect(source.indexOf('<AssistantDisclosure')).toBeLessThan(below)
   })
 
+  test('lets a screen too short for the group scroll the column, not the page', () => {
+    expect(source).toContain("!docked && 'overflow-y-auto'")
+  })
+
   test('puts the composer under the group and the disclosure under it', () => {
     const group = source.indexOf('<AssistantEmptyState')
     const composer = source.indexOf('<AssistantComposer')

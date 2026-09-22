@@ -25,7 +25,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  globalThis.sessionStorage = original
+  // Bun has no sessionStorage of its own, and assigning undefined back would
+  // leave an own property behind for every later test file to see.
+  if (original === undefined) {
+    delete (globalThis as { sessionStorage?: Storage }).sessionStorage
+  } else {
+    globalThis.sessionStorage = original
+  }
 })
 
 describe('the pending question', () => {

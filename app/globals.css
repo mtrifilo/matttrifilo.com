@@ -370,13 +370,6 @@
 }
 
 /*
- * A focused pill has to be brought into view, and the transform is what
- * stops that: it puts most of the row at negative offsets no scroll position
- * can reach. Dropping the animation drops the transform with it, and
- * starter-ticker.tsx hands the same position to scrollLeft in the same
- * breath, so the row does not move and the browser can scroll it again.
- */
-/*
  * A restart, for the length of one forced layout: the component drops the
  * animation and puts it straight back with a new duration and offset, which
  * starts it afresh instead of amending the running one. Separate from the
@@ -386,6 +379,13 @@
   animation: none;
 }
 
+/*
+ * A focused pill has to be brought into view, and the transform is what
+ * stops that: it puts most of the row at negative offsets no scroll position
+ * can reach. Dropping the animation drops the transform with it, and
+ * starter-ticker.tsx hands the same position to scrollLeft in the same
+ * breath, so the row does not move and the browser can scroll it again.
+ */
 .starter-ticker-track[data-frozen='true'] {
   animation: none;
   /* The lead that lets a row's first pill be scrolled clear of the fade.
