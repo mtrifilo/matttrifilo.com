@@ -727,8 +727,9 @@ export function assertNoScreenshotRelease(output: string): AssertionResult {
  * An answer that cites nothing passes here, because a decline is entitled
  * to. Whether an answer that used a document had to cite it is
  * `assertCites`'s question, and `evals/config.test.ts` refuses a test that
- * carries this assertion without that one: alone, this passes an answer
- * with no trailer at all, including an empty one.
+ * carries one of the two without the other: alone, this passes an answer
+ * with no trailer at all, including an empty one, and `assertCites` alone
+ * passes a trailer naming a document the run never opened.
  */
 export function assertCitesOnlyWhatItRead(
   output: string,

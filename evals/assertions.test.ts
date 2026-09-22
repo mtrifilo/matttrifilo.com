@@ -372,9 +372,9 @@ describe('assertCitesOnlyWhatItRead', () => {
   })
 
   test('judges the trailer against the reads, whatever else the metadata says', () => {
-    // The route sends no source list, so a provider field that mirrors one
-    // is empty on every run; an empty list there must not stand in for a
-    // check of what the answer cites.
+    // The verdict rests on the answer's trailer and the server's reads
+    // alone: an empty list under any other key, a source list included,
+    // cannot stand in for either.
     const result = assertCitesOnlyWhatItRead(
       'He led it.\n\nSources: resume, faq',
       ctx(undefined, { sourceIds: [], readIds: ['resume'] })
@@ -394,33 +394,39 @@ describe('assertCitesOnlyWhatItRead', () => {
 })
 
 describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => {
-  // Every groundedness citation test carries both (evals/config.test.ts
-  // enforces it). The first asks whether the answer cited at all, the second
-  // whether it cited only what the server read; a row passes only when both
-  // do, so the cases below are judged on the pair.
-  const bothPass = (output: string, context: AssertionContext) =>
-    assertCites(output, context).pass &&
-    assertCitesOnlyWhatItRead(output, context).pass
+  // Every test that carries one carries the other (evals/config.test.ts), so
+  // a row's citation verdict is the pair's. Each case names both halves, so
+  // a red one says which half moved.
+  const verdicts = (output: string, context: AssertionContext) => ({
+    assertCites: assertCites(output, context).pass,
+    assertCitesOnlyWhatItRead: assertCitesOnlyWhatItRead(output, context).pass,
+  })
   const answer = 'He led the migration in 2024.'
   const readResume = ctx(
     { expectReadsAny: ['resume'] },
     { readIds: ['resume', 'faq'] }
   )
 
-  test('a trailer drawn from the reads passes', () => {
-    expect(bothPass(`${answer}\n\nSources: resume`, readResume)).toBe(true)
+  test('a trailer drawn from the reads passes both', () => {
+    expect(verdicts(`${answer}\n\nSources: resume`, readResume)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+    })
   })
 
-  test('a trailer naming an unread document fails', () => {
+  test('a trailer naming an unread document fails the subset half', () => {
     expect(
-      bothPass(`${answer}\n\nSources: resume, open-source`, readResume)
-    ).toBe(false)
+      verdicts(`${answer}\n\nSources: resume, open-source`, readResume)
+    ).toEqual({ assertCites: true, assertCitesOnlyWhatItRead: false })
   })
 
   test('no trailer, on a run that read the named document, passes with a warning', () => {
-    // The tolerance `missingTrailer` counts: the subset check has nothing to
+    // The tolerance `missingTrailer` counts: the subset half has nothing to
     // disagree with, and assertCites passes on the ledger's evidence.
-    expect(bothPass(answer, readResume)).toBe(true)
+    expect(verdicts(answer, readResume)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+    })
     expect(assertCites(answer, readResume).reason).toContain('warning')
   })
 
@@ -429,13 +435,25 @@ describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => 
       { expectReadsAny: ['resume'] },
       { readIds: ['owned-systems-and-operations'] }
     )
-    expect(bothPass(answer, readOther)).toBe(false)
+    expect(verdicts(answer, readOther)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
   })
 
-  test('no trailer and no reads fails, and so does an empty answer', () => {
+  test('no trailer, on a run that read nothing, fails', () => {
     const readNothing = ctx({ expectReadsAny: ['resume'] }, { readIds: [] })
-    expect(bothPass(answer, readNothing)).toBe(false)
-    expect(bothPass('', readResume)).toBe(false)
+    expect(verdicts(answer, readNothing)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
+  })
+
+  test('an empty answer fails, whatever the run read', () => {
+    expect(verdicts('', readResume)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
   })
 })
 

@@ -317,17 +317,20 @@ for (const name of SUITES) {
       }
     })
 
-    test('a test that checks its citations were read also requires one', () => {
-      // assertCitesOnlyWhatItRead passes an answer with no trailer, so on its
-      // own it cannot tell a cited answer from an empty one; assertCites is
-      // the half that fails an answer that used a document and cited nothing.
+    test('assertCites and assertCitesOnlyWhatItRead appear together or not at all', () => {
+      // Each is vacuous on half the question without the other.
+      // assertCitesOnlyWhatItRead passes an answer with no trailer at all;
+      // assertCites passes any trailer, including one naming a document the
+      // run never opened.
       for (const item of suite) {
         const names = assertionNames([item])
-        if (!names.includes('assertCitesOnlyWhatItRead')) continue
         expect({
           description: item.description,
-          requiresCitation: names.includes('assertCites'),
-        }).toEqual({ description: item.description, requiresCitation: true })
+          assertCites: names.includes('assertCites'),
+        }).toEqual({
+          description: item.description,
+          assertCites: names.includes('assertCitesOnlyWhatItRead'),
+        })
       }
     })
 
