@@ -622,6 +622,44 @@ describe('withoutTicketKeys', () => {
     expect(withoutTicketKeys(subject)).toBe(subject)
   })
 
+  test('a branch-named title loses its key', () => {
+    // What GitHub fills a pull request title with when the branch is named
+    // for the ticket, which is the commonest way one arrives.
+    expect(withoutTicketKeys('PSY-2080-add-gallery')).toBe('add-gallery')
+  })
+
+  test.each([
+    ['a title-cased tail', 'PSY-2080-Add-Gallery'],
+    ['a key longer than six letters', 'Resolve PLATFORM-9 today'],
+    ['a key of one letter', 'Resolve X-1 at last'],
+  ])('%s keeps its key, and that is the trade', (_label, subject) => {
+    // The first is indistinguishable from `AES-256-GCM` to the guard that
+    // stops a version being cut in half; the other two are the bounds the
+    // ticket settled. Pinned so the cost is visible rather than surprising.
+    expect(withoutTicketKeys(subject)).toBe(subject)
+  })
+
+  test.each([
+    [
+      'an ellipsis keeps its space',
+      'wip AB-1 ... see notes',
+      'wip ... see notes',
+    ],
+    ['a stray slash between two keys', 'Fix AB-1/CD-2 split', 'Fix / split'],
+    ['a doubled bracket', '[[AB-1]] Add the parser', '[ ] Add the parser'],
+    [
+      'a spaced semicolon closes up',
+      'Fix AB-1 crash ; really',
+      'Fix crash; really',
+    ],
+  ])('the whole-string tidying, %s', (_label, subject, expected) => {
+    // Not all of these read well. They are pinned because the tidying runs
+    // over the whole string whenever a key was found, which is the trade for
+    // tidying at all, and a reader of these lines should see the shapes
+    // rather than infer them from a docstring.
+    expect(withoutTicketKeys(subject)).toBe(expected)
+  })
+
   test('a bracketed key takes its brackets and nothing else', () => {
     expect(withoutTicketKeys('Fix PSY-2080 crash in parse()')).toBe(
       'Fix crash in parse()'

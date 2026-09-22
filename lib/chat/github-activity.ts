@@ -14,8 +14,10 @@ import { estimateTokens } from './validate'
  * has ever contributed, from a dependency bot, and from whoever opens the
  * next pull request, and they land in a model's context. So:
  *
- *   - The filtering is code, not a request in the prompt. `sanitiseText` runs
- *     over every string before any of it is framed. Be precise about what it
+ *   - The filtering is code, not a request in the prompt. Every string is
+ *     filtered before any of it is framed: `sanitiseText` for a release tag,
+ *     `sanitiseTitle`, which is the same pipeline plus the noise rules below,
+ *     for a title or a commit subject. Be precise about what the safety half
  *     is: a denylist of everything that could ACT (markup, links, addresses,
  *     handles, invisible characters, the frame's own markers), not a
  *     whitelist and not an attempt to recognise a malicious sentence. Words
@@ -231,23 +233,30 @@ const EMOJI_SHORTCODE = /:[a-z][a-z0-9_+-]{1,30}:/gi
  *
  *   - Nothing word-like or a hyphen in front, so `v1.2.0-SDK-1` and
  *     `feature-ABC-1` are left whole rather than losing their tail.
- *   - Nothing word-like after the digits, and no `.` or `-` followed by
- *     another character. Without the first, `\d+` backtracks and
- *     `CVE-2024-1234` comes back as `4-1234`; without the second,
- *     `TLS-1.2` comes back as `.2` and `AES-256-GCM` as `-GCM`. A version
- *     number and a standard's name are what commit subjects are made of, and
- *     half of one is worse than all of it: the block presents these lines to
- *     the model as quotations of what the repository said.
+ *   - Nothing word-like after the digits, so `\d+` cannot backtrack: without
+ *     it `CVE-2024-1234` came back as `4-1234`.
+ *   - No `.` or `-` then a digit, and no `-` then a capital, which is how the
+ *     rest of a version or a standard's name continues: without it `TLS-1.2`
+ *     came back as `.2` and `AES-256-GCM` as `-GCM`. Those are what commit
+ *     subjects are made of, and half of one is worse than all of it, because
+ *     the block presents these lines to the model as quotations of what the
+ *     repository said.
  *
- * What remains is a casualty rather than a defect, and it is a whole token
- * either way: `UTF-8`, `SHA-256`, `ISO-8601`, `HTTP-2`, `COVID-19` and
- * `GPT-4` are removed as well. Accepted rather than patched around, because
- * the alternative is a list of acronyms to spare, which has no end and no
- * owner. `github-activity.test.ts` pins each of those so the cost stays
- * visible and cheap to change.
+ * Three classes are left behind, all of them whole tokens, all pinned by name
+ * in `github-activity.test.ts` so the cost stays visible and cheap to change:
+ *
+ *   - Removed though they are not keys: `UTF-8`, `SHA-256`, `ISO-8601`,
+ *     `HTTP-2`, `COVID-19`, `GPT-4`. Accepted rather than patched around,
+ *     because the alternative is a list of acronyms to spare, which has no
+ *     end and no owner.
+ *   - Kept though they are keys, because what follows them is the shape a
+ *     version continues in: `PSY-2080-Add-Gallery`. The lower-case spelling,
+ *     which is what a branch-named title actually looks like, is removed.
+ *   - Kept because the key is longer than six letters: `PLATFORM-9`. Six is
+ *     the bound the ticket settled; trackers do allow longer.
  */
 export const TICKET_KEY_PATTERN =
-  '(?<![\\w-])[A-Z]{2,6}-\\d+(?![\\w])(?![-.][A-Za-z0-9])'
+  '(?<![\\w-])[A-Z]{2,6}-\\d+(?![\\w])(?![-.]\\d)(?!-[A-Z])'
 const TICKET_KEY = new RegExp(TICKET_KEY_PATTERN, 'g')
 
 /**
@@ -273,9 +282,11 @@ const BRACKETED_TICKET_KEYS = new RegExp(
  * with nothing after it.
  *
  * A trailing full stop is not a separator: `Fix PSY-1 crash.` keeps its
- * sentence, with the space the key left in front of the stop taken out.
+ * sentence, with the space the key left in front of the stop taken out. A
+ * repeated mark is left alone, so `wip AB-1 ... see notes` keeps the space in
+ * front of its ellipsis rather than reading as a cut-off sentence.
  */
-const ORPHANED_SPACE = /\s+([.,;:!?])/g
+const ORPHANED_SPACE = /\s+([.,;:!?])(?![.,;:!?])/g
 const LEADING_SEPARATORS = /^[\s:;,.\u2013\u2014/|-]+/
 const TRAILING_SEPARATORS = /[\s:;,\u2013\u2014/|-]+$/
 
@@ -302,9 +313,10 @@ const TRAILING_SEPARATORS = /[\s:;,\u2013\u2014/|-]+$/
  * `://` and `](`, and `Fix http:/AB-1/evil.example redirect` closes up into a
  * live link that no pattern sees again. A space cannot be a URL.
  *
- * The limit, since every pattern in this file states one: a key an author
- * breaks up deliberately survives, and that is the whole cost of the removal
- * itself.
+ * The limits, since every pattern in this file states one: a key an author
+ * breaks up deliberately survives, so do the two classes the pattern's own
+ * docstring names, and the tidying reshapes the whole string rather than only
+ * the gap, which the tests pin.
  */
 export function withoutTicketKeys(value: string): string {
   const withoutKeys = value
