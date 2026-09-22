@@ -27,6 +27,18 @@ export interface CuratedRepo {
   name: string
   /** Reviewed one-line description. Falls back to GitHub's when omitted. */
   summary?: string
+  /**
+   * Whether Matt's Career Assistant may fetch this repository's recent
+   * activity (MTC-45).
+   *
+   * The assistant's allowlist is derived from this flag rather than from the
+   * list itself, so a project can be shown on /open-source without becoming
+   * something the chat route will reach out to GitHub for. A repository with
+   * the flag needs a `summary`: the assistant shows that line to the model as
+   * the repository's description, and GitHub's own text is never substituted
+   * for it. See lib/chat/repositories.ts.
+   */
+  assistant?: true
 }
 
 export const openSourceRepos: readonly CuratedRepo[] = [
@@ -34,11 +46,20 @@ export const openSourceRepos: readonly CuratedRepo[] = [
     owner: 'mtrifilo',
     name: 'decant',
     summary: 'CLI to transform your clipboard into markdown for LLM context.',
+    assistant: true,
   },
   {
     owner: 'mtrifilo',
     name: 'psychic-homily-web',
     summary:
       'A website to document and amplify new music releases, shows, and cultural events from Arizona musicians and beyond.',
+    assistant: true,
+  },
+  {
+    owner: 'mtrifilo',
+    name: 'matttrifilo.com',
+    summary:
+      'The source of this site: a Next.js portfolio with a blog, a résumé, an open-source page, and an AI career assistant, built with React, Tailwind and Bun on Vercel.',
+    assistant: true,
   },
 ]

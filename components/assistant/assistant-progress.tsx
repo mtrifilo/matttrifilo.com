@@ -1,6 +1,12 @@
 'use client'
 
-import { CircleStop, FileText, LoaderCircle, PenLine } from 'lucide-react'
+import {
+  CircleStop,
+  FileText,
+  GitBranch,
+  LoaderCircle,
+  PenLine,
+} from 'lucide-react'
 import { useState } from 'react'
 import {
   ChainOfThought,
@@ -23,6 +29,7 @@ import {
   PROGRESS_THINKING,
   PROGRESS_UNFINISHED,
   PROGRESS_WRITING,
+  progressChecking,
   progressReading,
   progressSummary,
 } from './copy'
@@ -74,12 +81,11 @@ export function AssistantProgress({
 
   const totals = progressTotals(view)
   const summary = totals
-    ? progressSummary(totals.count, totals.seconds)
+    ? progressSummary(totals.documents, totals.activity, totals.seconds)
     : undefined
   const rows = progressRows(status, view.progress)
   const seconds = progressSeconds(pending, elapsedMs)
-  const clock =
-    summary || seconds === undefined ? undefined : `${seconds}s`
+  const clock = summary || seconds === undefined ? undefined : `${seconds}s`
   const timerOnStep = progressTimerPlacement(rows) === 'step'
   const headerLabel = summary ?? headline(status, rows)
 
@@ -116,8 +122,7 @@ export function AssistantProgress({
             label={label(row)}
             status={row.state}
             timer={
-              timerOnStep &&
-              (row.state === 'active' || row.state === 'stopped')
+              timerOnStep && (row.state === 'active' || row.state === 'stopped')
                 ? clock
                 : undefined
             }
@@ -135,12 +140,19 @@ export function AssistantProgress({
 function rowIcon(row: ProgressRow) {
   if (row.state === 'active') return LoaderCircle
   if (row.state === 'stopped') return CircleStop
-  return row.title === undefined ? PenLine : FileText
+  if (row.title === undefined) return PenLine
+  return row.kind === 'activity' ? GitBranch : FileText
 }
 
-/** A read row names its document; the writing row names the answer. */
+/**
+ * A read row names its document, a check row names its repository, and the
+ * writing row names the answer.
+ */
 function label(row: ProgressRow): string {
-  return row.title === undefined ? PROGRESS_WRITING : progressReading(row.title)
+  if (row.title === undefined) return PROGRESS_WRITING
+  return row.kind === 'activity'
+    ? progressChecking(row.title)
+    : progressReading(row.title)
 }
 
 /**

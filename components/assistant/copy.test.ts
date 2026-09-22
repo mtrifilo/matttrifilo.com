@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test'
+import { announcementFor } from '@/lib/chat/answer'
+import type { ProgressView } from '@/lib/chat/progress'
 import {
   MATT_EMAIL,
   PROGRESS_THINKING,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   STARTER_QUESTIONS,
+  progressChecking,
   progressReading,
   progressSummary,
 } from './copy'
@@ -23,6 +26,10 @@ import {
  * the ticker two identical pills, and an over-long one would widen the row
  * past what a 390px screen can read. The evidence that each question is
  * answerable is the golden suite, not a unit test.
+ *
+ * Adding a question here means adding its golden in the same change:
+ * evals/config.test.ts requires a golden whose `vars.question` is the exact
+ * string, and fails naming any entry that has none.
  */
 describe('the starter questions', () => {
   /**
@@ -93,21 +100,57 @@ describe('the rate-limit notice', () => {
 
 describe('the progress copy', () => {
   test('counts documents in English', () => {
-    expect(progressSummary(1, 9)).toBe('Read 1 document in 9s')
-    expect(progressSummary(3, 14)).toBe('Read 3 documents in 14s')
-    expect(progressSummary(2, 1)).toBe('Read 2 documents in 1s')
+    expect(progressSummary(1, 0, 9)).toBe('Read 1 document in 9s')
+    expect(progressSummary(3, 0, 14)).toBe('Read 3 documents in 14s')
+    expect(progressSummary(2, 0, 1)).toBe('Read 2 documents in 1s')
+  })
+
+  test('counts a GitHub check apart from the documents', () => {
+    // A check is not a read, and the one line that stands in for the whole
+    // run must not call it one.
+    expect(progressSummary(2, 1, 11)).toBe(
+      'Read 2 documents and checked GitHub in 11s'
+    )
+    expect(progressSummary(1, 1, 8)).toBe(
+      'Read 1 document and checked GitHub in 8s'
+    )
+    expect(progressSummary(0, 1, 6)).toBe('Checked GitHub in 6s')
+    // Three repositories checked is still one sentence: the visitor is being
+    // told where the answer came from, not how many requests it took.
+    expect(progressSummary(0, 3, 9)).toBe('Checked GitHub in 9s')
   })
 
   test('names the document it is reading, and nothing else', () => {
     expect(progressReading('Résumé')).toBe('Reading Résumé…')
   })
 
+  test('names the repository it is checking, and says it is GitHub', () => {
+    expect(progressChecking('psychic-homily-web')).toBe(
+      'Checking GitHub for psychic-homily-web…'
+    )
+  })
+
   test('the spoken and written forms differ only by the ellipsis', () => {
-    // lib/chat/answer.ts speaks "Reading {title}" and "Writing answer" to a
-    // screen reader from its own literals, because it may not import this
-    // module. This is the tripwire for the two drifting apart.
-    expect(progressReading('Résumé')).toBe(`${'Reading Résumé'}…`)
-    expect(PROGRESS_WRITING).toBe(`${'Writing answer'}…`)
+    // lib/chat/answer.ts speaks these lines to a screen reader from its own
+    // literals, because it may not import this module. This is the tripwire
+    // for the two drifting apart, and it reads the real announcement rather
+    // than a third copy of the words: a test that re-typed them would stay
+    // green while the two channels described different work.
+    const spoken = (progress: ProgressView) =>
+      announcementFor('streaming', false, progress)
+
+    expect(
+      spoken({ phase: 'reading', steps: [{ id: 'r', title: 'Résumé' }] })
+    ).toBe(progressReading('Résumé').replace('…', ''))
+    expect(
+      spoken({
+        phase: 'reading',
+        steps: [{ id: 'decant', title: 'decant', kind: 'activity' }],
+      })
+    ).toBe(progressChecking('decant').replace('…', ''))
+    expect(spoken({ phase: 'writing', steps: [] })).toBe(
+      PROGRESS_WRITING.replace('…', '')
+    )
   })
 
   test('the wait before a first read is Thinking', () => {

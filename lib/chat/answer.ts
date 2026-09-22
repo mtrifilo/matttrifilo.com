@@ -177,11 +177,12 @@ export function announcementFor(
  * anything yet, or has already reported itself done. In both cases the
  * caller's "Responding" is the truthful thing to say.
  *
- * These two verbs are the spoken half of what
- * components/assistant/copy.ts shows on screen as "Reading {title}…" and
- * "Writing answer…". They are written out here rather than imported because
- * this module may not reach into components; change one and change the
- * other, or the two channels will describe different work.
+ * These three verbs are the spoken half of what
+ * components/assistant/copy.ts shows on screen as "Reading {title}…",
+ * "Checking GitHub for {name}…" and "Writing answer…". They are written out
+ * here rather than imported because this module may not reach into
+ * components; change one and change the other, or the two channels will
+ * describe different work.
  */
 function stepAnnouncement(
   progress: ProgressView | undefined
@@ -190,7 +191,10 @@ function stepAnnouncement(
   if (progress.phase === 'writing') return 'Writing answer'
   if (progress.phase !== 'reading') return undefined
   const current = progress.steps[progress.steps.length - 1]
-  return current ? `Reading ${current.title}` : undefined
+  if (!current) return undefined
+  return current.kind === 'activity'
+    ? `Checking GitHub for ${current.title}`
+    : `Reading ${current.title}`
 }
 
 /** An error the transcript has to say something about. */

@@ -95,7 +95,7 @@ jobs:
       # interrupted and the rest of the suite is evidence about Vertex, not
       # the assistant. Fatal on purpose: a run that cannot mint a token will
       # fail every test the same way, and the suites step would still spend
-      # the rest of the budget producing 102 identical red rows.
+      # the rest of the budget producing one identical red row per test.
       - name: Wait until Vertex accepts this identity
         run: bun run evals/warmup.ts
         env:

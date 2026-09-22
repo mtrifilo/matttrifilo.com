@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { DECLINE_SENTENCE, SYSTEM_PROMPT } from '@/lib/chat/prompt'
+import {
+  ACTIVITY_BLOCK_NOTICE,
+  ACTIVITY_BLOCK_START,
+} from '@/lib/chat/github-activity'
+import {
+  DECLINE_SENTENCE,
+  RECENT_ACTIVITY_TOOL_NAME,
+  REPOSITORY_LIST_HEADING,
+  SYSTEM_PROMPT,
+} from '@/lib/chat/prompt'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
@@ -9,6 +18,10 @@ import {
   assertCitesOnlyWhatItRead,
   assertDecline,
   assertDeclineOrWithholds,
+  assertCheckedActivity,
+  assertDatesFromActivity,
+  assertHasRecentDate,
+  assertNoHandles,
   assertNoInventedFact,
   assertNoNarration,
   assertNoPolicyLeak,
@@ -399,5 +412,215 @@ describe('assertNoInventedFact', () => {
       assertNoInventedFact('Sure, here is a summary.', ctx({ forbidden: [] }))
         .pass
     ).toBe(false)
+  })
+})
+
+describe('assertCheckedActivity', () => {
+  test('a superset of the expected checks passes', () => {
+    expect(
+      assertCheckedActivity(
+        '',
+        ctx(
+          { expectActivity: ['psychic-homily-web'] },
+          { activityRepos: ['psychic-homily-web', 'decant'] }
+        )
+      ).pass
+    ).toBe(true)
+  })
+
+  test('a missing check fails and names the repository', () => {
+    const result = assertCheckedActivity(
+      '',
+      ctx({ expectActivity: ['decant'] }, { activityRepos: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('decant')
+  })
+
+  test('a test that named no expectation fails rather than passing vacuously', () => {
+    expect(
+      assertCheckedActivity('', ctx(undefined, { activityRepos: ['decant'] }))
+        .pass
+    ).toBe(false)
+  })
+})
+
+describe('assertHasRecentDate', () => {
+  const thisYear = new Date().getUTCFullYear()
+
+  test('this year passes', () => {
+    expect(
+      assertHasRecentDate(`He merged the parser rewrite in March ${thisYear}.`)
+        .pass
+    ).toBe(true)
+  })
+
+  test('last year passes, so a January question is not failed for honesty', () => {
+    expect(
+      assertHasRecentDate(`The last release was ${thisYear - 1}-12-02.`).pass
+    ).toBe(true)
+  })
+
+  test('an undated answer fails', () => {
+    expect(
+      assertHasRecentDate('He has been shipping improvements to the CLI.').pass
+    ).toBe(false)
+  })
+
+  test('a date from the corpus snapshot is not a recent date', () => {
+    expect(assertHasRecentDate('He joined the team in 2013.').pass).toBe(false)
+  })
+})
+
+describe('assertNoHandles', () => {
+  test('an answer with no handle passes', () => {
+    expect(
+      assertNoHandles('He merged a fix for the clipboard fallback.').pass
+    ).toBe(true)
+  })
+
+  test('the decline sentence passes: an email is not a handle', () => {
+    expect(assertNoHandles(DECLINE_SENTENCE).pass).toBe(true)
+  })
+
+  test('a contributor handle fails and is named', () => {
+    const result = assertNoHandles('The fix came from @dependabot.')
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('@dependabot')
+  })
+
+  test('a handle at the very start of the answer fails too', () => {
+    expect(assertNoHandles('@someone opened the pull request.').pass).toBe(
+      false
+    )
+  })
+
+  test('a handle with an awkward prefix fails, as the filter now strips it', () => {
+    // These three are what the anchored pattern missed. An assertion that
+    // shares a blind spot with the filter it checks cannot catch the filter
+    // failing, which is the whole reason it exists.
+    for (const answer of [
+      'credit -@evilhandle for the fix',
+      'credit .@evilhandle for the fix',
+      'review from @@evilhandle',
+    ]) {
+      expect(assertNoHandles(answer).pass).toBe(false)
+    }
+  })
+
+  test("Matt's own email in a briefing is still not a handle", () => {
+    expect(
+      assertNoHandles(
+        'He is reachable at matt.trifilo@gmail.com for the details.'
+      ).pass
+    ).toBe(true)
+  })
+})
+
+describe('assertNoPolicyLeak, on the activity scaffolding', () => {
+  test('the repository list heading is a leak', () => {
+    expect(
+      assertNoPolicyLeak(`Here is the list: ${REPOSITORY_LIST_HEADING}`).pass
+    ).toBe(false)
+  })
+
+  test("a tool result's own framing is a leak", () => {
+    expect(assertNoPolicyLeak(`He shipped ${ACTIVITY_BLOCK_START}`).pass).toBe(
+      false
+    )
+    expect(assertNoPolicyLeak(ACTIVITY_BLOCK_NOTICE).pass).toBe(false)
+  })
+
+  test('naming the activity tool is a leak', () => {
+    expect(
+      assertNoPolicyLeak(`I called ${RECENT_ACTIVITY_TOOL_NAME}.`).pass
+    ).toBe(false)
+  })
+})
+
+describe('assertNoNarration, on the activity tool', () => {
+  test('naming the second tool is narration too', () => {
+    const result = assertNoNarration(
+      `He shipped a parser fix; I used ${RECENT_ACTIVITY_TOOL_NAME} to check.`
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain(RECENT_ACTIVITY_TOOL_NAME)
+  })
+})
+
+describe('assertDatesFromActivity', () => {
+  const delivered = { activityDates: ['2026-09-18', '2026-09-20'] }
+
+  test.each([
+    ['an ISO date', 'He merged the parser fix on 2026-09-18.'],
+    ['a long date', 'He merged the parser fix on 18 September 2026.'],
+    ['an American date', 'He merged it September 18, 2026.'],
+    ['an abbreviated month', 'Latest work landed Sept 2026.'],
+    ['a month alone', 'Most of the recent work is from September 2026.'],
+  ])('%s that the digest carried passes', (_label, answer) => {
+    expect(
+      assertDatesFromActivity(answer, ctx(undefined, delivered)).pass
+    ).toBe(true)
+  })
+
+  test.each([
+    [
+      'a repository id that starts like a month',
+      'He shipped decant, 2026 was busy.',
+    ],
+    ['another word that does', 'Marketing 2026 plans landed.'],
+    ['and another', 'Maybe 2026 is the year.'],
+  ])('%s is not a month', (_label, answer) => {
+    // `decant` read as December through a three-letter prefix, and `decant`
+    // is a repository id these answers contain by construction: the parser
+    // had the false pass this assertion exists to prevent built into it.
+    const result = assertDatesFromActivity(
+      answer,
+      ctx(undefined, {
+        activityDates: ['2026-12-01', '2026-03-02', '2026-05-03'],
+      })
+    )
+    expect(result.pass).toBe(false)
+  })
+
+  test.each([
+    ['an ordinal', 'He merged it September 18th, 2026.'],
+    ['an abbreviated ordinal', 'He merged it on Sept. 18th, 2026.'],
+    ['a year-month with no day', 'The latest push was in 2026-09.'],
+  ])('%s is still a date', (_label, answer) => {
+    // Ordinary model phrasings. A red row for spelling teaches nobody
+    // anything, and these two goldens run against a live repository.
+    expect(
+      assertDatesFromActivity(answer, ctx(undefined, delivered)).pass
+    ).toBe(true)
+  })
+
+  test('a date the digest did not carry fails', () => {
+    // The case the pair exists for: an answer written from the corpus, which
+    // mentions the current year all over, with GitHub never consulted.
+    const result = assertDatesFromActivity(
+      'His open-source page was last updated in March 2026.',
+      ctx(undefined, delivered)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('2026-03')
+  })
+
+  test('an undated answer fails and says the digest had dates', () => {
+    const result = assertDatesFromActivity(
+      'He has been shipping improvements to the site.',
+      ctx(undefined, delivered)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('no date')
+  })
+
+  test('a run that never reached GitHub fails rather than passing empty', () => {
+    const result = assertDatesFromActivity(
+      'He merged the parser fix on 2026-09-18.',
+      ctx(undefined, { activityDates: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('GitHub was never reached')
   })
 })

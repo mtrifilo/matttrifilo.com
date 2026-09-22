@@ -440,10 +440,30 @@ describe('knowledge corpus structure', () => {
   })
 
   test('the index carries no document body', () => {
-    // The whole point of the split: the index is a menu, not the meal.
-    for (const document of corpus.documents) {
-      expect(index.text.length).toBeLessThan(document.text.length + 2_000)
-    }
+    // The index is a menu, not the meal. "Menu" is a claim about the index
+    // against the corpus as a whole, not against any one document: the index
+    // grows a line per document while the shortest document does not grow at
+    // all, so comparing the two crosses over on corpus size alone and says
+    // nothing about whether a body leaked into a summary.
+    const bodyTotal = corpus.documents.reduce(
+      (sum, document) => sum + document.text.length,
+      0
+    )
+    expect(index.text.length).toBeLessThan(bodyTotal / 4)
+
+    // What the per-document form was really protecting: one entry may not
+    // carry more than its own catalogue line. An entry is the summary plus
+    // the id, title, tags and token estimate around it, so bound it by the
+    // summary rule the frontmatter contract already enforces plus room for
+    // that scaffolding.
+    const longestEntryLine = Math.max(
+      ...index.text
+        .split('\n')
+        .filter(line => line.startsWith('- '))
+        .map(line => line.length)
+    )
+    expect(longestEntryLine).toBeLessThan(SUMMARY_MAX_LENGTH * 3)
+
     expect(index.tokenEstimate).toBeLessThan(KNOWLEDGE_INDEX_TOKEN_CEILING)
   })
 })

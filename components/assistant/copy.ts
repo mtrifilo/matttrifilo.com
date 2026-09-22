@@ -35,11 +35,12 @@ export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
  * because the ticker starts it at a different offset.
  *
  * Every question here has to draw a sourced answer rather than a decline,
- * and evals/suites/golden.yaml is the only place that is measured. Its
- * coverage of this pool is partial: the second tranche has a golden each,
- * most of the first tranche is covered by a golden on the same subject, and
- * a handful are not covered at all. Nothing enforces the correspondence, so
- * a question added here needs its golden added by hand.
+ * and evals/suites/golden.yaml is the only place that is measured. Each
+ * entry needs a golden whose vars.question is this exact string; a golden on
+ * the same subject in other words does not prove the wording in the pill
+ * works. evals/config.test.ts fails `bun test` and names any entry that has
+ * none, so adding a question here means adding its golden in the same
+ * change.
  *
  * The cap in copy.test.ts is the pill's constraint, not a style rule: the
  * ticker renders each question on one line, so a longer one would widen the
@@ -126,6 +127,19 @@ export const PROGRESS_THINKING = 'Thinking…'
  */
 export const progressReading = (title: string) => `Reading ${title}…`
 
+/**
+ * One line per repository the assistant checks on GitHub (MTC-45), named from
+ * the server's allowlist, never from the model.
+ *
+ * It says GitHub rather than "the repository" because the visitor is being
+ * told why this step took a second or two: the answer went outside the site
+ * for it, and that is worth saying plainly.
+ *
+ * `announcementFor` in lib/chat/answer.ts speaks the same line without the
+ * ellipsis, from its own literal. Change the verb here and change it there.
+ */
+export const progressChecking = (name: string) => `Checking GitHub for ${name}…`
+
 /** The last step: the reading is done and the answer is being written. */
 export const PROGRESS_WRITING = 'Writing answer…'
 
@@ -137,9 +151,34 @@ export const PROGRESS_WRITING = 'Writing answer…'
  */
 export const PROGRESS_STOPPED = 'Stopped'
 
-/** The collapsed line above a finished answer. Only ever shown truthfully. */
-export const progressSummary = (count: number, seconds: number) =>
-  `Read ${count} ${count === 1 ? 'document' : 'documents'} in ${seconds}s`
+/**
+ * The collapsed line above a finished answer. Only ever shown truthfully.
+ *
+ * Documents and GitHub checks are counted apart because they are different
+ * work, and calling one the other in the line that stands in for the whole
+ * run would be the sort of small inaccuracy this view exists to avoid. The
+ * checks are not numbered: "checked GitHub" is true of one repository or
+ * three, and a visitor is being told where the answer came from, not how many
+ * requests it took.
+ *
+ * `progressTotals` only produces totals for a run with at least one step, so
+ * one of the two counts is always above zero.
+ */
+export const progressSummary = (
+  documents: number,
+  activity: number,
+  seconds: number
+) => {
+  const parts: string[] = []
+  if (documents > 0) {
+    parts.push(
+      `Read ${documents} ${documents === 1 ? 'document' : 'documents'}`
+    )
+  }
+  if (activity > 0)
+    parts.push(parts.length > 0 ? 'checked GitHub' : 'Checked GitHub')
+  return `${parts.join(' and ')} in ${seconds}s`
+}
 
 /**
  * The header above the steps of a run that finished without writing an

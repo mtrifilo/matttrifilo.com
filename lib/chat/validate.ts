@@ -3,7 +3,7 @@ import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
 import { isChatDisabled } from './kill-switch'
 import { CHAT_MAX_MESSAGE_CHARS } from './answer'
 import { PROGRESS_PART_TYPE } from './progress'
-import { SYSTEM_PROMPT, type ChatTurn } from './prompt'
+import { REPOSITORY_BLOCK, SYSTEM_PROMPT, type ChatTurn } from './prompt'
 
 export { CHAT_MAX_MESSAGE_CHARS }
 
@@ -58,9 +58,16 @@ export const CHAT_MAX_OUTPUT_TOKENS = 8_192
  * answer rather than hoping the model volunteers one. That makes a wasted
  * call — a hallucinated id, say — cost a document rather than the answer: the
  * visitor gets a reply drawn from fewer sources instead of an empty bubble.
- * Raising it to `+ 2` would buy one retry back at about a quarter more input
- * tokens per request; the cost note in handler.ts is the reason it is not
- * free.
+ *
+ * It did not grow when `recent_activity` was added (MTC-45), and it cannot.
+ * A step is a model call and every tool call it emitted, so a model may ask
+ * for the GitHub check and a document in the same step; three tool-calling
+ * steps are enough for the three documents and the three checks the budgets
+ * allow. The bound that says it cannot grow is in lib/ai/bounded-fetch.ts: a
+ * model call's worst-case wait is 67,500 ms, and four of them are exactly
+ * VERTEX_REQUEST_WAIT_BUDGET_MS. A fifth step would put a stalling request
+ * past Vercel's 300 s function limit, so raising this means lowering those
+ * timeouts first. `bounded-fetch.test.ts` fails if it is raised here alone.
  *
  * It lives here rather than in handler.ts because the answer cap below is
  * derived from it.
@@ -269,8 +276,22 @@ export function validateChatRequest({
     (total, turn) => total + estimateTokens(turn.text),
     0
   )
+  // The fixed blocks the route always sends, plus the conversation.
+  // REPOSITORY_BLOCK rides in the same system message as the index but is not
+  // part of its token estimate, so it is counted here rather than left out.
+  //
+  // What is still not counted: the two tool definitions, which the SDK sends
+  // on every model call. They are a few hundred tokens, and
+  // `recent_activity`'s description interpolates the allowlist, so they grow
+  // when a repository is added. That is a knowing omission rather than an
+  // oversight, and it is why CHAT_MAX_INPUT_TOKENS is set below the sum of
+  // the caps rather than at it; if the allowlist ever grows past a handful,
+  // count them here instead of widening the margin again.
   const inputTokens =
-    indexTokenEstimate + estimateTokens(SYSTEM_PROMPT) + conversationTokens
+    indexTokenEstimate +
+    estimateTokens(SYSTEM_PROMPT) +
+    estimateTokens(REPOSITORY_BLOCK) +
+    conversationTokens
   if (inputTokens > CHAT_MAX_INPUT_TOKENS) return reject('budget_exceeded')
 
   return {

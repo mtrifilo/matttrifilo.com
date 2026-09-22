@@ -23,6 +23,7 @@ import {
   type KnowledgeEntry,
   type KnowledgeIndex,
 } from '@/lib/knowledge'
+import type { ActivityFetchFailure } from './github-activity'
 import {
   PROGRESS_PART_ID,
   PROGRESS_PART_TYPE,
@@ -31,8 +32,20 @@ import {
   type ChatProgressPhase,
   type ChatProgressStep,
 } from './progress'
-import { READ_DOCUMENT_TOOL_NAME, buildMessages } from './prompt'
+import {
+  READ_DOCUMENT_TOOL_NAME,
+  RECENT_ACTIVITY_TOOL_NAME,
+  buildMessages,
+} from './prompt'
+import { createReadBudget } from './read-budget'
 import { createReadDocumentSession, type ReadsRefused } from './read-document'
+import {
+  RECENT_ACTIVITY_MAX_CALLS,
+  createRecentActivitySession,
+  type ActivityRefused,
+  type RecentActivitySessionDeps,
+} from './recent-activity'
+import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
   CHAT_ERROR_STATUS,
   CHAT_MAX_OUTPUT_TOKENS,
@@ -108,6 +121,17 @@ export interface ChatHandlerDeps {
    * cannot forget it and serve the model to anything that can POST.
    */
   verifyVisitor: () => Promise<VisitorVerdict>
+  /**
+   * How `recent_activity` reaches GitHub (MTC-45). Defaults to the real
+   * fetch.
+   *
+   * Tests pass a stub, so `bun test` needs no network. The eval provider
+   * passes a wrapper around the real fetch instead, because a suite about
+   * whether the assistant reports current work has to exercise the request it
+   * would make in production; a GitHub outage therefore reddens those two
+   * rows, which `evals/suites/golden.yaml` says beside them.
+   */
+  fetchActivity?: RecentActivitySessionDeps['fetchActivity']
   env?: EnvSource
   /** Injected so the duration in the log is assertable. */
   now?: () => number
@@ -154,8 +178,11 @@ export interface ChatMessageMetadata {
   incomplete?: true
 }
 
-/** The one tool the model is offered. */
-type ChatTools = Record<typeof READ_DOCUMENT_TOOL_NAME, Tool>
+/** The tools the model is offered. */
+type ChatTools = Record<
+  typeof READ_DOCUMENT_TOOL_NAME | typeof RECENT_ACTIVITY_TOOL_NAME,
+  Tool
+>
 
 /**
  * The message the browser receives: the answer text, the progress narration,
@@ -184,6 +211,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     readKnowledgeDocument,
     model,
     verifyVisitor,
+    fetchActivity,
     env = process.env,
     now = Date.now,
   } = deps
@@ -268,9 +296,19 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 
       // Per request, because the read budget is per request: a session built
       // once at module scope would let one visitor's reads exhaust another's.
+      // One ledger, shared by both tools, so the ceiling on what a question
+      // may send is the number written down rather than the sum of the tools
+      // that happen to exist.
+      const budget = createReadBudget()
       const session = createReadDocumentSession({
         entries: index.entries,
         readKnowledgeDocument,
+        budget,
+      })
+      const activity = createRecentActivitySession({
+        fetchActivity,
+        budget,
+        onFailure: logGitHubFailure,
       })
 
       const answer = new AnswerText()
@@ -285,7 +323,10 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           history: validation.history,
           userMessage: validation.userMessage,
         }),
-        tools: { [READ_DOCUMENT_TOOL_NAME]: session.tool } satisfies ChatTools,
+        tools: {
+          [READ_DOCUMENT_TOOL_NAME]: session.tool,
+          [RECENT_ACTIVITY_TOOL_NAME]: activity.tool,
+        } satisfies ChatTools,
         // Reads, then one answer. Without a stop condition the SDK would run
         // a single step and never come back for the answer after a tool call.
         stopWhen: stepCountIs(CHAT_MAX_STEPS),
@@ -340,6 +381,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
+            activityCalls: activity.activityCalls(),
+            activityTokens: activity.activityTokens(),
+            activityRefused: activity.activityRefused(),
             vertexRetries: vertexCalls.retries(),
             vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
@@ -357,6 +401,9 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
+            activityCalls: activity.activityCalls(),
+            activityTokens: activity.activityTokens(),
+            ...flatActivityRefusals(activity.activityRefused()),
             vertexRetries: vertexCalls.retries(),
             vertexFirstByteMs: vertexCalls.firstByteMs(),
             ms: now() - started,
@@ -587,8 +634,18 @@ function withProgress({
   const titles = new Map(entries.map(entry => [entry.id, entry.title]))
   const steps: ChatProgressStep[] = []
   const listed = new Set<string>()
-  /** Reads the session will have accepted, duplicates included, as it counts. */
+  /** Calls whose outcome has not arrived yet, by the SDK's tool call id. */
+  const inFlight = new Map<string, ChatProgressStep>()
+  /** Ids a call has actually succeeded for, so a later refusal keeps the row. */
+  const succeeded = new Set<string>()
+  /** Reads that succeeded, duplicates included, as the read budget counts them. */
   let reads = 0
+  /**
+   * Checks whose digest reached the model. Not the same as the session's
+   * `activityCalls`, which counts failures too: a row is for work the visitor
+   * can be told happened, and a fetch that returned nothing is not that.
+   */
+  let checks = 0
   let phase: ChatProgressPhase = 'reading'
   let emitted = false
   let failed = false
@@ -615,15 +672,54 @@ function withProgress({
     transform(chunk, controller) {
       switch (chunk.type) {
         case 'tool-input-available': {
-          const step = toStep(chunk, titles, reads)
+          const step = toStep(chunk, titles, reads, checks)
           if (!step) break
-          // Spent whether or not it earns a row: the read session charges a
-          // repeat to the budget the same as any other read.
-          reads += 1
+          const callId = toolCallId(chunk)
+          // Remembered even when it earns no row, because the outcome below
+          // is what spends the budget and a repeat call spends it too.
+          if (callId !== undefined) inFlight.set(callId, step)
           if (listed.has(step.id)) break
           listed.add(step.id)
           steps.push(step)
           phase = 'reading'
+          emit(controller)
+          break
+        }
+        case 'tool-output-error':
+        case 'tool-output-available': {
+          // The row goes up when the call starts, because narrating the wait
+          // is the point; it is corrected here, when the outcome is known.
+          // Both counters live here rather than at the call, so what they
+          // hold is work that happened and not work that was attempted: a
+          // refused read or an unreachable repository must neither be counted
+          // against the caps below nor left on screen.
+          const callId = toolCallId(chunk)
+          const step = callId === undefined ? undefined : inFlight.get(callId)
+          if (!step || callId === undefined) break
+          inFlight.delete(callId)
+
+          if (!refusedOutput(chunk)) {
+            succeeded.add(step.id)
+            if (step.kind === 'activity') checks += 1
+            else reads += 1
+            break
+          }
+          // Refused. Withdraw the row unless some other call for the same id
+          // produced something, or still might: a step's tool calls run
+          // concurrently, so a model that asks for one repository twice gets
+          // one digest and one `repository_already_checked`, in either order.
+          // Withdrawing on the refusal would take the row away from a check
+          // that did happen.
+          if (succeeded.has(step.id)) break
+          let stillWaiting = false
+          for (const other of inFlight.values()) {
+            if (other.id === step.id) stillWaiting = true
+          }
+          if (stillWaiting) break
+          const at = steps.findIndex(listedStep => listedStep.id === step.id)
+          if (at < 0) break
+          steps.splice(at, 1)
+          listed.delete(step.id)
           emit(controller)
           break
         }
@@ -663,41 +759,82 @@ function withProgress({
 }
 
 /**
- * The step a `read_document` call earns, if it earns one.
+ * The step a tool call earns, if it earns one.
  *
  * Everything is guarded rather than asserted: this reads a chunk built from
  * model output, and a malformed one has to yield no step instead of throwing
  * inside a transform, where it would take the answer down with it.
  *
- * The document cap is predicted here rather than waited for, so the list
- * never counts a read that cannot happen: past
- * KNOWLEDGE_READ_BUDGET.maxDocuments the read session refuses on count
- * alone, before it looks at the id at all.
+ * The caps are predicted here so the list never opens a row for work that
+ * cannot happen: past KNOWLEDGE_READ_BUDGET.maxDocuments the read session
+ * refuses on count alone, and past RECENT_ACTIVITY_MAX_CALLS the activity
+ * session does the same, both before looking at the id. `reads` and `checks`
+ * are counted from tool OUTPUTS rather than from calls, so they hold work
+ * that happened; a refusal this stage cannot predict, such as a document
+ * larger than the remaining token budget, withdraws its row when the outcome
+ * arrives instead of being guessed at here.
  *
- * The token half of that budget is not predicted, because it depends on
- * document text this stage has not seen. A read the session refused for size
- * would therefore both earn a row it did not deserve and spend one of the
- * three this counter allows, hiding a later read that did happen. Tests in
- * lib/knowledge/knowledge.test.ts keep that unreachable: one holds every
- * document under KNOWLEDGE_DOCUMENT_TOKEN_CEILING, well under the whole-turn
- * budget, and 'the three largest documents fit in one turn' holds both the
- * three largest together and the worst repeated read inside it. They are
- * load-bearing for a claim this view makes on screen, which is why they are
- * named here rather than left to be found.
+ * That correction is what lets the token half of the budget go unpredicted.
+ * It has to: whether a read fits depends on text this stage never sees, and
+ * on how much of the shared budget the GitHub digests already spent
+ * (lib/chat/read-budget.ts). Guessing would put a row over an answer that
+ * never used the document.
  */
 function toStep(
   chunk: { toolName?: unknown; input?: unknown },
   titles: ReadonlyMap<string, string>,
-  reads: number
+  reads: number,
+  checks: number
 ): ChatProgressStep | undefined {
-  if (chunk.toolName !== READ_DOCUMENT_TOOL_NAME) return undefined
-  if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
   const input = chunk.input
   if (typeof input !== 'object' || input === null) return undefined
+
+  if (chunk.toolName === RECENT_ACTIVITY_TOOL_NAME) {
+    if (checks >= RECENT_ACTIVITY_MAX_CALLS) return undefined
+    const id = (input as { repository?: unknown }).repository
+    if (typeof id !== 'string') return undefined
+    // The name comes from the allowlist, never from the model, which is the
+    // same rule the document titles follow: an id the list does not hold is
+    // about to be refused as `unknown_repository`, and a row for a repository
+    // that was never checked is the one thing this view must not show.
+    const repository = ASSISTANT_REPOSITORIES.find(entry => entry.id === id)
+    return repository === undefined
+      ? undefined
+      : { id: repository.id, title: repository.id, kind: 'activity' }
+  }
+
+  if (chunk.toolName !== READ_DOCUMENT_TOOL_NAME) return undefined
+  if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
   const id = (input as { id?: unknown }).id
   if (typeof id !== 'string') return undefined
   const title = titles.get(id)
   return title === undefined ? undefined : { id, title }
+}
+
+/** The SDK's id for one tool call, if the chunk carries a usable one. */
+function toolCallId(chunk: { toolCallId?: unknown }): string | undefined {
+  return typeof chunk.toolCallId === 'string' ? chunk.toolCallId : undefined
+}
+
+/**
+ * Whether a tool answered with a refusal rather than content.
+ *
+ * Both tools answer a refusal as `{ error: '<code>' }` and neither throws, so
+ * one check covers both. A tool that threw anyway arrives as an error chunk
+ * rather than an output one, and the caller treats those as refusals too:
+ * without that, the safety property here would rest on "no tool ever throws",
+ * which nothing enforces, and a thrown tool would leave a row claiming work
+ * that produced nothing.
+ *
+ * Read defensively: this is a chunk off a stream, and an output shape this
+ * does not recognise counts as content, which leaves the row where it is
+ * rather than withdrawing a step that did happen.
+ */
+function refusedOutput(chunk: { type: string; output?: unknown }): boolean {
+  if (chunk.type !== 'tool-output-available') return true
+  const output = chunk.output
+  if (typeof output !== 'object' || output === null) return false
+  return typeof (output as { error?: unknown }).error === 'string'
 }
 
 /** The refusal counters as the same three flat fields on every log path. */
@@ -710,6 +847,15 @@ function flatRefusals(r: {
     readsRefusedUnknown: r.unknown,
     readsRefusedBudget: r.budget,
     readsRefusedTooLarge: r.tooLarge,
+  }
+}
+
+/** The same, for the activity checks. Flat fields a log query can aggregate. */
+function flatActivityRefusals(r: ActivityRefused) {
+  return {
+    activityRefusedUnknown: r.unknown,
+    activityRefusedDuplicate: r.duplicate,
+    activityRefusedBudget: r.budget,
   }
 }
 
@@ -746,6 +892,11 @@ interface CompletionAggregates {
   documentsRead: number
   readTokens: number
   readsRefused: ReadsRefused
+  /** GitHub checks this request made, failures included. */
+  activityCalls: number
+  /** Tokens of repository activity charged to the shared read budget. */
+  activityTokens: number
+  activityRefused: ActivityRefused
   /** Connections the Vertex wrapper abandoned and reopened on this request. */
   vertexRetries: number
   /** The slowest wait for a first response byte on this request. */
@@ -768,6 +919,9 @@ function logCompletion({
   documentsRead,
   readTokens,
   readsRefused,
+  activityCalls,
+  activityTokens,
+  activityRefused,
   vertexRetries,
   vertexFirstByteMs,
   ms,
@@ -786,6 +940,17 @@ function logCompletion({
     // tooLarge means a document in the corpus can never be read at all. They
     // call for three different fixes, so they are three different counters.
     ...flatRefusals(readsRefused),
+    // Outbound calls to a third party, and what they cost the read budget.
+    // Aggregate numbers only: which repository was checked is not recorded,
+    // for the same reason no document id is.
+    activityCalls,
+    activityTokens,
+    // Split for the same reason the read refusals are: an unknown id means
+    // the model is guessing at the repository list, a duplicate means it is
+    // looping, and a budget refusal means a GitHub call was spent and its
+    // digest then dropped, which is the one failure here that costs a request
+    // and gives the visitor nothing.
+    ...flatActivityRefusals(activityRefused),
     // False here is the signal that a request burned tokens and gave the
     // visitor nothing. It should be rare; if it is not, CHAT_MAX_STEPS is
     // wrong.
@@ -810,6 +975,21 @@ function logCompletion({
   if (finishReason === 'length') console.warn('[chat] truncated', aggregate)
   else if (finishReason !== 'stop') console.warn('[chat] incomplete', aggregate)
   else console.info('[chat]', aggregate)
+}
+
+/**
+ * A GitHub call that did not answer, as a stage, a repository id, and a
+ * status.
+ *
+ * The repository id is the one piece of text on any log line in this module,
+ * and it is here because a rate limit or an outage has to be attributable to
+ * one of three repositories to be fixable. It is safe to write: the three ids
+ * are compiled into the deployment from a public curated list, so this line
+ * can carry nothing a visitor typed and nothing GitHub returned. No URL and
+ * no response body: either can quote back text this route never logs.
+ */
+const logGitHubFailure: ActivityFetchFailure = failure => {
+  console.warn('[chat]', failure)
 }
 
 /** Makes refused requests visible in the logs, by code and flags only. */

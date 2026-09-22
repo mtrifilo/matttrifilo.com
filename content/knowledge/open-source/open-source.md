@@ -3,7 +3,7 @@ id: 'open-source'
 title: 'Open Source Projects'
 summary: 'The open-source projects Matt curates on his site: what each one does and where the repository lives.'
 tags: [open-source, projects, github, cli, side-projects]
-updated: '2026-09-14'
+updated: '2026-09-21'
 canonical: 'https://matttrifilo.com/open-source'
 ---
 
@@ -31,6 +31,14 @@ at GitHub for current figures.
 - Owner: mtrifilo
 - What it is: a website to document and amplify new music releases, shows,
   and cultural events from Arizona musicians and beyond.
+
+## matttrifilo.com
+
+- Repository: https://github.com/mtrifilo/matttrifilo.com
+- Owner: mtrifilo
+- What it is: the source of this site: a Next.js portfolio with a blog, a
+  résumé, an open-source page, and an AI career assistant, built with
+  React, Tailwind and Bun on Vercel.
 
 ## Where else to look
 

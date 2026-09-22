@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
-import { loadKnowledgeIndex } from '@/lib/knowledge'
+import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
+import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
 import { historyFrom } from './route-request'
 
@@ -19,9 +21,17 @@ const EVALS = import.meta.dir
 const SUITES = ['golden', 'refusals', 'injection', 'groundedness'] as const
 type SuiteName = (typeof SUITES)[number]
 
-/** The floor the ticket sets for each suite. */
+/**
+ * The floor each suite has to stay above.
+ *
+ * It is a floor, not a count: a suite may grow freely, and only a change
+ * that drops one below its number has to argue for itself here. `golden`
+ * sits well above the others because the correspondence test below protects
+ * only the goldens that answer a starter question; without this number the
+ * rest of the suite is guarded by nothing.
+ */
 const MINIMUM: Record<SuiteName, number> = {
-  golden: 30,
+  golden: 70,
   refusals: 20,
   injection: 20,
   groundedness: 20,
@@ -104,6 +114,11 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   'assertDeclineOrWithholds',
   'assertCitesOnlyWhatItRead',
   'assertChipsMatchReads',
+  // Reads the provider's ledger, not the answer, so an empty answer clears
+  // it; `assertNoHandles` is an absence check on the text for the same
+  // reason. Neither can stand alone as the thing a test judges.
+  'assertCheckedActivity',
+  'assertNoHandles',
 ])
 
 function toArray(value: unknown): string[] {
@@ -111,6 +126,46 @@ function toArray(value: unknown): string[] {
     ? value.filter((item): item is string => typeof item === 'string')
     : []
 }
+
+/** The distinct values that appear more than once, for a failure that names them. */
+function duplicates(values: string[]): string[] {
+  return [...new Set(values.filter((v, i) => values.indexOf(v) !== i))]
+}
+
+/** Every `icontains`/`icontains-any` needle a test carries, nesting included. */
+function containsNeedles(item: SuiteTest): string[] {
+  const needles: string[] = []
+  const walk = (list: SuiteAssertion[] | undefined) => {
+    for (const entry of list ?? []) {
+      if (entry.type === 'icontains-any' || entry.type === 'contains-any') {
+        needles.push(...toArray(entry.value))
+      }
+      if (
+        (entry.type === 'icontains' || entry.type === 'contains') &&
+        typeof entry.value === 'string'
+      ) {
+        needles.push(entry.value)
+      }
+      walk(entry.assert)
+    }
+  }
+  walk(item.assert)
+  return needles
+}
+
+/**
+ * The corpus bodies, whitespace-flattened and lowercased.
+ *
+ * Flattened because the markdown is hard-wrapped, so a phrase the assistant
+ * would say on one line is split across two in the file and a raw substring
+ * search would miss it.
+ */
+const corpusText = new Map<string, string>(
+  listKnowledgeDocuments().map(document => [
+    document.id,
+    document.text.replace(/\s+/g, ' ').toLowerCase(),
+  ])
+)
 
 describe('promptfooconfig.yaml', () => {
   test('targets the route provider and nothing else', () => {
@@ -148,6 +203,23 @@ describe('promptfooconfig.yaml', () => {
   })
 })
 
+describe('starter questions', () => {
+  /**
+   * The pool is the only copy a visitor is invited to click, so a pool entry
+   * with no golden is a question shipped without anything measuring whether
+   * it draws a sourced answer or a decline. Matching on the exact string
+   * rather than the subject is the point: a golden on the same topic in
+   * different words does not prove the wording in the pill works.
+   */
+  test('every starter question is the exact question of a golden', () => {
+    const asked = new Set(
+      suites.golden.map(item => String(item.vars?.question))
+    )
+    const missing = STARTER_QUESTIONS.filter(question => !asked.has(question))
+    expect(missing).toEqual([])
+  })
+})
+
 for (const name of SUITES) {
   const suite = suites[name]
 
@@ -171,6 +243,15 @@ for (const name of SUITES) {
     test('descriptions are unique, so a red row names one test', () => {
       const descriptions = suite.map(item => String(item.description))
       expect(new Set(descriptions).size).toBe(descriptions.length)
+    })
+
+    test('no two tests ask the same question', () => {
+      // Unique descriptions do not imply unique questions, and a merge that
+      // keeps both sides of two branches is how a suite acquires a duplicate:
+      // it pays for a second full run of one question and shows up as two
+      // rows nobody can tell apart.
+      const questions = suite.map(item => String(item.vars?.question))
+      expect(duplicates(questions)).toEqual([])
     })
 
     test('the smoke subset is the first three tests', () => {
@@ -199,11 +280,25 @@ for (const name of SUITES) {
         if (names.includes('assertReadsAnyOf')) {
           expect(Array.isArray(metadata.expectReadsAny)).toBe(true)
         }
+        if (names.includes('assertCheckedActivity')) {
+          expect(Array.isArray(metadata.expectActivity)).toBe(true)
+        }
         if (
           names.includes('assertDeclineOrWithholds') ||
           names.includes('assertNoInventedFact')
         ) {
           expect(Array.isArray(metadata.forbidden)).toBe(true)
+        }
+      }
+    })
+
+    test('every expected check names an allowlisted repository', () => {
+      // A golden pointed at a repository the route may not fetch would fail
+      // on every run for a reason that has nothing to do with the answer.
+      const allowed = ASSISTANT_REPOSITORIES.map(repository => repository.id)
+      for (const item of suite) {
+        for (const id of toArray(item.metadata?.expectActivity)) {
+          expect(allowed).toContain(id)
         }
       }
     })
@@ -227,14 +322,90 @@ for (const name of SUITES) {
         // not an absence check, or a promptfoo assertion that reads the output
         // (the contains family, a rubric). Any one of them already fails on an
         // empty answer, so the test does not need assertAnswered as well.
+        // A `not-` assertion is an absence check like the named ones and
+        // passes on an empty answer, so it does not count.
         const judgesContent =
           names.some(name => !ABSENCE_ONLY.has(name)) ||
-          types.some(type => type !== 'javascript' && type !== 'assert-set')
+          types.some(
+            type =>
+              type !== 'javascript' &&
+              type !== 'assert-set' &&
+              !type.startsWith('not-')
+          )
         expect({
           description: item.description,
           judgesContent,
         }).toEqual({ description: item.description, judgesContent: true })
       }
+    })
+
+    test('every document a test expects can satisfy its own phrase check', () => {
+      // `assertReadsAnyOf` passes on ONE of the documents a test names, so a
+      // document listed there that contains none of the test's distinctive
+      // phrases makes the test unpassable from that document: the run clears
+      // the read gate and then fails the phrase check, which reads as a model
+      // regression rather than as the suite asking for something it cannot
+      // get. The same holds for an `expectReads` id.
+      const unreachable: unknown[] = []
+      for (const item of suite) {
+        const needles = containsNeedles(item)
+        if (needles.length === 0) continue
+        const ids = [
+          ...toArray(item.metadata?.expectReads),
+          ...toArray(item.metadata?.expectReadsAny),
+        ]
+        for (const id of ids) {
+          const text = corpusText.get(id) ?? ''
+          const reachable = needles.some(needle =>
+            text.includes(needle.toLowerCase())
+          )
+          if (!reachable)
+            unreachable.push({ description: item.description, id })
+        }
+      }
+      expect(unreachable).toEqual([])
+    })
+
+    test('no anchor name is defined twice', () => {
+      // Anchors are the one place in these files where two definitions
+      // resolve silently: YAML takes the nearest preceding one, so a merge
+      // that keeps two `&r38` blocks grades one test against the other's
+      // rubric with nothing red. Read from the raw text, because a parser
+      // has already collapsed them by the time it hands back objects.
+      // Matched at an anchor's only legal position, right after the `key:`
+      // it labels, so an ampersand inside rubric prose ("R&D") is not read
+      // as a declaration and cannot redden the suite with a false duplicate.
+      const raw = readFileSync(join(EVALS, `suites/${name}.yaml`), 'utf8')
+      const anchors = [...raw.matchAll(/^\s*(?:-\s*)?\w+:\s+&([\w-]+)/gm)].map(
+        match => match[1]
+      )
+      expect(duplicates(anchors)).toEqual([])
+    })
+
+    test('every assert-set grades one rubric, repeated', () => {
+      // The tolerance this pattern buys is "two of three grades of the SAME
+      // rubric". Three different rubrics inside one assert-set would still
+      // score on the mean, quietly turning a judgement into a checklist that
+      // passes at 0.6 with one part unmet.
+      const offenders: unknown[] = []
+      const walk = (
+        list: SuiteAssertion[] | undefined,
+        description: unknown
+      ) => {
+        for (const entry of list ?? []) {
+          if (entry.type === 'assert-set') {
+            const values = (entry.assert ?? []).map(member =>
+              String(member.value)
+            )
+            if (values.length < 2 || new Set(values).size !== 1) {
+              offenders.push({ description, distinct: new Set(values).size })
+            }
+          }
+          walk(entry.assert, description)
+        }
+      }
+      for (const item of suite) walk(item.assert, item.description)
+      expect(offenders).toEqual([])
     })
 
     test('every replayed turn is one the provider will actually send', () => {
