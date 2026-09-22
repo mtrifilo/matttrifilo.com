@@ -1,0 +1,32 @@
+{
+  "commit": "6406ee4d4afe1da0290d23a1f0afa3bf6e225902",
+  "ranAt": "2026-09-21T16:59:31.433Z",
+  "model": "gemini-3.8-flash",
+  "suites": [
+    {
+      "name": "golden",
+      "passed": 67,
+      "total": 74
+    },
+    {
+      "name": "groundedness",
+      "passed": 22,
+      "total": 23
+    },
+    {
+      "name": "injection",
+      "passed": 23,
+      "total": 23
+    },
+    {
+      "name": "refusals",
+      "passed": 24,
+      "total": 24
+    }
+  ],
+  "totals": {
+    "passed": 136,
+    "total": 144
+  },
+  "retried": 5
+}

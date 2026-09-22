@@ -1,6 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { MATT_MAILTO } from './copy'
+import { useEvalsPublished } from './evals-published'
+
+/** Matt's copy, like the two sentences above it. */
+const EVALS_LINK_LABEL = 'How this assistant is tested'
 
 /**
  * The required disclosure under the input: what the answers are, and who to
@@ -14,8 +20,14 @@ import { MATT_MAILTO } from './copy'
  * "Conversations aren't saved" is a statement about the whole system, not a
  * nicety: nothing about a conversation is written down on the server, and the
  * transcript lives only until the tab is closed.
+ *
+ * The third line is the published eval results (MTC-44). It appears only
+ * when a run has been published, because a link to a page that can only say
+ * "no published run yet" is worse than no link.
  */
 export function AssistantDisclosure({ className }: { className?: string }) {
+  const evalsPublished = useEvalsPublished()
+
   return (
     <div
       className={cn(
@@ -35,6 +47,16 @@ export function AssistantDisclosure({ className }: { className?: string }) {
         .
       </p>
       <p>Conversations aren&rsquo;t saved.</p>
+      {evalsPublished && (
+        <p>
+          <Link
+            className="underline underline-offset-2 hover:text-foreground"
+            href="/ask/evals"
+          >
+            {EVALS_LINK_LABEL}
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

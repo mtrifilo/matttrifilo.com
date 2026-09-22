@@ -79,10 +79,13 @@ describe('sitemap', () => {
 })
 
 describe('visibleSiteRoutes', () => {
-  test('drops the assistant route, and only that, when the kill switch is on', () => {
+  test('drops the assistant routes, and only those, when the kill switch is on', () => {
     const visible = visibleSiteRoutes({ assistantDisabled: true })
-    expect(visible.some(route => route.href === '/ask')).toBe(false)
-    expect(visible.length).toBe(siteRoutes.length - 1)
+    const assistantRoutes = siteRoutes.filter(route => route.assistant)
+    expect(assistantRoutes.length).toBeGreaterThan(0)
+    for (const route of assistantRoutes)
+      expect(visible.some(served => served.href === route.href)).toBe(false)
+    expect(visible.length).toBe(siteRoutes.length - assistantRoutes.length)
     expect(visible.every(route => !route.assistant)).toBe(true)
   })
 
@@ -90,9 +93,12 @@ describe('visibleSiteRoutes', () => {
     expect(visibleSiteRoutes({ assistantDisabled: false })).toBe(siteRoutes)
   })
 
-  test('the assistant route is /ask', () => {
+  test('the assistant routes are /ask and its eval results', () => {
+    // Both go when the switch is on: the results page describes an
+    // assistant that is not answering, and the link to it lives under the
+    // chat pane that is not rendered either.
     expect(
       siteRoutes.filter(route => route.assistant).map(route => route.href)
-    ).toEqual(['/ask'])
+    ).toEqual(['/ask', '/ask/evals'])
   })
 })

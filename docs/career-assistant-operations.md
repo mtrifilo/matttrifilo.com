@@ -139,7 +139,7 @@ Locally, during development, by decision of 2026-09-21 (Matt): a full run on eve
 
 `.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change). It dispatches only a ref in this repository and runs the workflow file at that ref with `id-token: write`, so never dispatch it on a branch whose `.github/` or `evals/` changes you have not read: a contributor's branch is evaluated by cherry-picking its content changes onto a branch you own, or by reviewing those two directories first. It is not a required check and must not become one.
 
-Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, so a later ticket can publish it on the site. `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
+Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, which is the shape the site publishes (see "Publishing a run" below). `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
 
 ```json
 {
@@ -151,6 +151,25 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
   "retried": 0
 }
 ```
+
+### Publishing a run (MTC-44)
+
+The site publishes eval results at `/ask/evals`, linked from the line under the chat pane. It reads them from `evals/results/`, which is committed: one file per recorded run, named `<YYYY-MM-DD>-<7-char sha>.json`, holding exactly the `summary.json` above.
+
+After a local `bun run evals` that accompanies a corpus, prompt or suite change:
+
+```
+bun run evals:publish            # copies evals/out/summary.json into evals/results/
+git add evals/results/<the file it named>
+```
+
+Commit it in the same pull request as the change the run covers. Older files stay: the page shows the newest run and a history of the last ten, and a reader can see the trend. A published record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists.
+
+What it refuses, and why: a summary whose totals are missing or malformed (the site would skip it at build time anyway), and a record that can name no commit. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes the working copy's `git rev-parse HEAD` and the record stays version-linked; a summary that already carries a real sha keeps it, and the file is named after that sha.
+
+The page renders aggregates only: suite, passed, total, the run date, the commit, the model id, the retry count, and a sentence per suite on what it checks. No question, no answer and no grader rationale is published; the suite definitions in `evals/suites/` are the public detail. Nothing is published for an assistant that is switched off: with `CHAT_DISABLED=1` the page is a 404 and the link is not rendered, exactly like `/ask`. With no record in `evals/results/` the page says there is no published run yet and the link is not rendered.
+
+A summary that never reaches `evals/results/` is not published; the page shows the newest run that did, dated, so a long gap is visible rather than hidden.
 
 ### A red run
 

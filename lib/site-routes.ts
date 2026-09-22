@@ -37,6 +37,18 @@ export const siteRoutes: readonly SiteRoute[] = [
     assistant: true,
   },
   {
+    // The assistant's published eval results (MTC-44). Out of the nav
+    // because it is reached from the line under the chat pane, by someone
+    // who is already looking at the assistant and wants to know what backs
+    // it; in the sitemap because it is a page worth finding.
+    href: '/ask/evals',
+    label: 'How the assistant is tested',
+    changeFrequency: 'monthly',
+    priority: 0.4,
+    assistant: true,
+    hideFromNav: true,
+  },
+  {
     href: '/open-source',
     label: 'Open Source',
     changeFrequency: 'monthly',

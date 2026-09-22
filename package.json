@@ -13,6 +13,7 @@
     "evals": "bun run evals:run && bun run evals:report",
     "evals:run": "mkdir -p evals/out && PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2 --output evals/out/results.json",
     "evals:report": "bun run evals/summarize.ts evals/out/results.json evals/out/summary.json",
+    "evals:publish": "bun run evals/publish.ts",
     "evals:smoke": "mkdir -p evals/out && PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 2 --filter-metadata smoke=true --output evals/out/results.json && bun run evals:report",
     "evals:compare": "bun run evals/compare-reasoning.ts"
   },
