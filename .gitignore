@@ -55,3 +55,10 @@ next-env.d.ts
 # results are per-commit: the table goes in the pull request body, and a
 # dispatched run also uploads them as the workflow's `evals` artifact.
 evals/out/
+
+# Under .claude/, only what this repository ships on purpose is tracked:
+# the skills, and a shared settings.json if one is ever added. Everything
+# else there (settings.local.json, worktrees) is per machine.
+.claude/*
+!.claude/skills/
+!.claude/settings.json
