@@ -201,6 +201,8 @@ If a preview ever looks like the branch's markup with the wrong styling, check t
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.
 
+A placeholder is a heading or line outside code that starts with `TODO` (after an optional list marker) or contains `TODO (Matt)`: in `content/knowledge/faq` a question whose heading or answer is one is dropped and listed by `bun run knowledge:check`, and anywhere else it fails the build.
+
 ## Eval suites (MTC-32)
 
 `evals/` holds four promptfoo suites that run the chat route's own handler in process. There is no server and no fixture model: `evals/provider.ts` builds `createChatHandler` with the real knowledge corpus and the real Vertex client, posts the body a browser would post, and reads the answer back off the stream. What a suite asserts on is therefore the live policy, the live corpus and the live read budget.

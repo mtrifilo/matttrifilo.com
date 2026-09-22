@@ -169,11 +169,6 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 /** A `##` heading, and only `##` — `###` and deeper stay inside a block. */
 const BLOCK_HEADING = /^## (?!#)/
 /**
- * A body still waiting on Matt. faq.md ships its questions with `TODO
- * (Matt)` bodies; those blocks are dropped so a placeholder never reaches
- * the model, and knowledge.test.ts asserts no `TODO` survives the build.
- */
-/**
  * What a placeholder looks like, as opposed to the word "TODO" appearing
  * in something Matt wrote.
  *
@@ -183,9 +178,10 @@ const BLOCK_HEADING = /^## (?!#)/
  * where prose should be: a line that *starts* with TODO (after an optional
  * list marker), or the literal marker faq.md uses.
  *
- * One definition, used three ways: the faq drop below, the build-time
- * refusal in every other topic, and the backstop in knowledge.test.ts that
- * checks the text as it ships.
+ * These shapes are applied to a line only through findBlockPlaceholder,
+ * which is the one rule for a block: the faq drop, the build-time refusal
+ * in every other topic, and the backstop in knowledge.test.ts that checks
+ * the text as it ships all reach it, so they cannot disagree.
  */
 const PLACEHOLDER_LINE = /^[ \t]*(?:(?:[-*+]|\d+\.)[ \t]+)?TODO\b/
 const PLACEHOLDER_MARKER = /TODO \(Matt\)/
@@ -394,19 +390,29 @@ function stripComments(body: string): string {
 }
 
 /**
- * True when a body is something Matt actually wrote, rather than empty or
- * still a `TODO` placeholder. Applied to the lead-in text as well as to
- * each `##` block: a file's intro is no more publishable than its
- * questions while it still says TODO.
+ * A stretch of a document: the introduction before the first `##` heading
+ * (heading null), or one `##` heading and the lines under it. The heading
+ * is part of the block because it is prose too: the model reads it, and
+ * the progress view shows it to the visitor.
  */
-function isAnswered(body: string): boolean {
-  const trimmed = body.trim()
-  return trimmed !== '' && !isPlaceholder(trimmed)
+interface Block {
+  heading: SourceLine | null
+  lines: SourceLine[]
 }
 
-interface Block {
-  heading: string
-  body: string
+/** A block that starts at a `##` heading. */
+interface Section extends Block {
+  heading: SourceLine
+}
+
+/** A heading's title: the line without its `## `. */
+function headingTitle(heading: SourceLine): string {
+  return heading.text.replace(BLOCK_HEADING, '').trim()
+}
+
+/** A block's lines under its heading, joined back into text. */
+function blockBody(block: Block): string {
+  return block.lines.map(line => line.text).join('\n')
 }
 
 /** An opening or closing ``` / ~~~ fence, with any indent and info string. */
@@ -446,40 +452,35 @@ class FenceTracker {
 }
 
 /**
- * Everything before the first `##` heading, then one entry per heading.
+ * Everything before the first `##` heading, then one section per heading.
  *
  * A `##` inside a fenced code block is a comment in someone's shell
  * snippet, not a section: treating it as a boundary would split the block
  * and orphan the fence, which is how a document ends up rendering as one
- * long code block or failing to render at all.
+ * long code block or failing to render at all. It follows that every block
+ * starts outside a fence, so a block can be read on its own.
  */
-function splitBlocks(body: string): { intro: string; blocks: Block[] } {
-  const lines = body.split(/\r?\n/)
-  const introLines: string[] = []
-  const blocks: Block[] = []
-  let current: { heading: string; lines: string[] } | null = null
+function splitBlocks(lines: readonly SourceLine[]): {
+  intro: Block
+  sections: Section[]
+} {
+  const intro: Block = { heading: null, lines: [] }
+  const sections: Section[] = []
+  let current: Block = intro
   const fence = new FenceTracker()
 
   for (const line of lines) {
-    const inCode = fence.consume(line)
-    if (!inCode && BLOCK_HEADING.test(line)) {
-      if (current) {
-        blocks.push({
-          heading: current.heading,
-          body: current.lines.join('\n'),
-        })
-      }
-      current = { heading: line, lines: [] }
+    const inCode = fence.consume(line.text)
+    if (!inCode && BLOCK_HEADING.test(line.text)) {
+      const section: Section = { heading: line, lines: [] }
+      sections.push(section)
+      current = section
       continue
     }
-    if (current) current.lines.push(line)
-    else introLines.push(line)
-  }
-  if (current) {
-    blocks.push({ heading: current.heading, body: current.lines.join('\n') })
+    current.lines.push(line)
   }
 
-  return { intro: introLines.join('\n').trim(), blocks }
+  return { intro, sections }
 }
 
 /**
@@ -498,8 +499,8 @@ function splitBlocks(body: string): { intro: string; blocks: Block[] } {
  */
 export function documentHeadings(text: string): string[] {
   const headings: string[] = []
-  for (const block of splitBlocks(text).blocks) {
-    const heading = block.heading.replace(BLOCK_HEADING, '').trim()
+  for (const section of splitBlocks(sourceLines(text)).sections) {
+    const heading = headingTitle(section.heading)
     if (heading === '' || heading.length > MAX_HEADING_CHARS) continue
     headings.push(heading)
     if (headings.length === MAX_HEADINGS) break
@@ -670,12 +671,38 @@ export interface FoundPlaceholder {
 }
 
 /**
- * The first placeholder in a document, or null.
+ * The first placeholder in one block, heading first, or null. This is the
+ * one rule for whether a block is unfinished; nothing decides it from the
+ * body alone.
  *
- * Reads each line the way MDX will — fenced blocks skipped, escapes and
- * inline code removed — so `// TODO` inside a ```` ``` ```` block and a
+ * The heading is checked because it is prose a visitor can be shown: the
+ * progress view lists a document's section titles under its row, so an
+ * editor's note written as a heading is a placeholder even when the
+ * section under it is finished.
+ *
+ * Reads each line the way MDX will (fenced blocks skipped, escapes and
+ * inline code removed), so `// TODO` inside a ```` ``` ```` block and a
  * `` `TODO` `` written about in prose are both left alone. What it looks
- * for is a placeholder's *shape* (isPlaceholder), not the word.
+ * for is a placeholder's *shape* (isPlaceholder), not the word. A block
+ * always starts outside a fence (splitBlocks), so reading one alone sees
+ * the same fences as reading the whole document.
+ */
+function findBlockPlaceholder(block: Block): SourceLine | null {
+  if (block.heading) {
+    const title = headingTitle(block.heading)
+    if (isPlaceholder(visibleProse(title))) return block.heading
+  }
+  const fence = new FenceTracker()
+  for (const line of block.lines) {
+    if (fence.consume(line.text)) continue
+    if (isPlaceholder(visibleProse(line.text))) return line
+  }
+  return null
+}
+
+/**
+ * The first placeholder in a document, or null: findBlockPlaceholder over
+ * the introduction and then each section.
  *
  * Exported because knowledge.test.ts runs it over the shipped text as a
  * backstop, and the two must agree on what a placeholder is.
@@ -683,19 +710,12 @@ export interface FoundPlaceholder {
 export function findPlaceholder(
   lines: readonly SourceLine[]
 ): FoundPlaceholder | null {
-  const fence = new FenceTracker()
-  let heading: string | null = null
-  for (const line of lines) {
-    if (fence.consume(line.text)) continue
-    if (BLOCK_HEADING.test(line.text)) {
-      heading = line.text.replace(/^##\s*/, '')
-      // The heading is prose a visitor can be shown: the progress view
-      // lists a document's section titles under its row. An editor's note
-      // written as a heading is a placeholder like any other.
-      if (isPlaceholder(visibleProse(heading))) return { line, heading }
-      continue
-    }
-    if (isPlaceholder(visibleProse(line.text))) return { line, heading }
+  const { intro, sections } = splitBlocks(lines)
+  const introLine = findBlockPlaceholder(intro)
+  if (introLine) return { line: introLine, heading: null }
+  for (const section of sections) {
+    const line = findBlockPlaceholder(section)
+    if (line) return { line, heading: headingTitle(section.heading) }
   }
   return null
 }
@@ -716,34 +736,44 @@ function assertNoPlaceholder(
 }
 
 /**
- * The faq's text: every `##` block whose answer is missing or still a
- * TODO is dropped, and the headings that were dropped are reported so
- * `bun run knowledge:check` can print them rather than leaving the
- * deletion invisible. A file that had blocks and has none left contributes
- * no document at all, so an FAQ Matt has not written yet is simply absent
- * from the index rather than present and empty.
+ * True when a block is something Matt actually wrote: it has a body, and
+ * neither its heading nor its body is a placeholder. Applied to the
+ * lead-in text as well as to each `##` section: a file's intro is no more
+ * publishable than its questions while it still says TODO.
+ */
+function isAnswered(block: Block): boolean {
+  return blockBody(block).trim() !== '' && findBlockPlaceholder(block) === null
+}
+
+/**
+ * The faq's text: every `##` section whose answer is missing, or whose
+ * heading or answer is a placeholder, is dropped, and the headings that
+ * were dropped are reported so `bun run knowledge:check` can print them
+ * rather than leaving the deletion invisible. A file that had sections and
+ * has none left contributes no document at all, so an FAQ Matt has not
+ * written yet is simply absent from the index rather than present and
+ * empty.
  */
 function readAnsweredBlocks(
   body: string,
   label: string
 ): { text: string; unanswered: UnansweredQuestion[] } {
-  const { intro, blocks } = splitBlocks(body)
-  const answered = blocks.filter(block => isAnswered(block.body))
-  const unanswered = blocks
-    .filter(block => !isAnswered(block.body))
-    .map(block => ({
-      file: label,
-      heading: block.heading.replace(/^##\s*/, ''),
-    }))
-  if (blocks.length > 0 && answered.length === 0) {
+  const { intro, sections } = splitBlocks(sourceLines(body))
+  const answered = sections.filter(isAnswered)
+  const unanswered = sections
+    .filter(section => !isAnswered(section))
+    .map(section => ({ file: label, heading: headingTitle(section.heading) }))
+  if (sections.length > 0 && answered.length === 0) {
     return { text: '', unanswered }
   }
 
-  // Each surviving block keeps the spacing it was written with; only the
+  // Each surviving section keeps the spacing it was written with; only the
   // dropped ones change the file.
   const parts = [
-    isAnswered(intro) ? intro : '',
-    ...answered.map(block => `${block.heading}\n${trimEnd(block.body)}`),
+    isAnswered(intro) ? blockBody(intro).trim() : '',
+    ...answered.map(
+      section => `${section.heading.text}\n${trimEnd(blockBody(section))}`
+    ),
   ]
   return { text: parts.filter(part => part !== '').join('\n\n'), unanswered }
 }
