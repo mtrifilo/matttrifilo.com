@@ -167,6 +167,12 @@ Two things that figure does not cover, and neither is verified against Vercel's 
 
 The exposure is worth stating plainly: the assistant holds no private data and has no outbound channel other than the answer a visitor reads, so the "lethal trifecta" is not present. The risk is answer manipulation, and the filtering, the framing, and the two eval suites are what address it. A live injected commit is not needed to test the boundary, and `lib/chat/github-activity.test.ts` feeds the strings directly through the filter instead.
 
+## Preview deployments and the build cache (MTC-62)
+
+A preview build on Vercel restores `.next/cache` from the previous deployment of the project, whatever branch that was. On 2026-09-22 Turbopack (Next.js 16.3.3) reused a stale stylesheet from that cache: PR #41's preview served the branch's JavaScript with main's CSS, so the follow-up row it added had no rules at all and the transcript scrolled sideways. CI runs `bun run build` cold and was green. The persistent build cache is therefore off in `next.config.ts` (`experimental.turbopackFileSystemCacheForBuild: false`); a cold build of this site takes well under a minute.
+
+If a preview ever looks like the branch's markup with the wrong styling, check the stylesheet before the code: open the page, fetch the `<link rel="stylesheet">` it names, and search it for a class the branch added. A stylesheet without that class is a cache hit, not a CSS bug. Redeploy without the build cache (the Vercel dashboard's redeploy dialog, or `vercel deploy --force` from the branch, never `--prod`) and check again.
+
 ## Updating the knowledge base
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.

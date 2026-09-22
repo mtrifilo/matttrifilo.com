@@ -25,6 +25,18 @@ const nextConfig: NextConfig = {
     '/ask/evals': ['./evals/results/*.json'],
   },
   experimental: {
+    /**
+     * Off because Vercel restores .next/cache from the previous deployment
+     * and Turbopack then reused a stale stylesheet for a branch that had
+     * changed app/globals.css: PR #41's preview served main's CSS under the
+     * branch's JavaScript, and the follow-up row it added had no rules at
+     * all (MTC-62, 2026-09-22; the same symptom is reported for 16.3.0 in
+     * vercel/next.js discussion 87283). A cold Turbopack build of this site
+     * compiles in well under a minute, so the cache buys little and a wrong
+     * preview costs a review cycle. Revisit when a Next release names the
+     * invalidation fix.
+     */
+    turbopackFileSystemCacheForBuild: false,
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-dialog',
