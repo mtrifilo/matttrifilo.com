@@ -40,14 +40,19 @@ describe('progress caps layering', () => {
     ])
   })
 
-  test('nothing in lib/knowledge imports from the chat layer', () => {
+  test('nothing under lib/knowledge imports from the chat layer', () => {
     // The chat route depends on the corpus, so the corpus depending on the
     // chat layer would make the two one tangle. The heading caps both need
-    // live in lib/progress-caps for that reason.
+    // live in lib/progress-caps for that reason. Tests are exempt: they
+    // hold the two layers' copies of a contract against each other, which
+    // means importing both.
     const dir = path.join(LIB, 'knowledge')
     const modules = fs
-      .readdirSync(dir)
-      .filter(name => /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name))
+      .readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .filter(
+        name =>
+          /\.[cm]?[jt]sx?$/.test(name) && !/\.test\.[cm]?[jt]sx?$/.test(name)
+      )
     expect(modules).toContain('build.ts')
     for (const name of modules) {
       const chatImports = specifiersIn(path.join(dir, name)).filter(specifier =>
@@ -64,5 +69,15 @@ describe('progress caps layering', () => {
     // lib/chat/progress.ts is in the browser bundle and imports the caps,
     // so anything this module imported would ship to every visitor.
     expect(specifiersIn(path.join(LIB, 'progress-caps.ts'))).toEqual([])
+  })
+
+  test('the progress wire imports only the caps and a type', () => {
+    // Its header promises the browser one runtime import. './answer' is
+    // listed because the reader cannot tell `import type` apart, and it is
+    // a type-only import there.
+    expect(specifiersIn(path.join(LIB, 'chat', 'progress.ts'))).toEqual([
+      '@/lib/progress-caps',
+      './answer',
+    ])
   })
 })

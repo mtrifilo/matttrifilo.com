@@ -47,12 +47,13 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   empty if need be, and disable the trigger instead.
  * - Animation and transition alike are paired with their `motion-reduce`
  *   counterparts, so nothing moves for a visitor who asked for less.
- * - `ChainOfThoughtStep` is a plain component, not a `memo`. Its caller
- *   re-reads the progress part from the message on every render, so a read
- *   row's `description` is a new element each time and a shallow comparison
- *   never matches it. The rows it could match (a GitHub check, the writing
- *   row) are a line of text each, so a memo would cost a prop walk per row
- *   and save nothing worth keeping.
+ * - `ChainOfThoughtStep` is a plain component, not a `memo`. Its caller,
+ *   `components/assistant/assistant-progress.tsx`, builds a read row's
+ *   `description` element on every render from a view re-derived from the
+ *   message each time, so a shallow comparison never matches it. The rows
+ *   it could match (a GitHub check, the writing row) are a line of text
+ *   each, so a memo would cost a prop walk per row and save nothing worth
+ *   keeping.
  *
  * `@radix-ui/react-use-controllable-state` is a direct dependency pinned to
  * the exact version `radix-ui` itself depends on, so the tree holds one copy

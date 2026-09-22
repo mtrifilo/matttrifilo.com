@@ -20,8 +20,12 @@
  * is that nothing is meant to reach it: a row that showed eight of a
  * document's nine sections without saying so would be the quiet half-truth
  * the progress view exists to avoid. lib/knowledge/knowledge.test.ts fails
- * before a corpus document reaches either bound, which is what keeps the
- * truncation theoretical.
+ * before a corpus document reaches the count, which is what keeps the
+ * truncation theoretical. It does not catch a heading past the character
+ * cap: the build skips that heading, so the row lists the others.
+ *
+ * MAX_TITLE_CHARS stays in lib/chat/progress.ts: only the wire enforces it,
+ * and the corpus is held under it by a test rather than by the build.
  */
 export const MAX_HEADINGS = 12
 export const MAX_HEADING_CHARS = 120
