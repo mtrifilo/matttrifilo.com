@@ -392,35 +392,34 @@ describe('the detail an expanded read row shows', () => {
 
   test('a bad field costs the row its detail, never the row', () => {
     // Lenient one field at a time: dropping the step would undercount the
-    // work, which is the one false claim this module exists to prevent.
-    for (const bad of [
-      { topic: 'salary', headings: ['Experience'] },
-      { topic: 42, headings: ['Experience'] },
-      { topic: 'resume', headings: 'Experience' },
-      { topic: 'resume', headings: [7, {}, null] },
-      { topic: 'resume', headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1)] },
-    ]) {
-      const step = outlined({ id: 'resume', title: 'Résumé', ...bad })
-      expect(step?.id).toBe('resume')
-      expect(step?.title).toBe('Résumé')
+    // work, which is the one false claim this module exists to prevent. The
+    // whole step is compared, so a bad value that survived onto it would
+    // fail here rather than passing on the row's id alone.
+    const row = { id: 'resume', title: 'Résumé' }
+    const cases: [Record<string, unknown>, Record<string, unknown>][] = [
+      // An unknown topic goes; the good headings stay.
+      [
+        { topic: 'salary', headings: ['Experience'] },
+        { headings: ['Experience'] },
+      ],
+      [{ topic: 42, headings: ['Experience'] }, { headings: ['Experience'] }],
+      [{ topic: null, headings: ['Experience'] }, { headings: ['Experience'] }],
+      // Headings that are not an array of strings go; the topic stays.
+      [{ topic: 'resume', headings: 'Experience' }, { topic: 'resume' }],
+      [{ topic: 'resume', headings: [7, {}, null] }, { topic: 'resume' }],
+      [
+        { topic: 'resume', headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1)] },
+        { topic: 'resume' },
+      ],
+      // A bad heading is skipped without hiding the ones after it.
+      [
+        { headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1), 'Education'] },
+        { headings: ['Education'] },
+      ],
+    ]
+    for (const [bad, kept] of cases) {
+      expect(outlined({ ...row, ...bad })).toEqual({ ...row, ...kept })
     }
-    // The unknown topic goes, the good headings stay.
-    expect(
-      outlined({
-        id: 'resume',
-        title: 'Résumé',
-        topic: 'salary',
-        headings: ['Experience'],
-      })
-    ).toEqual({ id: 'resume', title: 'Résumé', headings: ['Experience'] })
-    // And a bad heading is skipped without hiding the ones after it.
-    expect(
-      outlined({
-        id: 'resume',
-        title: 'Résumé',
-        headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1), 'Education'],
-      })
-    ).toEqual({ id: 'resume', title: 'Résumé', headings: ['Education'] })
   })
 
   test('a heading exactly at the cap is kept', () => {

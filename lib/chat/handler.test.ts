@@ -1456,15 +1456,26 @@ describe('progress on the stream', () => {
   })
 
   test('a document with no sections carries no headings field', async () => {
-    // The blog twin in the corpus has no `##` line at all, and an empty
-    // array on the wire would put an empty second line under its row.
+    // One corpus document has no `##` line at all, so this is a real state
+    // and not a hypothetical. An empty array on the wire would put an empty
+    // second line under the row, so the entry is given the empty array the
+    // build would give it and the step must still omit the field.
+    const sectionless = { ...asEntry(documents[0]), headings: [] }
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => ({ ...index, entries: [sectionless] }),
+      readKnowledgeDocument,
+      model: () => modelOf(reads('resume'), answers()),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => 1_000,
+    })
     const body = await (
-      await handlerWith(modelOf(reads('resume'), answers()))(
-        post({ messages: [uiMessage('user', QUESTION)] })
-      )
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
     ).text()
 
-    expect(progressFrom(body).at(-1)?.steps[0]).not.toHaveProperty('headings')
+    const step = progressFrom(body).at(-1)?.steps[0]
+    expect(step).toEqual({ id: 'resume', title: 'Résumé', topic: 'resume' })
+    expect(step).not.toHaveProperty('headings')
   })
 
   test('every progress chunk carries the same part id', async () => {

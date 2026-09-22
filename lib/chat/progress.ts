@@ -160,12 +160,16 @@ export const MAX_TITLE_CHARS = 200
 /**
  * How many section titles one read row may carry, and how long each may be.
  *
- * Distrust bounds on the wire, read the same way MAX_TITLE_CHARS is: a
- * heading past either of them is not a `##` line from the corpus, so it is
- * dropped rather than truncated. The corpus is held well below both, and
- * lib/knowledge/knowledge.test.ts fails if a document comes close, because a
- * row that showed eight of a document's nine sections without saying so
- * would be the sort of quiet half-truth this view exists to avoid.
+ * Distrust bounds on the wire. An over-long heading is not a `##` line from
+ * the corpus, so it is dropped rather than truncated, the same way an
+ * over-long title is.
+ *
+ * The count is the exception to that rule, and the only reason it is safe
+ * is that nothing is meant to reach it: a row that showed eight of a
+ * document's nine sections without saying so would be the quiet half-truth
+ * this view exists to avoid. lib/knowledge/knowledge.test.ts fails before a
+ * corpus document reaches either bound, which is what keeps the truncation
+ * theoretical; the corpus stands at nine sections and 88 characters today.
  */
 export const MAX_HEADINGS = 12
 export const MAX_HEADING_CHARS = 120

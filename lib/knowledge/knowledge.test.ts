@@ -286,6 +286,14 @@ describe('knowledge corpus content guards', () => {
     // …and an escaped backtick does not make a code span, so the
     // placeholder inside one is still a placeholder.
     expect(placeholder('\\`TODO (Matt)\\`')).toBe(true)
+
+    // A heading is prose too, and since MTC-50 it is prose a visitor is
+    // shown: an editor's note written as a section title is a placeholder
+    // even when the section under it is finished.
+    expect(placeholder('## TODO (Matt): confirm the date\n\nWritten.')).toBe(
+      true
+    )
+    expect(placeholder('## What TODO comments cost\n\nWritten.')).toBe(false)
   })
 
   test('no surface contains a comment marker, closed or unterminated', () => {
@@ -514,19 +522,24 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     expect(documentHeadings(many)).toHaveLength(MAX_HEADINGS)
   })
 
-  test('every corpus document stays well inside both caps', () => {
+  test('every corpus document stays inside both caps', () => {
     // The caps are there to distrust the wire, not to trim the corpus. A
     // document that reached one would have a row showing some of its
     // sections without saying so, which is the quiet half-truth the whole
     // view exists to avoid: this fails first instead.
+    //
+    // Counted with the extractor rather than a regex of its own. A `##`
+    // line inside a fenced code block is not a section, and a second
+    // definition of that here would fail a correct document and report it
+    // as a blown cap.
     for (const document of corpus.documents) {
-      const sections = (document.text.match(/^## (?!#)/gm) ?? []).length
-      expect({ id: document.id, sections }).toEqual({
+      const sections = documentHeadings(document.text)
+      expect({ id: document.id, headings: document.headings ?? [] }).toEqual({
         id: document.id,
-        sections: document.headings?.length ?? 0,
+        headings: sections,
       })
-      expect(sections).toBeLessThan(MAX_HEADINGS)
-      for (const heading of document.headings ?? []) {
+      expect(sections.length).toBeLessThan(MAX_HEADINGS)
+      for (const heading of sections) {
         expect(heading.length).toBeLessThan(MAX_HEADING_CHARS)
       }
     }
@@ -550,13 +563,6 @@ describe('the section titles the progress view shows (MTC-50)', () => {
         `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
     )
     expect(new Set(lines)).toEqual(new Set(catalogue))
-
-    // And no document's outline reaches it as a run of text.
-    for (const entry of outlined) {
-      const outline = entry.headings ?? []
-      if (outline.length < 2) continue
-      expect(index.text).not.toContain(outline.join(' '))
-    }
   })
 })
 

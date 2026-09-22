@@ -171,10 +171,15 @@ function label(row: ProgressRow): string {
  * neither a topic nor sections. A row whose step carries neither field, as
  * every step written before MTC-50 does, gets no second line rather than an
  * empty one.
+ *
+ * A topic that repeats the title is dropped: the résumé is the one document
+ * in its topic, so "Reading Résumé…" over "Résumé" is the same duplicate the
+ * timer rule avoids on the header, and it tells the visitor nothing.
  */
 function description(row: ProgressRow): ReactNode {
   if (row.kind !== 'document') return undefined
-  const topic = row.topic === undefined ? undefined : progressTopic(row.topic)
+  const label = row.topic === undefined ? undefined : progressTopic(row.topic)
+  const topic = label === row.title ? undefined : label
   const headings = row.headings ?? []
   if (topic === undefined && headings.length === 0) return undefined
   return (

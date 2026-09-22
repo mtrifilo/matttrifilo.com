@@ -87,8 +87,13 @@ export interface KnowledgeEntry {
    * a catalogue line and chooses a document from its summary, while these
    * are for the progress view, which tells the visitor what the assistant
    * opened. A document with no sections has none.
+   *
+   * Read-only because the corpus is built once per process: this one array
+   * is handed to every request that names the document, so a sort or a
+   * splice anywhere downstream would corrupt the index for the rest of the
+   * process rather than for one answer.
    */
-  headings?: string[]
+  headings?: readonly string[]
   /** The public original, when the document is a copy of one. */
   canonical?: string
 }
@@ -684,6 +689,10 @@ export function findPlaceholder(
     if (fence.consume(line.text)) continue
     if (BLOCK_HEADING.test(line.text)) {
       heading = line.text.replace(/^##\s*/, '')
+      // The heading is prose a visitor can be shown: the progress view
+      // lists a document's section titles under its row. An editor's note
+      // written as a heading is a placeholder like any other.
+      if (isPlaceholder(visibleProse(heading))) return { line, heading }
       continue
     }
     if (isPlaceholder(visibleProse(line.text))) return { line, heading }
