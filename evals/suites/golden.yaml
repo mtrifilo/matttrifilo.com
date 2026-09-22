@@ -253,7 +253,7 @@
         - type: llm-rubric
           value: *r7
 
-# Reads: resume only; the title Manager, Product Engineering is in no other document.
+# Reads: resume only; recognition-and-programs titles the role Technical Manager, Software and Product Engineering.
 - description: 'golden: current role'
   vars:
     question: What is Matt's current title?
@@ -786,7 +786,7 @@
         - type: llm-rubric
           value: *r23
 
-# Reads: resume only; the essay names the certificate but not the college or the major.
+# Reads: resume only; the essay has the certificate but calls the degree Liberal Arts and names no college.
 - description: 'golden: education'
   vars:
     question: What is Matt's educational background?
@@ -857,7 +857,7 @@
         - type: llm-rubric
           value: *r25
 
-# Reads any of: resume or technical-expertise; both list the same four languages.
+# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go.
 - description: 'golden: languages and stacks'
   vars:
     question: Which languages and frameworks does Matt work in?
@@ -887,8 +887,8 @@
             The answer names languages from the published list (Java, Python,
             TypeScript, Go) and may add frameworks from it such as Spring Boot,
             Micronaut, Vue.js or React, or Node as the runtime its TypeScript
-            runs on. It does not add a language the published material does
-            not list.
+            runs on. It does not add a language that neither the résumé nor
+            the technical-expertise document lists.
         - type: llm-rubric
           value: *r26
         - type: llm-rubric
@@ -954,10 +954,10 @@
         - type: llm-rubric
           value: &r28 >-
             The answer says Matt led moving Liquid template merging out of the
-            core monolith into a separate service, as a tour of duty with the
-            Platform Services team from 2020 to 2021. Naming the service's
-            stack (Java or Micronaut), the merge contexts, or the order in
-            which consumers moved onto it is correct but not required.
+            core monolith into a standalone Java or Micronaut service, as a
+            tour of duty with the Platform Services team from 2020 to 2021.
+            Naming the merge contexts, or the order in which consumers moved
+            onto it, is correct but not required.
         - type: llm-rubric
           value: *r28
         - type: llm-rubric
@@ -994,8 +994,8 @@
             to do about them. Either document's framing of that is correct:
             how recent sending practice affects deliverability, as the résumé
             puts it, or what the bounce, complaint and engagement figures mean
-            and which list-hygiene actions to take, as the feature's own
-            document puts it.
+            and what to do next, as the feature's own document puts it. Saying
+            he also designed it is correct but not required.
         - type: llm-rubric
           value: *r29
         - type: llm-rubric
@@ -1693,19 +1693,21 @@
       assert:
         - type: llm-rubric
           value: &r45 >-
-            The answer says Matt proposed and built it as an LLM feature, that
-            it runs on Gemini on Vertex AI with retrieval over the product's
-            help-centre content, and that it explains a sender's engagement
-            figures, such as bounce rate, complaint rate and how recently
-            contacts engaged, and recommends what to do next. Describing that
-            instead as how the last 30 days of sending practice help or hurt
-            deliverability, as the résumé does, is equally correct. Naming the
-            proof of concept in one week, the production beta about five weeks
-            after build kickoff, and every user two months after kickoff, or
-            the Promptfoo evals behind its model changes, is correct but not
-            required; a different duration stated as fact is wrong. It is
-            written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            The answer says Matt proposed and built it as an LLM feature
+            (saying he also designed it, or that it was one of the product's
+            first LLM features, is correct but not required), that it runs on
+            Gemini on Vertex AI with retrieval over the product's help-centre
+            content, and that it explains a sender's engagement figures, such
+            as bounce rate, complaint rate and how recently contacts engaged,
+            and recommends what to do next. Describing that instead as how the
+            last 30 days of sending practice help or hurt deliverability, as
+            the résumé does, is equally correct. Naming the proof of concept in
+            one week, the production beta about five weeks after build kickoff,
+            and every user two months after kickoff, or the Promptfoo evals
+            behind its model changes, is correct but not required; a different
+            duration for any of those three milestones is wrong. It is written
+            about Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
         - type: llm-rubric
           value: *r45
         - type: llm-rubric
@@ -2378,7 +2380,7 @@
 # resume: "Software Engineer III / Tech Lead (player-coach), Email
 # Reliability · Jul 2022 - May 2025 - Half coding, half management for a
 # team of 5 through the Keap-to-Thryv acquisition."
-# Reads: resume only; recognition-and-programs dates the role but not the title or team size.
+# Reads: resume only; recognition-and-programs lacks the Tech Lead title, team of five and acquisition graded here.
 - description: 'golden: the player-coach years'
   vars:
     question: Has Matt worked as a player-coach, and how did he split his time?
@@ -2691,9 +2693,10 @@
     question: Has Matt owned a vendor negotiation or a licensing budget?
   metadata:
     suite: golden
-    # The negotiation itself is résumé-only. The AI tooling document carries
-    # only the ownership sentence, which the rubric treats as an addition,
-    # so it cannot stand in for the read.
+    # The +48 percent quote and the flat outcome are résumé-only; two career
+    # documents describe the renewal analysis without them. The AI tooling
+    # document carries only the ownership sentence, which the rubric treats
+    # as an addition, so none of them can stand in for the read.
     expectReads: [resume]
   assert:
     - type: javascript
@@ -2762,12 +2765,13 @@
       assert:
         - type: llm-rubric
           value: &r69 >-
-            The answer gives the two documented outcomes: Matt hired two
-            engineers in 2025 who became high performers within months, and
+            The answer gives the two documented outcomes: Matt made two hires
+            in 2025 who became high performers within months, or quickly, and
             he has kept his team, stated either as zero voluntary attrition
             under him as manager or as 100 percent team retention in his first
-            year as manager, May 2025 to May 2026. It may add that he lists hiring and performance management among his
-            leadership skills, that he believes growing people compounds, or
+            year as manager, May 2025 to May 2026. It may add that he lists
+            hiring and performance management among his leadership skills,
+            that he believes growing people compounds, or
             the essay's point that he has hosted many candidate interviews,
             has rarely seen shipped projects from candidates and does not
             treat them as mandatory, and expects demonstrable
