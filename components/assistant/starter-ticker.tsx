@@ -4,8 +4,6 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
-  type CSSProperties,
   type FocusEvent,
   type MouseEvent,
   type Ref,
@@ -16,50 +14,66 @@ import { STARTER_QUESTIONS } from './copy'
 import {
   EDGE_FADE_PROPERTY,
   loopSeconds,
-  offsetForStartAt,
+  openingProgress,
+  pillIndexFor,
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
+  tickerRows,
   TOUCH_PAUSE_MS,
 } from './ticker-geometry'
 
 /**
- * The starter questions, drifting (MTC-39).
+ * The starter questions, drifting in two rows (MTC-39, MTC-55).
  *
- * Three static pills could only ever show three of the questions the corpus
- * answers. The row shows the whole pool by moving: the pool is rendered once
- * as real buttons and once more as a silent copy behind it, and a CSS
- * keyframe slides the track by exactly one copy's width, so the frame that
- * ends the loop is the frame that starts it. Nothing here runs per frame; the
- * browser owns the motion, and app/globals.css owns the rules.
+ * Static pills could only ever show a handful of the questions the corpus
+ * answers. Two rows show the whole pool by moving: each row renders its half
+ * of the pool once as real buttons and once more as a silent copy behind it,
+ * and a CSS keyframe slides the track by exactly one copy's width, so the
+ * frame that ends the loop is the frame that starts it. Nothing here runs per
+ * frame; the browser owns the motion, and app/globals.css owns the rules.
  *
- * Two things are worth reading twice.
+ * Four things are worth reading twice.
+ *
+ * **Both rows travel right to left**, the reading direction, so a question
+ * arrives first word first. A row moving the other way shows its last words
+ * first, which is unreadable however slowly it goes.
+ *
+ * **A row opens on a whole pill.** Where a pill sits is a measurement, not a
+ * constant, so the opening offset is computed from the row's own layout on
+ * the first measurement and then left alone: after that the offset belongs to
+ * the loop.
  *
  * **Tab meets each question once, and every visible pill works.** Only the
- * first copy is announced and tabbable; the second is `aria-hidden` with
- * `tabIndex={-1}` buttons. It is NOT `inert`, which the ticket's sketch asked
- * for and which would have made it unclickable: the trailing copy is what the
- * row shows while the loop wraps, and that is most of the time the pool's
- * first questions are on screen. A dead pill under the cursor is the one
- * thing this row must never be, so the duplicate answers a click and hands
- * the same question over.
+ * first copy of a row is announced and tabbable; the second is `aria-hidden`
+ * with `tabIndex={-1}` buttons. It is NOT `inert`, which would make it
+ * unclickable: the trailing copy is what a row shows while its loop wraps,
+ * and that is most of the time the pool's first questions are on screen. A
+ * dead pill under the cursor is the one thing these rows must never be, so
+ * the duplicate answers a click and hands the same question over.
  *
  * **A focused pill has to be visible**, and the track's transform is what
- * makes that hard: most of the row sits at negative offsets, which no scroll
- * position can reach. So focus freezes the track, hands its position over to
+ * makes that hard: most of a row sits at offsets no scroll position can
+ * reach. So focus freezes that row's track, hands its position over to
  * `scrollLeft`, and scrolls the pill clear of the edge fades; blur converts
  * back into a progress the animation resumes from. Both conversions go
  * through ticker-geometry.ts, which is why neither switch is visible.
  */
 
+/**
+ * The pool as the two rows carry it. Computed once, because it is a property
+ * of the pool rather than of any surface showing it.
+ */
+const ROWS = tickerRows(STARTER_QUESTIONS)
+
 export interface StarterTickerProps {
   onPick: (question: string) => void
   /**
-   * How far into the pool this row opens, as a fraction. Two surfaces show
+   * Which pill each row opens on, as an index into the row. Two surfaces show
    * the same pool in the same order, and this is what stops them showing the
-   * same pills at the same moment.
+   * same questions at the same moment.
    */
   startAt?: number
   className?: string
@@ -77,26 +91,81 @@ export function StarterTicker({
   startAt = 0,
   className,
 }: StarterTickerProps) {
+  const groupRef = useRef<HTMLDivElement>(null)
+  const resumeRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => () => clearTimeout(resumeRef.current), [])
+
+  // Pausing on touch is what keeps a moving pill from being a moving target.
+  // It is not behind `pointer: coarse`, because a touchstart is itself the
+  // evidence, and a touchscreen laptop reports a fine pointer. Both rows
+  // stop: a row still drifting beside the one being read is the distraction
+  // the pause exists to remove, which is also why hover and focus are read
+  // off this element rather than off a single row.
+  const handleTouchStart = useCallback(() => {
+    const group = groupRef.current
+    if (!group || prefersReducedMotion()) return
+    group.dataset.touched = 'true'
+    clearTimeout(resumeRef.current)
+    resumeRef.current = setTimeout(() => {
+      delete group.dataset.touched
+    }, TOUCH_PAUSE_MS)
+  }, [])
+
+  return (
+    <div
+      aria-label={TICKER_LABEL}
+      className={cn('starter-ticker flex w-full flex-col gap-2', className)}
+      onTouchStart={handleTouchStart}
+      ref={groupRef}
+      role="group"
+    >
+      {ROWS.map((questions, index) => (
+        <TickerRow
+          key={index}
+          onPick={onPick}
+          questions={questions}
+          startAt={startAt}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * One drifting row.
+ *
+ * Each row measures itself, because the rows hold a different number of
+ * questions and therefore loop over different distances. One speed, two
+ * durations, which is also what keeps the rows from ever falling into step.
+ */
+function TickerRow({
+  questions,
+  onPick,
+  startAt,
+}: {
+  questions: readonly string[]
+  onPick: (question: string) => void
+  startAt: number
+}) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const copyRef = useRef<HTMLDivElement>(null)
-  // The measured width of one copy of the pool. Everything the focus
-  // handling computes is in these pixels, so it is read, never guessed.
+  // The measured width of one copy of this row's questions. Everything the
+  // focus handling computes is in these pixels, so it is read, never guessed.
   const copyWidthRef = useRef(0)
-  const resumeRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  // Computed once. After the first paint the offset belongs to the blur
-  // handler, and a re-render that wrote this value back would snap the row
-  // to where it opened.
-  const [openingOffset] = useState(() => offsetForStartAt(startAt))
+  // False until the row has been laid out once and placed on its opening
+  // pill. After that the offset belongs to the loop and to the blur handler.
+  const openedRef = useRef(false)
 
   /**
    * One loop is one copy's width, so the duration is what holds the speed
-   * steady whatever the pool says.
+   * steady whatever the row carries.
    *
    * A running animation keeps its elapsed time when the duration changes,
    * not its progress, so a later measurement would jump the row. Restarting
    * it at the progress it was already at is what keeps the speed a property
-   * of the pool rather than of where the loop happens to be.
+   * of the questions rather than of where the loop happens to be.
    *
    * A frozen track is left entirely alone, measurement included: a pill has
    * focus, the scroll offset was computed from the width as it was, and
@@ -106,25 +175,34 @@ export function StarterTicker({
   const measure = useCallback(() => {
     const copy = copyRef.current
     const track = trackRef.current
-    if (!copy || !track || track.dataset.frozen === 'true') return
+    const viewport = viewportRef.current
+    if (!copy || !track || !viewport || track.dataset.frozen === 'true') return
     const width = copy.getBoundingClientRect().width
     const seconds = loopSeconds(width)
     if (seconds === null || width === copyWidthRef.current) return
     copyWidthRef.current = width
-    const resumeAt = animationProgress(track)
+    const offset = openedRef.current
+      ? animationProgress(track)
+      : openingProgress(
+          pillStart(copy, startAt),
+          fadeWidth(viewport),
+          copyWidthRef.current
+        )
+    openedRef.current = true
     track.dataset.frozen = 'true'
     // Read to flush the style change, so removing it below starts a new
     // animation rather than amending the running one.
     void track.offsetWidth
     track.style.setProperty('--ticker-duration', `${seconds}s`)
-    if (resumeAt !== null) {
-      track.style.setProperty('--ticker-offset', String(resumeAt))
+    if (offset !== null) {
+      track.style.setProperty('--ticker-offset', String(offset))
     }
     delete track.dataset.frozen
-  }, [])
+  }, [startAt])
 
-  // Once now, so a Tab in the first frames finds a width to work from; the
-  // observer then catches the font arriving and the visitor zooming.
+  // Once now, so the row is on its opening pill and a Tab in the first frames
+  // finds a width to work from; the observer then catches the font arriving
+  // and the visitor zooming.
   useEffect(() => {
     const copy = copyRef.current
     if (!copy) return
@@ -133,8 +211,6 @@ export function StarterTicker({
     observer.observe(copy)
     return () => observer.disconnect()
   }, [measure])
-
-  useEffect(() => () => clearTimeout(resumeRef.current), [])
 
   const handleFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
     const viewport = viewportRef.current
@@ -166,8 +242,8 @@ export function StarterTicker({
 
     // A pointer press focuses the pill before the click completes. Moving
     // the row now would take the pill out from under the cursor and the
-    // click would be lost, and a mouse is already holding the row still by
-    // hovering it.
+    // click would be lost, and a mouse is already holding the rows still by
+    // hovering them.
     if (!pill.matches(':focus-visible')) return
 
     viewport.scrollLeft = revealScrollLeft({
@@ -203,40 +279,17 @@ export function StarterTicker({
     [measure]
   )
 
-  // Pausing on touch is what keeps a moving pill from being a moving target.
-  // It is not behind `pointer: coarse`, because a touchstart is itself the
-  // evidence, and a touchscreen laptop reports a fine pointer.
-  const handleTouchStart = useCallback(() => {
-    const track = trackRef.current
-    if (!track || prefersReducedMotion()) return
-    track.dataset.touched = 'true'
-    clearTimeout(resumeRef.current)
-    resumeRef.current = setTimeout(() => {
-      delete track.dataset.touched
-    }, TOUCH_PAUSE_MS)
-  }, [])
-
   return (
     <div
-      aria-label={TICKER_LABEL}
       // The vertical padding is room for a focus ring the row would
       // otherwise clip; the negative margin gives it back to the layout, so
-      // the row occupies what the design says it does.
-      className={cn(
-        'edge-faded-row starter-ticker -my-1 w-full py-1',
-        className
-      )}
+      // the two rows sit the distance apart the design says they do.
+      className="edge-faded-row starter-ticker-row -my-1 w-full py-1"
       onBlur={handleBlur}
       onFocus={handleFocus}
-      onTouchStart={handleTouchStart}
       ref={viewportRef}
-      role="group"
     >
-      <div
-        className="starter-ticker-track"
-        ref={trackRef}
-        style={{ '--ticker-offset': openingOffset } as CSSProperties}
-      >
+      <div className="starter-ticker-track" ref={trackRef}>
         {Array.from({ length: TICKER_COPIES }, (_, index) => (
           // Only the first copy is the real one. The rest exist so the loop
           // has somewhere to come from, and the keyframe's distance is one
@@ -245,6 +298,7 @@ export function StarterTicker({
             decorative={index > 0}
             key={index}
             onPick={onPick}
+            questions={questions}
             ref={index === 0 ? copyRef : undefined}
           />
         ))}
@@ -254,12 +308,12 @@ export function StarterTicker({
 }
 
 /**
- * One pass of the pool.
+ * One pass of a row's questions.
  *
  * `decorative` is one word for three facts that have to agree: a trailing
  * copy is not announced, not in the tab order, and not there at all under
  * reduced motion, where nothing loops. Splitting them is how a copy ends up
- * half hidden, which reads to a screen reader as the pool said twice.
+ * half hidden, which reads to a screen reader as the questions said twice.
  *
  * What it is not is unclickable. Every copy answers a pointer, because the
  * trailing one is what the row shows while the loop wraps.
@@ -267,10 +321,12 @@ export function StarterTicker({
 function QuestionRow({
   decorative,
   onPick,
+  questions,
   ref,
 }: {
   decorative: boolean
   onPick: (question: string) => void
+  questions: readonly string[]
   ref?: Ref<HTMLDivElement>
 }) {
   return (
@@ -281,9 +337,9 @@ function QuestionRow({
       className="starter-ticker-copy flex shrink-0 items-start gap-2 pr-2"
       ref={ref}
     >
-      {STARTER_QUESTIONS.map(question => (
-        // The pool's questions are one line each, which is what lets the row
-        // move at a steady speed and never reflow.
+      {questions.map(question => (
+        // The questions are one line each, which is what lets a row move at a
+        // steady speed and never reflow.
         <Suggestion
           className="max-w-none whitespace-nowrap"
           key={question}
@@ -316,6 +372,18 @@ function animationProgress(track: Element): number | null {
 
 function animationNameOf(animation: Animation): string | undefined {
   return (animation as { animationName?: string }).animationName
+}
+
+/**
+ * Where the pill a surface opens on starts, in the track's own coordinates.
+ *
+ * The track is the pill's offset parent, so this is the coordinate the
+ * opening progress and `scrollLeft` are both measured in.
+ */
+function pillStart(copy: HTMLElement, startAt: number): number {
+  const pills = copy.children
+  const pill = pills.item(pillIndexFor(startAt, pills.length))
+  return pill instanceof HTMLElement ? pill.offsetLeft : 0
 }
 
 /** The edge fade, read from the stylesheet so one number defines it. */

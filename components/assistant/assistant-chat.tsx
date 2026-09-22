@@ -25,13 +25,12 @@ import { createChatFetch } from '@/lib/chat/transport'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
+import { AssistantEmptyState } from './assistant-empty-state'
 import { AssistantHeader } from './assistant-header'
 import { ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
-import { ASSISTANT_INTRO, ASSISTANT_NAME, RESET_LABEL } from './copy'
+import { ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { takePendingQuestion } from './pending-question'
-import { StarterTicker } from './starter-ticker'
-import { ASK_START_AT } from './ticker-geometry'
 import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
@@ -234,6 +233,12 @@ export function AssistantChat() {
         {announcement}
       </p>
 
+      {/* Before the first question the group is centred in the column, and
+          the composer below is part of it. Two flexible spaces do that,
+          rather than a wrapper around both, because the composer keeps its
+          caret and its draft only while it keeps its place in this tree. */}
+      {!hasTranscript && <div aria-hidden="true" className="flex-1" />}
+
       {hasTranscript ? (
         <Conversation className="min-h-0">
           <ConversationContent className="pb-2">
@@ -297,7 +302,7 @@ export function AssistantChat() {
           <ConversationScrollButton />
         </Conversation>
       ) : (
-        <EmptyState onPick={ask} />
+        <AssistantEmptyState onPick={ask} />
       )}
 
       <div className="space-y-2">
@@ -317,23 +322,8 @@ export function AssistantChat() {
         />
         <AssistantDisclosure />
       </div>
-    </div>
-  )
-}
 
-function EmptyState({ onPick }: { onPick: (question: string) => void }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col justify-center gap-4 pb-8">
-      <h1
-        className="font-semibold"
-        style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
-      >
-        {ASSISTANT_NAME}
-      </h1>
-      <p className="max-w-xl leading-relaxed text-muted-foreground">
-        {ASSISTANT_INTRO}
-      </p>
-      <StarterTicker onPick={onPick} startAt={ASK_START_AT} />
+      {!hasTranscript && <div aria-hidden="true" className="flex-1" />}
     </div>
   )
 }

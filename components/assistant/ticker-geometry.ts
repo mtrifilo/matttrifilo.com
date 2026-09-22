@@ -1,33 +1,38 @@
 /**
- * The arithmetic behind the starter-question ticker (MTC-39).
+ * The arithmetic behind the starter-question ticker (MTC-39, MTC-55).
  *
- * The row is one track holding the question pool twice, moved by a CSS
- * `transform` keyframe that travels exactly one copy's width. Two coordinate
- * systems therefore describe the same row, and the component swaps between
- * them whenever a pill takes focus:
+ * The pool is split across two rows. Each row is one track holding its own
+ * half of the pool twice, moved by a CSS `transform` keyframe that travels
+ * exactly one copy's width. Two coordinate systems therefore describe the
+ * same row, and the component swaps between them whenever a pill takes focus:
  *
  * - **animation progress**, a fraction of one loop, which is what the CSS
  *   animation and its negative `animation-delay` speak;
  * - **scroll offset**, pixels of `scrollLeft`, which is what a browser moves
  *   to bring a focused element into view.
  *
- * Everything that converts between them, or decides where a focused pill
- * should sit, is here: it is pure, so it is tested without a DOM, and the
- * component is left with nothing but the event plumbing.
+ * Both rows travel right to left, so a pill enters at the right edge first
+ * word first and is read as it arrives. Progress and scroll offset therefore
+ * grow together: at progress p the row shows the pool from p of a copy in.
+ *
+ * Everything that converts between them, decides where a row opens, or
+ * decides where a focused pill should sit, is here: it is pure, so it is
+ * tested without a DOM, and the component is left with nothing but the event
+ * plumbing.
  */
 
 /**
- * How fast the row drifts. Slow enough to read a pill that is already on
+ * How fast a row drifts. Slow enough to read a pill that is already on
  * screen, quick enough that a different question arrives while someone is
  * deciding: a pill crosses a 640px row in about eighteen seconds.
  */
 export const TICKER_SPEED_PX_PER_SECOND = 35
 
-/** How long a touch holds the row still before it drifts again. */
+/** How long a touch holds the rows still before they drift again. */
 export const TOUCH_PAUSE_MS = 4000
 
 /**
- * How many times the pool is laid down in the track.
+ * How many times a row's half of the pool is laid down in its track.
  *
  * It is here rather than in the component because the keyframe encodes the
  * same number: the track travels `100 / TICKER_COPIES` percent of its own
@@ -49,24 +54,52 @@ export const TICKER_ANIMATION_NAME = 'starter-ticker'
  */
 export const EDGE_FADE_PROPERTY = '--edge-fade'
 
-/** The keyframe's starting transform, which is why every conversion inverts. */
-export const TICKER_KEYFRAME_FROM = `translateX(-${100 / TICKER_COPIES}%)`
+/**
+ * The keyframe's two ends, which every conversion below assumes.
+ *
+ * The track starts unmoved and travels one copy to the left, so its content
+ * walks leftwards past the viewport: a question appears at the right edge
+ * with its first word and is legible as it arrives. Swapping these reverses
+ * the row and mirrors every conversion here, which is why
+ * lib/ticker-css.test.ts pins both.
+ */
+export const TICKER_KEYFRAME_FROM = 'translateX(0)'
+export const TICKER_KEYFRAME_TO = `translateX(-${100 / TICKER_COPIES}%)`
 
 /**
- * Where each surface opens the loop, as a fraction of the pool.
+ * Which pill of each row sits against the left fade when a surface opens.
  *
- * The homepage starts at the top. A visitor who submits from there lands on
- * /ask a second later, and a row that opened on the same three pills would
- * look like it had not moved. Both are named so that changing one is an edit
- * in the same place as the other.
+ * The homepage opens each row on its first question. A visitor who submits
+ * from there lands on /ask a second later, and rows that opened on the same
+ * pills would look like they had not moved, so /ask opens further in. Four
+ * pills is where MTC-39's "a third of the way into the pool" lands now that
+ * the pool is split in two, and it is a whole pill rather than a fraction of
+ * a track, which is what keeps the opening from cutting a question in half.
  */
 export const HOME_START_AT = 0
-export const ASK_START_AT = 1 / 3
+export const ASK_START_AT = 4
+
+/**
+ * The pool split across the two rows: the odd positions, then the even ones.
+ *
+ * Odd and even rather than first half and second half, because the pool is
+ * ordered by what the reader most wants answered: halving it would bury the
+ * leading questions at the back of the second row, while alternating leaves
+ * both rows opening on one of them. Every question appears in exactly one
+ * row, in the pool's order.
+ */
+export function tickerRows(
+  pool: readonly string[]
+): readonly [readonly string[], readonly string[]] {
+  const odd = pool.filter((_, index) => index % 2 === 0)
+  const even = pool.filter((_, index) => index % 2 === 1)
+  return [odd, even]
+}
 
 /**
  * Seconds for one loop at the ticker's speed, given the width of one copy of
- * the pool. Zero width means the row has not been laid out yet; the caller
- * leaves the stylesheet's fallback in place rather than dividing by it.
+ * a row's questions. Zero width means the row has not been laid out yet; the
+ * caller leaves the stylesheet's fallback in place rather than dividing by it.
  */
 export function loopSeconds(copyWidth: number): number | null {
   if (!Number.isFinite(copyWidth) || copyWidth <= 0) return null
@@ -74,18 +107,36 @@ export function loopSeconds(copyWidth: number): number | null {
 }
 
 /**
- * The animation progress that opens the loop `startAt` of the way into the
- * pool.
+ * Which pill of a row a surface's `startAt` names, wrapped into the row.
  *
- * The keyframe runs from TICKER_KEYFRAME_FROM to `translateX(0)`, so the
- * content at the left edge is *earlier* in the pool as progress grows: a
- * progress of p shows the pool from (1 - p) of the way in. Inverting here is
- * what lets the surfaces name the thing they care about, which is how far
- * into the questions their row opens. Reverse that keyframe and every
- * conversion below is mirrored, which is why ticker-css.test.ts pins it.
+ * The two rows hold a different number of questions, so a surface names one
+ * index and each row resolves it against its own length rather than falling
+ * off the end.
  */
-export function offsetForStartAt(startAt: number): number {
-  return wrapFraction(1 - startAt)
+export function pillIndexFor(startAt: number, count: number): number {
+  if (!Number.isFinite(startAt) || count <= 0) return 0
+  const index = Math.trunc(startAt)
+  return ((index % count) + count) % count
+}
+
+/**
+ * The animation progress that parks a pill's leading edge just clear of the
+ * left fade, which is what "the row opens on a whole pill" means.
+ *
+ * At progress p the row shows its questions from p of a copy in, so a pill
+ * whose left edge sits at `pillStart` in the track reaches the viewport's
+ * `fade` mark at (pillStart - fade) of a copy. The row's first pill starts
+ * at zero and therefore opens just before the loop wraps, which is the frame
+ * the design draws: the faded tail of the previous question under the
+ * gradient, then a whole question.
+ */
+export function openingProgress(
+  pillStart: number,
+  fade: number,
+  copyWidth: number
+): number {
+  if (!Number.isFinite(copyWidth) || copyWidth <= 0) return 0
+  return wrapFraction((pillStart - fade) / copyWidth)
 }
 
 /**
@@ -93,7 +144,7 @@ export function offsetForStartAt(startAt: number): number {
  *
  * Both numbers describe the same row, so switching between them is invisible
  * as long as this is the conversion used in both directions. A progress of
- * zero wraps to a scroll of zero rather than to one whole copy: the two show
+ * one wraps to a scroll of zero rather than to one whole copy: the two show
  * the same pixels, because the second copy is the first one repeated, and
  * the smaller of them keeps the focusable pills at offsets the row can
  * actually scroll to.
@@ -102,7 +153,8 @@ export function scrollLeftForProgress(
   progress: number,
   copyWidth: number
 ): number {
-  return wrapFraction(1 - progress) * copyWidth
+  if (!Number.isFinite(copyWidth) || copyWidth <= 0) return 0
+  return wrapFraction(progress) * copyWidth
 }
 
 /** The inverse: the progress a paused row should resume from. */
@@ -111,7 +163,7 @@ export function progressForScrollLeft(
   copyWidth: number
 ): number {
   if (!Number.isFinite(copyWidth) || copyWidth <= 0) return 0
-  return wrapFraction(1 - (scrollLeft % copyWidth) / copyWidth)
+  return wrapFraction(scrollLeft / copyWidth)
 }
 
 export interface RevealRequest {

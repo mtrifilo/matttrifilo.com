@@ -5,6 +5,7 @@ import {
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   TICKER_KEYFRAME_FROM,
+  TICKER_KEYFRAME_TO,
 } from '@/components/assistant/ticker-geometry'
 
 /**
@@ -34,6 +35,23 @@ function ruleFor(selector: string): string {
   throw new Error(`${selector} is not closed`)
 }
 
+/** The at-rule a declaration sits inside, braces balanced. */
+function blockAround(needle: string): string {
+  const inner = css.indexOf(needle)
+  if (inner < 0) throw new Error(`${needle} is not in app/globals.css`)
+  const start = css.lastIndexOf('@media', inner)
+  if (start < 0) throw new Error(`${needle} is not inside an at-rule`)
+  let depth = 0
+  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1
+    if (css[i] === '}') {
+      depth -= 1
+      if (depth === 0) return css.slice(start, i + 1)
+    }
+  }
+  throw new Error(`the at-rule around ${needle} is not closed`)
+}
+
 /** One step of a keyframe block, by its selector rather than its order. */
 function stepOf(keyframe: string, step: 'from' | 'to'): string {
   const match = new RegExp(`\\b${step}\\s*\\{([^}]*)\\}`).exec(keyframe)
@@ -44,20 +62,23 @@ function stepOf(keyframe: string, step: 'from' | 'to'): string {
 describe('the ticker keyframe', () => {
   const keyframe = ruleFor(`@keyframes ${TICKER_ANIMATION_NAME}`)
 
-  test('travels one copy of the pool, in the direction the maths assumes', () => {
-    // Reversing these two, which is the shape most marquees are written in,
-    // mirrors every conversion in ticker-geometry.ts: a focused pill would
-    // then scroll to the opposite end of the row. Read by keyframe selector
-    // rather than by position, because swapping only the `from` and `to`
-    // labels reverses the loop just as thoroughly.
+  test('carries the questions right to left, which the maths assumes', () => {
+    // The track starts unmoved and travels one copy leftwards, so a question
+    // enters at the right edge first word first. Reversing these two shows
+    // its last words first and mirrors every conversion in
+    // ticker-geometry.ts, so a focused pill would scroll to the opposite end
+    // of its row. Read by keyframe selector rather than by position, because
+    // swapping only the `from` and `to` labels reverses the loop just as
+    // thoroughly.
     expect(stepOf(keyframe, 'from')).toContain(TICKER_KEYFRAME_FROM)
-    expect(stepOf(keyframe, 'to')).toContain('translateX(0)')
+    expect(stepOf(keyframe, 'to')).toContain(TICKER_KEYFRAME_TO)
+    expect(TICKER_KEYFRAME_FROM).toBe('translateX(0)')
   })
 
   test('the distance matches the number of copies the track renders', () => {
     // 100 / TICKER_COPIES percent of the track is one copy only while the
     // component renders exactly that many.
-    expect(TICKER_KEYFRAME_FROM).toBe(`translateX(-${100 / TICKER_COPIES}%)`)
+    expect(TICKER_KEYFRAME_TO).toBe(`translateX(-${100 / TICKER_COPIES}%)`)
     expect(keyframe).toContain(`-${100 / TICKER_COPIES}%`)
   })
 
@@ -68,8 +89,8 @@ describe('the ticker keyframe', () => {
   })
 })
 
-describe('the row the component scrolls', () => {
-  const row = ruleFor('.starter-ticker {')
+describe('the rows the component scrolls', () => {
+  const row = ruleFor('.starter-ticker-row {')
 
   test('is hidden, not clipped', () => {
     // `overflow: clip` hides the same pixels and is the natural cleanup
@@ -169,10 +190,29 @@ function componentSource(file: string): string {
 describe('the state flags the component writes', () => {
   test('the stylesheet reads the attributes the component sets', () => {
     // These are strings on both sides of the boundary. A rename in one file
-    // leaves the other writing an attribute nothing styles, and the row
-    // simply never pauses or never freezes.
-    expect(css).toContain(".starter-ticker-track[data-touched='true']")
+    // leaves the other writing an attribute nothing styles, and the rows
+    // simply never pause or never freeze. A touch is recorded on the group
+    // and a freeze on one track, because a touch stops both rows while only
+    // the row holding the focused pill hands its position to scrollLeft.
+    expect(css).toContain(".starter-ticker[data-touched='true']")
     expect(css).toContain(".starter-ticker-track[data-frozen='true']")
+  })
+
+  test('hover and focus stop both rows, not just the one under the pointer', () => {
+    expect(css).toContain('.starter-ticker:hover .starter-ticker-track')
+    expect(css).toContain('.starter-ticker:focus-within .starter-ticker-track')
+  })
+
+  test('reduced motion turns both rows into plain scroll strips', () => {
+    // Continuous horizontal motion is a vestibular trigger, so nothing here
+    // may move. Each half of this is separately silent when it breaks: a row
+    // left as `overflow: hidden` cannot be scrolled to its later questions at
+    // all, and a trailing copy left rendered is the row said twice.
+    const block = blockAround(".starter-ticker-copy[aria-hidden='true']")
+    expect(block).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(block).toContain('.starter-ticker-row')
+    expect(block).toContain('overflow-x: auto')
+    expect(block).toContain('animation: none')
   })
 
   test('freezing drops the animation rather than pausing it', () => {

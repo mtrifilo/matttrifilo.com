@@ -174,21 +174,26 @@
 }
 
 /*
- * Starter-question ticker (MTC-39).
+ * Starter-question ticker (MTC-39, MTC-55).
  *
- * The row is one track carrying the question pool twice: the announced,
- * tabbable buttons, then a silent copy of them. The keyframe moves the track
- * by exactly one copy, so the frame that finishes the loop is the frame that
- * starts it and the seam is never visible.
+ * The pool is split across two rows. Each row is one track carrying its own
+ * questions twice: the announced, tabbable buttons, then a silent copy of
+ * them. The keyframe moves a track by exactly one copy, so the frame that
+ * finishes the loop is the frame that starts it and the seam is never
+ * visible.
+ *
+ * It travels leftwards, which is what sends the questions past the viewport
+ * right to left: a pill enters at the right edge with its first word and is
+ * legible as it arrives.
  *
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
- * one copy, so the row drifts at one speed whatever the pool says; the value
+ * one copy, so both rows drift at one speed whatever they carry; the value
  * declared here is that width for the pool as it stands, divided by the
  * speed in ticker-geometry.ts, so the first frames are not wrong while the
- * measurement lands. --ticker-offset is where in the loop an instance opens,
- * as a fraction, which is how the homepage and /ask avoid showing the same
- * pills at the same moment.
+ * measurement lands. --ticker-offset is where in the loop a row opens, as a
+ * fraction, which is how a row lands on a whole pill and how the homepage
+ * and /ask avoid showing the same questions at the same moment.
  *
  * The distance here, the copy count in starter-ticker.tsx and the
  * conversions in ticker-geometry.ts are one decision written in three
@@ -196,10 +201,10 @@
  */
 @keyframes starter-ticker {
   from {
-    transform: translateX(-50%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(0);
+    transform: translateX(-50%);
   }
 }
 
@@ -246,7 +251,7 @@
   }
 }
 
-.starter-ticker {
+.starter-ticker-row {
   /*
    * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
    * a box that can still be scrolled programmatically, and scrollLeft is how
@@ -328,17 +333,25 @@
   position: relative;
   display: flex;
   width: max-content;
-  /* Stated once; the component overrides it inline from the measurement. */
-  --ticker-duration: 340s;
+  /* Stated once; the component overrides both inline from the measurement.
+     The duration is one row's share of the pool at the ticker's speed, and
+     the offset is where the loop starts, which stands until the row knows
+     where its own opening pill sits. */
+  --ticker-duration: 170s;
   --ticker-offset: 0;
   animation: starter-ticker var(--ticker-duration) linear infinite;
   animation-delay: calc(var(--ticker-offset) * var(--ticker-duration) * -1);
 }
 
-/* A pill that is being read, or reached for, holds still. */
+/*
+ * A pill that is being read, or reached for, holds still, and so does the
+ * other row: a row still drifting beside the one being read is the
+ * distraction the pause exists to remove. That is why all three conditions
+ * are read off the group rather than off a single row.
+ */
 .starter-ticker:hover .starter-ticker-track,
 .starter-ticker:focus-within .starter-ticker-track,
-.starter-ticker-track[data-touched='true'] {
+.starter-ticker[data-touched='true'] .starter-ticker-track {
   animation-play-state: paused;
 }
 
@@ -354,14 +367,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .starter-ticker {
+  /* Both rows become plain strips the visitor scrolls, fades and all. */
+  .starter-ticker-row {
     overflow-x: auto;
     overflow-y: hidden;
   }
   .starter-ticker-track {
     animation: none;
   }
-  /* Nothing loops, so the second copy would just be the pool said twice. */
+  /* Nothing loops, so a second copy would just be the row said twice. */
   .starter-ticker-copy[aria-hidden='true'] {
     display: none;
   }
