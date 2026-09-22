@@ -131,8 +131,12 @@ export interface EvalMetadata extends Record<string, unknown> {
    * `isUncitedAnswer` defines that. Recorded rather than only failed: the
    * count is what says how often the citation line goes missing, and the
    * publish gate refuses a run where it is more than a tenth of the tests.
-   * Never set on a row that already has nothing to grade, so one row cannot
-   * spend two of the gate's budgets.
+   *
+   * Never set together with `transportFailure`: a row with nothing to grade
+   * has no answer to be missing a trailer from. It is set independently of
+   * whether the test passed, though, so a row the trailer assertion still
+   * fails (it read a document other than the one its test names) is counted
+   * here and also costs the run a pass.
    */
   missingTrailer?: true
 }

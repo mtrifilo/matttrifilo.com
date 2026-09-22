@@ -104,9 +104,8 @@ export function planPublish(
       commit,
       ranAt: summary.ranAt,
       model: summary.model,
-      ...(summary.promptfooVersion
-        ? { promptfooVersion: summary.promptfooVersion }
-        : {}),
+      // Always present: the floor refuses a summary that names no version.
+      promptfooVersion: summary.promptfooVersion,
       suites: summary.suites.map(({ name, passed, total }) => ({
         name,
         passed,
