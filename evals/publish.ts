@@ -28,7 +28,12 @@ import type { EvalSummary } from './summary'
  * There is no force flag and no environment override, on purpose: the page
  * the record feeds is a credibility page, and a bad record published under
  * the same claim as a good one is worse than no record. The answer to a
- * refusal is another run, not a way past this script.
+ * refusal is another run.
+ *
+ * What it cannot do is stop someone writing a false record deliberately:
+ * `evals/out/` is not committed, so a hand-edited summary reaches this script
+ * as a summary. Reviewing the record in the diff is what catches that. This
+ * gate is against publishing a run that went badly, not against fraud.
  *
  * Usage: bun run evals:publish [summary.json]
  */
@@ -47,7 +52,7 @@ export type PublishDecision = PublishPlan | { refusal: string }
  * and records `local`, which is true but not a version, so the working
  * copy's HEAD stands in: it is the commit the publisher is about to attach
  * the record to, and it names the code that ran only if that code is
- * committed, which is why main() warns on a dirty tree. Returns null when
+ * committed, which is why main() refuses to publish from a dirty tree. Returns null when
  * neither is a git object name, because a record that names no commit cannot
  * be version-linked and must not ship.
  */
@@ -121,15 +126,18 @@ function headCommit(): string | null {
 }
 
 /**
- * Whether the working copy has changes HEAD does not carry.
+ * Whether the working copy is known to carry changes HEAD does not.
  *
- * A git that cannot answer counts as clean: there is then no working copy to
- * contradict the commit the record names, which is the case in a temporary
- * directory and in a checkout that is not a repository.
+ * Fails closed: a git that cannot answer is `unknown`, not `clean`. The
+ * record's claim is that some commit contains the suites and the corpus the
+ * run walked, and a directory where git will not say cannot support it. That
+ * also closes the one way the refusal could be lifted from outside the
+ * script, by pointing `GIT_DIR` somewhere git fails.
  */
-function workingCopyIsDirty(): boolean {
+function workingCopyState(): 'clean' | 'dirty' | 'unknown' {
   const status = git(['status', '--porcelain'])
-  return status !== null && status.length > 0
+  if (status === null) return 'unknown'
+  return status.length > 0 ? 'dirty' : 'clean'
 }
 
 function git(args: string[]): string | null {
@@ -167,16 +175,22 @@ function main(): void {
   const recorded = (parsed as { commit?: unknown } | null)?.commit
   const needsHead = typeof recorded !== 'string' || !isCommitSha(recorded)
   const decision = planPublish(parsed, needsHead ? headCommit() : null)
-  if ('refusal' in decision) fail(`${decision.refusal}; refusing to publish`)
+  if ('refusal' in decision)
+    fail(
+      `${decision.refusal}; refusing to publish. Re-run the suites when Vertex is healthy, or dispatch .github/workflows/evals.yml by hand; the per-row flags behind these counts are in the run's results.json under \`metadata\`, and the rules are in docs/career-assistant-operations.md under "Publishing a run"`
+    )
 
   // The record has to name a commit that contains the suites and the corpus
   // the run walked. An uncommitted change means it does not, whichever
   // commit is named, so this is a refusal rather than the warning it used to
   // be: a record pointing at code that never ran is a false claim on a page
   // a hiring manager reads as evidence.
-  if (workingCopyIsDirty()) {
+  const tree = workingCopyState()
+  if (tree !== 'clean') {
     fail(
-      'the working copy has uncommitted changes, so no commit contains the code this run walked. Commit the change the run covers first, then publish; refusing to publish'
+      tree === 'dirty'
+        ? 'the working copy has uncommitted changes, so no commit contains the code this run walked. Commit the change the run covers first, then publish; refusing to publish'
+        : 'git could not say whether this working copy is clean, so nothing here can name the code the run walked. Run this from the repository; refusing to publish'
     )
   }
 

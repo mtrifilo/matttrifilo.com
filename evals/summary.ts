@@ -19,9 +19,10 @@ export interface EvalSummary {
   ranAt: string
   model: string
   /**
-   * The promptfoo that ran the suites. Optional because a record written
-   * before it was recorded carries no version, and a run that could not read
-   * its own installed version publishes nothing rather than a guess.
+   * The promptfoo that ran the suites. Optional in the artifact because a run
+   * that cannot read its own installed version records none rather than a
+   * guess; the publish gate then refuses the summary, so no published record
+   * is missing it.
    */
   promptfooVersion?: string
   suites: SuiteSummary[]
@@ -35,16 +36,18 @@ export interface EvalSummary {
   retried: number
   /**
    * Tests that produced no answer to grade: an error envelope after every
-   * attempt, or a stream with no text in it. They are not evidence about the
-   * assistant, and an absence check passes on them, so a run with any of
-   * them cannot be published.
+   * attempt, a stream with no text in it, or a row that never reached the
+   * provider at all. They are not evidence about the assistant, and an
+   * absence check passes on them, so a run with any of them cannot be
+   * published.
    */
   transportFailures: number
   /**
-   * Answers that used a document and wrote no `Sources:` trailer. The
-   * groundedness suite tolerates this where the run demonstrably read the
-   * document, so the number is the only place the policy's citation line
-   * going missing is visible.
+   * Answers that used a document and wrote no `Sources:` trailer, as
+   * `isUncitedAnswer` in evals/assertions.ts defines that. The groundedness
+   * suite tolerates a single miss where the run read the document the test
+   * names, so this count and the `warning:` reasons in `results.json` are
+   * where a citation line going missing is visible at all.
    */
   missingTrailer: number
 }
@@ -118,9 +121,24 @@ export function summarise({
     },
     retried: rows.filter(row => (readNumber(row.metadata?.attempt) ?? 1) > 1)
       .length,
-    transportFailures: countFlagged(rows, 'transportFailure'),
+    transportFailures: rows.filter(hasNothingToGrade).length,
     missingTrailer: countFlagged(rows, 'missingTrailer'),
   }
+}
+
+/**
+ * The row produced no answer to grade.
+ *
+ * Two ways in. The provider says so on a row it handled, by raising
+ * `transportFailure`. The other way is a row the provider never got to
+ * report on: a throw in `callApi` (a credential check, or the handler
+ * itself) reaches promptfoo as an error row carrying no provider metadata at
+ * all, and `model` is the field every provider response sets. A failed row
+ * without one never ran the route, which is the same kind of nothing.
+ */
+function hasNothingToGrade(row: ResultRow): boolean {
+  if (row.metadata?.transportFailure === true) return true
+  return row.success !== true && readString(row.metadata?.model) === undefined
 }
 
 /** Rows whose provider metadata raised one of the run-quality flags. */
@@ -136,7 +154,7 @@ export function markdownTable(summary: EvalSummary): string {
       ? `${summary.retried} test(s) were sent twice after a stalled Vertex connection.`
       : 'No test needed a second attempt.',
     summary.transportFailures > 0
-      ? `${summary.transportFailures} test(s) produced no answer to grade, so this run cannot be published.`
+      ? `${summary.transportFailures} test(s) produced no answer to grade, so this run cannot be published; results.json names the code on each row.`
       : 'Every test produced an answer to grade.',
     summary.missingTrailer > 0
       ? `${summary.missingTrailer} answer(s) used a document without a Sources: trailer.`

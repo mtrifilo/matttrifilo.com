@@ -12,8 +12,9 @@ import {
   historyFrom,
   isTransportCode,
 } from './route-request'
+import { isUncitedAnswer } from './assertions'
 import {
-  answerQuality,
+  hasNothingToGrade,
   parseUiMessageStream,
   type StreamedMetadata,
 } from './route-stream'
@@ -115,18 +116,23 @@ export interface EvalMetadata extends Record<string, unknown> {
   /** 1, or higher when earlier attempts were lost to a transport stall. */
   attempt?: number
   /**
-   * This row carries no answer to grade: an error envelope (a stalled
-   * connection, a refused token, any other API error) or a 200 whose stream
-   * held no text. Counted per run as `transportFailures` and refused by the
+   * This row carries no answer to grade: any error envelope, or a 200 whose
+   * stream held no text. Wider than the two transport codes the retry loop
+   * acts on, because the question here is whether the row is evidence, not
+   * whose fault it is: a route decision the suites never expect (the kill
+   * switch, a rejected body) leaves as little to grade as a stalled
+   * connection. Counted per run as `transportFailures` and refused by the
    * publish gate, because an assertion that checks for the ABSENCE of
    * something passes on an empty output and would publish as evidence.
    */
   transportFailure?: true
   /**
-   * The answer used a document and wrote no `Sources:` trailer. Recorded
-   * rather than only failed: the run demonstrably read the document, so this
-   * is the policy's citation line going missing, and the count is what says
-   * how often that happens.
+   * The answer used a document and wrote no `Sources:` trailer, as
+   * `isUncitedAnswer` defines that. Recorded rather than only failed: the
+   * count is what says how often the citation line goes missing, and the
+   * publish gate refuses a run where it is more than a tenth of the tests.
+   * Never set on a row that already has nothing to grade, so one row cannot
+   * spend two of the gate's budgets.
    */
   missingTrailer?: true
 }
@@ -289,7 +295,14 @@ export default class ChatRouteProvider {
     return {
       response: {
         output: answer.text,
-        metadata: { ...metadata, ...answerQuality(answer.text, readIds) },
+        metadata: {
+          ...metadata,
+          ...(hasNothingToGrade(answer.text)
+            ? { transportFailure: true as const }
+            : isUncitedAnswer(answer.text, readIds)
+              ? { missingTrailer: true as const }
+              : {}),
+        },
       },
       transportFailure: false,
     }

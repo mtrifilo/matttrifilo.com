@@ -155,7 +155,7 @@ export function evalQualityProblem(summary: EvalSummary): string | null {
   if (!summary.promptfooVersion)
     return 'it names no `promptfooVersion`, so the record is not version-linked'
   if (summary.transportFailures > 0)
-    return `${summary.transportFailures} of its ${total} tests produced no answer to grade (a stalled connection, a refused token, an API error or an empty answer), so the run says nothing about the assistant`
+    return `${summary.transportFailures} of its ${total} tests produced no answer to grade, so those rows say nothing about the assistant; the run's results.json names the code on each of them, and it can be a stalled connection, a refused token, the kill switch, or an answer with no text in it`
   if (passed < total * MIN_PASS_RATE)
     return `it passed ${passed} of ${total}, below the ${percent(MIN_PASS_RATE)} a published run has to clear`
   for (const suite of summary.suites) {

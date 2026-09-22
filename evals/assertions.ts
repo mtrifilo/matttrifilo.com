@@ -796,26 +796,71 @@ export function assertCites(
     return { pass: true, score: 1, reason: `cited ${cited.join(', ')}` }
 
   const readIds = stringList(context.metadata?.readIds)
-  const prose = answerProse(output).trim()
-  const answered =
-    prose.length > 0 &&
-    prose !== DECLINE_SENTENCE &&
-    !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
-  if (readIds.length > 0 && answered) {
+  if (!isUncitedAnswer(output, readIds)) {
     return {
-      pass: true,
-      score: 1,
-      reason: `warning: no Sources: trailer, on an answer that read ${readIds.join(', ')}`,
+      pass: false,
+      score: 0,
+      reason:
+        readIds.length === 0
+          ? 'no Sources: trailer, and the run opened no document'
+          : 'no Sources: trailer, and the answer is a decline or no answer at all',
+    }
+  }
+
+  // Tolerance rests on the run having opened the document the test names,
+  // not on its having opened anything: `readIds` is a superset of what the
+  // answer saw, and "it read something" would tolerate a trailer missing
+  // from an answer about a different document entirely. A test that names
+  // no expected document gets no tolerance, because nothing then says which
+  // document the answer was supposed to use.
+  const expected = [
+    ...stringList(context.test?.metadata?.expectReads),
+    ...stringList(context.test?.metadata?.expectReadsAny),
+  ]
+  const used = expected.filter(id => readIds.includes(id))
+  if (used.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        expected.length === 0
+          ? 'no Sources: trailer, and the test names no document the answer should have used'
+          : `no Sources: trailer, and the run read none of ${expected.join(', ')}`,
     }
   }
   return {
-    pass: false,
-    score: 0,
-    reason:
-      readIds.length > 0
-        ? 'no Sources: trailer, and the answer does not use what it read'
-        : 'no Sources: trailer on an answer that used a document',
+    pass: true,
+    score: 1,
+    reason: `warning: no Sources: trailer, on an answer that read ${used.join(', ')}`,
   }
+}
+
+/**
+ * The answer used a document and did not cite it: the flake class MTC-54
+ * counts as `missingTrailer`.
+ *
+ * The one definition of it. `assertCites` above asks this before it
+ * tolerates a missing trailer, and `evals/provider.ts` asks it to raise the
+ * per-test flag the run summary counts, so the number on a summary and the
+ * warnings in a results file are the same question asked once.
+ *
+ * A decline is not an uncited answer: the policy asks for a trailer on an
+ * answer that USED a document, and an answer that says the material does not
+ * cover the question used none of it. An empty answer is not one either;
+ * that row has nothing to grade at all.
+ *
+ * `readIds` is the server's ledger, which is a superset of what the answer
+ * saw: a document refused afterwards for its size still appears in it. So
+ * this counts at most the answers that dropped a citation, never fewer,
+ * which is the safe direction for a count a publish gate refuses on.
+ */
+export function isUncitedAnswer(output: string, readIds: string[]): boolean {
+  if (readIds.length === 0) return false
+  if (sourcesTrailerIds(output).length > 0) return false
+  const prose = answerProse(output).trim()
+  if (prose.length === 0) return false
+  if (prose === DECLINE_SENTENCE) return false
+  return !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
 }
 
 /**

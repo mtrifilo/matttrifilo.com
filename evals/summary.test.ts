@@ -4,6 +4,7 @@ import {
   allPassed,
   markdownTable,
   summarise,
+  type ResultRow,
   type ResultsFile,
 } from './summary'
 
@@ -17,7 +18,7 @@ const row = (
   metadata: { model },
 })
 
-const file = (rows: ReturnType<typeof row>[]): ResultsFile => ({
+const file = (rows: ResultRow[]): ResultsFile => ({
   results: { results: rows },
 })
 
@@ -115,6 +116,34 @@ describe('summarise', () => {
       ranAt: 'r',
     })
     expect(summary.missingTrailer).toBe(1)
+    expect(summary.transportFailures).toBe(0)
+  })
+
+  test('counts a row that never reached the provider', () => {
+    // A throw in the provider (a credential check, the handler itself)
+    // reaches promptfoo as an error row with no provider metadata at all.
+    // Those rows have as little to grade as an error envelope and the gate
+    // has to see them.
+    const threw = {
+      success: false,
+      testCase: { metadata: { suite: 'golden' } },
+    }
+    const summary = summarise({
+      results: file([row('golden', true), threw]),
+      commit: 'c',
+      ranAt: 'r',
+    })
+    expect(summary.transportFailures).toBe(1)
+  })
+
+  test('does not count a passing row that carries no model', () => {
+    // Only a FAILED row with no provider metadata is a row that never ran.
+    const odd = { success: true, testCase: { metadata: { suite: 'golden' } } }
+    const summary = summarise({
+      results: file([odd]),
+      commit: 'c',
+      ranAt: 'r',
+    })
     expect(summary.transportFailures).toBe(0)
   })
 

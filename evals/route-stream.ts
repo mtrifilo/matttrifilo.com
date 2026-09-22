@@ -127,31 +127,16 @@ export function answerProse(text: string): string {
 }
 
 /**
- * The two run-quality flags the provider records per test, and the summary
- * counts over the whole run (MTC-54).
+ * The row has nothing to grade: no prose at all, whatever else came back.
  *
- * Facts about the request rather than judgements about the answer, which is
- * why they are measured here and not in an assertion: only a count over the
- * whole run says whether a red row was the assistant or the hour, and the
- * publish gate reads those counts.
- *
- * An answer with no prose carries no evidence about the policy, so it counts
- * as a row with nothing to grade. The two flags are exclusive for that
- * reason: a run cut off before it wrote anything has no trailer because it
- * has no answer, and counting that as a dropped citation would inflate the
- * number the gate refuses on.
+ * A fact about the request rather than a judgement about the answer, which
+ * is why the provider records it per test and the run summary counts it
+ * (`transportFailures`): an assertion that checks for the absence of
+ * something passes on an empty answer, so a run carrying such rows is not
+ * evidence about the assistant and is not publishable.
  */
-export function answerQuality(
-  text: string,
-  readIds: string[]
-): { transportFailure?: true; missingTrailer?: true } {
-  const empty = answerProse(text).trim().length === 0
-  const missingTrailer =
-    !empty && readIds.length > 0 && sourcesTrailerIds(text).length === 0
-  return {
-    ...(empty ? { transportFailure: true as const } : {}),
-    ...(missingTrailer ? { missingTrailer: true as const } : {}),
-  }
+export function hasNothingToGrade(text: string): boolean {
+  return answerProse(text).trim().length === 0
 }
 
 /**
