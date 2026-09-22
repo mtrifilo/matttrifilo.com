@@ -199,6 +199,12 @@ export function createRecentActivitySession({
    * would be pointed at activity that had not arrived yet, and told the
    * outcome recorded so far it could read a failure in the same step the
    * first call was handed that repository's digest.
+   *
+   * A rejection is shared as well as a result, since both callers hold the
+   * same promise. `fetchRepositoryActivity` returns a result rather than
+   * throwing, so this is latent; when it fires, both calls end as tool errors,
+   * which the handler already treats as refusals, so the step stays
+   * consistent with itself.
    */
   const inFlight = new Map<string, Promise<RecentActivityResult>>()
   const refused: ActivityRefused = { unknown: 0, duplicate: 0, budget: 0 }
@@ -216,6 +222,23 @@ export function createRecentActivitySession({
   }
 
   async function check(id: string): Promise<RecentActivityResult> {
+    const repository = assistantRepository(id)
+
+    // Before every guard, because answering from a call that is already in the
+    // air spends nothing: no request, no budget, no cap. Ahead of the cap in
+    // particular. The allowlist is exactly RECENT_ACTIVITY_MAX_CALLS long, so
+    // a step that checks all three repositories and repeats one has spent the
+    // cap by the time the repeat arrives; behind the cap check the repeat was
+    // told the budget was exhausted while the first call was being handed that
+    // repository's digest, which is the contradiction this coalescing exists
+    // to remove. Counted as a duplicate either way: a model looping is what
+    // that counter is read for.
+    const running = repository ? inFlight.get(repository.id) : undefined
+    if (running) {
+      refused.duplicate += 1
+      return running
+    }
+
     // Before the id is looked at, like the read budget: once the calls are
     // spent no further fetch can happen, whatever is asked for.
     if (calls >= RECENT_ACTIVITY_MAX_CALLS) {
@@ -223,7 +246,6 @@ export function createRecentActivitySession({
       return { error: 'activity_budget_exhausted' }
     }
 
-    const repository = assistantRepository(id)
     // An id off the list reaches no network at all. It costs nothing against
     // the call cap: no request was made, and the step cap already bounds how
     // often a model can guess.
@@ -232,14 +254,6 @@ export function createRecentActivitySession({
       return { error: 'unknown_repository' }
     }
 
-    // A second call while the first is still waiting on GitHub. Counted as a
-    // duplicate, because that is what it is and a model looping is what the
-    // counter exists to show, and then answered with the first call's result.
-    const running = inFlight.get(repository.id)
-    if (running) {
-      refused.duplicate += 1
-      return running
-    }
     if (outcome.has(repository.id)) {
       // The recorded outcome again, whatever it was: a repository is fetched
       // once per request either way.
@@ -283,6 +297,14 @@ export function createRecentActivitySession({
     const tokens = estimateTokens(activity)
     // Measured on the text actually handed over, like a read: the budget
     // bounds what this request sends, so it counts what this request sends.
+    //
+    // One exception, and it is the price of coalescing: a duplicate call in
+    // the same step is handed this same block again, and it is charged once.
+    // What that can add is one repeat of one digest per extra tool call the
+    // model emits in a step, against a budget twelve times a digest's size,
+    // so the ledger is short rather than wrong in a way that matters. The
+    // alternative, charging each delivery, can refuse the second copy, which
+    // puts a failure and a digest for one repository back in one step.
     if (!budget.charge(tokens)) {
       return refuse(repository.id, 'activity_budget_exhausted')
     }

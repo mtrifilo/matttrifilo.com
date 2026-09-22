@@ -213,6 +213,17 @@ describe('the call caps', () => {
   })
 
   test('a concurrent duplicate charges the read budget once', async () => {
+    // Measured against a session that did not duplicate, rather than against
+    // this session's own counter: both counters move on adjacent lines, so
+    // comparing them to each other would pass however often either was
+    // charged.
+    const alone = createReadBudget()
+    const single = createRecentActivitySession({
+      budget: alone,
+      ...fetcher(),
+    })
+    await run(single.tool, ALLOWED)
+
     const budget = createReadBudget()
     let calls = 0
     const session = createRecentActivitySession({
@@ -227,7 +238,39 @@ describe('the call caps', () => {
     await Promise.all([run(session.tool, ALLOWED), run(session.tool, ALLOWED)])
 
     expect(calls).toBe(1)
-    expect(budget.spent()).toBe(session.activityTokens())
+    expect(budget.spent()).toBe(alone.spent())
+    expect(budget.spent()).toBeGreaterThan(0)
+  })
+
+  test('a duplicate is coalesced even when the call cap is already spent', async () => {
+    // The allowlist is exactly RECENT_ACTIVITY_MAX_CALLS long, so a step that
+    // checks every repository and repeats one reaches the repeat with the cap
+    // spent. Behind the cap check the repeat was told the budget was
+    // exhausted while the first call was being handed that repository's
+    // digest, which is the contradiction the coalescing removes.
+    const fetched: string[] = []
+    const session = createRecentActivitySession({
+      fetchActivity: async repository => {
+        fetched.push(repository.id)
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'ok', raw }
+      },
+    })
+
+    const results = await Promise.all([
+      ...ASSISTANT_REPOSITORIES.map(repository =>
+        run(session.tool, repository.id)
+      ),
+      run(session.tool, ALLOWED),
+    ])
+
+    expect(fetched).toHaveLength(RECENT_ACTIVITY_MAX_CALLS)
+    expect(results[results.length - 1]).toEqual(results[0])
+    expect(session.activityRefused()).toEqual({
+      unknown: 0,
+      duplicate: 1,
+      budget: 0,
+    })
   })
 
   test('a call after the in-flight one has settled is told it already has it', async () => {

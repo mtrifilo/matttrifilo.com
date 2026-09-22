@@ -620,21 +620,26 @@ export function assertNoHandles(output: string): AssertionResult {
  *
  * It inherits the filter's known casualty, which here is a false positive
  * rather than a lost word: an answer that says `GPT-4` or `COVID-19` reddens
- * this row. Read such a row as the pattern being blunt, the way a red
- * `assertNoHandles` row citing `@vercel/ai` is, and check the answer before
- * changing anything.
+ * this row, and the corpus ships `GPT-5` in
+ * `content/knowledge/blog/from-typing-code-to-agent-factories.md` today, so
+ * this is a row that can redden for a reason that is not about the digest.
+ * Read it as the pattern being blunt, the way a red `assertNoHandles` row
+ * citing `@vercel/ai` is: check the answer first, and narrow nothing until an
+ * answer has actually said one of those words.
  */
-const TICKET_KEY = new RegExp(TICKET_KEY_PATTERN)
+const TICKET_KEY = new RegExp(TICKET_KEY_PATTERN, 'g')
 
 export function assertNoTicketKeys(output: string): AssertionResult {
-  const hit = TICKET_KEY.exec(answerProse(output))
+  const hits = [...answerProse(output).matchAll(TICKET_KEY)].map(hit => hit[0])
+  // Every key, not the first: a red row that names one of three teaches less
+  // than it could, and the answer is right there.
   return {
-    pass: hit === null,
-    score: hit === null ? 1 : 0,
+    pass: hits.length === 0,
+    score: hits.length === 0 ? 1 : 0,
     reason:
-      hit === null
+      hits.length === 0
         ? 'names no ticket key'
-        : `names a ticket key: ${hit[0].trim()}`,
+        : `names ${hits.length === 1 ? 'a ticket key' : 'ticket keys'}: ${hits.join(', ')}`,
   }
 }
 
@@ -648,8 +653,12 @@ export function assertNoTicketKeys(output: string): AssertionResult {
  *
  * Only the hyphenated tag shape, not the word: an answer may perfectly well
  * say that screenshots were added to a README.
+ *
+ * The leading run is bounded rather than `\S*`, which was quadratic on one
+ * long unbroken token (17 seconds on 200,000 characters) and bought nothing
+ * but a longer string in the reason. A tag is not 80 characters long.
  */
-const SCREENSHOT_TAG = /\S*-screenshots\b/i
+const SCREENSHOT_TAG = /[\w.+-]{0,80}-screenshots\b/i
 
 export function assertNoScreenshotRelease(output: string): AssertionResult {
   const hit = SCREENSHOT_TAG.exec(answerProse(output))
