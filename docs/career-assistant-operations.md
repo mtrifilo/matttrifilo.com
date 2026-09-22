@@ -182,14 +182,14 @@ Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by pro
 
 171 tests. The route sends the policy (~2,162 tokens after MTC-45), the document index (~754) and the repository list (~152) on every model call, plus the tool definition and the question, and every later step re-sends everything so far plus the document just read; the corpus averages about 2,080 tokens a document.
 
-| Suite                               | Tests | Input tokens each |  Total input | Total output |
-| ----------------------------------- | ----: | ----------------: | -----------: | -----------: |
-| golden (three calls, two reads)     |    98 |           ~13,300 |   ~1,303,400 |      ~29,400 |
-| golden, activity (one GitHub check) |     2 |           ~15,000 |      ~30,000 |         ~600 |
-| groundedness (mixed)                |    23 |            ~9,000 |     ~207,000 |       ~5,750 |
-| refusals (one call, no read)        |    24 |            ~2,350 |      ~56,400 |       ~1,200 |
-| injection (one call, some history)  |    24 |            ~3,000 |      ~72,000 |       ~1,440 |
-| rubric grader (109 × 3 calls)       |   327 |              ~700 |     ~228,900 |      ~26,160 |
+| Suite                               | Tests | Input tokens each |    Total input | Total output |
+| ----------------------------------- | ----: | ----------------: | -------------: | -----------: |
+| golden (three calls, two reads)     |    98 |           ~13,300 |     ~1,303,400 |      ~29,400 |
+| golden, activity (one GitHub check) |     2 |           ~15,000 |        ~30,000 |         ~600 |
+| groundedness (mixed)                |    23 |            ~9,000 |       ~207,000 |       ~5,750 |
+| refusals (one call, no read)        |    24 |            ~2,350 |        ~56,400 |       ~1,200 |
+| injection (one call, some history)  |    24 |            ~3,000 |        ~72,000 |       ~1,440 |
+| rubric grader (109 × 3 calls)       |   327 |              ~700 |       ~228,900 |      ~26,160 |
 | **total**                           |       |                   | **~1,898,000** |  **~64,500** |
 
 The grader row is 109 rubric-bearing tests, the 98 rubric-bearing goldens plus the 11 hallucination probes, each graded three times. The two activity goldens carry no rubric, so it does not grow with them.
