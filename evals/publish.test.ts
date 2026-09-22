@@ -168,6 +168,17 @@ describe('the script itself', () => {
     expect(result.stderr.toString()).toContain('does not parse as JSON')
   })
 
+  test('says so when the record it writes names no promptfoo version', () => {
+    // The conventions ask every published summary to name one. It still
+    // publishes, but nobody should find the gap out from the page.
+    const dir = workspace()
+    const older = summary()
+    delete older.promptfooVersion
+    const result = publish(dir, writeSummary(dir, older))
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr.toString()).toContain('no promptfoo version')
+  })
+
   test('writes the record, then refuses to replace it', () => {
     // The safety property the runbook advertises: a record that exists is
     // never rewritten, whatever is published at it.

@@ -27,12 +27,12 @@ export interface EvalRun extends EvalSummary {
   file: string
 }
 
-/** Where `bun run evals:publish` writes and where the page reads. */
-export const EVAL_RESULTS_DIR = path.join('evals', 'results')
-
-/** That directory, resolved once, so every caller reads the same place. */
+/**
+ * Where `bun run evals:publish` writes and where the page reads, resolved
+ * here so every caller reads and writes the same place.
+ */
 export function evalResultsDir(): string {
-  return path.join(process.cwd(), EVAL_RESULTS_DIR)
+  return path.join(process.cwd(), 'evals', 'results')
 }
 
 /** What a rendered label may be: short, and free of control or format characters. */
@@ -114,12 +114,7 @@ const FIELD_GUARDS: Record<keyof EvalSummary, (value: unknown) => boolean> = {
   ranAt: isTimestamp,
   model: isLabel,
   promptfooVersion: value => value === undefined || isLabel(value),
-  suites: value =>
-    Array.isArray(value) &&
-    value.every(isSuiteSummary) &&
-    // One row per suite. Two rows under one name are two React keys and two
-    // readings of the same number.
-    new Set(value.map(suite => suite.name)).size === value.length,
+  suites: value => Array.isArray(value) && value.every(isSuiteSummary),
   totals: isTotals,
   retried: isCount,
 }
@@ -147,6 +142,10 @@ export function evalSummaryProblem(value: unknown): string | null {
       return `its \`${field}\` is missing or not something this page can publish`
   const suites = record.suites as SuiteSummary[]
   const totals = record.totals as EvalSummary['totals']
+  // One row per suite. Two rows under one name are two React keys and two
+  // readings of the same number.
+  if (new Set(suites.map(suite => suite.name)).size !== suites.length)
+    return 'it names a suite more than once'
   return sum(suites, suite => suite.passed) === totals.passed &&
     sum(suites, suite => suite.total) === totals.total
     ? null

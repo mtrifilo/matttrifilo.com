@@ -3,8 +3,9 @@ import fs from 'fs'
 import path from 'path'
 import sitemap from '@/app/sitemap'
 import { getBlogSlugs } from './blog'
-import { siteRoutes, visibleSiteRoutes } from './site-routes'
+import { siteRoutes, sitemapRoutes, visibleSiteRoutes } from './site-routes'
 import { isChatDisabled } from './chat/kill-switch'
+import { hasPublishedEvalRun } from './evals/results'
 
 const BASE = 'https://matttrifilo.com'
 const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
@@ -48,12 +49,17 @@ describe('siteRoutes', () => {
 })
 
 describe('sitemap', () => {
-  test('includes every static route', () => {
+  test('includes every static route worth offering', () => {
     const urls = new Set(sitemap().map(entry => entry.url))
-    // The environment decides whether the assistant's pages exist, so the
-    // expectation reads the same switch the sitemap does (a `vercel env
-    // pull` puts production's CHAT_DISABLED=1 into .env.local).
-    const expected = visibleSiteRoutes({ assistantDisabled: isChatDisabled() })
+    // The environment decides whether the assistant's pages exist, and the
+    // published records decide whether the eval results page has anything
+    // on it, so the expectation reads the same two things the sitemap does
+    // (a `vercel env pull` puts production's CHAT_DISABLED=1 into
+    // .env.local).
+    const expected = sitemapRoutes({
+      assistantDisabled: isChatDisabled(),
+      evalResultsPublished: hasPublishedEvalRun(),
+    })
     for (const route of expected) expect(urls.has(toUrl(route.href))).toBe(true)
     for (const route of siteRoutes)
       if (!expected.includes(route))
@@ -91,6 +97,23 @@ describe('visibleSiteRoutes', () => {
 
   test('offers every route when the assistant is serving', () => {
     expect(visibleSiteRoutes({ assistantDisabled: false })).toBe(siteRoutes)
+  })
+
+  test('keeps the eval results page out of the sitemap until a run is published', () => {
+    // The page is served in both states. Offering a search engine a page
+    // whose whole body says there is nothing on it is the thing the line
+    // under the chat pane already refuses to do.
+    const withRun = sitemapRoutes({
+      assistantDisabled: false,
+      evalResultsPublished: true,
+    })
+    const without = sitemapRoutes({
+      assistantDisabled: false,
+      evalResultsPublished: false,
+    })
+    expect(withRun.some(route => route.href === '/ask/evals')).toBe(true)
+    expect(without.some(route => route.href === '/ask/evals')).toBe(false)
+    expect(without.length).toBe(withRun.length - 1)
   })
 
   test('the assistant routes are /ask and its eval results', () => {

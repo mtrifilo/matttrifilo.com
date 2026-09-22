@@ -6,6 +6,7 @@ import type { EvalSummary } from '@/evals/summary'
 import {
   evalHistory,
   evalResultsDir,
+  evalSummaryProblem,
   hasPublishedEvalRun,
   isCommitSha,
   isEvalSummary,
@@ -174,6 +175,52 @@ describe('isEvalSummary', () => {
       )
     ).toBe(false)
     expect(isEvalSummary(run({ promptfooVersion: '0.123.0‮' }))).toBe(false)
+  })
+
+  test('rejects a record that names a suite twice', () => {
+    // Two rows under one name are two React keys and two readings of the
+    // same number.
+    expect(
+      isEvalSummary(
+        run({
+          suites: [
+            { name: 'golden', passed: 1, total: 2 },
+            { name: 'golden', passed: 1, total: 2 },
+          ],
+          totals: { passed: 2, total: 4 },
+        })
+      )
+    ).toBe(false)
+  })
+
+  test('rejects a label that is only whitespace', () => {
+    // It passes every character test and renders as an empty cell.
+    expect(isEvalSummary(run({ model: '   ' }))).toBe(false)
+    expect(
+      isEvalSummary(
+        run({
+          suites: [{ name: ' ', passed: 1, total: 1 }],
+          totals: { passed: 1, total: 1 },
+        })
+      )
+    ).toBe(false)
+  })
+
+  test('says which field it refused, so a run is not lost to a guess', () => {
+    expect(evalSummaryProblem(run())).toBe(null)
+    expect(evalSummaryProblem(run({ model: 'a'.repeat(65) }))).toContain(
+      '`model`'
+    )
+    expect(evalSummaryProblem(run({ ranAt: 'yesterday' }))).toContain('`ranAt`')
+    expect(
+      evalSummaryProblem(
+        run({
+          suites: [{ name: 'golden', passed: 1, total: 1 }],
+          totals: { passed: 9, total: 9 },
+        })
+      )
+    ).toContain('do not add up')
+    expect(evalSummaryProblem('not a record')).toContain('not an object')
   })
 
   test('rejects a ranAt the history cannot be sorted by', () => {

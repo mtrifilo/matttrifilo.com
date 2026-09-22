@@ -14,6 +14,11 @@ export interface SiteRoute {
   assistant?: true
   /** Keep the page in the sitemap but out of the header nav. */
   hideFromNav?: boolean
+  /**
+   * The page is served whatever happens, but it is only worth offering to a
+   * search engine once there is a published eval run on it.
+   */
+  needsPublishedEvalRun?: true
 }
 
 /**
@@ -48,6 +53,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     priority: 0.4,
     assistant: true,
     hideFromNav: true,
+    needsPublishedEvalRun: true,
   },
   {
     href: '/open-source',
@@ -86,4 +92,19 @@ export function visibleSiteRoutes(options: {
   return options.assistantDisabled
     ? siteRoutes.filter(route => !route.assistant)
     : siteRoutes
+}
+
+/**
+ * The routes worth submitting to a search engine. Narrower than the served
+ * site: the eval results page is real in both states, but until a run is
+ * published its whole body is a sentence saying there is none, and the line
+ * under the chat pane withholds its link for the same reason.
+ */
+export function sitemapRoutes(options: {
+  assistantDisabled: boolean
+  evalResultsPublished: boolean
+}): readonly SiteRoute[] {
+  return visibleSiteRoutes(options).filter(
+    route => options.evalResultsPublished || !route.needsPublishedEvalRun
+  )
 }

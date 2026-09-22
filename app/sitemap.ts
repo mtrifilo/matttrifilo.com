@@ -1,13 +1,15 @@
 import type { MetadataRoute } from 'next'
 import { getBlogSlugs } from '@/lib/blog'
-import { visibleSiteRoutes } from '@/lib/site-routes'
+import { sitemapRoutes } from '@/lib/site-routes'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
+import { hasPublishedEvalRun } from '@/lib/evals/results'
 
 const baseUrl = 'https://matttrifilo.com'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const staticPages: MetadataRoute.Sitemap = visibleSiteRoutes({
+  const staticPages: MetadataRoute.Sitemap = sitemapRoutes({
     assistantDisabled: isChatDisabled(),
+    evalResultsPublished: hasPublishedEvalRun(),
   }).map(route => ({
     url: route.href === '/' ? baseUrl : `${baseUrl}${route.href}`,
     lastModified: new Date(),
