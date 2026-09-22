@@ -47,6 +47,12 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   empty if need be, and disable the trigger instead.
  * - Animation and transition alike are paired with their `motion-reduce`
  *   counterparts, so nothing moves for a visitor who asked for less.
+ * - `ChainOfThoughtStep` is a plain component, not a `memo`. Its caller
+ *   re-reads the progress part from the message on every render, so a read
+ *   row's `description` is a new element each time and a shallow comparison
+ *   never matches it. The rows it could match (a GitHub check, the writing
+ *   row) are a line of text each, so a memo would cost a prop walk per row
+ *   and save nothing worth keeping.
  *
  * `@radix-ui/react-use-controllable-state` is a direct dependency pinned to
  * the exact version `radix-ui` itself depends on, so the tree holds one copy
@@ -163,62 +169,60 @@ export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
   timer?: ReactNode;
 };
 
-export const ChainOfThoughtStep = memo(
-  ({
-    className,
-    icon: Icon = DotIcon,
-    label,
-    description,
-    status = "complete",
-    timer,
-    children,
-    ...props
-  }: ChainOfThoughtStepProps) => {
-    const statusStyles = {
-      complete: "text-muted-foreground",
-      active: "text-foreground",
-      pending: "text-muted-foreground/50",
-      stopped: "text-muted-foreground",
-    };
-    const iconStyles = {
-      complete: "",
-      active: "animate-spin motion-reduce:animate-none",
-      pending: "",
-      stopped: "",
-    };
+export const ChainOfThoughtStep = ({
+  className,
+  icon: Icon = DotIcon,
+  label,
+  description,
+  status = "complete",
+  timer,
+  children,
+  ...props
+}: ChainOfThoughtStepProps) => {
+  const statusStyles = {
+    complete: "text-muted-foreground",
+    active: "text-foreground",
+    pending: "text-muted-foreground/50",
+    stopped: "text-muted-foreground",
+  };
+  const iconStyles = {
+    complete: "",
+    active: "animate-spin motion-reduce:animate-none",
+    pending: "",
+    stopped: "",
+  };
 
-    return (
-      <div
-        className={cn(
-          "flex gap-2 text-sm",
-          statusStyles[status],
-          "fade-in-0 slide-in-from-top-2 animate-in motion-reduce:animate-none",
-          className
-        )}
-        {...props}
-      >
-        <div className="relative mt-0.5">
-          <Icon className={cn("size-4", iconStyles[status])} />
-          <div className="-mx-px absolute top-7 bottom-0 left-1/2 w-px bg-border" />
-        </div>
-        <div className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div>{label}</div>
-            {description && (
-              <div className="text-muted-foreground text-xs">{description}</div>
-            )}
-            {children}
-          </div>
-          {timer !== undefined && (
-            <span aria-hidden="true" className="shrink-0 tabular-nums">
-              {timer}
-            </span>
-          )}
-        </div>
+  return (
+    <div
+      className={cn(
+        "flex gap-2 text-sm",
+        statusStyles[status],
+        "fade-in-0 slide-in-from-top-2 animate-in motion-reduce:animate-none",
+        className
+      )}
+      {...props}
+    >
+      <div className="relative mt-0.5">
+        <Icon className={cn("size-4", iconStyles[status])} />
+        <div className="-mx-px absolute top-7 bottom-0 left-1/2 w-px bg-border" />
       </div>
-    );
-  }
-);
+      <div className="flex min-w-0 flex-1 items-start gap-2 overflow-hidden">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>{label}</div>
+          {description && (
+            <div className="text-muted-foreground text-xs">{description}</div>
+          )}
+          {children}
+        </div>
+        {timer !== undefined && (
+          <span aria-hidden="true" className="shrink-0 tabular-nums">
+            {timer}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export type ChainOfThoughtContentProps = ComponentProps<
   typeof CollapsibleContent
