@@ -55,3 +55,8 @@ next-env.d.ts
 # results are per-commit: the table goes in the pull request body, and a
 # dispatched run also uploads them as the workflow's `evals` artifact.
 evals/out/
+
+# Claude Code state is per machine and never shared, except the skills
+# this repository ships on purpose.
+.claude/*
+!.claude/skills/
