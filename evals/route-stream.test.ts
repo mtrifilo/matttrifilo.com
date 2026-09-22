@@ -118,6 +118,31 @@ describe('answerProse', () => {
   })
 })
 
+describe('the follow-ups block below the citation line', () => {
+  const answered = [
+    'He led it.',
+    'Sources: resume',
+    'Follow-ups:',
+    'What does his team own?',
+  ].join('\n')
+
+  test('does not stop the citation ids being read', () => {
+    // The Sources line is no longer the final line of an answer (MTC-41),
+    // and the groundedness suite is built on reading it.
+    expect(sourcesTrailerIds(answered)).toEqual(['resume'])
+  })
+
+  test('is not part of the prose an assertion judges', () => {
+    expect(answerProse(answered)).toBe('He led it.')
+  })
+
+  test('comes off an answer that cited nothing', () => {
+    expect(
+      answerProse('He led it.\nFollow-ups:\nWhat does his team own?')
+    ).toBe('He led it.')
+  })
+})
+
 describe('withoutQuotations', () => {
   test('removes block quotes and quoted spans', () => {
     const text = [

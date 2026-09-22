@@ -30,6 +30,31 @@ import type { ChatErrorCode } from './validate'
 export const SOURCES_TRAILER_PREFIX = 'Sources: '
 
 /**
+ * Prefix of the second trailer: the line after `Sources:` that introduces the
+ * follow-up questions the policy asks for (MTC-41).
+ *
+ * It sits beside the citation prefix for the same reason that one is here.
+ * The questions themselves never reach the visitor as text: the browser takes
+ * this block back out of the answer and renders the list the server validated
+ * onto the message metadata, so an unvalidated proposal cannot appear even as
+ * prose. It carries no trailing space because nothing follows it on its own
+ * line; the questions are the lines after it.
+ */
+export const FOLLOW_UPS_TRAILER_PREFIX = 'Follow-ups:'
+
+/** How many proposals a visitor is offered, whatever the model wrote. */
+export const FOLLOW_UPS_MAX = 3
+
+/**
+ * Length bounds on one proposal, in characters.
+ *
+ * The floor rejects a fragment that is not a question anyone asked; the
+ * ceiling is what a pill can carry in one line on a row that scrolls.
+ */
+export const FOLLOW_UP_MIN_CHARS = 12
+export const FOLLOW_UP_MAX_CHARS = 140
+
+/**
  * Characters in one question. Roughly a long paragraph.
  *
  * Defined here for the same reason as the trailer prefix: both ends enforce
@@ -41,8 +66,14 @@ export const CHAT_MAX_MESSAGE_CHARS = 1_500
 
 /** One assistant message, reduced to what the transcript renders. */
 export interface AnswerView {
-  /** The answer, with any `Sources:` trailer removed. */
+  /** The answer, with both of the policy's trailers removed. */
   text: string
+  /**
+   * Questions the model proposed for the next turn, already validated
+   * (MTC-41). Empty whenever there is no row to show: a decline, a run that
+   * did not finish, or proposals that were all malformed.
+   */
+  followUps: readonly string[]
   /** Real text that stopped mid-sentence on the output cap. */
   truncated: boolean
   /** The run ended without a clean answer. Implied by `truncated`. */
@@ -63,9 +94,14 @@ export interface AnswerMessage {
 }
 
 export function toAnswerView(message: AnswerMessage): AnswerView {
-  const text = stripSourcesTrailer(joinTextParts(message.parts))
+  const text = stripTrailers(joinTextParts(message.parts))
   return {
     text,
+    // Validated again on the way in. The server is the gate, but these
+    // strings are model output about to be rendered as buttons, and the one
+    // place that decides what a well-formed proposal is should be the one
+    // place that decides what gets drawn.
+    followUps: takeFollowUps(stringsIn(message.metadata?.followUps)),
     // Lenient: a progress part this module cannot read costs the visitor the
     // step list and nothing else. See lib/chat/progress.ts.
     progress: toProgressView(message.parts),
@@ -105,6 +141,121 @@ export function stripSourcesTrailer(text: string): string {
   if (!TRAILER_LINE.test(trimmed.slice(lastBreak + 1))) return text
   return trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd()
 }
+
+/**
+ * Everything from the follow-ups marker to the end of the answer (MTC-41).
+ *
+ * The marker line and the questions under it are a channel to this code, not
+ * to the reader: the row the visitor sees is drawn from the validated list on
+ * the message metadata. So the whole block goes, from the last line that
+ * opens with the literal prefix. The policy says nothing follows those
+ * questions, and taking the block wholesale is what keeps a half-written
+ * proposal off the screen while the rest of it streams in.
+ */
+export function stripFollowUpsTrailer(text: string): string {
+  const marker = lastFollowUpsMarker(text.split('\n'))
+  if (marker < 0) return text
+  return text.split('\n').slice(0, marker).join('\n').trimEnd()
+}
+
+/** Both trailers, in the order they are written. */
+export function stripTrailers(text: string): string {
+  return stripSourcesTrailer(stripFollowUpsTrailer(text))
+}
+
+/**
+ * The follow-up questions the model proposed, or an empty list (MTC-41).
+ *
+ * Everything below the marker is model output that will be drawn as a button
+ * and, when tapped, sent back as the next question, so it is treated the way
+ * any other untrusted text is: read as lines, judged one at a time, and kept
+ * only if it is the shape the policy asked for. Scanning stops at the first
+ * proposal that is not, rather than skipping it, so prose the model added
+ * after its list can never be promoted into a pill.
+ */
+export function parseFollowUps(text: string): string[] {
+  const lines = text.split('\n')
+  const marker = lastFollowUpsMarker(lines)
+  if (marker < 0) return []
+  return takeFollowUps([
+    // The policy puts the questions on the lines after the marker, but a
+    // model that starts the first one on the marker line has still proposed
+    // it, and dropping it would cost the visitor a pill for a formatting slip.
+    lines[marker].replace(FOLLOW_UPS_LINE, ''),
+    ...lines.slice(marker + 1),
+  ])
+}
+
+/**
+ * Whether one line is a proposal a visitor may be offered.
+ *
+ * Every clause is about what a hiring manager's next question looks like, and
+ * every one of them also closes a way for model output to become something
+ * other than a question in the visitor's hands: a link to follow, an address
+ * to write to, markup the renderer might act on, or a line of instructions
+ * dressed as a suggestion.
+ */
+export function isWellFormedFollowUp(question: string): boolean {
+  if (
+    question.length < FOLLOW_UP_MIN_CHARS ||
+    question.length > FOLLOW_UP_MAX_CHARS
+  ) {
+    return false
+  }
+  if (!question.endsWith('?')) return false
+  if (question.includes('@')) return false
+  if (MARKDOWN_CHARACTER.test(question)) return false
+  if (LINK.test(question)) return false
+  if (CONTROL_CHARACTER.test(question)) return false
+  return true
+}
+
+/** Index of the last line that opens the follow-ups block, or -1. */
+function lastFollowUpsMarker(lines: readonly string[]): number {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (FOLLOW_UPS_LINE.test(lines[index])) return index
+  }
+  return -1
+}
+
+/**
+ * The first few well-formed, distinct proposals, in the order they were
+ * written. Blank lines are skipped, because models space their lists out;
+ * anything else that fails the check ends the list.
+ */
+function takeFollowUps(lines: readonly string[]): string[] {
+  const kept: string[] = []
+  const seen = new Set<string>()
+  for (const line of lines) {
+    if (kept.length === FOLLOW_UPS_MAX) break
+    const question = line.replace(LIST_MARKER, '').trim()
+    if (question.length === 0) continue
+    if (!isWellFormedFollowUp(question)) break
+    const key = question.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    kept.push(question)
+  }
+  return kept
+}
+
+/** The strings in a value that arrived as JSON, and nothing else. */
+function stringsIn(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
+const FOLLOW_UPS_LINE = new RegExp(`^\\s*${FOLLOW_UPS_TRAILER_PREFIX}`)
+
+/** A bullet or number a model puts in front of a list item. */
+const LIST_MARKER = /^\s*(?:[-*•]|\d+[.)])\s+/
+
+/** Characters markdown gives a meaning, so a pill cannot smuggle one in. */
+const MARKDOWN_CHARACTER = /[*_`[\]<>|#~\\]/
+
+const LINK = /https?:\/\/|www\.|mailto:/i
+
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
 
 /** Which notice, if any, sits under an answer once its run has ended. */
 export type AnswerNotice = 'truncated' | 'incomplete'

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import {
+  EDGE_FADE_PROPERTY,
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   TICKER_KEYFRAME_FROM,
@@ -77,21 +78,39 @@ describe('the row the component scrolls', () => {
     expect(row).toContain('overflow: hidden')
     expect(row).not.toContain('overflow: clip')
   })
+})
 
-  test('declares the fade width on itself, in pixels, at every width', () => {
-    // starter-ticker.tsx reads --ticker-fade off this element with
+describe('the shared edge fade', () => {
+  const faded = ruleFor('.edge-faded-row {')
+
+  test('declares the fade width on the row, in pixels, at every width', () => {
+    // starter-ticker.tsx reads this property off the row element with
     // getComputedStyle and parses it as pixels. Declared on the track
     // instead it would not inherit upwards, and declared in rem it would
     // parse to a number sixteen times too small; both fail silently, and
     // the focused pill lands under the gradient. Every declaration is
     // checked, not just the first: the breakpoint override is the one that
     // applies on the desktop the frames were drawn at.
-    expect(row).toMatch(/--ticker-fade:/)
-    const declared = [...css.matchAll(/--ticker-fade:\s*([^;]+);/g)].map(
-      match => match[1].trim()
-    )
+    expect(faded).toContain(`${EDGE_FADE_PROPERTY}:`)
+    const declared = [
+      ...css.matchAll(new RegExp(`${EDGE_FADE_PROPERTY}:\\s*([^;]+);`, 'g')),
+    ].map(match => match[1].trim())
     expect(declared.length).toBeGreaterThanOrEqual(2)
     for (const value of declared) expect(value).toMatch(/^\d+(?:\.\d+)?px$/)
+  })
+
+  test('both rows of pills wear the class that declares it', () => {
+    // The fade, the scroll padding and the property the component reads all
+    // live on this one class now (MTC-41). A row that renders without it
+    // loses its gradient and puts a focused pill under the edge, and neither
+    // failure is visible to any other test here.
+    for (const file of ['starter-ticker.tsx', 'assistant-answer.tsx']) {
+      const source = readFileSync(
+        new URL(`../components/assistant/${file}`, import.meta.url),
+        'utf8'
+      )
+      expect(source).toContain('edge-faded-row')
+    }
   })
 })
 

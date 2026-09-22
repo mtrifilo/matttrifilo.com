@@ -55,10 +55,11 @@ describe('app/globals.css through the build optimiser', () => {
     expect(out).toContain('-webkit-mask-image:linear-gradient(')
   })
 
-  test('the starter ticker keeps both mask-image declarations', () => {
-    // Same hazard as the hex canvas, on a row whose edge fades are the whole
-    // reason the loop reads as a window onto more questions (MTC-39).
-    const out = emitted(ruleFor('.starter-ticker {'))
+  test('the faded pill rows keep both mask-image declarations', () => {
+    // Same hazard as the hex canvas, on the rule whose edge fades are the
+    // whole reason a row of pills reads as a window onto more questions
+    // (MTC-39, MTC-41).
+    const out = emitted(ruleFor('.edge-faded-row {'))
     expect(out).toContain('mask-image:linear-gradient(')
     expect(out).toContain('-webkit-mask-image:linear-gradient(')
   })

@@ -44,6 +44,8 @@ export interface AssertionContext {
   test?: { metadata?: Record<string, unknown> }
   /** Shortcut to the provider response's metadata. */
   metadata?: Record<string, unknown>
+  /** The test's own variables, including the question that was asked. */
+  vars?: Record<string, unknown>
 }
 
 /**
@@ -656,6 +658,69 @@ export function assertChipsMatchReads(
         ? `chips name ${sourceIds.join(', ') || 'nothing'}, all of it read`
         : `chips name documents the run never read: ${unread.join(', ')}`,
   }
+}
+
+/**
+ * Every question the assistant offers can be answered by the assistant
+ * (MTC-41).
+ *
+ * The row of pills is a promise: a visitor who taps one expects a briefing,
+ * not the decline sentence. The only way to know is to ask, so this is a
+ * two-turn test. The first turn is the golden's own question and answer; the
+ * second replays both as `history` and asks the first proposal, exactly as
+ * the browser would, through the same provider and therefore the same route.
+ *
+ * Only the first proposal is asked. Three would triple what a golden costs
+ * for a third of the evidence each; one is enough to catch a policy that
+ * invites questions the corpus cannot answer, which is the failure this
+ * exists for. A red row here is a finding about the policy or the corpus.
+ */
+export async function assertFollowUpsAnswerable(
+  output: string,
+  context: AssertionContext
+): Promise<AssertionResult> {
+  const followUps = stringList(context.metadata?.followUps)
+  if (followUps.length === 0) {
+    return fail('the answer proposed no follow-up questions')
+  }
+  const question = context.vars?.question
+  if (typeof question !== 'string' || question.length === 0) {
+    return fail('the test has no question for the follow-up to follow')
+  }
+
+  // Imported here rather than at the top of the file: the provider reaches
+  // Vertex and the knowledge corpus, and `bun test` loads this module for
+  // the pure assertions around it.
+  const { default: ChatRouteProvider } = await import('./provider')
+  const asked = followUps[0]
+  const second = await new ChatRouteProvider().callApi(asked, {
+    vars: {
+      history: [
+        { role: 'user', text: question },
+        // The raw answer, trailers included, because that is what the
+        // browser posts back: it strips them for display only.
+        { role: 'assistant', text: output },
+      ],
+    },
+  })
+
+  if (second.error) return fail(`the follow-up run failed: ${second.error}`)
+  const prose = answerProse(second.output).trim()
+  if (prose === DECLINE_SENTENCE) {
+    return fail(`the assistant declined its own follow-up: ${asked}`)
+  }
+  if (prose.length === 0) {
+    return fail(`the follow-up produced no answer: ${asked}`)
+  }
+  return {
+    pass: true,
+    score: 1,
+    reason: `proposed ${followUps.length}; "${asked}" was answered`,
+  }
+}
+
+function fail(reason: string): AssertionResult {
+  return { pass: false, score: 0, reason }
 }
 
 /** An answer that used a document ends with the citation trailer. */

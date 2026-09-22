@@ -47,6 +47,7 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
  */
 const EMPTY_VIEW: AnswerView = {
   text: '',
+  followUps: [],
   truncated: false,
   incomplete: false,
 }
@@ -259,6 +260,15 @@ export function AssistantChat() {
                       // Earlier ones show the duration the server sent with
                       // them, which is on the message itself.
                       elapsedMs={isLast ? elapsedMs : 0}
+                      // The row belongs to the answer the conversation has
+                      // arrived at. An earlier turn's proposals were answered
+                      // or passed over, and a run the visitor stopped is not
+                      // a place to be offered more.
+                      onFollowUp={
+                        isLast && status === 'ready' && !stopped
+                          ? ask
+                          : undefined
+                      }
                       pending={isLast && busy}
                       view={toAnswerView(message)}
                     />

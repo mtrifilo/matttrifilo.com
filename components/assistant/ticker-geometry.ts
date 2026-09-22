@@ -39,6 +39,16 @@ export const TICKER_COPIES = 2
 /** The keyframe this arithmetic describes. Must match app/globals.css. */
 export const TICKER_ANIMATION_NAME = 'starter-ticker'
 
+/**
+ * The custom property carrying the width of a row's edge gradient, in pixels.
+ *
+ * Declared by `.edge-faded-row` in app/globals.css and read back off the
+ * element with `getComputedStyle`, so the name is a contract between two
+ * languages and lives here as one string. lib/ticker-css.test.ts is what
+ * keeps the stylesheet and this constant saying the same thing.
+ */
+export const EDGE_FADE_PROPERTY = '--edge-fade'
+
 /** The keyframe's starting transform, which is why every conversion inverts. */
 export const TICKER_KEYFRAME_FROM = `translateX(-${100 / TICKER_COPIES}%)`
 

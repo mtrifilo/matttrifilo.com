@@ -203,45 +203,85 @@
   }
 }
 
-.starter-ticker {
+/*
+ * A row of pills that runs off both edges of its box: the starter ticker and
+ * the follow-up row after an answer (MTC-41) are the same window onto more
+ * questions, so the gradient and the scroll padding are declared once, here,
+ * and each row adds only how it moves.
+ */
+.edge-faded-row {
   /* Read back by starter-ticker.tsx to place a focused pill clear of the
      gradient, so it belongs on this element and has to stay in pixels. */
-  --ticker-fade: 56px;
-  /*
-   * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
-   * a box that can still be scrolled programmatically, and scrollLeft is how
-   * a focused pill is brought into view once the track stops moving.
-   */
-  overflow: hidden;
+  --edge-fade: 56px;
   /*
    * Keep a focused pill out of the gradient. This is what the browser's own
-   * focus scrolling obeys, which is the only thing that moves the row under
-   * prefers-reduced-motion.
+   * focus scrolling obeys, which is the only thing that moves the ticker
+   * under prefers-reduced-motion, and the only thing that moves the
+   * follow-up row at all.
    *
    * It is scroll-padding and NOT padding. Padding here would give the row a
-   * blank strip at each end, and the track has nothing to put in the left
-   * one for the last few seconds of every loop: the strip would fade in as
-   * an empty sliver and then snap full at the wrap. The cost of leaving it
-   * out is that the pool's first question, which starts at scroll zero and
-   * has nothing to its left, cannot be brought fully clear of the left
-   * gradient by any scroll. Every other question can.
+   * blank strip at each end, and the ticker's track has nothing to put in
+   * the left one for the last few seconds of every loop: the strip would
+   * fade in as an empty sliver and then snap full at the wrap. The cost of
+   * leaving it out is that a row's first pill, which starts at scroll zero
+   * and has nothing to its left, cannot be brought fully clear of the left
+   * gradient by any scroll. Every other pill can.
    */
-  scroll-padding-inline: var(--ticker-fade);
+  scroll-padding-inline: var(--edge-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
      blur-on-scroll note in this file explains why a hand-written prefix is
      a hazard, and lib/globals-css.test.ts is the guard. */
   mask-image: linear-gradient(
     to right,
     transparent 0,
-    black var(--ticker-fade),
-    black calc(100% - var(--ticker-fade)),
+    black var(--edge-fade),
+    black calc(100% - var(--edge-fade)),
     transparent 100%
   );
 }
 
 @media (min-width: 48rem) {
-  .starter-ticker {
-    --ticker-fade: 72px;
+  .edge-faded-row {
+    --edge-fade: 72px;
+  }
+}
+
+.starter-ticker {
+  /*
+   * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
+   * a box that can still be scrolled programmatically, and scrollLeft is how
+   * a focused pill is brought into view once the track stops moving.
+   */
+  overflow: hidden;
+}
+
+/*
+ * The follow-up row (MTC-41).
+ *
+ * Nothing loops here: the pills are this answer's proposals, so the row is an
+ * ordinary scroll container the visitor drags, at every width.
+ *
+ * It grows into place rather than arriving at full height, so the answer
+ * above it is not jolted at the moment the run ends. @starting-style is what
+ * gives a freshly mounted element a height to grow from; a browser without it
+ * simply shows the row at once, which is also what a visitor who asked for no
+ * motion gets. The cap is far above what one line of pills needs, so it
+ * bounds the transition rather than the content.
+ */
+.follow-up-row {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: 12rem;
+  opacity: 1;
+  transition:
+    max-height 180ms ease-out,
+    opacity 180ms ease-out;
+}
+
+@starting-style {
+  .follow-up-row {
+    max-height: 0;
+    opacity: 0;
   }
 }
 
@@ -287,6 +327,10 @@
   /* Nothing loops, so the second copy would just be the pool said twice. */
   .starter-ticker-copy[aria-hidden='true'] {
     display: none;
+  }
+  /* The row is still offered; it just stops growing into place. */
+  .follow-up-row {
+    transition: none;
   }
 }
 

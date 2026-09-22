@@ -228,6 +228,8 @@
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - work mix
@@ -1381,6 +1383,8 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - forum
@@ -1424,6 +1428,8 @@
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - '28'
@@ -1650,6 +1656,8 @@
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - deliverability
@@ -1694,6 +1702,8 @@
       value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - CVE
@@ -1777,6 +1787,8 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - weekly rotation
@@ -1866,6 +1878,8 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
         - status page

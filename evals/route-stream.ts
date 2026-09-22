@@ -1,4 +1,7 @@
-import { SOURCES_TRAILER_PREFIX } from '@/lib/chat/answer'
+import {
+  SOURCES_TRAILER_PREFIX,
+  stripFollowUpsTrailer,
+} from '@/lib/chat/answer'
 
 /**
  * Reading the chat route's response the way the browser reads it (MTC-32).
@@ -20,6 +23,8 @@ export interface StreamedMetadata {
   sources?: { id: string; title: string; url: string }[]
   truncated?: true
   incomplete?: true
+  /** The validated follow-up questions, when the run proposed any (MTC-41). */
+  followUps?: string[]
 }
 
 export interface StreamedAnswer {
@@ -87,7 +92,9 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
  * matches how the browser finds the line in lib/chat/answer.ts.
  */
 export function sourcesTrailerIds(text: string): string[] {
-  const trimmed = text.trimEnd()
+  // The follow-ups block comes after the citation line (MTC-41), so the
+  // "final line" this reads is only final once that block is off the end.
+  const trimmed = stripFollowUpsTrailer(text).trimEnd()
   const lastLine = trimmed.slice(trimmed.lastIndexOf('\n') + 1).trimStart()
   if (!lastLine.startsWith(SOURCES_TRAILER_PREFIX.trimEnd())) return []
   return lastLine
@@ -98,17 +105,24 @@ export function sourcesTrailerIds(text: string): string[] {
 }
 
 /**
- * The answer without its trailer, for assertions that read the prose.
+ * The answer without either trailer, for assertions that read the prose.
  *
- * Deliberately a separate function from the browser's `stripSourcesTrailer`:
- * that one is client copy handling and may one day keep a partial trailer on
- * screen, while this one only has to hand a suite the sentences.
+ * The citation half is deliberately a separate function from the browser's
+ * `stripSourcesTrailer`: that one is client copy handling and may one day
+ * keep a partial trailer on screen, while this one only has to hand a suite
+ * the sentences. The follow-ups half is shared, because a suite reading past
+ * that marker would judge the model's proposed questions as part of the
+ * answer: a probe's forbidden phrase inside a suggestion would read as an
+ * invented fact.
  */
 export function answerProse(text: string): string {
-  const trimmed = text.trimEnd()
+  const trimmed = stripFollowUpsTrailer(text).trimEnd()
   const lastBreak = trimmed.lastIndexOf('\n')
   const lastLine = trimmed.slice(lastBreak + 1).trimStart()
-  if (!lastLine.startsWith(SOURCES_TRAILER_PREFIX.trimEnd())) return text
+  // `trimmed`, not `text`: an answer with follow-ups and no citation line
+  // has already had the block taken off it, and handing the raw text back
+  // would put the questions into the prose every assertion reads.
+  if (!lastLine.startsWith(SOURCES_TRAILER_PREFIX.trimEnd())) return trimmed
   return trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd()
 }
 

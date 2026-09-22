@@ -32,7 +32,9 @@ import {
   type ChatProgressPhase,
   type ChatProgressStep,
 } from './progress'
+import { parseFollowUps } from './answer'
 import {
+  DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
   RECENT_ACTIVITY_TOOL_NAME,
   buildMessages,
@@ -172,10 +174,18 @@ export { CHAT_MAX_STEPS }
  *
  * Both flags are present-or-absent rather than booleans, so `metadata.x` is
  * never a falsy `false` the UI has to distinguish from "not set".
+ *
+ * - `followUps`: the questions the model proposed for the next turn (MTC-41),
+ *   already validated. This is the only channel they travel on: the trailer
+ *   the model writes them in is stripped out of the answer text, so the
+ *   browser cannot render a proposal that did not pass the check here.
+ *   Absent on a decline, on a run that did not finish cleanly, and whenever
+ *   nothing well-formed survived.
  */
 export interface ChatMessageMetadata {
   truncated?: true
   incomplete?: true
+  followUps?: string[]
 }
 
 /** The tools the model is offered. */
@@ -433,6 +443,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             // spent every step reading. Say so.
             if (!answer.answered() || part.finishReason !== 'stop') {
               metadata.incomplete = true
+            } else {
+              // Only a finished answer offers more. A cut-off one may have
+              // lost half its trailer, and a run that never answered has
+              // nothing for a follow-up to follow.
+              const followUps = followUpsFrom(answer.end())
+              if (followUps.length > 0) metadata.followUps = followUps
             }
             return Object.keys(metadata).length > 0 ? metadata : undefined
           },
@@ -459,28 +475,65 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 }
 
 /**
- * Whether the run produced an answer for the visitor to read.
+ * Whether the run produced an answer for the visitor to read, and how that
+ * answer ended.
  *
- * No text is kept, only the flag. The flag resets on every `start-step`, so
- * only the final step is judged: a model may narrate before a tool call
- * ("Let me check his résumé."), and that preamble is not the answer.
+ * Both reset on every `start-step`, so only the final step is judged: a model
+ * may narrate before a tool call ("Let me check his résumé."), and that
+ * preamble is neither the answer nor a place to look for its trailers.
+ *
+ * Only the end of the text is kept. The trailers the policy asks for are the
+ * last thing written, so a fixed-size tail is all the metadata callback needs,
+ * and a long briefing costs the same handful of kilobytes as a short one.
+ * Nothing here is logged: a visitor's answer stays in memory for the length of
+ * the request and goes no further.
  */
 class AnswerText {
   private sawText = false
+  private tail = ''
 
   observe(part: { type: string; text?: string }): void {
     if (part.type === 'start-step') {
       this.sawText = false
+      this.tail = ''
       return
     }
     if (part.type !== 'text-delta' || typeof part.text !== 'string') return
     this.sawText ||= part.text.trim().length > 0
+    this.tail = (this.tail + part.text).slice(-ANSWER_TAIL_CHARS)
   }
 
   /** Whether the final step produced any text for the visitor to read. */
   answered(): boolean {
     return this.sawText
   }
+
+  /** The end of the final step's text, where the trailers are. */
+  end(): string {
+    return this.tail
+  }
+}
+
+/**
+ * How much of the answer's end is held for trailer parsing.
+ *
+ * A citation line and three questions at their cap come to well under a
+ * thousand characters, and the decline sentence this also has to recognise is
+ * shorter still, so the margin is generous rather than tuned.
+ */
+const ANSWER_TAIL_CHARS = 2_000
+
+/**
+ * The proposals on a finished answer, or none.
+ *
+ * A decline is the one sentence alone, by policy, so a decline that carries a
+ * trailer is a model ignoring the rule rather than an answer offering more:
+ * the questions are dropped instead of being shown under a sentence that just
+ * said there was nothing to say.
+ */
+function followUpsFrom(tail: string): string[] {
+  if (tail.includes(DECLINE_SENTENCE)) return []
+  return parseFollowUps(tail)
 }
 
 // Only these chunk types reach the browser: the answer text, the stream
