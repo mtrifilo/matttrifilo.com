@@ -12,7 +12,11 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
  *
  * Bun offers no way to scope a test preload to a subset of files, so every
  * test in the suite runs with these globals present. The two rules below are
- * what keeps that from costing the rest of the suite.
+ * what keeps that from costing the rest of the suite. What they do not undo
+ * is the globals Happy DOM adds: `window`, `document` and `location` stay, so
+ * a library that sniffs for a browser takes its browser branch under test
+ * (the AI SDK's user agent and google-auth-library's crypto both do). No
+ * suite depends on either today; one that does has to say so.
  *
  * **Bun's own globals stay Bun's.** Happy DOM overwrites about thirty
  * globals Bun already implements, and some of those are what the route
@@ -36,9 +40,18 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
  *
  * The registrator makes `globalThis` the window itself, so the first group
  * are the window's own methods and would stop working on `window` if they
- * were handed back to Bun. The second group are the event classes Happy
- * DOM's own `dispatchEvent` type-checks its argument against, which is how
- * React Testing Library's events reach a component.
+ * were handed back to Bun. The second group are the event classes, plus the
+ * `MessagePort` a `MessageEvent` carries: Happy DOM's `dispatchEvent` rejects
+ * anything that is not an instance of its own `Event`, so an event built
+ * from a Bun class never reaches a listener. That is the path React Testing
+ * Library's `fireEvent` takes to a component.
+ *
+ * The restore hands every other name back to Bun, so a Happy DOM API that
+ * expects its own type gets Bun's instead. Two known cases: `new
+ * FormData(form)` returns an empty Bun `FormData`, and Happy DOM's
+ * `FileReader` rejects a Bun `Blob`. A component test that needs one of
+ * these adds the name here, checks the full suite still passes with that
+ * global now Happy DOM's, and pins the case in test/dom-preload.test.tsx.
  */
 const BROWSER_OWNS: ReadonlySet<string> = new Set([
   'addEventListener',
@@ -55,22 +68,33 @@ const BROWSER_OWNS: ReadonlySet<string> = new Set([
   'MessagePort',
 ])
 
-const bunGlobals = new Map<string, PropertyDescriptor>()
-for (const name of Object.getOwnPropertyNames(globalThis)) {
-  if (BROWSER_OWNS.has(name)) continue
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)
-  // A property that cannot be redefined cannot have been replaced either,
-  // so there is nothing to put back.
-  if (descriptor?.configurable) bunGlobals.set(name, descriptor)
+/**
+ * Bun's own globals as they were before Happy DOM registered, which the
+ * preload's test compares against by identity.
+ */
+export const BUN_GLOBALS: ReadonlyMap<string, PropertyDescriptor> =
+  snapshotBunGlobals()
+
+function snapshotBunGlobals(): Map<string, PropertyDescriptor> {
+  const bunGlobals = new Map<string, PropertyDescriptor>()
+  for (const name of Object.getOwnPropertyNames(globalThis)) {
+    if (BROWSER_OWNS.has(name)) continue
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)
+    // A property that cannot be redefined cannot have been replaced either,
+    // so there is nothing to put back.
+    if (descriptor?.configurable) bunGlobals.set(name, descriptor)
+  }
+  return bunGlobals
 }
 
 GlobalRegistrator.register({
-  // A real origin. Component code reads `location`, and `:focus-visible`
-  // resolves against a document that has to believe it is on a page.
+  // An http origin rather than Happy DOM's default `about:blank`, so a
+  // relative URL resolved against `document.baseURI` has a base, as it does
+  // on the site.
   url: 'https://matttrifilo.com/',
 })
 
-for (const [name, descriptor] of bunGlobals) {
+for (const [name, descriptor] of BUN_GLOBALS) {
   const current = Object.getOwnPropertyDescriptor(globalThis, name)
   if (current && !isReplaced(current, descriptor)) continue
   Object.defineProperty(globalThis, name, descriptor)

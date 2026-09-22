@@ -27,13 +27,16 @@ const STEPS: ChatProgressStep[] = [
 ]
 
 /** A run that read three documents and answered, in 14 seconds. */
-function finishedView(steps: readonly ChatProgressStep[] = STEPS): AnswerView {
+function finishedView(
+  steps: readonly ChatProgressStep[] = STEPS,
+  ms = 14_200
+): AnswerView {
   return {
     text: 'An answer drawn from those documents.',
     followUps: [],
     truncated: false,
     incomplete: false,
-    progress: { phase: 'done', steps, ms: 14_200 },
+    progress: { phase: 'done', steps, ms },
   }
 }
 
@@ -56,13 +59,19 @@ describe('a finished run', () => {
   })
 
   test('counts the documents and the seconds the run actually took', () => {
-    // 14_200 ms is 14s, and one document is singular. Both are decided in
-    // lib/chat/progress.ts and worded in copy.ts; this is the check that the
-    // panel renders their answer rather than a count of its own rows.
-    renderFinished(finishedView(STEPS.slice(0, 1)))
+    // Three steps, three rows, two documents: a GitHub check is a step but
+    // not a source, so a panel that counted its own rows or steps would say
+    // three. 14_600 ms rounds to 15s, where truncating would say 14. Both
+    // are decided in lib/chat/progress.ts and worded in copy.ts; this is the
+    // check that the panel renders their answer.
+    const steps: ChatProgressStep[] = [
+      ...STEPS.slice(0, 2),
+      { id: 'decant', title: 'decant', kind: 'activity' },
+    ]
+    renderFinished(finishedView(steps, 14_600))
 
     expect(
-      screen.getByRole('button', { name: progressSummary(1, 0, 14) })
+      screen.getByRole('button', { name: progressSummary(2, 1, 15) })
     ).toBeDefined()
   })
 

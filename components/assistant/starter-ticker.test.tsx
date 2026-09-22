@@ -21,26 +21,26 @@ import { TICKER_ANIMATION_NAME, TICKER_COPIES } from './ticker-geometry'
  * what the browser would then draw.
  */
 
-const REAL_MATCH_MEDIA = window.matchMedia
+/** The part of Happy DOM's window that describes the visitor's device. */
+const device = (
+  window as unknown as {
+    happyDOM: { settings: { device: { prefersReducedMotion: string } } }
+  }
+).happyDOM.settings.device
 
 /**
- * Answer the reduced-motion query the way a visitor's setting would.
+ * Set the visitor's motion preference.
  *
- * Happy DOM's own `matchMedia` reports every query as unmatched, so the one
- * media feature the component branches on has to be stated.
+ * Happy DOM's `matchMedia` evaluates queries against its device settings,
+ * whose default is no preference, so a visitor who asked for less motion is
+ * stated here rather than by replacing `matchMedia`.
  */
 function setReducedMotion(reduce: boolean): void {
-  window.matchMedia = ((query: string) =>
-    ({
-      matches: reduce && query.includes('prefers-reduced-motion'),
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }) as unknown as MediaQueryList) as typeof window.matchMedia
+  device.prefersReducedMotion = reduce ? 'reduce' : 'no-preference'
 }
 
 afterEach(() => {
-  window.matchMedia = REAL_MATCH_MEDIA
+  setReducedMotion(false)
 })
 
 /** The row the stylesheet's hover, focus and touch rules are anchored on. */
@@ -142,7 +142,8 @@ describe('holding the row still', () => {
     const { container } = render(<StarterTicker onPick={() => {}} />)
     const { viewport, track } = rowOf(container)
 
-    expect(viewport.classList.contains('edge-faded-row')).toBe(true)
+    expect(viewport.classList.contains('starter-ticker')).toBe(true)
+    expect(track.classList.contains('starter-ticker-track')).toBe(true)
     expect(viewport.contains(track)).toBe(true)
 
     screen.getAllByRole('button')[0].focus()

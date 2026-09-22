@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { render } from '@testing-library/react'
+import { useState } from 'react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { BUN_GLOBALS } from './dom-preload'
 
 /**
  * The preload's own contract (MTC-59).
@@ -38,25 +39,72 @@ describe('the DOM the preload registers', () => {
     expect(() => stream.pipeThrough(new TransformStream())).not.toThrow()
   })
 
-  test('leaves Bun owning fetch and its message types', () => {
-    // The route handlers are called with a `Request` in tests and answer with
-    // a `Response`; one suite spies on `globalThis.fetch` directly. All three
-    // have to be the implementations the deployed route runs on.
-    const request = new Request('https://matttrifilo.com/api/chat', {
-      method: 'POST',
-      body: '{}',
-      headers: { 'content-type': 'application/json' },
+  test('leaves every Bun global it replaced as Bun had it', () => {
+    // By identity, not behaviour: Happy DOM's `Request`, `Response`, `URL`
+    // and `fetch` behave like Bun's in a smoke test, and differ where the
+    // route handlers and the AI SDK depend on them.
+    expect(BUN_GLOBALS.has('document')).toBe(false)
+    for (const name of ['fetch', 'Request', 'Response', 'Headers', 'URL']) {
+      expect(BUN_GLOBALS.has(name)).toBe(true)
+    }
+    const handedToHappyDom = [...BUN_GLOBALS].flatMap(([name, bun]) => {
+      const current = Object.getOwnPropertyDescriptor(globalThis, name)
+      const same =
+        current !== undefined &&
+        ('value' in bun
+          ? current.value === bun.value
+          : current.get === bun.get && current.set === bun.set)
+      return same ? [] : [name]
     })
-    expect(request.headers.get('content-type')).toBe('application/json')
-    expect(new Response('ok').status).toBe(200)
-    expect(typeof fetch).toBe('function')
+    expect(handedToHappyDom).toEqual([])
+  })
+})
+
+describe('the globals the browser keeps', () => {
+  // Happy DOM's dispatchEvent rejects an event that is not its own `Event`,
+  // so each of these fails if its class is handed back to Bun.
+  test('an event fired at a controlled input reaches React', () => {
+    function Field({ onValue }: { onValue: (value: string) => void }) {
+      const [value, setValue] = useState('')
+      return (
+        <input
+          aria-label="field"
+          onChange={event => {
+            setValue(event.target.value)
+            onValue(event.target.value)
+          }}
+          value={value}
+        />
+      )
+    }
+    const seen: string[] = []
+    render(<Field onValue={value => seen.push(value)} />)
+
+    fireEvent.change(screen.getByLabelText('field'), {
+      target: { value: 'typed' },
+    })
+    expect(seen).toEqual(['typed'])
   })
 
-  test('leaves Bun owning URL, which node:fs accepts as a path', () => {
-    // Several tests read a file through `new URL(..., import.meta.url)`.
-    // node:fs type-checks that argument, so a Happy DOM URL is not a path.
-    const self = new URL(import.meta.url)
-    expect(readFileSync(self, 'utf8').length).toBeGreaterThan(0)
+  test('a CustomEvent reaches an element listener', () => {
+    const target = document.createElement('div')
+    const details: unknown[] = []
+    target.addEventListener('ping', event => {
+      details.push((event as CustomEvent).detail)
+    })
+    target.dispatchEvent(new CustomEvent('ping', { detail: 1 }))
+    expect(details).toEqual([1])
+  })
+
+  test('an Event reaches a window listener', () => {
+    let heard = 0
+    const listener = () => {
+      heard += 1
+    }
+    window.addEventListener('resize', listener)
+    window.dispatchEvent(new Event('resize'))
+    window.removeEventListener('resize', listener)
+    expect(heard).toBe(1)
   })
 })
 
