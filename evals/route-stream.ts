@@ -127,6 +127,34 @@ export function answerProse(text: string): string {
 }
 
 /**
+ * The two run-quality flags the provider records per test, and the summary
+ * counts over the whole run (MTC-54).
+ *
+ * Facts about the request rather than judgements about the answer, which is
+ * why they are measured here and not in an assertion: only a count over the
+ * whole run says whether a red row was the assistant or the hour, and the
+ * publish gate reads those counts.
+ *
+ * An answer with no prose carries no evidence about the policy, so it counts
+ * as a row with nothing to grade. The two flags are exclusive for that
+ * reason: a run cut off before it wrote anything has no trailer because it
+ * has no answer, and counting that as a dropped citation would inflate the
+ * number the gate refuses on.
+ */
+export function answerQuality(
+  text: string,
+  readIds: string[]
+): { transportFailure?: true; missingTrailer?: true } {
+  const empty = answerProse(text).trim().length === 0
+  const missingTrailer =
+    !empty && readIds.length > 0 && sourcesTrailerIds(text).length === 0
+  return {
+    ...(empty ? { transportFailure: true as const } : {}),
+    ...(missingTrailer ? { missingTrailer: true as const } : {}),
+  }
+}
+
+/**
  * The visitor-authored parts of an answer that must not be read as the
  * assistant's own voice: markdown block quotes and anything inside double
  * quotes.

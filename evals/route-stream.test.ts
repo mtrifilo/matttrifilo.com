@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   answerProse,
+  answerQuality,
   parseUiMessageStream,
   sourcesTrailerIds,
   withoutQuotations,
@@ -161,5 +162,41 @@ describe('withoutQuotations', () => {
     expect(withoutQuotations('Matt led the migration.')).toBe(
       'Matt led the migration.'
     )
+  })
+})
+
+describe('answerQuality', () => {
+  const answer = 'He led the migration in 2024.'
+
+  test('flags nothing when a cited answer came back', () => {
+    expect(answerQuality(`${answer}\n\nSources: resume`, ['resume'])).toEqual(
+      {}
+    )
+  })
+
+  test('flags nothing when the run read nothing and cited nothing', () => {
+    // A decline reads no document, so it owes no trailer.
+    expect(answerQuality(answer, [])).toEqual({})
+  })
+
+  test('flags an answer that used a document and did not cite it', () => {
+    expect(answerQuality(answer, ['resume'])).toEqual({ missingTrailer: true })
+  })
+
+  test('flags a row with nothing to grade', () => {
+    expect(answerQuality('', [])).toEqual({ transportFailure: true })
+    expect(answerQuality('   \n', [])).toEqual({ transportFailure: true })
+  })
+
+  test('an answer cut off before it wrote anything is not a dropped citation', () => {
+    // Both would otherwise be true, and the same row would count twice
+    // against two different thresholds in the publish gate.
+    expect(answerQuality('', ['resume'])).toEqual({ transportFailure: true })
+  })
+
+  test('a trailer with no prose above it is still nothing to grade', () => {
+    expect(answerQuality('Sources: resume', ['resume'])).toEqual({
+      transportFailure: true,
+    })
   })
 })

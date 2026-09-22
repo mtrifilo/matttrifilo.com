@@ -13,9 +13,8 @@ import {
   isTransportCode,
 } from './route-request'
 import {
-  answerProse,
+  answerQuality,
   parseUiMessageStream,
-  sourcesTrailerIds,
   type StreamedMetadata,
 } from './route-stream'
 
@@ -271,7 +270,6 @@ export default class ChatRouteProvider {
       followUps: answer.metadata.followUps ?? [],
       finishReason: answer.finishReason,
       ...flags(answer.metadata),
-      ...runQuality(answer.text, readIds),
     }
 
     // The route writes its envelope into the stream's error text when the
@@ -289,7 +287,10 @@ export default class ChatRouteProvider {
     }
 
     return {
-      response: { output: answer.text, metadata },
+      response: {
+        output: answer.text,
+        metadata: { ...metadata, ...answerQuality(answer.text, readIds) },
+      },
       transportFailure: false,
     }
   }
@@ -325,28 +326,6 @@ function baseMetadata(
     followUps: [],
     model,
     status,
-  }
-}
-
-/**
- * The two flake classes a run is measured by, read off the answer itself.
- *
- * Measured here rather than in an assertion because they are facts about the
- * request, not judgements about the answer: every suite produces them, and
- * only a count over the whole run says whether a red row was the assistant or
- * the hour. An answer with no prose at all carries no evidence about the
- * policy either, so it counts with the error envelopes.
- */
-function runQuality(
-  text: string,
-  readIds: string[]
-): { transportFailure?: true; missingTrailer?: true } {
-  const empty = answerProse(text).trim().length === 0
-  const missingTrailer =
-    readIds.length > 0 && sourcesTrailerIds(text).length === 0
-  return {
-    ...(empty ? { transportFailure: true as const } : {}),
-    ...(missingTrailer ? { missingTrailer: true as const } : {}),
   }
 }
 
