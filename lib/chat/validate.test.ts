@@ -1,5 +1,19 @@
 import { describe, expect, test } from 'bun:test'
-import { KNOWLEDGE_INDEX_TOKEN_CEILING } from '@/lib/knowledge'
+import {
+  KNOWLEDGE_INDEX_TOKEN_CEILING,
+  KNOWLEDGE_READ_BUDGET,
+  loadKnowledgeIndex,
+} from '@/lib/knowledge'
+import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
+import {
+  MAX_TITLE_CHARS,
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  PROGRESS_TOPICS,
+  type ChatProgress,
+} from './progress'
+import { RECENT_ACTIVITY_MAX_CALLS } from './recent-activity'
+import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
   CHAT_ERROR_MESSAGE,
   CHAT_ERROR_STATUS,
@@ -429,6 +443,118 @@ describe('rejecting a request', () => {
       })
     )
     expect(codeOf(result)).toBe('invalid')
+  })
+})
+
+describe('the replayed progress part', () => {
+  // validate.ts skips this part without measuring it, and that is only
+  // sound while the largest part the route can write stays small next to
+  // the text the caps already admit. These tests pin that size, so a change
+  // to any cap it is built from fails here and the question is asked again.
+
+  /**
+   * Ids are the one field the wire does not cap. Every real id, a corpus
+   * file name or an allowlisted repository, is held under this stand-in
+   * below, so the worst case can use it without depending on the corpus.
+   */
+  const ID_STAND_IN_CHARS = 64
+
+  /** The request body Vercel accepts for a function: 4.5 MB. */
+  const VERCEL_REQUEST_BODY_BYTES = 4_500_000
+
+  /**
+   * The route sets no `maxDuration`, so Vercel's 300 s default ends a run
+   * and `ms` has at most six digits.
+   */
+  const LONGEST_RUN_MS = 300_000
+
+  const longestTopic = PROGRESS_TOPICS.reduce((a, b) =>
+    b.length > a.length ? b : a
+  )
+
+  /** Every field at its cap: the most the route can write for one answer. */
+  function largestPart() {
+    const read = {
+      id: 'i'.repeat(ID_STAND_IN_CHARS),
+      title: 't'.repeat(MAX_TITLE_CHARS),
+      topic: longestTopic,
+      headings: Array.from({ length: MAX_HEADINGS }, () =>
+        'h'.repeat(MAX_HEADING_CHARS)
+      ),
+    }
+    const check = {
+      id: 'i'.repeat(ID_STAND_IN_CHARS),
+      title: 't'.repeat(MAX_TITLE_CHARS),
+      kind: 'activity' as const,
+    }
+    const data: ChatProgress = {
+      steps: [
+        ...Array.from({ length: KNOWLEDGE_READ_BUDGET.maxDocuments }, () => ({
+          ...read,
+        })),
+        ...Array.from({ length: RECENT_ACTIVITY_MAX_CALLS }, () => ({
+          ...check,
+        })),
+      ],
+      phase: 'done',
+      ms: LONGEST_RUN_MS,
+    }
+    return { type: PROGRESS_PART_TYPE, id: PROGRESS_PART_ID, data }
+  }
+
+  test('every real id fits the stand-in the worst case uses', () => {
+    const ids = [
+      ...loadKnowledgeIndex().entries.map(entry => entry.id),
+      ...ASSISTANT_REPOSITORIES.map(repository => repository.id),
+    ]
+    for (const id of ids) {
+      expect({ id, fits: id.length <= ID_STAND_IN_CHARS }).toEqual({
+        id,
+        fits: true,
+      })
+    }
+  })
+
+  test('the largest part the route can write is pinned', () => {
+    // Characters of JSON. Headings and titles may be non-ASCII, so the
+    // bytes on the wire can reach three times this, and that is still
+    // small beside the text an eight-question conversation may carry.
+    // A new number here is a decision: re-read the runbook's progress
+    // section and the comment on the replay path in validate.ts first.
+    expect(JSON.stringify(largestPart()).length).toBe(6_383)
+  })
+
+  test('a longest conversation carrying the largest part still validates', () => {
+    // The part is outside the token budget by design, so a conversation at
+    // the budget with the part on every answer is accepted exactly as it is
+    // without one. Its size is what the platform sees, and it stays under
+    // a tenth of the request body Vercel accepts.
+    const fullQuestion = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
+    const fullAnswer = 'x'.repeat(CHAT_MAX_OUTPUT_TOKENS * 4)
+    const longest = Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) =>
+      i % 2 === 0
+        ? {
+            id: `a${i}`,
+            role: 'assistant',
+            parts: [
+              { type: 'step-start' },
+              largestPart(),
+              { type: 'text', text: fullAnswer },
+            ],
+          }
+        : said('user', fullQuestion)
+    )
+    const request = body(...longest)
+
+    const result = validateChatRequest({
+      body: request,
+      indexTokenEstimate: KNOWLEDGE_INDEX_TOKEN_CEILING,
+      env: {},
+    })
+    expect(codeOf(result)).toBe(null)
+    expect(Buffer.byteLength(JSON.stringify(request))).toBeLessThan(
+      VERCEL_REQUEST_BODY_BYTES / 10
+    )
   })
 })
 
