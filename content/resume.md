@@ -26,7 +26,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 - Cut median lead time to production from 9 days to 2.3 and nearly tripled merged PRs/week (10 to 28) by leading the team's adoption of human-reviewed AI coding agents and independent deploys; open customer-defect backlog fell from 28 to 12 and review volume rose ~3x.
 - Ran the company's Claude Code pilot (late 2025); results informed the org-wide decision to adopt Claude Code and Cursor as primary AI tooling for ~50 engineers.
 - Proposed, designed, and built the AI Email Engagement Summary, one of the product's first LLM features (Gemini on Vertex AI, RAG over Postmaster-written help content). It explains how a user's last 30 days of sending practices are helping or hurting deliverability and recommends fixes. Proof of concept in 1 week, beta in 5, 100% rollout 2 months after formal development began. Wrote the Promptfoo eval suite that gates every model change.
-- Adapted OpenAI's open-source Symphony harness (via a colleague-built internal fork) to dispatch Claude Code agents that open PRs for CVE tickets the moment they are created, running the team's security-ticket skill with full service context: 17 PRs across 7 services, ~80% hands-free, in month one.
+- Adapted OpenAI's open-source Symphony harness (via an internal fork two colleagues built) to dispatch Claude Code agents that open PRs for CVE tickets the moment they are created, running the team's security-ticket skill with full service context: 17 PRs across 7 services, ~80% hands-free, in month one.
 - Wrote the governance for Thryv's Claude Code plugin marketplace; the team's marketplace (16 plugins, 130 merged PRs in 8 weeks) became the company template.
 
 ##### Platform and operations

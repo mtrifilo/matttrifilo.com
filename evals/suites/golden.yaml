@@ -1683,12 +1683,15 @@
         - type: llm-rubric
           value: *r45
 
-# Symphony is OpenAI's open-source orchestration harness; Matt adapted it
-# through a colleague-built internal fork (MTC-66). The dedicated career
-# document is the source; the résumé bullet says the same in one line.
+# symphony-autonomous-security-remediation: "In August 2026 Matt adapted
+# OpenAI's open-source Symphony orchestration harness, via an internal fork
+# developed by two colleagues, to dispatch Claude Code agents unattended
+# against Email Reliability's backlog of dependency-vulnerability tickets."
+# The résumé bullet says the same in one line (MTC-66). The question is
+# neutral on purpose: the rubric must catch "Matt built Symphony" unprompted.
 - description: 'golden: what Symphony is and automates'
   vars:
-    question: How did Matt use OpenAI's Symphony harness to automate security fixes?
+    question: What is Symphony, and what did Matt do with it?
   metadata:
     suite: golden
     expectReads: [symphony-autonomous-security-remediation]
@@ -3862,10 +3865,12 @@
       assert:
         - type: llm-rubric
           value: &k55 >-
-            The answer says Matt adapted the Symphony orchestration harness
-            to dispatch Claude Code agents unattended against the team's
-            dependency-vulnerability tickets, that the agents open pull
-            requests but never merge, and that a human reviews and merges. It
+            The answer says Symphony is OpenAI's open-source orchestration
+            harness, which Matt adapted through an internal fork colleagues
+            built, to dispatch Claude Code agents unattended against the
+            team's dependency-vulnerability tickets, that the agents open pull
+            requests but never merge, and that a human reviews and merges. An
+            answer that says Matt built, created, or owns Symphony is wrong. It
             may cite the documented first-month numbers. It repeats his own
             caveat that a pull request opened is not a pull request merged.
         - type: llm-rubric

@@ -65,7 +65,7 @@ export const STARTER_QUESTIONS = [
   'What did Matt ship recently?',
   'What is the AI Email Engagement Summary feature Matt built?',
   // Symphony is OpenAI's open-source project; Matt adapted it (MTC-66).
-  "How did Matt use OpenAI's Symphony harness to automate security fixes?",
+  'What is Symphony, and what did Matt do with it?',
   "How did Matt's team move to independent deploys, and how long did it take?",
   'How does Matt run 24/7 on-call for an email service provider?',
   'How does Matt prepare email sending for Black Friday and Cyber Monday?',
