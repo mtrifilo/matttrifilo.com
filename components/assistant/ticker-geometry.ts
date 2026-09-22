@@ -71,10 +71,9 @@ export const TICKER_KEYFRAME_TO = `translateX(-${100 / TICKER_COPIES}%)`
  *
  * The homepage opens each row on its first question. A visitor who submits
  * from there lands on /ask a second later, and rows that opened on the same
- * pills would look like they had not moved, so /ask opens further in. Four
- * pills is where MTC-39's "a third of the way into the pool" lands now that
- * the pool is split in two, and it is a whole pill rather than a fraction of
- * a track, which is what keeps the opening from cutting a question in half.
+ * pills would look like they had not moved, so /ask opens about a third of
+ * the way into each row. Both are whole pills rather than fractions of a
+ * track, which is what keeps the opening from cutting a question in half.
  */
 export const HOME_START_AT = 0
 export const ASK_START_AT = 4
@@ -148,22 +147,29 @@ export function openingProgress(
  * the same pixels, because the second copy is the first one repeated, and
  * the smaller of them keeps the focusable pills at offsets the row can
  * actually scroll to.
+ *
+ * `inset` is the blank lead a held-still track is given (its start padding),
+ * which moves every pill that far right. Without it a row's first pill
+ * starts at scroll zero with nothing to its left, and no scroll could bring
+ * it out from under the left fade.
  */
 export function scrollLeftForProgress(
   progress: number,
-  copyWidth: number
+  copyWidth: number,
+  inset = 0
 ): number {
-  if (!Number.isFinite(copyWidth) || copyWidth <= 0) return 0
-  return wrapFraction(progress) * copyWidth
+  if (!Number.isFinite(copyWidth) || copyWidth <= 0) return inset
+  return wrapFraction(progress) * copyWidth + inset
 }
 
-/** The inverse: the progress a paused row should resume from. */
+/** The inverse: the progress a held-still row should resume from. */
 export function progressForScrollLeft(
   scrollLeft: number,
-  copyWidth: number
+  copyWidth: number,
+  inset = 0
 ): number {
   if (!Number.isFinite(copyWidth) || copyWidth <= 0) return 0
-  return wrapFraction(scrollLeft / copyWidth)
+  return wrapFraction((scrollLeft - inset) / copyWidth)
 }
 
 export interface RevealRequest {

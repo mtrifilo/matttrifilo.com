@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type FocusEvent,
   type MouseEvent,
@@ -44,7 +45,9 @@ import {
  * **A row opens on a whole pill.** Where a pill sits is a measurement, not a
  * constant, so the opening offset is computed from the row's own layout on
  * the first measurement and then left alone: after that the offset belongs to
- * the loop.
+ * the loop. Until that measurement the stylesheet keeps the moving rows
+ * invisible, so the server's markup never shows a row at the wrong pill and
+ * then jumps.
  *
  * **Tab meets each question once, and every visible pill works.** Only the
  * first copy of a row is announced and tabbable; the second is `aria-hidden`
@@ -59,7 +62,10 @@ import {
  * reach. So focus freezes that row's track, hands its position over to
  * `scrollLeft`, and scrolls the pill clear of the edge fades; blur converts
  * back into a progress the animation resumes from. Both conversions go
- * through ticker-geometry.ts, which is why neither switch is visible.
+ * through ticker-geometry.ts, which is why neither switch is visible. A
+ * frozen track also gains a blank lead as wide as the fade, which is the
+ * only way a row's first pill, with nothing to its left, can be scrolled
+ * clear of the gradient.
  */
 
 /**
@@ -157,6 +163,9 @@ function TickerRow({
   // False until the row has been laid out once and placed on its opening
   // pill. After that the offset belongs to the loop and to the blur handler.
   const openedRef = useRef(false)
+  // The blank lead the track was frozen with. The thaw has to subtract the
+  // same number the freeze added, even if the fade changed in between.
+  const insetRef = useRef(0)
 
   /**
    * One loop is one copy's width, so the duration is what holds the speed
@@ -198,12 +207,13 @@ function TickerRow({
       track.style.setProperty('--ticker-offset', String(offset))
     }
     delete track.dataset.frozen
+    track.dataset.placed = 'true'
   }, [startAt])
 
-  // Once now, so the row is on its opening pill and a Tab in the first frames
-  // finds a width to work from; the observer then catches the font arriving
-  // and the visitor zooming.
-  useEffect(() => {
+  // Once before the first paint, so the row appears on its opening pill and
+  // a Tab in the first frames finds a width to work from; the observer then
+  // catches the font arriving and the visitor zooming.
+  useLayoutEffect(() => {
     const copy = copyRef.current
     if (!copy) return
     measure()
@@ -235,9 +245,15 @@ function TickerRow({
       // the other. Leaving the row where it is beats moving it wrongly.
       if (progress === null || copyWidth <= 0) return
       // Freeze first: the rule that drops the animation also drops the
-      // transform, and the scroll offset below replaces it exactly.
+      // transform and adds the lead, and the scroll offset below replaces
+      // both exactly.
+      insetRef.current = fadeWidth(viewport)
       track.dataset.frozen = 'true'
-      viewport.scrollLeft = scrollLeftForProgress(progress, copyWidth)
+      viewport.scrollLeft = scrollLeftForProgress(
+        progress,
+        copyWidth,
+        insetRef.current
+      )
     }
 
     // A pointer press focuses the pill before the click completes. Moving
@@ -268,7 +284,8 @@ function TickerRow({
       if (next instanceof Node && event.currentTarget.contains(next)) return
       const progress = progressForScrollLeft(
         viewport.scrollLeft,
-        copyWidthRef.current
+        copyWidthRef.current,
+        insetRef.current
       )
       viewport.scrollLeft = 0
       track.style.setProperty('--ticker-offset', String(progress))

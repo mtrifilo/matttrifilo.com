@@ -196,6 +196,32 @@ describe('the state flags the component writes', () => {
     // the row holding the focused pill hands its position to scrollLeft.
     expect(css).toContain(".starter-ticker[data-touched='true']")
     expect(css).toContain(".starter-ticker-track[data-frozen='true']")
+    expect(css).toContain(".starter-ticker-track:not([data-placed='true'])")
+    const source = componentSource('starter-ticker.tsx')
+    expect(source).toContain("dataset.touched = 'true'")
+    expect(source).toContain("dataset.frozen = 'true'")
+    expect(source).toContain("dataset.placed = 'true'")
+  })
+
+  test('a moving row stays invisible, not absent, until it is placed', () => {
+    // Hidden rather than removed, so the row keeps its height and nothing
+    // under it moves when it appears; and only where it moves, because a
+    // static strip has no opening to wait for.
+    const block = blockAround(".starter-ticker-track:not([data-placed='true'])")
+    expect(block).toContain('@media (prefers-reduced-motion: no-preference)')
+    expect(block).toContain('visibility: hidden')
+    expect(block).not.toContain('display: none')
+  })
+
+  test('a held or static track leads with the fade width the component adds', () => {
+    // starter-ticker.tsx adds the fade it reads off the row to scrollLeft as
+    // it freezes. A lead of any other width moves the row by the difference
+    // at every focus.
+    expect(ruleFor(".starter-ticker-track[data-frozen='true']")).toContain(
+      `padding-inline-start: var(${EDGE_FADE_PROPERTY})`
+    )
+    const reduced = blockAround(".starter-ticker-copy[aria-hidden='true']")
+    expect(reduced).toContain(`padding-inline: var(${EDGE_FADE_PROPERTY})`)
   })
 
   test('hover and focus stop both rows, not just the one under the pointer', () => {

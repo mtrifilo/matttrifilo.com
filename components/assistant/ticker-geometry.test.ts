@@ -174,6 +174,28 @@ describe('the two coordinate systems', () => {
     expect(progress).toBeCloseTo(0.25, 6)
   })
 
+  test('the lead a held track is given shifts the scroll and nothing else', () => {
+    // Freezing adds the lead to the track and the same width to scrollLeft,
+    // and the thaw takes it back off, so the row does not move either way.
+    for (const progress of [0, 0.1, 0.5, 0.99]) {
+      const scrollLeft = scrollLeftForProgress(progress, COPY_WIDTH, FADE)
+      expect(scrollLeft).toBeCloseTo(progress * COPY_WIDTH + FADE, 6)
+      expect(progressForScrollLeft(scrollLeft, COPY_WIDTH, FADE)).toBeCloseTo(
+        progress,
+        6
+      )
+    }
+  })
+
+  test('a held row scrolled back onto its lead resumes on its first pill', () => {
+    // The first pill revealed at a scroll of zero sits at the fade, which is
+    // the frame the row opens on when it opens on that pill.
+    expect(progressForScrollLeft(0, COPY_WIDTH, FADE)).toBeCloseTo(
+      openingProgress(0, FADE, COPY_WIDTH),
+      6
+    )
+  })
+
   test('an unmeasured row resumes at the start rather than at infinity', () => {
     expect(progressForScrollLeft(400, 0)).toBe(0)
     expect(scrollLeftForProgress(0.5, 0)).toBe(0)
@@ -253,12 +275,11 @@ describe('bringing a focused pill into view', () => {
     expect(next).toBe(900 - 56)
   })
 
-  test('a row’s first question is the one pill the fade still covers', () => {
-    // It starts at zero with nothing to its left, so clearing the gradient
-    // would need a negative scroll. Pinned rather than fixed: giving the row
-    // a blank strip to scroll into would make the loop show that strip
-    // empty for the last seconds of every pass. Every other pill can be
-    // brought fully clear, which the cases above are.
+  test('a row’s first question clears the fade once the track has its lead', () => {
+    // It starts at zero with nothing to its left, so without the lead a held
+    // track is given, clearing the gradient would need a negative scroll.
+    // With the lead the pill starts at the fade, and a scroll of zero shows
+    // it whole.
     expect(
       revealScrollLeft({ ...row, scrollLeft: 0, pillStart: 0, pillWidth: 275 })
     ).toBe(0)
@@ -266,7 +287,7 @@ describe('bringing a focused pill into view', () => {
       revealScrollLeft({
         ...row,
         scrollLeft: 4000,
-        pillStart: 0,
+        pillStart: FADE,
         pillWidth: 275,
       })
     ).toBe(0)

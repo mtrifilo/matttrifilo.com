@@ -189,11 +189,11 @@
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
  * one copy, so both rows drift at one speed whatever they carry; the value
- * declared here is that width for the pool as it stands, divided by the
- * speed in ticker-geometry.ts, so the first frames are not wrong while the
- * measurement lands. --ticker-offset is where in the loop a row opens, as a
- * fraction, which is how a row lands on a whole pill and how the homepage
- * and /ask avoid showing the same questions at the same moment.
+ * declared here is roughly one row's copy width divided by the speed in
+ * ticker-geometry.ts, and is only what a row runs at while it is still
+ * invisible, waiting to be placed. --ticker-offset is where in the loop a
+ * row opens, as a fraction, which is how a row lands on a whole pill and how
+ * the homepage and /ask avoid showing the same questions at the same moment.
  *
  * The distance here, the copy count in starter-ticker.tsx and the
  * conversions in ticker-geometry.ts are one decision written in three
@@ -227,10 +227,11 @@
    * It is scroll-padding and NOT padding. Padding here would give the row a
    * blank strip at each end, and the ticker's track has nothing to put in
    * the left one for the last few seconds of every loop: the strip would
-   * fade in as an empty sliver and then snap full at the wrap. The cost of
-   * leaving it out is that a row's first pill, which starts at scroll zero
-   * and has nothing to its left, cannot be brought fully clear of the left
-   * gradient by any scroll. Every other pill can.
+   * fade in as an empty sliver and then snap full at the wrap. A row's first
+   * pill starts at scroll zero with nothing to its left, so the ticker gives
+   * its track a lead of its own whenever the track is not looping (held
+   * still for focus, or under reduced motion); the follow-up row has no left
+   * gradient to clear.
    */
   scroll-padding-inline: var(--edge-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
@@ -333,14 +334,25 @@
   position: relative;
   display: flex;
   width: max-content;
-  /* Stated once; the component overrides both inline from the measurement.
-     The duration is one row's share of the pool at the ticker's speed, and
-     the offset is where the loop starts, which stands until the row knows
-     where its own opening pill sits. */
+  /* Stated once; the component overrides both inline from the measurement,
+     in the same step that makes the row visible. */
   --ticker-duration: 170s;
   --ticker-offset: 0;
   animation: starter-ticker var(--ticker-duration) linear infinite;
   animation-delay: calc(var(--ticker-offset) * var(--ticker-duration) * -1);
+}
+
+/*
+ * A moving row is invisible until starter-ticker.tsx has placed it on its
+ * opening pill. The server cannot know where that pill sits, so without this
+ * the first frames would show the row at the start of its loop, with a
+ * question cut by the fade, and then jump. It keeps its height meanwhile, so
+ * nothing below it moves when it appears.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .starter-ticker-track:not([data-placed='true']) {
+    visibility: hidden;
+  }
 }
 
 /*
@@ -364,6 +376,9 @@
  */
 .starter-ticker-track[data-frozen='true'] {
   animation: none;
+  /* The lead that lets a row's first pill be scrolled clear of the fade.
+     The component adds the same width to scrollLeft as it freezes. */
+  padding-inline-start: var(--edge-fade);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -374,6 +389,9 @@
   }
   .starter-ticker-track {
     animation: none;
+    /* A strip at rest opens on a whole first pill, and scrolls far enough
+       that its last pill clears the right fade too. */
+    padding-inline: var(--edge-fade);
   }
   /* Nothing loops, so a second copy would just be the row said twice. */
   .starter-ticker-copy[aria-hidden='true'] {
