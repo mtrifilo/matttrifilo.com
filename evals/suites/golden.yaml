@@ -1706,10 +1706,15 @@
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertFollowUpsAnswerable
+    # The dedicated document's own words: it never says "CVE" and calls the
+    # skill the security-fix skill. The attribution is enforced by string as
+    # well as by the judge.
+    - type: icontains
+      value: OpenAI
     - type: icontains-any
       value:
-        - CVE
-        - security-ticket
+        - pull request
+        - vulnerab
         - hands-free
     - type: assert-set
       threshold: 0.6
@@ -1720,7 +1725,7 @@
             harness, which Matt adapted, through an internal fork built by
             colleagues, to dispatch Claude Code agents that open pull requests
             for the team's dependency-vulnerability tickets using the team's
-            security-ticket skill, with humans reviewing and merging. An
+            security-fix skill, with humans reviewing and merging. An
             answer that says Matt built, created, or owns Symphony is wrong.
             Giving the first-month figures, 17 pull requests across 7
             services at about 80 percent hands-free, is correct but not
