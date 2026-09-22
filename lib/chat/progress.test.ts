@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor, type AnswerView } from './answer'
 import { TOPIC_ORDER } from '@/lib/knowledge/build'
+import { MAX_HEADINGS, MAX_HEADING_CHARS } from '@/lib/progress-caps'
 import {
-  MAX_HEADINGS,
-  MAX_HEADING_CHARS,
   PROGRESS_PART_TYPE,
   PROGRESS_TOPICS,
   STOPPED_BEFORE_FIRST_STEP,
