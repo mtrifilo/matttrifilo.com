@@ -14,8 +14,10 @@ import { estimateTokens } from './validate'
  * has ever contributed, from a dependency bot, and from whoever opens the
  * next pull request, and they land in a model's context. So:
  *
- *   - The filtering is code, not a request in the prompt. `sanitiseText` runs
- *     over every string before any of it is framed. Be precise about what it
+ *   - The filtering is code, not a request in the prompt. Every string is
+ *     filtered before any of it is framed: `sanitiseText` for a release tag,
+ *     `sanitiseTitle`, which is the same pipeline plus the noise rules below,
+ *     for a title or a commit subject. Be precise about what the safety half
  *     is: a denylist of everything that could ACT (markup, links, addresses,
  *     handles, invisible characters, the frame's own markers), not a
  *     whitelist and not an attempt to recognise a malicious sentence. Words
@@ -37,6 +39,17 @@ import { estimateTokens } from './validate'
  *   - The digest is capped in two places: each string at
  *     ACTIVITY_TEXT_MAX_CHARS, and the whole block at ACTIVITY_MAX_TOKENS,
  *     with the oldest entries dropped first.
+ *
+ * Two of the rules here are about noise rather than about safety, and they
+ * are marked as such where they live: `withoutTicketKeys`, and the release
+ * tags `isReleaseTagWorthShowing` refuses. What a repository ships is read by
+ * a hiring manager, and an issue key or a screenshot upload tells that reader
+ * nothing while sounding like it should. They are in code and not in the
+ * policy because a filter the model is asked to apply is a filter that holds
+ * most of the time. Neither may reshape what it does not remove: a noise rule
+ * that rewrites a version number or closes a gap a link filter opened is a
+ * worse defect than the noise it came for, which is why the key removal
+ * leaves a space behind and why the release rules judge the published tag.
  *
  * The exposure worth being precise about: the assistant holds no private data
  * and its only outbound channel is the answer the visitor reads, so the risk
@@ -205,6 +218,120 @@ const MENTION = new RegExp(HANDLE_PATTERN, 'g')
 const EMOJI_SHORTCODE = /:[a-z][a-z0-9_+-]{1,30}:/gi
 
 /**
+ * An issue-tracker key standing on its own: `PSY-2080`, `MTC-52`, `JIRA-7`.
+ *
+ * Exported as a source string, like HANDLE_PATTERN and for the same reason:
+ * `evals/assertions.ts` checks that no key reached an answer, and a second
+ * copy of the definition is a copy that drifts from this one.
+ *
+ * Upper case and at least two letters, which is how every tracker writes a
+ * key and is what keeps a lowercase branch or tag name such as
+ * `psy-2080-screenshots` out of it.
+ *
+ * The two guards either side are what keep this from corrupting a quotation
+ * rather than merely shortening one, and neither is optional:
+ *
+ *   - Nothing word-like or a hyphen in front, so `v1.2.0-SDK-1` and
+ *     `feature-ABC-1` are left whole rather than losing their tail.
+ *   - Nothing word-like after the digits, so `\d+` cannot backtrack: without
+ *     it `CVE-2024-1234` came back as `4-1234`.
+ *   - No `.` or `-` then a digit, and no `-` then a capital, which is how the
+ *     rest of a version or a standard's name continues: without it `TLS-1.2`
+ *     came back as `.2` and `AES-256-GCM` as `-GCM`. Those are what commit
+ *     subjects are made of, and half of one is worse than all of it, because
+ *     the block presents these lines to the model as quotations of what the
+ *     repository said.
+ *
+ * Three classes are left behind, all of them whole tokens, all pinned by name
+ * in `github-activity.test.ts` so the cost stays visible and cheap to change:
+ *
+ *   - Removed though they are not keys: `UTF-8`, `SHA-256`, `ISO-8601`,
+ *     `HTTP-2`, `COVID-19`, `GPT-4`. Accepted rather than patched around,
+ *     because the alternative is a list of acronyms to spare, which has no
+ *     end and no owner.
+ *   - Kept though they are keys, because what follows them is the shape a
+ *     version continues in: `PSY-2080-Add-Gallery`. The lower-case spelling,
+ *     which is what a branch-named title actually looks like, is removed.
+ *   - Kept because the key is longer than six letters: `PLATFORM-9`. Six is
+ *     the bound the ticket settled; trackers do allow longer.
+ */
+export const TICKET_KEY_PATTERN =
+  '(?<![\\w-])[A-Z]{2,6}-\\d+(?![\\w])(?![-.]\\d)(?!-[A-Z])'
+const TICKET_KEY = new RegExp(TICKET_KEY_PATTERN, 'g')
+
+/**
+ * A bracketed run of nothing but keys: `[PSY-2080]`, `(PSY-2079, PSY-2080)`.
+ *
+ * Matched as a whole so the brackets go with their contents. Removing the
+ * keys first and then emptied bracket pairs took `parse()` out of `Fix
+ * PSY-2080 crash in parse()`, which is a function name and not punctuation
+ * a key left behind.
+ */
+const BRACKETED_TICKET_KEYS = new RegExp(
+  `[([{]\\s*${TICKET_KEY_PATTERN}(?:[\\s,;]+${TICKET_KEY_PATTERN})*\\s*[)\\]}]`,
+  'g'
+)
+
+/**
+ * What a removed key leaves behind: a space in front of the punctuation that
+ * followed it, a doubled space, a separator at either end.
+ *
+ * `PSY-2080: Add the parser` and `Add the parser (PSY-2080)` are both
+ * ordinary title conventions, and a subject that was nothing but a key has to
+ * come out empty so the digest drops the entry rather than showing a colon
+ * with nothing after it.
+ *
+ * A trailing full stop is not a separator: `Fix PSY-1 crash.` keeps its
+ * sentence, with the space the key left in front of the stop taken out. A
+ * repeated mark is left alone, so `wip AB-1 ... see notes` keeps the space in
+ * front of its ellipsis rather than reading as a cut-off sentence.
+ */
+const ORPHANED_SPACE = /\s+([.,;:!?])(?![.,;:!?])/g
+const LEADING_SEPARATORS = /^[\s:;,.\u2013\u2014/|-]+/
+const TRAILING_SEPARATORS = /[\s:;,\u2013\u2014/|-]+$/
+
+/**
+ * One string with its issue-tracker keys taken out, and the punctuation they
+ * were holding up tidied away.
+ *
+ * Noise, not safety: a key is accurate, and it is also the part of a title
+ * that means nothing to a hiring manager reading what Matt shipped (MTC-52,
+ * and `~/docs/research/hiring/hiring-audience-2026.md`, 2026-09-22, on
+ * answers a reader could forward). Nothing here is load-bearing for the
+ * injection posture, and a title that dodges it is merely a title that still
+ * says `PSY-2080`.
+ *
+ * A string with no key in it is returned untouched. A string with one is
+ * tidied as a whole: its spaces collapse and a space before punctuation
+ * closes up wherever they sit, not only where the key was. That is the trade
+ * for tidying at all, and it is why the no-key case returns early.
+ *
+ * **A key is replaced by a space and never by nothing**, and that is a safety
+ * property rather than a cosmetic one. This runs after the link filters, so
+ * closing a gap would let it hand them back what they removed: a key is
+ * bounded by non-word characters on both sides, which is the alphabet of
+ * `://` and `](`, and `Fix http:/AB-1/evil.example redirect` closes up into a
+ * live link that no pattern sees again. A space cannot be a URL.
+ *
+ * The limits, since every pattern in this file states one: a key an author
+ * breaks up deliberately survives, so do the two classes the pattern's own
+ * docstring names, and the tidying reshapes the whole string rather than only
+ * the gap, which the tests pin.
+ */
+export function withoutTicketKeys(value: string): string {
+  const withoutKeys = value
+    .replace(BRACKETED_TICKET_KEYS, ' ')
+    .replace(TICKET_KEY, ' ')
+  if (withoutKeys === value) return value
+  return withoutKeys
+    .replace(ORPHANED_SPACE, '$1')
+    .replace(/\s+/g, ' ')
+    .replace(LEADING_SEPARATORS, '')
+    .replace(TRAILING_SEPARATORS, '')
+    .trim()
+}
+
+/**
  * One of the block's markers, as a pattern that tolerates how it is spelled.
  *
  * A literal `replaceAll` of the marker was not enough twice over: it ran
@@ -260,9 +387,32 @@ function markerPattern(marker: string): RegExp {
  * removed is everything that could act: markup, links, addresses, names, and
  * the frame's own words. The rest arrives as a quotation inside the block,
  * which is where the policy takes over.
+ *
+ * This is the safety filter and nothing else. The noise rules live one layer
+ * out, in `sanitiseTitle`, which is what pull request titles and commit
+ * subjects go through; a release tag goes through this one alone, because a
+ * tag is an identifier and rewriting one invents a release.
  */
 export function sanitiseText(value: string): string {
-  const stripped = value
+  return sanitise(value, false)
+}
+
+/**
+ * One title or commit subject: the safety filter, plus the noise rules.
+ *
+ * The order is the point, and it is why this is a flag on one pipeline rather
+ * than two calls one after the other. `withoutTicketKeys` runs after the link
+ * and address patterns, so it cannot hand them anything back, and before the
+ * marker rewrite and the character cap, so a key removal that spells out
+ * `BEGIN REPOSITORY ACTIVITY` (from `BEGIN REPOSITORY AB-1 ACTIVITY`) is
+ * still rewritten, and the cap still counts the characters a reader is shown.
+ */
+export function sanitiseTitle(value: string): string {
+  return sanitise(value, true)
+}
+
+function sanitise(value: string, removeTicketKeys: boolean): string {
+  const neutral = value
     .replace(CONTROL_CHARS, ' ')
     .replace(TAG_CHARS, ' ')
     .replace(HTML_TAG, ' ')
@@ -279,7 +429,10 @@ export function sanitiseText(value: string): string {
     .replace(MENTION, ' ')
     .replace(EMOJI_SHORTCODE, ' ')
     .replace(/\s+/g, ' ')
-    // After the collapse, and whitespace-tolerant besides: see markerPattern.
+  const plain = removeTicketKeys ? withoutTicketKeys(neutral) : neutral
+  const stripped = plain
+    // After the collapse and after the key removal, and whitespace-tolerant
+    // besides: see markerPattern.
     .replace(markerPattern(ACTIVITY_BLOCK_START), '[activity]')
     .replace(markerPattern(ACTIVITY_BLOCK_END), '[activity]')
     .trim()
@@ -365,6 +518,78 @@ function stripMergeAttribution(subject: string): string {
 }
 
 /**
+ * A tag with a `-screenshots` segment in it, whatever case it is written in.
+ *
+ * The psy-loop publishes screenshot uploads under tags of this shape. They
+ * are full releases rather than prereleases, so `/releases/latest` returns
+ * one, and an answer that leads with it reports an image upload as the
+ * repository's latest release.
+ *
+ * Not anchored at the end: `v1.2.0-screenshots-2026-09-16` and
+ * `v1.2.0-screenshots.zip` are the same upload with something appended, and
+ * an end-anchored rule admitted both. `-screenshotsy` is not a match, so a
+ * word that merely starts the same way is safe.
+ */
+const SCREENSHOT_TAG = /-screenshots\b/i
+
+/**
+ * A tag that opens like a version: `v1.2.0`, `1.2`, `v2.0.0-rc.1`.
+ *
+ * Anchored at the start and open at the end, so a prerelease or build suffix
+ * is still a version.
+ */
+const SEMVER_TAG = /^v?\d+\.\d+(\.\d+)?/
+
+/**
+ * Whether the digest states this release at all.
+ *
+ * Both rules, decided on MTC-52: a screenshot upload is not a release a
+ * reader cares about, and a tag that does not open like a version is not
+ * evidence that anything was released. Either rule alone leaves a hole. A
+ * future upload tag that is not spelled `-screenshots` is caught by the
+ * second; a screenshot upload tagged `v3.1.0-screenshots` is caught by the
+ * first.
+ *
+ * A digest with no release simply has no release line, which is the same
+ * thing `renderActivityDigest` does for a repository that has never cut one.
+ *
+ * Judged on the tag GitHub published, before any filtering: see
+ * `toShownRelease`. A version this rule accepts is one the repository really
+ * tagged, which is the whole value of the rule.
+ *
+ * What it turns away besides an upload: a tag that is a name rather than a
+ * version, and a version with no minor part. `v1` and `v2` are real tags on
+ * other people's repositories and this refuses them, which is the rule the
+ * ticket settled (`v?\d+\.\d+`) rather than an accident; none of the three
+ * allowlisted repositories tags that way today.
+ */
+export function isReleaseTagWorthShowing(tag: string): boolean {
+  if (SCREENSHOT_TAG.test(tag)) return false
+  return SEMVER_TAG.test(tag)
+}
+
+/**
+ * The release a digest will carry, or null.
+ *
+ * The rules judge `release.tag` as GitHub published it, and the filter runs
+ * only on what is then shown. Judging the filtered tag instead let the filter
+ * manufacture a release: `SDK-2.0.1` lost an issue-key-shaped prefix and
+ * became `0.1`, a version the repository never published, stated as fact
+ * inside a block the policy tells the model to trust as a quotation.
+ *
+ * The filtered tag is checked as well, so a tag that passes the rules and is
+ * then reshaped into something that does not is no release either.
+ */
+function toShownRelease(
+  release: RawRepositoryActivity['release']
+): ActivityDigest['release'] {
+  if (!release || !isReleaseTagWorthShowing(release.tag)) return null
+  const tag = sanitiseText(release.tag)
+  if (!isReleaseTagWorthShowing(tag)) return null
+  return { tag, date: toIsoDate(release.publishedAt) }
+}
+
+/**
  * The date part of an ISO timestamp, or null.
  *
  * Dates and not times, deliberately: an hour-old cache cannot honestly report
@@ -398,7 +623,9 @@ export interface ActivityDigest {
  *
  * Pure, so the whole of what reaches the model can be asserted without a
  * network. Entries whose text is empty once filtered are dropped rather than
- * shown blank: a title that was nothing but a URL has nothing left to say.
+ * shown blank: a title that was nothing but a URL has nothing left to say,
+ * and neither does one that was nothing but an issue key. A release the
+ * digest will not state (`isReleaseTagWorthShowing`) is dropped the same way.
  */
 export function toActivityDigest(
   repository: AssistantRepository,
@@ -408,28 +635,22 @@ export function toActivityDigest(
     id: repository.id,
     description: repository.description,
     pushedOn: toIsoDate(raw.pushedAt),
-    release: raw.release
-      ? {
-          tag: sanitiseText(raw.release.tag),
-          date: toIsoDate(raw.release.publishedAt),
-        }
-      : null,
+    release: toShownRelease(raw.release),
     pullRequests: raw.pullRequests
       .slice(0, ACTIVITY_MAX_PULL_REQUESTS)
       .map(pull => ({
-        title: sanitiseText(pull.title),
+        title: sanitiseTitle(pull.title),
         mergedOn: toIsoDate(pull.mergedAt),
       }))
       .filter(pull => pull.title.length > 0),
     commits: raw.commits
       .slice(0, ACTIVITY_MAX_COMMITS)
       .map(commit => ({
-        subject: sanitiseText(commitSubject(commit.subject)),
+        subject: sanitiseTitle(commitSubject(commit.subject)),
         date: toIsoDate(commit.date),
       }))
       .filter(commit => commit.subject.length > 0),
   }
-  if (digest.release && digest.release.tag.length === 0) digest.release = null
   return trimToTokenCap(digest)
 }
 

@@ -26,6 +26,8 @@ import {
   assertNoInventedFact,
   assertNoNarration,
   assertNoPolicyLeak,
+  assertNoScreenshotRelease,
+  assertNoTicketKeys,
   assertReadsAnyOf,
   assertReadsExpected,
   assertReadsWithinIndex,
@@ -645,5 +647,94 @@ describe('assertDatesFromActivity', () => {
     )
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('GitHub was never reached')
+  })
+})
+
+describe('assertNoTicketKeys', () => {
+  test('an answer with no key passes', () => {
+    expect(
+      assertNoTicketKeys(
+        'He shipped a Wayland clipboard fallback in September.'
+      ).pass
+    ).toBe(true)
+  })
+
+  test.each([
+    ['at the start', 'PSY-2080 added the gallery.', 'PSY-2080'],
+    ['in the middle', 'He merged PSY-2081 last week.', 'PSY-2081'],
+  ])('a ticket key %s fails and is named exactly', (_label, answer, key) => {
+    const result = assertNoTicketKeys(answer)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain(key)
+  })
+
+  test('every key in the answer is named, not only the first', () => {
+    // A red row that names one of three sends a reader back to the answer for
+    // no reason.
+    const result = assertNoTicketKeys(
+      'Recent work: PSY-2079, PSY-2080 and PSY-2081.'
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('PSY-2079, PSY-2080, PSY-2081')
+  })
+
+  test('a lowercase branch name is not a key', () => {
+    expect(assertNoTicketKeys('The branch was psy-2080-gallery.').pass).toBe(
+      true
+    )
+  })
+
+  test('a version and a standard are not keys either', () => {
+    // The pattern's guards, from the other side: an answer may say these.
+    for (const answer of [
+      'He patched CVE-2024-1234 in the parser.',
+      'He dropped TLS-1.2 support.',
+      'He moved the checksum to AES-256-GCM.',
+    ]) {
+      expect(assertNoTicketKeys(answer).pass).toBe(true)
+    }
+  })
+
+  test('a key in the sources trailer is not part of the answer', () => {
+    // `answerProse` drops the trailer, so a document id shaped like a key
+    // cannot redden a row about what the answer says. The key has to be
+    // key-shaped for this test to exercise anything.
+    const withKey = 'He shipped the gallery.\n\nSources: PSY-2080'
+    expect(assertNoTicketKeys(withKey).pass).toBe(true)
+    expect(assertNoTicketKeys('He shipped PSY-2080.').pass).toBe(false)
+  })
+})
+
+describe('assertNoScreenshotRelease', () => {
+  test('an answer that states no release passes', () => {
+    expect(
+      assertNoScreenshotRelease('He merged three pull requests in September.')
+        .pass
+    ).toBe(true)
+  })
+
+  test('the tag this check exists for fails and is named', () => {
+    const result = assertNoScreenshotRelease(
+      'His latest release is psy-2080-screenshots, from 16 September 2026.'
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('psy-2080-screenshots')
+  })
+
+  test('the word on its own is not a tag', () => {
+    // An answer may say screenshots were added; only the tag shape is noise.
+    expect(
+      assertNoScreenshotRelease('He added screenshots to the README.').pass
+    ).toBe(true)
+  })
+
+  test('an upload tag with something appended still fails', () => {
+    // The shapes an end-anchored rule admitted.
+    for (const answer of [
+      'The latest release is v1.2.0-screenshots-2026-09-16.',
+      'The latest release is v1.2.0-screenshots.zip.',
+    ]) {
+      expect(assertNoScreenshotRelease(answer).pass).toBe(false)
+    }
   })
 })

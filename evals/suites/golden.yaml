@@ -3912,7 +3912,10 @@
 # no llm-rubric: what the repository shipped this week changes between runs,
 # so there is no stable claim to grade. What they assert instead holds
 # whatever GitHub returned that day: the run fetched the right repository, it
-# dated the work, and it named no contributor.
+# dated the work, and it named no contributor, no issue key, and no
+# screenshot upload. The last two are the digest's noise filters seen from
+# the other end (MTC-52): a key or a `-screenshots` tag in an answer means
+# either the filter let it through or the model wrote it from nothing.
 #
 # These two are the only tests in any suite that reach a third party, because
 # the point is the request the route really makes. So they are also the only
@@ -3953,6 +3956,10 @@
     - type: javascript
       value: file://assertions.ts:assertNoHandles
     - type: javascript
+      value: file://assertions.ts:assertNoTicketKeys
+    - type: javascript
+      value: file://assertions.ts:assertNoScreenshotRelease
+    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
 
 - description: 'golden: what he is working on right now on his website'
@@ -3974,5 +3981,9 @@
       value: file://assertions.ts:assertDatesFromActivity
     - type: javascript
       value: file://assertions.ts:assertNoHandles
+    - type: javascript
+      value: file://assertions.ts:assertNoTicketKeys
+    - type: javascript
+      value: file://assertions.ts:assertNoScreenshotRelease
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex

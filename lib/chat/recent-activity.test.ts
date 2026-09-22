@@ -160,11 +160,12 @@ describe('the call caps', () => {
     expect(calls).toEqual([ALLOWED])
   })
 
-  test('two calls for one repository in the same step do not contradict', async () => {
+  test('two calls for one repository in the same step get the same answer', async () => {
     // The SDK runs a step's tool calls concurrently, and models do emit
-    // duplicates. The second call used to read the first's pessimistic
-    // placeholder and be told GitHub could not be reached, in the same step
-    // the first was handed that repository's digest.
+    // duplicates. The second call awaits the first's promise, so one step
+    // carries one outcome for one repository: it cannot hold a digest and
+    // `repository_already_checked` at once, and it cannot hold a digest and a
+    // failure at once either (MTC-52).
     let calls = 0
     const session = createRecentActivitySession({
       fetchActivity: async () => {
@@ -179,12 +180,109 @@ describe('the call caps', () => {
       run(session.tool, ALLOWED),
     ])
 
-    // One fetch, one digest, and a duplicate told it is a duplicate.
     expect(calls).toBe(1)
-    const results = [first, second]
-    expect(results.filter(result => 'activity' in result)).toHaveLength(1)
-    expect(results).toContainEqual({ error: 'repository_already_checked' })
+    expect(first).toMatchObject({ repository: ALLOWED })
+    expect(second).toEqual(first)
+    // The digest is charged once, not once per caller.
+    expect(session.activityCalls()).toBe(1)
+    // Still counted: what the counter is read for is a model looping, which
+    // is what this is whether the second call was refused or coalesced.
     expect(session.activityRefused().duplicate).toBe(1)
+  })
+
+  test('a concurrent duplicate shares the failure rather than contradicting it', async () => {
+    let calls = 0
+    const session = createRecentActivitySession({
+      fetchActivity: async () => {
+        calls += 1
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'unavailable' }
+      },
+    })
+
+    const results = await Promise.all([
+      run(session.tool, ALLOWED),
+      run(session.tool, ALLOWED),
+    ])
+
+    expect(calls).toBe(1)
+    expect(results).toEqual([
+      { error: 'activity_unavailable' },
+      { error: 'activity_unavailable' },
+    ])
+  })
+
+  test('a concurrent duplicate charges the read budget once', async () => {
+    // Measured against a session that did not duplicate, rather than against
+    // this session's own counter: both counters move on adjacent lines, so
+    // comparing them to each other would pass however often either was
+    // charged.
+    const alone = createReadBudget()
+    const single = createRecentActivitySession({
+      budget: alone,
+      ...fetcher(),
+    })
+    await run(single.tool, ALLOWED)
+
+    const budget = createReadBudget()
+    let calls = 0
+    const session = createRecentActivitySession({
+      budget,
+      fetchActivity: async () => {
+        calls += 1
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'ok', raw }
+      },
+    })
+
+    await Promise.all([run(session.tool, ALLOWED), run(session.tool, ALLOWED)])
+
+    expect(calls).toBe(1)
+    expect(budget.spent()).toBe(alone.spent())
+    expect(budget.spent()).toBeGreaterThan(0)
+  })
+
+  test('a duplicate is coalesced even when the call cap is already spent', async () => {
+    // The allowlist is exactly RECENT_ACTIVITY_MAX_CALLS long, so a step that
+    // checks every repository and repeats one reaches the repeat with the cap
+    // spent. Behind the cap check the repeat was told the budget was
+    // exhausted while the first call was being handed that repository's
+    // digest, which is the contradiction the coalescing removes.
+    const fetched: string[] = []
+    const session = createRecentActivitySession({
+      fetchActivity: async repository => {
+        fetched.push(repository.id)
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return { kind: 'ok', raw }
+      },
+    })
+
+    const results = await Promise.all([
+      ...ASSISTANT_REPOSITORIES.map(repository =>
+        run(session.tool, repository.id)
+      ),
+      run(session.tool, ALLOWED),
+    ])
+
+    expect(fetched).toHaveLength(RECENT_ACTIVITY_MAX_CALLS)
+    expect(results[results.length - 1]).toEqual(results[0])
+    expect(session.activityRefused()).toEqual({
+      unknown: 0,
+      duplicate: 1,
+      budget: 0,
+    })
+  })
+
+  test('a call after the in-flight one has settled is told it already has it', async () => {
+    // The coalescing is for one step, not for the request: once the promise
+    // has settled the recorded outcome is what answers, as before.
+    const { fetchActivity, calls } = fetcher()
+    const session = createRecentActivitySession({ fetchActivity })
+    await Promise.all([run(session.tool, ALLOWED), run(session.tool, ALLOWED)])
+    expect(await run(session.tool, ALLOWED)).toEqual({
+      error: 'repository_already_checked',
+    })
+    expect(calls).toEqual([ALLOWED])
   })
 
   test('a repository whose digest did not fit is told that again', async () => {
