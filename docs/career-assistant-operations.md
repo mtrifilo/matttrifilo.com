@@ -71,21 +71,55 @@ Vercel function logs for `/api/chat`, one line per request, all numeric:
 
 ### Vertex first-byte latency, measured (MTC-47)
 
-`vertexFirstByteMs` is the slowest wait before Vertex sent a byte on any model call of one request, and it is the number the two deadlines in `lib/ai/bounded-fetch.ts` are set from. Measured 2026-09-22 over 514 chat requests and 1,136 model calls in six eval runs (35141498434, 35146960224, 35615460739, 35619729850, 35622479143, 35640340223; dated 2026-09-16 to 2026-09-21), on GitHub's Ubuntu runners against the global Vertex endpoint at concurrency 2. To reproduce: `gh run view <id> --log`, then take the `vertexFirstByteMs` field off every `[chat] {` and `[chat] incomplete {` block. All figures in ms:
+`vertexFirstByteMs` on a `[chat]` line is the slowest wait before Vertex sent a byte on any model call of that request. It is the only number that can move the two deadlines in `lib/ai/bounded-fetch.ts`; the value of the last-attempt ceiling is fixed by the budget arithmetic in that file, so a measurement can show it is too small but cannot be what sets it.
 
-| class                   | n   | p50    | p90    | p95    | p99    | max    |
-| ----------------------- | --- | ------ | ------ | ------ | ------ | ------ |
-| all requests            | 514 | 5,288  | 17,013 | 22,051 | 26,838 | 35,970 |
-| no document read        | 173 | 3,322  | 9,695  | 13,842 | 22,999 | 25,634 |
-| one document read       | 117 | 5,468  | 17,925 | 26,187 | 31,661 | 33,958 |
-| two documents read      | 158 | 7,443  | 20,624 | 23,437 | 27,738 | 35,970 |
-| three documents read    | 66  | 6,619  | 18,545 | 22,959 | 25,217 | 25,217 |
-| `vertexRetries` = 0     | 492 | 5,193  | 15,842 | 20,624 | 26,187 | 27,738 |
-| `vertexRetries` above 0 | 22  | 15,789 | 31,661 | 33,958 | 35,970 | 35,970 |
+Measured 2026-09-22 from six eval runs, on GitHub's Ubuntu runners against the global Vertex endpoint at concurrency 2. Suite sizes differ per ref and two of the runs were cancelled part way, so the per-run counts are listed rather than implied; requests exceed tests because the eval provider re-runs a transport failure (`evals/provider.ts`).
 
-22 of the 514 requests recorded `vertexRetries` above zero, 28 retries over 1,136 model calls; 12 of those 22 still answered and 10 did not, which is every unanswered request in the sample. 18 requests failed the wrapper outright, each reporting 67,501 to 67,504 ms across two attempts, which is the 30,000 + 500 + 37,000 arithmetic to within 4 ms: read an elapsed far above that as a bug in the bound, not as upstream latency.
+| run         | requests with a first byte | requests that failed outright |
+| ----------- | -------------------------- | ----------------------------- |
+| 35141498434 | 102                        | 0                             |
+| 35146960224 | 103                        | 1                             |
+| 35615460739 | 29                         | 0                             |
+| 35619729850 | 31                         | 3                             |
+| 35622479143 | 146                        | 11                            |
+| 35640340223 | 103                        | 3                             |
+| total       | 514                        | 18                            |
 
-Three caveats before these numbers are read as production's. They are runner egress to the global endpoint rather than Vercel's. The distribution is censored at 30,000 ms, because a first byte slower than the first-attempt deadline is only ever observed on a last attempt, which is why every sample above 27,738 ms sits in the retried row. And the figure is one request's slowest call, not one call, so it cannot be split by step type.
+**To reproduce.** `gh run view <id> --log` in `mtrifilo/matttrifilo.com`, then:
+
+- The distribution: take `vertexFirstByteMs` off every multi-line `[chat] {`, `[chat] incomplete {` and `[chat] truncated {` block. Skip any block without the field. Percentiles below are nearest-rank, which matters at these sample sizes: a value can be the p95 of one row and the p99 of another.
+- The failures: count single-line `[chat] { stage: 'model', error: 'TimeoutError', vertexRetries: N }` blocks. These carry no `vertexFirstByteMs` and are not in the distribution.
+- The elapsed figures: they are in the `Error [TimeoutError]: Vertex sent no response byte in N ms across M attempt(s)` text, which reaches an eval log because the harness prints the error object. **No `/api/chat` log line carries it** (`logFailure` records a stage, an error name and `vertexRetries` by design), so on Vercel the visible signature of an exhausted wrapper is that failure line, not a duration.
+- Attempt counts: `[chat] step` lines are completed model calls; `[vertex] retry` lines are abandoned attempts; the `TimeoutError` messages are final attempts that threw.
+
+Two populations, never to be mixed. All figures in ms:
+
+| attempts     | 1,190   | 1,136 produced a first byte, 36 abandoned at the probe, 18 exhausted the ceiling |
+| ------------ | ------- | -------------------------------------------------------------------------------- |
+| **requests** | **532** | 514 recorded a `vertexFirstByteMs`, 18 failed outright and recorded none         |
+
+| class                      | n   | p50    | p90    | p95    | p99    | max    |
+| -------------------------- | --- | ------ | ------ | ------ | ------ | ------ |
+| all requests with a value  | 514 | 5,288  | 17,013 | 22,051 | 26,838 | 35,970 |
+| the request answered       | 504 | 5,260  | 16,665 | 21,203 | 26,187 | 33,958 |
+| the request did not answer | 10  | 15,789 | 31,661 | 35,970 | 35,970 | 35,970 |
+| no document read           | 173 | 3,322  | 9,695  | 13,842 | 22,999 | 25,634 |
+| one document read          | 117 | 5,468  | 17,925 | 26,187 | 31,661 | 33,958 |
+| two documents read         | 158 | 7,443  | 20,624 | 23,437 | 27,738 | 35,970 |
+| three documents read       | 66  | 6,619  | 18,545 | 22,959 | 25,217 | 25,217 |
+| `vertexRetries` = 0        | 492 | 5,193  | 15,842 | 20,624 | 26,187 | 27,738 |
+| `vertexRetries` above 0    | 22  | 15,789 | 31,661 | 33,958 | 35,970 | 35,970 |
+
+Outcomes: 22 of the 514 recorded `vertexRetries` above zero; 12 of those answered and 10 did not, and those 10 are every unanswered request in that population. Separately, 18 requests exhausted the wrapper, each reporting 67,501 to 67,504 ms across two attempts, which is 30,000 + 500 + 37,000 to within 4 ms. Counting both, 54 of 1,190 attempts (4.5%) were cut at a deadline, and 18 of 532 requests (3.4%) got no answer from Vertex at all.
+
+**Four things these numbers cannot tell you.**
+
+1. They are runner egress to the global endpoint, not Vercel's. Production has `CHAT_DISABLED=1` (MTC-35), so no production sample exists. `/api/ask/health?cache=1` on a preview is the nearest Vercel-side reading, with the caveat in that route's comment.
+2. They are survivor statistics. `onFirstByte` fires only after a chunk arrives, so a wait cut at its deadline records nothing. "30 s is above p99" follows from how the instrument works, not from how fast Vertex is; the 4.5% attempt-cut rate is the figure that actually says how often a deadline is met.
+3. The distribution is cut twice, once by each deadline. Above 30,000 ms a wait survives only on a last attempt, which is why exactly three samples clear it and all three sit in the retried row. Above 37,000 nothing survives.
+4. The figure is one request's slowest call, not one call, so it cannot be split by step type. Answering "was it the thinking phase or the connection?" needs a per-step first-byte field, which does not exist yet.
+
+**Re-measure when any of these change**, because each one moves the distribution and leaves the figures above quietly false: the default thinking level (`DEFAULT_CHAT_REASONING`, `lib/chat/validate.ts`), the model (`DEFAULT_GEMINI_MODEL`, `lib/ai/vertex.ts`, overridable by `GEMINI_MODEL` and not pinned by the workflow, so record which model a run used), the prompt or corpus size, or `CHAT_MAX_STEPS`. Update the table here and the two constants in `lib/ai/bounded-fetch.test.ts` together. Note also that GitHub deletes workflow logs on its retention window, so the run ids above stop being checkable after roughly 90 days from their dates.
 
 ## Runbook: something is wrong
 
@@ -203,7 +237,7 @@ A summary that never reaches `evals/results/` is not published; the page shows t
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
-4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement the timeout constants are calibrated against, and a full suite is the largest sample of it anything here produces; the percentiles it has produced so far are under "What to watch" above.
+4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency. A row that failed this way writes `[chat] { stage: 'model', error: ..., vertexRetries: N }` and nothing else: no `vertexFirstByteMs`, because no byte arrived. The rows that did answer carry both fields on their completion line, and a full suite is the largest sample of them anything here produces; the percentiles and the extraction recipe are under "What to watch" above.
 
 A fifth possibility is that the job ran out of time rather than failing. `.github/workflows/evals.yml` caps the job at `timeout-minutes: 90` and `bun run evals` uses `--max-concurrency 2`, so a full run is roughly 200 serial model calls: 144 route calls plus 255 grader calls, halved by the concurrency. That fits 90 minutes comfortably at normal latency, and does not fit it if the 3x retry case above holds for most of a run. A timeout kills the job rather than the step, so `continue-on-error` on the suites step does not rescue it and there is no `results.json` to read. If that happens, raise the cap or the concurrency; it is a sizing problem, not a regression. The margin halved when MTC-51 doubled the golden suite, and no wall-time has been measured since.
 

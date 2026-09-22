@@ -157,8 +157,8 @@ export interface VertexClientOptions {
   /**
    * Told how long each model call waited for its first response byte —
    * `VertexCallCounter.observeFirstByte`. The two deadlines in bounded-fetch
-   * are calibrated against this number and recalibrated from it, so every
-   * caller that can report it should.
+   * are checked against this number, and it is the only thing that can move
+   * them, so every caller that can report it should.
    */
   onFirstByte?: (ms: number) => void
 }

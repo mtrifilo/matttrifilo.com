@@ -93,10 +93,13 @@ export async function GET(request: Request) {
         // Above zero means modelMs contains an abandoned connection's wait
         // and a second billed generation, not one slow call.
         retries: calls.retries(),
-        // The slowest wait before Vertex sent a byte, which is what
-        // VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS are
-        // calibrated against; modelMs cannot answer it, since it also contains
-        // the generation.
+        // The slowest wait before Vertex sent a byte; modelMs cannot answer
+        // it, since it also contains the generation. Not comparable with the
+        // percentiles in bounded-fetch.ts: this route sends one word at
+        // reasoning 'none', so its waits are systematically shorter than a
+        // medium-thinking chat step's. What it is good for is the same
+        // deployment's network on two dates, and telling a stalled connection
+        // apart from a slow one.
         firstByteMs: calls.firstByteMs(),
         ms: Date.now() - started,
       },

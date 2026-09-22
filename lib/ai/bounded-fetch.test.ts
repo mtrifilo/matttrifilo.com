@@ -147,9 +147,9 @@ describe('createBoundedFetch', () => {
   })
 
   test('the last attempt is given the larger deadline', async () => {
-    // The point of the split: the earlier attempts probe for a stall on a
-    // guess, the last one is allowed to be slow rather than failing an
-    // answer the visitor is waiting for.
+    // The point of the split: the earlier attempts probe for a stall, the
+    // last one is allowed to be slow rather than failing an answer the
+    // visitor is waiting for.
     const aborted = { count: 0 }
     const deadlines: number[] = []
     const { fetch, retries } = harness((_input, init) => {
@@ -220,10 +220,13 @@ describe('createBoundedFetch', () => {
   })
 
   test('the elapsed a failure reports cannot outrun its own deadlines', async () => {
-    // The reading this pins: two attempts bounded at 10 and 20 ms reporting
-    // an elapsed hundreds of times their sum, because the abort fired on time
-    // and the wait on it did not end. An elapsed far past the ceilings is not
-    // a slow model, it is a ceiling that was reported rather than enforced.
+    // Two attempts bounded at 10 and 20 ms, against a transport that ignores
+    // the abort. Without the race the wrapper never settles here at all and
+    // the elapsed it would eventually report is whatever the transport took,
+    // not the 30 ms it was given: the error names a ceiling the wrapper did
+    // not enforce. Both halves are asserted, the elapsed in the message and
+    // the wall time, because only the pair distinguishes an enforced deadline
+    // from a reported one.
     const { fetch } = harness(deafToAbort())
     const started = Date.now()
 
@@ -240,8 +243,10 @@ describe('createBoundedFetch', () => {
   })
 
   test('a response that arrives after its deadline has its body cancelled', async () => {
-    // An unread stream holds the abandoned connection open for the rest of the
-    // function's life, which is the cost this wrapper exists to stop paying.
+    // A transport that answers the abort with a response rather than a
+    // rejection hands over a live body. Releasing it is the one thing the
+    // wrapper can do for an abandoned connection; an unread stream would hold
+    // it open for the rest of the function's life.
     let cancelled = false
     let calls = 0
     const { fetch } = harness((input, init) => {
@@ -667,9 +672,11 @@ describe('createVertexCallCounter', () => {
   })
 
   test('records how long each call waited for its first byte', async () => {
-    // The number VERTEX_FIRST_BYTE_TIMEOUT_MS is a guess at. Measured from
-    // the request to the first body byte of the attempt that produced one —
-    // so a clock that only moves inside the transport is enough to pin it.
+    // The number both deadlines are checked against. Measured from the
+    // request to the first body byte of the attempt that produced one, so a
+    // clock that only moves inside the transport is enough to pin it. Only
+    // that attempt: a wait cut at its deadline records nothing, which is what
+    // makes every percentile drawn from this a survivor statistic.
     const counter = createVertexCallCounter()
     let clock = 0
     let waitMs = 7
@@ -725,11 +732,15 @@ describe('createVertexCallCounter', () => {
 })
 
 /**
- * The sample the two deadlines are calibrated against: `vertexFirstByteMs` on
- * 514 chat requests over 1,136 model calls, in the six eval runs named in
- * bounded-fetch.ts, read 2026-09-22. Named here so the assertions below cite
- * one figure each rather than repeating a literal, and so a recalibration is a
- * two-line edit whose consequences the tests spell out.
+ * The sample the two deadlines are checked against: `vertexFirstByteMs` on the
+ * 514 chat requests that recorded one, in the six eval runs the runbook names,
+ * read 2026-09-22. Both are survivor statistics, so they are floors under the
+ * deadlines and say nothing about how often a deadline is met.
+ *
+ * Named here so each assertion cites one figure instead of a literal. They are
+ * not the only copies: bounded-fetch.ts states the same distribution in prose
+ * and the runbook tabulates it. A recalibration has to move all three, and the
+ * tests below only guarantee that whatever lands here still fits the budget.
  */
 const MEASURED_P99_MS = 26_838
 const MEASURED_MAX_MS = 35_970
@@ -777,18 +788,18 @@ describe('the constants the 300 s function limit allows', () => {
     ).toBeGreaterThan(VERCEL_FUNCTION_LIMIT_MS)
   })
 
-  test('the fast bound sits above the measured p99 of a healthy step', () => {
-    // 514 requests over six eval runs, 2026-09-16 to 2026-09-21 (the run ids
-    // are in bounded-fetch.ts): p95 22,051 ms, p99 26,838. A probe below p99
-    // spends a second billed generation on steps that were only slow, so the
-    // measurement is the floor.
+  test('the probe clears the measured p99 of the waits that survived it', () => {
+    // A probe below p99 of the surviving distribution cuts steps that were
+    // only slow, and each cut buys a second billed generation. The measurement
+    // is a floor, not a justification: how often the probe is actually met is
+    // an attempt-level rate, which no constant here carries.
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(MEASURED_P99_MS)
     // And below the point where a stall is unmistakable: healthy calls on
     // this deployment never approached 80 s, stalled ones sat at 80 to 110.
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeLessThan(80_000)
   })
 
-  test('the last attempt clears the slowest first byte measured', () => {
+  test('the last attempt clears the slowest wait ever measured', () => {
     // A ceiling under the slowest measured wait turns a slow answer into no
     // answer, which is the one outcome this attempt has no retry to cover.
     expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(MEASURED_MAX_MS)
@@ -797,14 +808,25 @@ describe('the constants the 300 s function limit allows', () => {
     )
   })
 
-  test('the two bounds still fit inside the per-call budget together', () => {
-    // The two tests above set a floor under each bound and the budget test
-    // sets a ceiling over their sum, which is the whole feasible region. It is
-    // asserted rather than left implied, because a future recalibration that
-    // raises one floor past the room the other leaves has no valid answer and
-    // should fail here rather than in the arithmetic.
+  test('the two floors and the budget still leave a feasible region', () => {
+    // The two tests above put a floor under each deadline and the budget test
+    // puts a ceiling over their sum. Asserted rather than left implied: a
+    // recalibration that raises a floor past the room the other one leaves has
+    // no valid answer at all, and should fail here rather than force whoever
+    // hits it to rediscover the arithmetic.
+    //
+    // Derived from VERTEX_MAX_ATTEMPTS the same way worstCasePerModelCall is,
+    // because the probe is spent once per attempt before the last: at three
+    // attempts the floors need 90,646 ms of a 67,500 ms budget, and a version
+    // of this that assumed two would call that feasible.
+    const probes = VERTEX_MAX_ATTEMPTS - 1
+    const backoffs = Array.from(
+      { length: probes },
+      (_, i) =>
+        VERTEX_RETRY_BACKOFF_MS[i] ?? VERTEX_RETRY_BACKOFF_MS.at(-1) ?? 0
+    ).reduce((a, b) => a + b, 0)
     expect(
-      MEASURED_P99_MS + VERTEX_RETRY_BACKOFF_MS[0] + MEASURED_MAX_MS
-    ).toBeLessThan(VERTEX_REQUEST_WAIT_BUDGET_MS / CHAT_MAX_STEPS)
+      MEASURED_P99_MS * probes + backoffs + MEASURED_MAX_MS
+    ).toBeLessThanOrEqual(VERTEX_REQUEST_WAIT_BUDGET_MS / CHAT_MAX_STEPS)
   })
 })

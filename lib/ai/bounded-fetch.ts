@@ -106,26 +106,39 @@ export interface BoundedFetchOptions {
  * How long an attempt *before the last* may take to send its first response
  * byte.
  *
- * Measured, not assumed. 514 chat requests over 1,136 model calls in six eval
- * runs, on GitHub runners against the global Vertex endpoint at concurrency 2
- * (runs 35141498434, 35146960224, 35615460739, 35619729850, 35622479143 and
- * 35640340223, dated 2026-09-16 to 2026-09-21, read 2026-09-22), put
- * `vertexFirstByteMs` at p50 5,288 ms, p90 17,013, p95 22,051, p99 26,838 and
- * a maximum of 35,970. Chat steps run at thinking `medium` and thought tokens
- * are not streamed (`sendReasoning: false`), so the connection is quiet
- * through that phase; 30 s sits above p99 of it, which is why a healthy step
- * does not meet this bound. 28 of those 1,136 calls did, 2.5%.
+ * Measured against six eval runs on GitHub runners against the global Vertex
+ * endpoint at concurrency 2. The run ids, the per-run counts and the
+ * extraction recipe are in the operations runbook, under "What to watch"; so
+ * is the warning about treating runner egress as Vercel's. Two populations,
+ * because mixing them is the easiest way to misread this:
  *
- * The sample is censored at exactly this number and cannot say otherwise: a
- * first byte later than 30 s is only ever observed on a last attempt, because
- * every earlier attempt is cut here. Three samples are above it, and they are
- * the evidence that steps do run past this bound and that the wider ceiling
- * below is what answers them.
+ *   attempts        1,190   1,136 produced a first byte, 36 were abandoned
+ *                           here and retried, 18 exhausted the ceiling below
+ *   requests          532   514 recorded a `vertexFirstByteMs`, 18 failed
+ *                           outright and recorded none
  *
- * Moving it is not free in either direction. The two deadlines sum to a
- * constant the arithmetic below derives, so a second added here is a second
- * taken off the only attempt whose deadline a visitor ever sees, and that
- * attempt has about a second of margin to give.
+ * Over the 514: p50 5,288 ms, p90 17,013, p95 22,051, p99 26,838, max 35,970.
+ * Chat steps run at thinking `medium` and thought tokens are not streamed
+ * (`sendReasoning: false`), so the connection is quiet through that phase.
+ *
+ * Read those percentiles as survivor statistics, which is the one thing about
+ * them that matters. `onFirstByte` fires only after a chunk arrives, so a wait
+ * that outran its deadline cannot enter the distribution: "30 s is above p99"
+ * is true by construction of the instrument and is not evidence that the
+ * deadline is rarely met. The figure that is evidence sits in the attempt row:
+ * 54 of 1,190 attempts, 4.5%, were cut at one of the two deadlines. Each of
+ * the 36 cut here bought a second connection to a generation Vertex may still
+ * have been running, and billing for.
+ *
+ * The distribution is therefore cut twice, once by each deadline, and neither
+ * cut shows up in the percentiles it produces. Above 30 s a wait survives only
+ * on a last attempt, which is why exactly three samples clear it (31,661,
+ * 33,958 and 35,970) and all three belong to requests that retried. Above 37 s
+ * nothing survives at all.
+ *
+ * Moving this number is not free in either direction. The two deadlines sum to
+ * a constant the arithmetic below derives, so a second added here is a second
+ * taken off the only attempt whose deadline a visitor ever sees.
  *
  * `msSinceStart` on the `[chat] step` line is not this measurement: it is
  * elapsed time to the *end* of a step, generation included.
@@ -182,16 +195,28 @@ export const VERTEX_MAX_ATTEMPTS = 2
  *     backoff                 500 ms
  *   left for the last      37_000 ms
  *
- * 37 s is that, not rounded, and the sample above says it is enough by very
- * little. The slowest first byte in those 514 requests was 35,970 ms and the
- * slowest on a request that went on to answer was 33,958, both necessarily on
- * a last attempt, since no earlier one lives past 30 s. Nothing reached
- * 37,000. About 1 s separates this ceiling from the worst thing measured
- * against it, so it is the number to defend when the probe above is argued
- * upward: a ceiling that fires is a visitor's failed answer, and widening it
- * without taking the seconds from the probe needs either fewer steps or a
- * larger share of the function limit than VERTEX_REQUEST_WAIT_BUDGET_MS
- * reserves.
+ * 37 s is that, not rounded: fixed by the arithmetic, not chosen from the
+ * measurement. The measurement cannot confirm it either, because the sample is
+ * censored at exactly this number, an attempt slower than it throwing rather
+ * than recording a wait. What the sample does say is that two things are true
+ * at once:
+ *
+ *   waits this long happen. The slowest recorded was 35,970 ms, and the
+ *   slowest on a request that went on to answer was 33,958, so a ceiling
+ *   under that would have turned an answer into a failure;
+ *
+ *   18 of the 532 requests, 3.4%, exhausted this ceiling and got nothing,
+ *   each reporting the full 67,500 ms across its two attempts.
+ *
+ * Whether those 18 were connections that were never going to speak or steps
+ * that wanted 40 s is not answerable from a failure line carrying only a stage
+ * and an error name, and that is the question deciding whether this number is
+ * too small rather than merely tight. Until something answers it, widening has
+ * no measured case, and nowhere to take the seconds from: out of the probe
+ * above, whose own margin is what holds the cut rate at 4.5%, or out of
+ * CHAT_MAX_STEPS, or out of the reserve VERTEX_REQUEST_WAIT_BUDGET_MS keeps
+ * outside the waiting budget. All three are choices about the shape of a
+ * request rather than about this constant.
  *
  * The worst case that arithmetic reaches — every step stalling once, then its
  * last attempt running to the ceiling — is 4 x (30 + 0.5 + 37) = 270 s. Read
@@ -364,12 +389,19 @@ export function createBoundedFetch({
  * The signal still reaches the transport, so a cooperative one tears its own
  * connection down. This race is what holds the deadline when it is not.
  * Waiting on the transport's promise alone gives the attempt no ceiling at
- * all: a connection stuck in DNS, in connect or in the TLS handshake may
- * never reject, and every number in this file is then a number the wrapper
- * reports rather than enforces. The elapsed in `firstByteTimeout` is measured
- * against the wall clock, so an attempt that outlives its abort is reported
- * as the time it really took, which is how an elapsed many times the sum of
- * the ceilings reaches a log line.
+ * all: a connection stuck in DNS, in connect or in the TLS handshake may never
+ * reject, and every number in this file is then a number the wrapper reports
+ * rather than enforces. `firstByteTimeout` measures its elapsed against the
+ * wall clock, so an attempt that outlives its abort still reports the time it
+ * really took, and the message can name an elapsed many times the sum of the
+ * ceilings that produced it.
+ *
+ * What this bounds is our own waiting, and only that. For the case it exists
+ * for there is no response yet and so no body to release: the socket, and any
+ * generation behind it, stay with the transport until it gives up. One request
+ * can hold several such connections. Bounding the wait is what keeps a step
+ * from spending the whole function on one of them; it does not reclaim
+ * anything.
  *
  * The body phase downstream races the same signal for the same reason. Both
  * halves of the wait need it, because the deadline has to end the wait
