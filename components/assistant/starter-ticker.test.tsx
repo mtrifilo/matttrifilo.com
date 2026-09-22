@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { STARTER_QUESTIONS } from './copy'
 import { StarterTicker } from './starter-ticker'
-import { TICKER_COPIES } from './ticker-geometry'
+import { TICKER_ANIMATION_NAME, TICKER_COPIES } from './ticker-geometry'
 
 /**
  * The starter ticker as it is rendered (MTC-59).
@@ -15,8 +15,10 @@ import { TICKER_COPIES } from './ticker-geometry'
  *
  * Nothing here asserts motion or position. Happy DOM runs no animations and
  * lays nothing out, so every pill measures zero wide; the speed, the pause
- * and where a focused pill lands are preview checks, and the two behaviours
- * below are the ones that exist without a layout.
+ * and where a focused pill lands are preview checks. Where a behaviour only
+ * starts once the row is moving, the test states a running loop and a
+ * measured width itself, and asserts the flag the component writes, never
+ * what the browser would then draw.
  */
 
 const REAL_MATCH_MEDIA = window.matchMedia
@@ -156,6 +158,73 @@ describe('holding the row still', () => {
     const { track } = rowOf(container)
 
     screen.getAllByRole('button')[0].focus()
+    expect(track.dataset.frozen).toBeUndefined()
+  })
+})
+
+describe('a moving row, while a pill has focus', () => {
+  const COPY_WIDTH = 600
+  const REAL_BOUNDING_RECT = Element.prototype.getBoundingClientRect
+
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = REAL_BOUNDING_RECT
+  })
+
+  /**
+   * Render a row that believes it is moving.
+   *
+   * The component measures one copy of the pool when it mounts, and only a
+   * row with a measured width and a running loop has a position to hand
+   * over, so both are stated: the copy's width before the render, and the
+   * browser's animation on the track after it.
+   */
+  function renderMovingRow() {
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const rect = REAL_BOUNDING_RECT.call(this)
+      if (!this.classList.contains('starter-ticker-copy')) return rect
+      return { ...rect.toJSON(), width: COPY_WIDTH } as DOMRect
+    }
+    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const row = rowOf(container)
+    const loop = {
+      animationName: TICKER_ANIMATION_NAME,
+      effect: { getComputedTiming: () => ({ progress: 0.25 }) },
+    } as unknown as Animation
+    row.track.getAnimations = () => [loop]
+    return row
+  }
+
+  test('freezes the track, which is the flag the stylesheet stops it on', () => {
+    const { track } = renderMovingRow()
+
+    screen.getAllByRole('button')[0].focus()
+    expect(track.dataset.frozen).toBe('true')
+  })
+
+  test('stays frozen while focus moves from one pill to the next', () => {
+    // Thawing between two pills would restart the loop under a visitor who
+    // is tabbing along the row. The next pill's focus would freeze it again,
+    // so the end state alone cannot tell; what is checked is that the flag
+    // was never taken off on the way.
+    const { track } = renderMovingRow()
+    const [first, second] = screen.getAllByRole('button')
+    first.focus()
+
+    const flagChanges = new MutationObserver(() => {})
+    flagChanges.observe(track, { attributeFilter: ['data-frozen'] })
+    second.focus()
+    const changes = flagChanges.takeRecords()
+    flagChanges.disconnect()
+
+    expect(changes).toHaveLength(0)
+    expect(track.dataset.frozen).toBe('true')
+  })
+
+  test('thaws once focus leaves the row', () => {
+    const { track } = renderMovingRow()
+
+    screen.getAllByRole('button')[0].focus()
+    ;(document.activeElement as HTMLElement).blur()
     expect(track.dataset.frozen).toBeUndefined()
   })
 })
