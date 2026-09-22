@@ -93,9 +93,8 @@ export interface BoundedFetchOptions {
   onRetry?: (retry: BoundedFetchRetry) => void
   /**
    * Time from an attempt's request to its first body byte, once per attempt
-   * that produced one. This is the number the two deadlines above are
-   * calibrated against, so it is measured rather than inferred from a step
-   * duration.
+   * that produced one. This is the number the two deadlines above are checked
+   * against, so it is measured rather than inferred from a step duration.
    */
   onFirstByte?: (ms: number) => void
   /** Injected so the measured duration is assertable. */
@@ -107,34 +106,41 @@ export interface BoundedFetchOptions {
  * byte.
  *
  * Measured against six eval runs on GitHub runners against the global Vertex
- * endpoint at concurrency 2. The run ids, the per-run counts and the
- * extraction recipe are in the operations runbook, under "What to watch"; so
- * is the warning about treating runner egress as Vercel's. Two populations,
- * because mixing them is the easiest way to misread this:
+ * endpoint at concurrency 2. The run ids, the per-run counts and the extraction
+ * recipe are in the operations runbook, under "What to watch"; so is the
+ * warning about treating runner egress as Vercel's.
  *
- *   attempts        1,190   1,136 produced a first byte, 36 were abandoned
- *                           here and retried, 18 exhausted the ceiling below
- *   requests          532   514 recorded a `vertexFirstByteMs`, 18 failed
- *                           outright and recorded none
+ * Count attempts, not requests, when asking how often a deadline is met. One
+ * request spans up to CHAT_MAX_STEPS model calls and each call up to
+ * VERTEX_MAX_ATTEMPTS attempts, and a request that exhausts the wrapper can
+ * write both a failure line and an `incomplete` completion line, so
+ * request-level counts cannot be added up. Attempts can: every attempt ends in
+ * exactly one of three log shapes, and each shape is counted from its own line.
  *
- * Over the 514: p50 5,288 ms, p90 17,013, p95 22,051, p99 26,838, max 35,970.
- * Chat steps run at thinking `medium` and thought tokens are not streamed
+ *   1,136   completed a model call (a `[chat] step` line)
+ *      36   abandoned here and retried (a `[vertex] retry` line)
+ *      18   exhausted the ceiling below and threw (a TimeoutError message)
+ *   -----
+ *   1,190   attempts, of which 54 were cut at a deadline: 4.5%
+ *
+ * Of the 523 requests behind them, 514 recorded a `vertexFirstByteMs`. Over
+ * those: p50 5,288 ms, p90 17,013, p95 22,051, p99 26,838, max 35,970. Chat
+ * steps run at thinking `medium` and thought tokens are not streamed
  * (`sendReasoning: false`), so the connection is quiet through that phase.
  *
  * Read those percentiles as survivor statistics, which is the one thing about
  * them that matters. `onFirstByte` fires only after a chunk arrives, so a wait
  * that outran its deadline cannot enter the distribution: "30 s is above p99"
  * is true by construction of the instrument and is not evidence that the
- * deadline is rarely met. The figure that is evidence sits in the attempt row:
- * 54 of 1,190 attempts, 4.5%, were cut at one of the two deadlines. Each of
- * the 36 cut here bought a second connection to a generation Vertex may still
- * have been running, and billing for.
+ * deadline is rarely met. The 4.5% above is that evidence. Each of the 36 cut
+ * here bought a second connection to a generation Vertex may still have been
+ * running, and billing for.
  *
  * The distribution is therefore cut twice, once by each deadline, and neither
  * cut shows up in the percentiles it produces. Above 30 s a wait survives only
- * on a last attempt, which is why exactly three samples clear it (31,661,
- * 33,958 and 35,970) and all three belong to requests that retried. Above 37 s
- * nothing survives at all.
+ * on a last attempt, which is why the three samples that clear it (31,661,
+ * 33,958 and 35,970) all belong to requests that retried. Above 37 s nothing
+ * survives at all.
  *
  * Moving this number is not free in either direction. The two deadlines sum to
  * a constant the arithmetic below derives, so a second added here is a second
@@ -205,7 +211,7 @@ export const VERTEX_MAX_ATTEMPTS = 2
  *   slowest on a request that went on to answer was 33,958, so a ceiling
  *   under that would have turned an answer into a failure;
  *
- *   18 of the 532 requests, 3.4%, exhausted this ceiling and got nothing,
+ *   18 of the 523 requests, 3.4%, exhausted this ceiling and got nothing,
  *   each reporting the full 67,500 ms across its two attempts.
  *
  * Whether those 18 were connections that were never going to speak or steps
@@ -273,7 +279,7 @@ export interface VertexCallCounter {
  * logs of the request that paid for it: a `modelMs` or a `[chat] ms` that
  * quietly contains a second billed generation is a measurement no one can
  * read correctly. The first-byte time is the other half: the number both
- * deadlines in this file are calibrated against, which nothing measures
+ * deadlines in this file are checked against, which nothing measures
  * unless it is counted here. One counter per request, wired into the model
  * client that request uses, is what makes either reportable.
  */

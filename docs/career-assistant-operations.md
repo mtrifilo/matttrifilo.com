@@ -75,15 +75,17 @@ Vercel function logs for `/api/chat`, one line per request, all numeric:
 
 Measured 2026-09-22 from six eval runs, on GitHub's Ubuntu runners against the global Vertex endpoint at concurrency 2. Suite sizes differ per ref and two of the runs were cancelled part way, so the per-run counts are listed rather than implied; requests exceed tests because the eval provider re-runs a transport failure (`evals/provider.ts`).
 
-| run         | requests with a first byte | requests that failed outright |
-| ----------- | -------------------------- | ----------------------------- |
-| 35141498434 | 102                        | 0                             |
-| 35146960224 | 103                        | 1                             |
-| 35615460739 | 29                         | 0                             |
-| 35619729850 | 31                         | 3                             |
-| 35622479143 | 146                        | 11                            |
-| 35640340223 | 103                        | 3                             |
-| total       | 514                        | 18                            |
+| run         | requests | recorded a first byte | wrote a `TimeoutError` failure line |
+| ----------- | -------- | --------------------- | ----------------------------------- |
+| 35141498434 | 102      | 102                   | 0                                   |
+| 35146960224 | 103      | 103                   | 1                                   |
+| 35615460739 | 30       | 29                    | 0                                   |
+| 35619729850 | 32       | 31                    | 3                                   |
+| 35622479143 | 152      | 146                   | 11                                  |
+| 35640340223 | 104      | 103                   | 3                                   |
+| total       | 523      | 514                   | 18                                  |
+
+The last two columns do not partition the first and must never be added: a request that exhausts the wrapper can write a failure line **and** an `incomplete` completion line carrying a `vertexFirstByteMs`, and 9 requests here did both. The request column is counted independently, one `botIdBypassed` line per request. In each cancelled run one request was killed mid-flight and logged neither.
 
 **To reproduce.** `gh run view <id> --log` in `mtrifilo/matttrifilo.com`, then:
 
@@ -92,11 +94,16 @@ Measured 2026-09-22 from six eval runs, on GitHub's Ubuntu runners against the g
 - The elapsed figures: they are in the `Error [TimeoutError]: Vertex sent no response byte in N ms across M attempt(s)` text, which reaches an eval log because the harness prints the error object. **No `/api/chat` log line carries it** (`logFailure` records a stage, an error name and `vertexRetries` by design), so on Vercel the visible signature of an exhausted wrapper is that failure line, not a duration.
 - Attempt counts: `[chat] step` lines are completed model calls; `[vertex] retry` lines are abandoned attempts; the `TimeoutError` messages are final attempts that threw.
 
-Two populations, never to be mixed. All figures in ms:
+**Count attempts, not requests, when asking how often a deadline is met.** Request-level counts cannot be added, for the reason above. Attempts can: each one ends in exactly one of three log shapes.
 
-| attempts     | 1,190   | 1,136 produced a first byte, 36 abandoned at the probe, 18 exhausted the ceiling |
-| ------------ | ------- | -------------------------------------------------------------------------------- |
-| **requests** | **532** | 514 recorded a `vertexFirstByteMs`, 18 failed outright and recorded none         |
+| attempts ended as                  | count | log line                            |
+| ---------------------------------- | ----- | ----------------------------------- |
+| completed a model call             | 1,136 | `[chat] step`                       |
+| abandoned at the probe and retried | 36    | `[vertex] retry`                    |
+| exhausted the ceiling and threw    | 18    | `Error [TimeoutError]: ...`         |
+| total                              | 1,190 | 54 of them, 4.5%, cut at a deadline |
+
+The distribution, over the 514 requests that recorded one. All figures in ms:
 
 | class                      | n   | p50    | p90    | p95    | p99    | max    |
 | -------------------------- | --- | ------ | ------ | ------ | ------ | ------ |
@@ -110,13 +117,13 @@ Two populations, never to be mixed. All figures in ms:
 | `vertexRetries` = 0        | 492 | 5,193  | 15,842 | 20,624 | 26,187 | 27,738 |
 | `vertexRetries` above 0    | 22  | 15,789 | 31,661 | 33,958 | 35,970 | 35,970 |
 
-Outcomes: 22 of the 514 recorded `vertexRetries` above zero; 12 of those answered and 10 did not, and those 10 are every unanswered request in that population. Separately, 18 requests exhausted the wrapper, each reporting 67,501 to 67,504 ms across two attempts, which is 30,000 + 500 + 37,000 to within 4 ms. Counting both, 54 of 1,190 attempts (4.5%) were cut at a deadline, and 18 of 532 requests (3.4%) got no answer from Vertex at all.
+Outcomes: 22 of the 514 recorded `vertexRetries` above zero; 12 of those answered and 10 did not, and those 10 are every unanswered request in that population. The 18 that exhausted the wrapper each reported 67,501 to 67,504 ms across two attempts, which is 30,000 + 500 + 37,000 to within 4 ms; 18 of 523 requests, 3.4%, is how often a visitor would have got nothing. Do not try to reconcile the 22 and the 18 into a single retry total. They are drawn from the two overlapping populations above, and the unduplicated attempt-level figure is the 36 in the table.
 
 **Four things these numbers cannot tell you.**
 
 1. They are runner egress to the global endpoint, not Vercel's. Production has `CHAT_DISABLED=1` (MTC-35), so no production sample exists. `/api/ask/health?cache=1` on a preview is the nearest Vercel-side reading, with the caveat in that route's comment.
 2. They are survivor statistics. `onFirstByte` fires only after a chunk arrives, so a wait cut at its deadline records nothing. "30 s is above p99" follows from how the instrument works, not from how fast Vertex is; the 4.5% attempt-cut rate is the figure that actually says how often a deadline is met.
-3. The distribution is cut twice, once by each deadline. Above 30,000 ms a wait survives only on a last attempt, which is why exactly three samples clear it and all three sit in the retried row. Above 37,000 nothing survives.
+3. The distribution is cut twice, once by each deadline. Above 30,000 ms a wait survives only on a last attempt, which is why exactly three samples clear it (31,661, 33,958 and 35,970) and all three sit in the retried row. Above 37,000 nothing survives.
 4. The figure is one request's slowest call, not one call, so it cannot be split by step type. Answering "was it the thinking phase or the connection?" needs a per-step first-byte field, which does not exist yet.
 
 **Re-measure when any of these change**, because each one moves the distribution and leaves the figures above quietly false: the default thinking level (`DEFAULT_CHAT_REASONING`, `lib/chat/validate.ts`), the model (`DEFAULT_GEMINI_MODEL`, `lib/ai/vertex.ts`, overridable by `GEMINI_MODEL` and not pinned by the workflow, so record which model a run used), the prompt or corpus size, or `CHAT_MAX_STEPS`. Update the table here and the two constants in `lib/ai/bounded-fetch.test.ts` together. Note also that GitHub deletes workflow logs on its retention window, so the run ids above stop being checkable after roughly 90 days from their dates.

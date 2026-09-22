@@ -27,8 +27,7 @@ export async function GET(request: Request) {
   // one slow call, and the probe's "first call" would not be the single clean
   // call it reads as. `firstByteMs` is the other half: the wait before
   // Vertex said anything, which is the number the wrapper's deadlines are
-  // calibrated against and which `modelMs` folds together with the
-  // generation.
+  // checked against and which `modelMs` folds together with the generation.
   const calls = createVertexCallCounter()
   try {
     // Built inside the try: it reads the five GCP_* variables, and a missing
