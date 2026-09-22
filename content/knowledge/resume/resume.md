@@ -1,7 +1,7 @@
 ---
 id: 'resume'
 title: 'Résumé'
-summary: "Matt Trifilo's published résumé: roles since 2017, independent deploys off the weekly release train, and reported outcomes."
+summary: "Matt Trifilo's published résumé: roles since 2017, what each team owned and shipped, where he is based and his work preferences, and reported outcomes."
 tags: [resume, experience, engineering-management, email-infrastructure, ai-agents]
 updated: '2026-09-14'
 canonical: 'https://matttrifilo.com/resume'
