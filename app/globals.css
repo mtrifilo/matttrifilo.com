@@ -189,15 +189,15 @@
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
  * one copy, so both rows drift at one speed whatever they carry; the value
- * declared here is roughly one row's copy width divided by the speed in
- * ticker-geometry.ts, and is only what a row runs at while it is still
- * invisible, waiting to be placed. --ticker-offset is where in the loop a
- * row opens, as a fraction, which is how a row lands on a whole pill and how
- * the homepage and /ask avoid showing the same questions at the same moment.
+ * declared here is any positive duration, replaced before the row is ever
+ * shown. --ticker-offset is where in the loop a row opens, as a fraction,
+ * which is how a row lands on a whole pill and how the homepage and /ask
+ * avoid showing the same questions at the same moment.
  *
- * The distance here, the copy count in starter-ticker.tsx and the
- * conversions in ticker-geometry.ts are one decision written in three
- * languages. lib/ticker-css.test.ts is what keeps them the same decision.
+ * The distance here, TICKER_COPIES in ticker-geometry.ts (the number of
+ * copies starter-ticker.tsx renders) and the conversions beside it are one
+ * decision written in two languages. lib/ticker-css.test.ts is what keeps
+ * them the same decision.
  */
 @keyframes starter-ticker {
   from {
@@ -335,7 +335,8 @@
   display: flex;
   width: max-content;
   /* Stated once; the component overrides both inline from the measurement,
-     in the same step that makes the row visible. */
+     in the same step that makes the row visible. The duration only has to
+     be a valid one until then. */
   --ticker-duration: 170s;
   --ticker-offset: 0;
   animation: starter-ticker var(--ticker-duration) linear infinite;
@@ -347,7 +348,8 @@
  * opening pill. The server cannot know where that pill sits, so without this
  * the first frames would show the row at the start of its loop, with a
  * question cut by the fade, and then jump. It keeps its height meanwhile, so
- * nothing below it moves when it appears.
+ * nothing below it moves when it appears. The cost is that the rows need the
+ * page's JavaScript to appear at all, which their buttons need anyway.
  */
 @media (prefers-reduced-motion: no-preference) {
   .starter-ticker-track:not([data-placed='true']) {
@@ -374,6 +376,16 @@
  * starter-ticker.tsx hands the same position to scrollLeft in the same
  * breath, so the row does not move and the browser can scroll it again.
  */
+/*
+ * A restart, for the length of one forced layout: the component drops the
+ * animation and puts it straight back with a new duration and offset, which
+ * starts it afresh instead of amending the running one. Separate from the
+ * freeze below, which also moves the pills.
+ */
+.starter-ticker-track[data-restarting='true'] {
+  animation: none;
+}
+
 .starter-ticker-track[data-frozen='true'] {
   animation: none;
   /* The lead that lets a row's first pill be scrolled clear of the fade.

@@ -79,7 +79,8 @@ export const HOME_START_AT = 0
 export const ASK_START_AT = 4
 
 /**
- * The pool split across the two rows: the odd positions, then the even ones.
+ * The pool split across the two rows: the odd positions, then the even ones,
+ * counting from one (so the first row holds indices 0, 2, 4 and so on).
  *
  * Odd and even rather than first half and second half, because the pool is
  * ordered by what the reader most wants answered: halving it would bury the
@@ -90,9 +91,9 @@ export const ASK_START_AT = 4
 export function tickerRows(
   pool: readonly string[]
 ): readonly [readonly string[], readonly string[]] {
-  const odd = pool.filter((_, index) => index % 2 === 0)
-  const even = pool.filter((_, index) => index % 2 === 1)
-  return [odd, even]
+  const firstRow = pool.filter((_, index) => index % 2 === 0)
+  const secondRow = pool.filter((_, index) => index % 2 === 1)
+  return [firstRow, secondRow]
 }
 
 /**

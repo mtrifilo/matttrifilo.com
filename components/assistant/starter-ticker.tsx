@@ -142,8 +142,10 @@ export function StarterTicker({
  * One drifting row.
  *
  * Each row measures itself, because the rows hold a different number of
- * questions and therefore loop over different distances. One speed, two
- * durations, which is also what keeps the rows from ever falling into step.
+ * questions and therefore loop over different distances: one speed, two
+ * durations. The rows are out of step because they carry different
+ * questions of different widths, so their pill boundaries never line up
+ * after the opening pill, whose leading edge both rows park at the fade.
  */
 function TickerRow({
   questions,
@@ -162,10 +164,7 @@ function TickerRow({
   const copyWidthRef = useRef(0)
   // False until the row has been laid out once and placed on its opening
   // pill. After that the offset belongs to the loop and to the blur handler.
-  const openedRef = useRef(false)
-  // The blank lead the track was frozen with. The thaw has to subtract the
-  // same number the freeze added, even if the fade changed in between.
-  const insetRef = useRef(0)
+  const placedRef = useRef(false)
 
   /**
    * One loop is one copy's width, so the duration is what holds the speed
@@ -190,15 +189,15 @@ function TickerRow({
     const seconds = loopSeconds(width)
     if (seconds === null || width === copyWidthRef.current) return
     copyWidthRef.current = width
-    const offset = openedRef.current
+    const offset = placedRef.current
       ? animationProgress(track)
       : openingProgress(
           pillStart(copy, startAt),
           fadeWidth(viewport),
           copyWidthRef.current
         )
-    openedRef.current = true
-    track.dataset.frozen = 'true'
+    placedRef.current = true
+    track.dataset.restarting = 'true'
     // Read to flush the style change, so removing it below starts a new
     // animation rather than amending the running one.
     void track.offsetWidth
@@ -206,7 +205,7 @@ function TickerRow({
     if (offset !== null) {
       track.style.setProperty('--ticker-offset', String(offset))
     }
-    delete track.dataset.frozen
+    delete track.dataset.restarting
     track.dataset.placed = 'true'
   }, [startAt])
 
@@ -234,25 +233,26 @@ function TickerRow({
     // inside the fades because the row sets scroll-padding to match them.
     if (prefersReducedMotion()) return
 
-    // Nothing is moving before the first frame, and nothing is transformed
-    // either, so the row can simply be scrolled.
-    const moving = track.getAnimations().length > 0
-    if (moving && track.dataset.frozen !== 'true') {
-      const progress = animationProgress(track)
+    // A row already frozen is one the visitor is tabbing along: it is held
+    // at its scroll offset and only the reveal below applies. Otherwise the
+    // loop's position is handed over to scrollLeft. With no loop running
+    // there is no transform to hand over, and the row can simply be scrolled.
+    const progress =
+      track.dataset.frozen === 'true' ? null : animationProgress(track)
+    if (progress !== null) {
       const copyWidth = copyWidthRef.current
-      // Without both of these the transform cannot be converted, and
-      // scrolling a track that is still transformed would add one offset to
-      // the other. Leaving the row where it is beats moving it wrongly.
-      if (progress === null || copyWidth <= 0) return
+      // Without a width the transform cannot be converted, and scrolling a
+      // track that is still transformed would add one offset to the other.
+      // Leaving the row where it is beats moving it wrongly.
+      if (copyWidth <= 0) return
       // Freeze first: the rule that drops the animation also drops the
       // transform and adds the lead, and the scroll offset below replaces
       // both exactly.
-      insetRef.current = fadeWidth(viewport)
       track.dataset.frozen = 'true'
       viewport.scrollLeft = scrollLeftForProgress(
         progress,
         copyWidth,
-        insetRef.current
+        leadOf(track)
       )
     }
 
@@ -282,10 +282,13 @@ function TickerRow({
       // Tabbing from one pill to the next keeps the row frozen.
       const next = event.relatedTarget
       if (next instanceof Node && event.currentTarget.contains(next)) return
+      // The lead is read while the track still has it, and read live: a
+      // fade that changed width while the row was held (a rotation across
+      // the breakpoint) moved the pills by the new width, not the old one.
       const progress = progressForScrollLeft(
         viewport.scrollLeft,
         copyWidthRef.current,
-        insetRef.current
+        leadOf(track)
       )
       viewport.scrollLeft = 0
       track.style.setProperty('--ticker-offset', String(progress))
@@ -401,6 +404,15 @@ function pillStart(copy: HTMLElement, startAt: number): number {
   const pills = copy.children
   const pill = pills.item(pillIndexFor(startAt, pills.length))
   return pill instanceof HTMLElement ? pill.offsetLeft : 0
+}
+
+/**
+ * The blank lead a frozen track carries, as the stylesheet actually applied
+ * it. It is the fade width by declaration; reading the padding itself is
+ * what keeps the freeze and the thaw converting with the pixels on screen.
+ */
+function leadOf(track: Element): number {
+  return Number.parseFloat(getComputedStyle(track).paddingInlineStart) || 0
 }
 
 /** The edge fade, read from the stylesheet so one number defines it. */

@@ -44,19 +44,14 @@ describe('the loop duration', () => {
 describe('splitting the pool across the rows', () => {
   const [first, second] = tickerRows(STARTER_QUESTIONS)
 
-  test('row one takes the odd positions and row two the even ones', () => {
+  test('row one takes the odd positions and row two the even ones, so the leading questions lead both rows', () => {
+    // The pool is ordered by what the reader most wants answered, so a
+    // first-half/second-half split would bury the lead questions at the back
+    // of the second row. Positions count from one.
     expect(first[0]).toBe(STARTER_QUESTIONS[0])
     expect(first[1]).toBe(STARTER_QUESTIONS[2])
     expect(second[0]).toBe(STARTER_QUESTIONS[1])
     expect(second[1]).toBe(STARTER_QUESTIONS[3])
-  })
-
-  test('the leading questions lead both rows', () => {
-    // The pool is ordered by what the reader most wants answered, so a
-    // first-half/second-half split would bury the lead questions at the back
-    // of the second row.
-    expect(first[0]).toBe(STARTER_QUESTIONS[0])
-    expect(second[0]).toBe(STARTER_QUESTIONS[1])
   })
 
   test('every question is in exactly one row, once', () => {
@@ -86,14 +81,17 @@ describe('splitting the pool across the rows', () => {
 })
 
 describe('which pill a row opens on', () => {
-  test('a surface names one index and every row resolves it', () => {
-    const [first, second] = tickerRows(STARTER_QUESTIONS)
-    expect(pillIndexFor(ASK_START_AT, first.length)).toBe(ASK_START_AT)
-    expect(pillIndexFor(ASK_START_AT, second.length)).toBe(ASK_START_AT)
-  })
-
-  test('/ask opens further into the rows than the homepage', () => {
-    expect(ASK_START_AT).not.toBe(HOME_START_AT)
+  test('the surfaces open every row on different, whole pills', () => {
+    // Indices, not fractions: a fraction of a track lands wherever the pill
+    // widths put it, which is how a row opens on half a question. And /ask
+    // must not open on what the homepage just showed, in either row.
+    expect(Number.isInteger(HOME_START_AT)).toBe(true)
+    expect(Number.isInteger(ASK_START_AT)).toBe(true)
+    for (const row of tickerRows(STARTER_QUESTIONS)) {
+      expect(pillIndexFor(ASK_START_AT, row.length)).not.toBe(
+        pillIndexFor(HOME_START_AT, row.length)
+      )
+    }
   })
 
   test('an index past the end of a row wraps into it', () => {
@@ -280,17 +278,21 @@ describe('bringing a focused pill into view', () => {
     // track is given, clearing the gradient would need a negative scroll.
     // With the lead the pill starts at the fade, and a scroll of zero shows
     // it whole.
-    expect(
-      revealScrollLeft({ ...row, scrollLeft: 0, pillStart: 0, pillWidth: 275 })
-    ).toBe(0)
-    expect(
-      revealScrollLeft({
-        ...row,
-        scrollLeft: 4000,
-        pillStart: FADE,
-        pillWidth: 275,
-      })
-    ).toBe(0)
+    const withoutLead = revealScrollLeft({
+      ...row,
+      scrollLeft: 0,
+      pillStart: 0,
+      pillWidth: 275,
+    })
+    // On screen a pill starts at pillStart - scrollLeft.
+    expect(0 - withoutLead).toBeLessThan(FADE)
+    const withLead = revealScrollLeft({
+      ...row,
+      scrollLeft: 4000,
+      pillStart: FADE,
+      pillWidth: 275,
+    })
+    expect(FADE - withLead).toBeGreaterThanOrEqual(FADE)
   })
 
   test('never scrolls past either end of the track', () => {

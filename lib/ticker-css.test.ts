@@ -11,9 +11,10 @@ import {
 /**
  * The contract between app/globals.css and the starter ticker (MTC-39).
  *
- * The row's behaviour is split across three languages: a keyframe in the
- * stylesheet, a copy count in the component, and the conversions in
- * ticker-geometry.ts. They are one decision, and each of the checks below is
+ * The rows' behaviour is split across two languages: a keyframe in the
+ * stylesheet, and the copy count and conversions in ticker-geometry.ts that
+ * the component renders and scrolls by. They are one decision, and each of
+ * the checks below is
  * an edit that would otherwise pass typecheck, lint and every other test
  * while quietly breaking the row in a way only a keyboard user would meet.
  */
@@ -125,7 +126,9 @@ describe('the shared edge fade', () => {
     // either of the two places that consume it is a silent half-fix: the
     // gradient and the focus offset would stop agreeing.
     expect(faded).toContain(`scroll-padding-inline: var(${EDGE_FADE_PROPERTY})`)
-    expect(faded).toContain(`var(${EDGE_FADE_PROPERTY})`)
+    const mask = /mask-image:([^;]*);/.exec(faded)?.[1] ?? ''
+    expect(mask).toContain(`black var(${EDGE_FADE_PROPERTY})`)
+    expect(mask).toContain(`calc(100% - var(${EDGE_FADE_PROPERTY}))`)
   })
 
   test('both rows of pills wear the class that declares it', () => {
@@ -214,9 +217,10 @@ describe('the state flags the component writes', () => {
   })
 
   test('a held or static track leads with the fade width the component adds', () => {
-    // starter-ticker.tsx adds the fade it reads off the row to scrollLeft as
-    // it freezes. A lead of any other width moves the row by the difference
-    // at every focus.
+    // starter-ticker.tsx reads the lead back off the frozen track and adds
+    // it to scrollLeft, and it places a focused pill clear of the fade it
+    // reads off the row. A lead narrower than the fade leaves a row's first
+    // pill under the gradient.
     expect(ruleFor(".starter-ticker-track[data-frozen='true']")).toContain(
       `padding-inline-start: var(${EDGE_FADE_PROPERTY})`
     )
@@ -224,9 +228,15 @@ describe('the state flags the component writes', () => {
     expect(reduced).toContain(`padding-inline: var(${EDGE_FADE_PROPERTY})`)
   })
 
-  test('hover and focus stop both rows, not just the one under the pointer', () => {
-    expect(css).toContain('.starter-ticker:hover .starter-ticker-track')
-    expect(css).toContain('.starter-ticker:focus-within .starter-ticker-track')
+  test('hover, focus and touch stop both rows, not just the one under the pointer', () => {
+    const pause = ruleFor('.starter-ticker:hover .starter-ticker-track')
+    expect(pause).toContain(
+      '.starter-ticker:focus-within .starter-ticker-track'
+    )
+    expect(pause).toContain(
+      ".starter-ticker[data-touched='true'] .starter-ticker-track"
+    )
+    expect(pause).toContain('animation-play-state: paused')
   })
 
   test('reduced motion turns both rows into plain scroll strips', () => {
@@ -239,6 +249,17 @@ describe('the state flags the component writes', () => {
     expect(block).toContain('.starter-ticker-row')
     expect(block).toContain('overflow-x: auto')
     expect(block).toContain('animation: none')
+  })
+
+  test('a restart drops the animation and moves nothing', () => {
+    // It lasts one forced layout. A lead here would shift the pills during
+    // it, which is the freeze's business, not the restart's.
+    const restart = ruleFor(".starter-ticker-track[data-restarting='true']")
+    expect(restart).toContain('animation: none')
+    expect(restart).not.toContain('padding')
+    expect(componentSource('starter-ticker.tsx')).toContain(
+      "dataset.restarting = 'true'"
+    )
   })
 
   test('freezing drops the animation rather than pausing it', () => {
