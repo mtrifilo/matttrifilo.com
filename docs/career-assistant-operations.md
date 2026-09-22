@@ -197,6 +197,18 @@ Belt and braces, owner's call: the project environment variable `VERCEL_FORCE_NO
 
 If a preview ever looks like the branch's markup with the wrong styling, check the stylesheet before the code: open the page, fetch the `<link rel="stylesheet">` it names, and search it for a class the branch added. A stylesheet without that class is a cache hit, not a CSS bug. Rebuild the same commit without the cache: the deployment's **Redeploy** button in the Vercel dashboard with **Use existing Build Cache** unchecked. (`vercel deploy --force` also skips the cache, but it uploads the working directory rather than the commit, so only from a clean tree on the branch, and never `--prod`.) Then check again.
 
+## Component tests (MTC-59)
+
+Rendered behaviour is testable under `bun test`: no browser, no dev server, no runner change.
+
+**Where they live.** Beside the component, as `*.test.tsx` (`components/assistant/starter-ticker.test.tsx`). Logic a component only draws stays where it is decided and keeps its own `.test.ts`, which is why `lib/chat/progress.ts` and `components/assistant/ticker-geometry.ts` are tested without a DOM.
+
+**What the preload does.** `bunfig.toml` preloads `test/dom-preload.ts` once per run, before any test file is imported, because React DOM reads `window` and `document` while its own module evaluates. It registers Happy DOM through `@happy-dom/global-registrator`, puts back every global Bun already implements that Happy DOM overwrote, and registers React Testing Library's `cleanup` as an `afterEach`. Bun cannot scope a test preload to a subset of files, so every test file runs with a DOM present; the restore is what keeps that from changing the implementation under the server suites. The streams are the sharp edge: Happy DOM replaces `TransformStream` but not `ReadableStream`, and mixing the two throws `readable should be ReadableStream` through every streamed answer. `test/dom-preload.test.tsx` fails first, and by name, if a version bump breaks that.
+
+**What not to test this way.** Happy DOM runs no animations and lays nothing out: every element measures zero wide, `:hover` and `:focus-within` do not resolve, and no stylesheet is applied. So motion, speed, pause-on-hover, scroll positions, focus-reveal offsets and anything that depends on a real width are preview checks, not tests. The stylesheet's own half of a behaviour is asserted against the CSS text instead (`lib/ticker-css.test.ts`, `lib/globals-css.test.ts`). What a component test is for is the markup: what exists, how much of it, what a screen reader and the tab key reach, which state the component writes for the stylesheet to read, and what a click or a toggle changes.
+
+**Running them.** `bun test components/assistant/starter-ticker.test.tsx` for one file, `bun test -t 'folds the steps away'` for one test. Cost of the whole setup, measured 2026-09-22: the suite went from 1,086 tests in 1.8 to 2.2 seconds to 1,107 tests in 1.9 to 2.3 seconds, on the same machine, with and without `TZ=America/Phoenix`.
+
 ## Updating the knowledge base
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.
