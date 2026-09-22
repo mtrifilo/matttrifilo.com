@@ -45,12 +45,31 @@ export function takePendingQuestion(now = Date.now()): string | null {
     const raw = sessionStorage.getItem(PENDING_QUESTION_KEY)
     if (raw === null) return null
     sessionStorage.removeItem(PENDING_QUESTION_KEY)
-    const pending = JSON.parse(raw) as { question?: unknown; at?: unknown }
-    if (typeof pending.question !== 'string' || typeof pending.at !== 'number')
-      return null
-    if (now - pending.at > PENDING_QUESTION_TTL_MS) return null
-    return pending.question
+    return askableQuestion(raw, now)
   } catch {
     return null
   }
+}
+
+/**
+ * Whether /ask is about to ask a handed-off question, without taking it. The
+ * page reads this while rendering, so it lays out a conversation from its
+ * first frame rather than an empty state it would drop a moment later.
+ */
+export function hasPendingQuestion(now = Date.now()): boolean {
+  try {
+    const raw = sessionStorage.getItem(PENDING_QUESTION_KEY)
+    return raw !== null && askableQuestion(raw, now) !== null
+  } catch {
+    return false
+  }
+}
+
+/** The stored question, or null when it is malformed or has gone stale. */
+function askableQuestion(raw: string, now: number): string | null {
+  const pending = JSON.parse(raw) as { question?: unknown; at?: unknown }
+  if (typeof pending.question !== 'string' || typeof pending.at !== 'number')
+    return null
+  if (now - pending.at > PENDING_QUESTION_TTL_MS) return null
+  return pending.question
 }

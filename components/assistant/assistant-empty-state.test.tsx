@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AssistantEmptyState } from './assistant-empty-state'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
@@ -52,10 +53,35 @@ describe('the /ask empty state', () => {
   test('claims no more of the column than its own content', () => {
     // The composer is a sibling in assistant-chat.tsx and is centred with
     // this group rather than docked under it, so the group must not stretch
-    // and push the composer away. The flexible space that does the centring
-    // is that file's, not this one's.
-    expect(html.slice(0, html.indexOf('>'))).toBe(
-      '<div class="flex flex-col gap-6"'
-    )
+    // and push the composer away.
+    const root = html.slice(0, html.indexOf('>'))
+    expect(root).not.toMatch(/\b(flex-1|grow|h-full|min-h-)/)
+  })
+})
+
+describe('the /ask column before the first question', () => {
+  // assistant-chat.tsx needs a browser to render, so its layout is read from
+  // the source: a flexible space above the group and one below the composer
+  // is what centres the two as one, and the composer sits directly under the
+  // group with the disclosure under it.
+  const source = readFileSync(
+    new URL('./assistant-chat.tsx', import.meta.url),
+    'utf8'
+  )
+  const spacer = '{!docked && <div aria-hidden="true" className="flex-1" />}'
+
+  test('centres the group and the composer between two flexible spaces', () => {
+    expect(source.split(spacer)).toHaveLength(3)
+    const [above, below] = [source.indexOf(spacer), source.lastIndexOf(spacer)]
+    expect(above).toBeLessThan(source.indexOf('<AssistantEmptyState'))
+    expect(source.indexOf('<AssistantDisclosure')).toBeLessThan(below)
+  })
+
+  test('puts the composer under the group and the disclosure under it', () => {
+    const group = source.indexOf('<AssistantEmptyState')
+    const composer = source.indexOf('<AssistantComposer')
+    expect(group).toBeGreaterThan(-1)
+    expect(group).toBeLessThan(composer)
+    expect(composer).toBeLessThan(source.indexOf('<AssistantDisclosure'))
   })
 })

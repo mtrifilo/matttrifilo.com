@@ -3,7 +3,14 @@
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { RotateCcw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import {
   Conversation,
   ConversationContent,
@@ -22,6 +29,7 @@ import {
 import type { ChatUIMessage } from '@/lib/chat/handler'
 import { STOPPED_BEFORE_FIRST_STEP } from '@/lib/chat/progress'
 import { createChatFetch } from '@/lib/chat/transport'
+import { cn } from '@/lib/utils'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
@@ -30,7 +38,7 @@ import { AssistantHeader } from './assistant-header'
 import { ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { ASSISTANT_NAME, RESET_LABEL } from './copy'
-import { takePendingQuestion } from './pending-question'
+import { hasPendingQuestion, takePendingQuestion } from './pending-question'
 import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
@@ -95,6 +103,19 @@ export function AssistantChat() {
   // answered and then failed on a regenerate.
   const askedRef = useRef<string | null>(null)
 
+  // True while a question handed over from the homepage is waiting to be
+  // asked. It is read during render, so the first frame after the hand-off
+  // is already a conversation: without it the page would paint the centred
+  // empty state and then drop the composer to the bottom, on the path most
+  // visitors arrive by. The server has no storage to read and says false;
+  // the layout effect below takes the question in the same frame, and by the
+  // next render the transcript holds it.
+  const handingOff = useSyncExternalStore(
+    subscribeToNothing,
+    hasPendingQuestion,
+    noPendingQuestionOnServer
+  )
+
   const {
     messages,
     sendMessage,
@@ -130,6 +151,9 @@ export function AssistantChat() {
   const busy = status === 'submitted' || status === 'streaming'
   const errorView = useMemo(() => toChatErrorView(error), [error])
   const hasTranscript = messages.length > 0
+  // Whether the composer is docked under a transcript, or centred with the
+  // empty state as one group.
+  const docked = hasTranscript || handingOff
   // One clock for the page, started the moment a question is sent rather than
   // when the stream opens, so the timer counts the wait the visitor is
   // actually sitting through. It freezes wherever the run ended.
@@ -173,9 +197,10 @@ export function AssistantChat() {
   // The homepage panel hands its question over through sessionStorage; asking
   // it here is what makes submitting from the homepage feel like one action.
   // The ref, not the storage read, is what keeps it to one send: React runs
-  // effects twice in development.
+  // effects twice in development. A layout effect, so the docked layout is
+  // in place before the first paint.
   const handedOff = useRef(false)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (handedOff.current) return
     handedOff.current = true
     const pending = takePendingQuestion()
@@ -209,7 +234,14 @@ export function AssistantChat() {
   }, [stop])
 
   return (
-    <div className="mx-auto flex h-[calc(100svh-var(--nav-height))] w-full max-w-3xl flex-col gap-6 px-4 pt-8 pb-6 md:px-8">
+    <div
+      className={cn(
+        'mx-auto flex h-[calc(100svh-var(--nav-height))] w-full max-w-3xl flex-col gap-6 px-4 pt-8 pb-6 md:px-8',
+        // A screen too short for the whole group scrolls the column rather
+        // than the page, which /ask never does.
+        !docked && 'overflow-y-auto'
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         <AssistantHeader />
         {hasTranscript && (
@@ -227,7 +259,7 @@ export function AssistantChat() {
       {/* The page keeps its heading once the conversation starts; it only
           stops taking up room. The empty state renders the visible one, as
           part of its centred group. */}
-      {hasTranscript && <h1 className="sr-only">{ASSISTANT_NAME}</h1>}
+      {docked && <h1 className="sr-only">{ASSISTANT_NAME}</h1>}
 
       <p aria-atomic="true" className="sr-only" role="status">
         {announcement}
@@ -237,9 +269,9 @@ export function AssistantChat() {
           the composer below is part of it. Two flexible spaces do that,
           rather than a wrapper around both, because the composer keeps its
           caret and its draft only while it keeps its place in this tree. */}
-      {!hasTranscript && <div aria-hidden="true" className="flex-1" />}
+      {!docked && <div aria-hidden="true" className="flex-1" />}
 
-      {hasTranscript ? (
+      {docked ? (
         <Conversation className="min-h-0">
           <ConversationContent className="pb-2">
             {messages.map((message, index) => {
@@ -323,7 +355,18 @@ export function AssistantChat() {
         <AssistantDisclosure />
       </div>
 
-      {!hasTranscript && <div aria-hidden="true" className="flex-1" />}
+      {!docked && <div aria-hidden="true" className="flex-1" />}
     </div>
   )
+}
+
+// The pending question lives in sessionStorage, which announces nothing to
+// this tab, and it only ever goes from present to taken inside this page's
+// own layout effect, after which the transcript holds the question.
+function subscribeToNothing(): () => void {
+  return () => {}
+}
+
+function noPendingQuestionOnServer(): boolean {
+  return false
 }
