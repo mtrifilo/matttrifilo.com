@@ -963,32 +963,6 @@ describe('checking GitHub', () => {
     expect(payloads.at(-1)?.steps).toEqual([])
   })
 
-  test('a duplicate call in one step shares the row of the check it repeats', async () => {
-    // The SDK runs a step's tool calls concurrently, and the session answers
-    // the second call from the first one's fetch, which is still running: two
-    // outputs, one check, and one row for the repository.
-    const model = modelOf(checksTwice(REPOSITORY), answers())
-    const handler = createChatHandler({
-      loadKnowledgeIndex: () => index,
-      readKnowledgeDocument,
-      model: () => model,
-      verifyVisitor: () => Promise.resolve(HUMAN),
-      fetchActivity: async () => {
-        await new Promise(resolve => setTimeout(resolve, 20))
-        return { kind: 'ok' as const, raw: ACTIVITY_RAW }
-      },
-      env: {},
-      now: () => 1_000,
-    })
-    const body = await (
-      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
-    ).text()
-
-    expect(progressFrom(body).at(-1)?.steps).toEqual([
-      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
-    ])
-  })
-
   describe('a repository asked for twice at once is one check', () => {
     const [first, second, third] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
 
@@ -1032,6 +1006,33 @@ describe('checking GitHub', () => {
         )
         .at(-1)
 
+    /**
+     * Whether any call in the first step was refused as a repeat. The tests
+     * below are about calls that share a fetch, and they would pass for the
+     * wrong reason if the session refused the repeat instead.
+     */
+    const repeatRefused = (model: MockLanguageModelV4) =>
+      JSON.stringify(
+        model.doStreamCalls[1].prompt.filter(message => message.role === 'tool')
+      ).includes('repository_already_checked')
+
+    test('a duplicate call in one step shares the row of the check it repeats', async () => {
+      // The SDK runs a step's tool calls concurrently, and the session
+      // answers the second call from the first one's fetch, which is still
+      // running: two outputs, one check, and one row for the repository.
+      const model = modelOf(checksTwice(first), answers())
+      const body = await (
+        await handlerWithSlowFetch(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+
+      expect(repeatRefused(model)).toBe(false)
+      expect(lastProgress(body)?.steps).toEqual([
+        { id: first, title: first, kind: 'activity' },
+      ])
+    })
+
     test('a repository checked in a later step still earns its row', async () => {
       // The repeat in the first step is answered from the fetch already
       // running, so that step ends with two digests for one repository and
@@ -1049,6 +1050,7 @@ describe('checking GitHub', () => {
         )
       ).text()
 
+      expect(repeatRefused(model)).toBe(false)
       const progress = lastProgress(body)
       expect(progress?.steps).toEqual([
         { id: first, title: first, kind: 'activity' },
@@ -1063,7 +1065,7 @@ describe('checking GitHub', () => {
       })
     })
 
-    test('two calls for one repository and one for another count two checks', async () => {
+    test('two calls for one repository and one for another earn a row each', async () => {
       const model = modelOf(checksAll(first, first, second), answers())
       const body = await (
         await handlerWithSlowFetch(model)(
@@ -1071,6 +1073,7 @@ describe('checking GitHub', () => {
         )
       ).text()
 
+      expect(repeatRefused(model)).toBe(false)
       const progress = lastProgress(body)
       expect(progress?.steps).toEqual([
         { id: first, title: first, kind: 'activity' },
@@ -1101,46 +1104,47 @@ describe('checking GitHub', () => {
       ])
       expect(totalsOf(progress)).toMatchObject({ documents: 0, activity: 3 })
     })
+  })
 
-    test('a transcript whose part is short a row is still accepted on replay', async () => {
-      // What the route wrote for the later-step case while a repeat counted
-      // twice: the third repository was checked and never listed. The part
-      // has the same shape either way, so a browser still holding one
-      // replays it with the next question and both ends read it as before.
-      const shortPart = {
-        type: PROGRESS_PART_TYPE,
-        id: PROGRESS_PART_ID,
-        data: {
-          phase: 'done',
-          ms: 4_000,
-          steps: [
-            { id: first, title: first, kind: 'activity' as const },
-            { id: second, title: second, kind: 'activity' as const },
-          ],
-        },
-      }
-      const model = readingModel()
-      const response = await handlerWith(model)(
-        post({
-          messages: [
-            uiMessage('user', QUESTION),
-            {
-              id: 'assistant-replayed',
-              role: 'assistant',
-              parts: [shortPart, { type: 'text', text: 'first answer' }],
-            },
-            uiMessage('user', 'And since then?'),
-          ],
-        })
-      )
-      await response.text()
+  test('a replayed progress part is accepted whatever rows it holds', async () => {
+    // Replay treats the part as narration and never reconciles its rows with
+    // the checks behind the answer, so a part listing fewer repositories than
+    // were checked is accepted on the way in and read unchanged in the
+    // browser. A browser holding such a part sends it with the next question.
+    const [first, second] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
+    const shortPart = {
+      type: PROGRESS_PART_TYPE,
+      id: PROGRESS_PART_ID,
+      data: {
+        phase: 'done',
+        ms: 4_000,
+        steps: [
+          { id: first, title: first, kind: 'activity' as const },
+          { id: second, title: second, kind: 'activity' as const },
+        ],
+      },
+    }
+    const model = readingModel()
+    const response = await handlerWith(model)(
+      post({
+        messages: [
+          uiMessage('user', QUESTION),
+          {
+            id: 'assistant-replayed',
+            role: 'assistant',
+            parts: [shortPart, { type: 'text', text: 'first answer' }],
+          },
+          uiMessage('user', 'And since then?'),
+        ],
+      })
+    )
+    await response.text()
 
-      expect(response.status).toBe(200)
-      expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain(
-        'first answer'
-      )
-      expect(toProgressView([shortPart])?.steps).toEqual(shortPart.data.steps)
-    })
+    expect(response.status).toBe(200)
+    expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain(
+      'first answer'
+    )
+    expect(toProgressView([shortPart])?.steps).toEqual(shortPart.data.steps)
   })
 
   test('a document and a check are counted apart on the log line', async () => {

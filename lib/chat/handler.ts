@@ -704,12 +704,13 @@ function withProgress({
    * answer two calls. The activity session answers a repeat call for a
    * repository whose fetch is still running with that same fetch
    * (lib/chat/recent-activity.ts), so a step that asks for one repository
-   * twice ends with two successful outputs for one check. The session's cap
-   * counts it once, and so must the prediction in `toStep`: counted per
-   * output, a repository asked for in a later step would be fetched with no
-   * row over it. The dedup lives here rather than in `toStep` because this is
-   * where the second output arrives; by the time `toStep` sees a call, the
-   * repeat's row is already refused by `listed`.
+   * twice ends with two successful outputs from one fetch. The session's cap
+   * spends one call on that fetch, so the prediction in `toStep` must count
+   * it once too: counted per output, a repository asked for in a later step would be
+   * fetched with no row over it. The dedup lives where outputs are counted
+   * because the overcount is in the outputs. `toStep` sees calls, not
+   * outputs, and is handed only a number, so it cannot tell two outputs for
+   * one repository from one output each for two.
    */
   const checked = new Set<string>()
   let phase: ChatProgressPhase = 'reading'
@@ -775,13 +776,16 @@ function withProgress({
           // Refused. Withdraw the row unless some other call for the same id
           // produced something, or still might. Two calls that share a row
           // can end differently: a document read twice whose repeat is
-          // refused for the budget, or a repository asked for again once its
-          // fetch has settled, which is told `repository_already_checked`.
-          // The SDK runs a step's calls concurrently and emits each outcome
-          // as it settles, so the refusal can arrive first, and withdrawing
-          // on it would take the row away from work that did happen. Calls
-          // for a repository whose fetch is still running never end
-          // differently: they share that fetch's outcome.
+          // refused for the budget, or a repository asked for again in a
+          // later step, which is told `repository_already_checked` after its
+          // digest was delivered. `succeeded` keeps the row in both. The
+          // wait on calls still in flight is defensive: the SDK runs a
+          // step's calls concurrently and emits each outcome as it settles,
+          // which is no promise that a refusal arrives after the success it
+          // follows, and withdrawing on an early refusal would take the row
+          // away from work that did happen. Calls for a repository whose
+          // fetch is still running never end differently: they share that
+          // fetch's outcome.
           if (succeeded.has(step.id)) break
           let stillWaiting = false
           for (const other of inFlight.values()) {
@@ -840,11 +844,15 @@ function withProgress({
  * The caps are predicted here so the list never opens a row for work that
  * cannot happen: past KNOWLEDGE_READ_BUDGET.maxDocuments the read session
  * refuses on count alone, and past RECENT_ACTIVITY_MAX_CALLS the activity
- * session does the same, both before looking at the id. `reads` and `checks`
- * are counted from tool OUTPUTS rather than from calls, so they hold work
- * that happened, and `checks` counts repositories rather than outputs, as the
- * session's cap does; a refusal this stage cannot predict, such as a document
- * larger than the remaining token budget, withdraws its row when the outcome
+ * session does the same, both before looking at the id. `reads` and
+ * `checkedRepositories` come from successful tool OUTPUTS rather than from
+ * calls, so they hold work that happened: `reads` counts every successful
+ * read, repeats included, as the read budget does, and
+ * `checkedRepositories` counts distinct repositories. Both can fall short of
+ * what the sessions count, never exceed it: the activity cap also spends a
+ * call on a fetch that failed. A refusal this stage cannot predict, such as
+ * a document larger than the remaining token budget or a check past a cap
+ * that a failed fetch helped spend, withdraws its row when the outcome
  * arrives instead of being guessed at here.
  *
  * That correction is what lets the token half of the budget go unpredicted.
@@ -857,13 +865,13 @@ function toStep(
   chunk: { toolName?: unknown; input?: unknown },
   indexed: ReadonlyMap<string, KnowledgeEntry>,
   reads: number,
-  checks: number
+  checkedRepositories: number
 ): ChatProgressStep | undefined {
   const input = chunk.input
   if (typeof input !== 'object' || input === null) return undefined
 
   if (chunk.toolName === RECENT_ACTIVITY_TOOL_NAME) {
-    if (checks >= RECENT_ACTIVITY_MAX_CALLS) return undefined
+    if (checkedRepositories >= RECENT_ACTIVITY_MAX_CALLS) return undefined
     const id = (input as { repository?: unknown }).repository
     if (typeof id !== 'string') return undefined
     // The name comes from the allowlist, never from the model, which is the
@@ -936,12 +944,16 @@ function flatRefusals(r: {
  * The same, for the activity checks. Flat fields a log query can aggregate.
  *
  * `activityRefusedDuplicate` is the one that is not only refusals: it counts
- * every repeated check, the ones answered from a fetch still in flight as
- * well as the ones refused `repository_already_checked`. A model that repeats
- * a check is looping whether or not the session could answer the repeat, and
- * this field is how an operator sees it. The progress view counts a
- * repository once however often it was asked for (`withProgress`), so a
- * repeat costs no row.
+ * repeats answered from a fetch still in flight as well as repeats refused
+ * `repository_already_checked`. A model that repeats a check is looping
+ * whether or not the session could answer the repeat, and this field is how
+ * an operator sees it. Some repeats land elsewhere, because the session
+ * repeats the outcome it recorded or meets another guard first: one past the
+ * call cap, or for a repository whose digest the budget refused, counts as
+ * `activityRefusedBudget`, and one for a repository GitHub did not answer is
+ * told `activity_unavailable` again and counted nowhere. The progress view
+ * counts a repository once however often it was asked for (`withProgress`),
+ * so a repeat costs no row.
  */
 function flatActivityRefusals(r: ActivityRefused) {
   return {
