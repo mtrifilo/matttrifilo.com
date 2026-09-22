@@ -7,7 +7,7 @@ import {
   LoaderCircle,
   PenLine,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -30,8 +30,10 @@ import {
   PROGRESS_UNFINISHED,
   PROGRESS_WRITING,
   progressChecking,
+  progressHeadings,
   progressReading,
   progressSummary,
+  progressTopic,
 } from './copy'
 
 /**
@@ -42,8 +44,13 @@ import {
  * that tracks the run, a step per document, and a timer. The clock sits on
  * the headline until a document is named, then moves onto the active step
  * so "Working…" does not sit above "Reading Résumé…". Once the answer is
- * there the headline becomes "Read 3 documents in 14s" and the steps fold
- * away behind it.
+ * there the headline names the tool and the number of sources, and the steps
+ * fold away behind it.
+ *
+ * A read row carries two more lines than it shows at a glance (MTC-50): the
+ * corpus topic the document sits in, and that document's section titles.
+ * Both come off the index on the server, so a row can only describe a
+ * document the assistant actually opened.
  *
  * This file draws. It decides nothing: which of six states a run is in, which
  * rows it has, and what the clock reads are all settled in lib/chat/progress,
@@ -117,6 +124,7 @@ export function AssistantProgress({
       <ChainOfThoughtContent>
         {rows.map(row => (
           <ChainOfThoughtStep
+            description={description(row)}
             icon={rowIcon(row)}
             key={row.key}
             label={label(row)}
@@ -153,6 +161,32 @@ function label(row: ProgressRow): string {
   return row.kind === 'activity'
     ? progressChecking(row.title)
     : progressReading(row.title)
+}
+
+/**
+ * What a read row says under its title: the corpus topic, then the
+ * document's section headings as a second, quieter line.
+ *
+ * Read rows only. The writing row names no document, and a GitHub check has
+ * neither a topic nor sections. A row whose step carries neither field, as
+ * every step written before MTC-50 does, gets no second line rather than an
+ * empty one.
+ */
+function description(row: ProgressRow): ReactNode {
+  if (row.kind !== 'document') return undefined
+  const topic = row.topic === undefined ? undefined : progressTopic(row.topic)
+  const headings = row.headings ?? []
+  if (topic === undefined && headings.length === 0) return undefined
+  return (
+    <div className="space-y-1">
+      {topic !== undefined && <div>{topic}</div>}
+      {headings.length > 0 && (
+        <div className="text-muted-foreground/70">
+          {progressHeadings(headings)}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /**

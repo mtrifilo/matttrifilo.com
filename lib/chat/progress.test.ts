@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor, type AnswerView } from './answer'
+import { TOPIC_ORDER } from '@/lib/knowledge/build'
 import {
+  MAX_HEADINGS,
+  MAX_HEADING_CHARS,
   PROGRESS_PART_TYPE,
+  PROGRESS_TOPICS,
   STOPPED_BEFORE_FIRST_STEP,
   progressRows,
   progressSeconds,
@@ -345,6 +349,172 @@ describe('activity steps', () => {
     expect(announcementFor('streaming', false, inFlight)).toBe(
       'Checking GitHub for decant'
     )
+  })
+})
+
+describe('the detail an expanded read row shows', () => {
+  const outlined = (step: Record<string, unknown>) =>
+    toProgressView([progressPart({ phase: 'reading', steps: [step] })])
+      ?.steps[0]
+
+  test('the topics a step may name are the corpus topics', () => {
+    // lib/chat/progress.ts may not import the build, which reads the
+    // filesystem at module scope, so the list is written out twice. A topic
+    // added to the corpus and not here would reach a row with no label.
+    expect([...PROGRESS_TOPICS]).toEqual([...TOPIC_ORDER])
+  })
+
+  test('a topic and a set of headings survive validation', () => {
+    expect(
+      outlined({
+        id: 'resume',
+        title: 'Résumé',
+        topic: 'resume',
+        headings: ['Experience', 'Education'],
+      })
+    ).toEqual({
+      id: 'resume',
+      title: 'Résumé',
+      topic: 'resume',
+      headings: ['Experience', 'Education'],
+    })
+  })
+
+  test('a step from before the fields existed still validates', () => {
+    // The browser replays the whole message back with the next question, so
+    // transcripts narrated by an earlier version are being validated right
+    // now. They keep their row, and simply have no second line.
+    const step = outlined({ id: 'resume', title: 'Résumé' })
+    expect(step).toEqual({ id: 'resume', title: 'Résumé' })
+    expect(step).not.toHaveProperty('topic')
+    expect(step).not.toHaveProperty('headings')
+  })
+
+  test('a bad field costs the row its detail, never the row', () => {
+    // Lenient one field at a time: dropping the step would undercount the
+    // work, which is the one false claim this module exists to prevent.
+    for (const bad of [
+      { topic: 'salary', headings: ['Experience'] },
+      { topic: 42, headings: ['Experience'] },
+      { topic: 'resume', headings: 'Experience' },
+      { topic: 'resume', headings: [7, {}, null] },
+      { topic: 'resume', headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1)] },
+    ]) {
+      const step = outlined({ id: 'resume', title: 'Résumé', ...bad })
+      expect(step?.id).toBe('resume')
+      expect(step?.title).toBe('Résumé')
+    }
+    // The unknown topic goes, the good headings stay.
+    expect(
+      outlined({
+        id: 'resume',
+        title: 'Résumé',
+        topic: 'salary',
+        headings: ['Experience'],
+      })
+    ).toEqual({ id: 'resume', title: 'Résumé', headings: ['Experience'] })
+    // And a bad heading is skipped without hiding the ones after it.
+    expect(
+      outlined({
+        id: 'resume',
+        title: 'Résumé',
+        headings: ['', 'x'.repeat(MAX_HEADING_CHARS + 1), 'Education'],
+      })
+    ).toEqual({ id: 'resume', title: 'Résumé', headings: ['Education'] })
+  })
+
+  test('a heading exactly at the cap is kept', () => {
+    const edge = 'x'.repeat(MAX_HEADING_CHARS)
+    expect(
+      outlined({ id: 'resume', title: 'Résumé', headings: [edge] })?.headings
+    ).toEqual([edge])
+  })
+
+  test('no more headings than the cap reach a row', () => {
+    const many = Array.from({ length: MAX_HEADINGS + 4 }, (_, i) => `S${i}`)
+    expect(
+      outlined({ id: 'resume', title: 'Résumé', headings: many })?.headings
+    ).toEqual(many.slice(0, MAX_HEADINGS))
+  })
+
+  test('a GitHub check keeps neither field', () => {
+    // Both describe a document. A check has no corpus topic and no sections,
+    // so a part claiming otherwise has them dropped rather than rendered.
+    expect(
+      outlined({
+        id: 'decant',
+        title: 'decant',
+        kind: 'activity',
+        topic: 'resume',
+        headings: ['Experience'],
+      })
+    ).toEqual({ id: 'decant', title: 'decant', kind: 'activity' })
+  })
+
+  test('a row carries the detail through to the view', () => {
+    const [read, check] = progressRows('done', {
+      phase: 'done',
+      steps: [
+        {
+          id: 'resume',
+          title: 'Résumé',
+          topic: 'resume',
+          headings: ['Experience'],
+        },
+        { id: 'decant', title: 'decant', kind: 'activity' },
+      ],
+      ms: 9_000,
+    })
+    expect(read).toEqual({
+      key: 'read:resume',
+      title: 'Résumé',
+      kind: 'document',
+      topic: 'resume',
+      headings: ['Experience'],
+      state: 'complete',
+    })
+    // Activity rows are untouched by any of this.
+    expect(check).toEqual({
+      key: 'read:decant',
+      title: 'decant',
+      kind: 'activity',
+      state: 'complete',
+    })
+  })
+
+  test('a row for a step without detail is the object it always was', () => {
+    const [row] = progressRows('done', {
+      phase: 'done',
+      steps: [{ id: 'resume', title: 'Résumé' }],
+      ms: 9_000,
+    })
+    expect(row).toEqual({
+      key: 'read:resume',
+      title: 'Résumé',
+      kind: 'document',
+      state: 'complete',
+    })
+    expect(row).not.toHaveProperty('topic')
+    expect(row).not.toHaveProperty('headings')
+  })
+
+  test('the detail changes nothing about what a run may claim', () => {
+    expect(
+      progressTotals(
+        viewWith({
+          phase: 'done',
+          steps: [
+            {
+              id: 'resume',
+              title: 'Résumé',
+              topic: 'resume',
+              headings: ['Experience'],
+            },
+          ],
+          ms: 9_000,
+        })
+      )
+    ).toEqual({ documents: 1, activity: 0, seconds: 9 })
   })
 })
 

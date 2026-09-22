@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/chat/progress'
 
 /**
  * Builds the career assistant's corpus: a small index the model always
@@ -39,8 +40,18 @@ import path from 'path'
  * This list is also the only definition of `source`. They used to be two
  * fields with the same five values and nothing asserting they agreed,
  * which let a document in career/ declare itself the résumé.
+ *
+ * Exported so lib/chat/progress.test.ts can hold its client-safe copy of
+ * this list against it: the progress wire names a step's topic, and the
+ * browser cannot import this module.
  */
-const TOPIC_ORDER = ['resume', 'career', 'faq', 'open-source', 'blog'] as const
+export const TOPIC_ORDER = [
+  'resume',
+  'career',
+  'faq',
+  'open-source',
+  'blog',
+] as const
 
 /**
  * The topic a document lives in. It keeps the name `source` because that
@@ -69,6 +80,15 @@ export interface KnowledgeEntry {
   source: KnowledgeSource
   /** Tokens the document body would cost to read; see estimateTokens. */
   tokenEstimate: number
+  /**
+   * The document's `##` section titles, in document order (MTC-50).
+   *
+   * On the entry object and never in the rendered index: the model is shown
+   * a catalogue line and chooses a document from its summary, while these
+   * are for the progress view, which tells the visitor what the assistant
+   * opened. A document with no sections has none.
+   */
+  headings?: string[]
   /** The public original, when the document is a copy of one. */
   canonical?: string
 }
@@ -457,6 +477,31 @@ function splitBlocks(body: string): { intro: string; blocks: Block[] } {
   return { intro: introLines.join('\n').trim(), blocks }
 }
 
+/**
+ * The `##` section titles of one document, in order, for the progress view
+ * (MTC-50).
+ *
+ * Read off the text the tool would hand the model, so the faq's dropped
+ * questions are not listed as sections of it. Titles only: a heading is a
+ * few words the author wrote to label a section, and nothing under it comes
+ * along.
+ *
+ * The caps come from the progress wire contract rather than being chosen
+ * here, so the build can never emit a heading that lib/chat/progress.ts
+ * would drop on arrival. One past either cap is skipped rather than
+ * truncated, the same way an over-long document title is.
+ */
+export function documentHeadings(text: string): string[] {
+  const headings: string[] = []
+  for (const block of splitBlocks(text).blocks) {
+    const heading = block.heading.replace(BLOCK_HEADING, '').trim()
+    if (heading === '' || heading.length > MAX_HEADING_CHARS) continue
+    headings.push(heading)
+    if (headings.length === MAX_HEADINGS) break
+  }
+  return headings
+}
+
 /** An inline code span: one or more backticks, matching run to close. */
 const INLINE_CODE = /(`+)(?:(?!\1)[\s\S])*?\1/g
 
@@ -748,6 +793,7 @@ function readDocument(
   }
 
   const tokenEstimate = estimateTokens(text)
+  const headings = documentHeadings(text)
   if (tokenEstimate > KNOWLEDGE_DOCUMENT_TOKEN_CEILING) {
     throw new Error(
       `${label}: ~${tokenEstimate} tokens against a per-document ceiling of ${KNOWLEDGE_DOCUMENT_TOKEN_CEILING}. Split this document: it is one of the handful the model may read in a turn (KNOWLEDGE_READ_BUDGET), and at this size it crowds the others out. Two focused documents are also easier for it to choose between, which is what the index is for.`
@@ -763,6 +809,7 @@ function readDocument(
       topic,
       source: topic,
       tokenEstimate,
+      ...(headings.length > 0 ? { headings } : {}),
       ...(frontmatter.canonical ? { canonical: frontmatter.canonical } : {}),
       text,
       updated: frontmatter.updated,
@@ -925,6 +972,7 @@ export function buildKnowledgeCorpus(
     topic: document.topic,
     source: document.source,
     tokenEstimate: document.tokenEstimate,
+    ...(document.headings ? { headings: document.headings } : {}),
     ...(document.canonical ? { canonical: document.canonical } : {}),
   }))
 

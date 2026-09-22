@@ -657,7 +657,8 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
  * job, one stage further down the pipe, which is why this one sees the tool
  * chunks the browser never will.
  *
- * Titles come from the index, never from the model. `tool-input-available`
+ * Every word a row shows comes from the index, never from the model: the
+ * title, the topic, and the section headings alike. `tool-input-available`
  * carries an id the model chose, and that id is looked up in the same
  * `entries` the read tool validates against. An id that is not there yields
  * no step at all: the read is about to be refused as `unknown_document`, and
@@ -684,7 +685,7 @@ function withProgress({
   now: () => number
   started: number
 }): TransformStream<ChatUIChunk, ChatUIChunk> {
-  const titles = new Map(entries.map(entry => [entry.id, entry.title]))
+  const indexed = new Map(entries.map(entry => [entry.id, entry]))
   const steps: ChatProgressStep[] = []
   const listed = new Set<string>()
   /** Calls whose outcome has not arrived yet, by the SDK's tool call id. */
@@ -725,7 +726,7 @@ function withProgress({
     transform(chunk, controller) {
       switch (chunk.type) {
         case 'tool-input-available': {
-          const step = toStep(chunk, titles, reads, checks)
+          const step = toStep(chunk, indexed, reads, checks)
           if (!step) break
           const callId = toolCallId(chunk)
           // Remembered even when it earns no row, because the outcome below
@@ -835,7 +836,7 @@ function withProgress({
  */
 function toStep(
   chunk: { toolName?: unknown; input?: unknown },
-  titles: ReadonlyMap<string, string>,
+  indexed: ReadonlyMap<string, KnowledgeEntry>,
   reads: number,
   checks: number
 ): ChatProgressStep | undefined {
@@ -860,8 +861,17 @@ function toStep(
   if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
   const id = (input as { id?: unknown }).id
   if (typeof id !== 'string') return undefined
-  const title = titles.get(id)
-  return title === undefined ? undefined : { id, title }
+  const entry = indexed.get(id)
+  if (entry === undefined) return undefined
+  // `source` rather than `topic`: the two hold the same value, and this one
+  // is typed as the closed set, so a topic added to the corpus and not to
+  // ChatProgressTopic fails typecheck here rather than reaching a row the
+  // browser has no label for.
+  const step: ChatProgressStep = { id, title: entry.title, topic: entry.source }
+  if (entry.headings && entry.headings.length > 0) {
+    step.headings = entry.headings
+  }
+  return step
 }
 
 /** The SDK's id for one tool call, if the chunk carries a usable one. */
