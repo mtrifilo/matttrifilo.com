@@ -420,12 +420,32 @@ describe('createBoundedFetch', () => {
   })
 
   test('the timeout says what the whole call spent, not the last deadline', async () => {
-    // 20 ms was the final attempt's ceiling; the call spent that plus the
-    // first attempt and the backoff, and the message that names only the
-    // ceiling reads as a much shorter wait than the one that happened.
+    // The message must cover the first attempt and the backoff as well as
+    // the final 20 ms ceiling. Measured with real timers the total is
+    // "about 30" and CI reported 29 once, so the clock is injected instead:
+    // each attempt advances it by its deadline and the backoff by its sleep,
+    // which makes the figure exactly 10 + 1 + 20 = 31. A regression that
+    // reported only the last attempt (20), only the first (10), or dropped
+    // the backoff (30) fails on the exact value.
+    let clock = 0
+    const deadlines = [10, 20]
+    let calls = 0
     const aborted = { count: 0 }
     const stall = stalls(aborted)
-    const { fetch } = harness((input, init) => stall(input, init))
+    const fetch = createBoundedFetch({
+      firstByteTimeoutMs: deadlines[0],
+      lastAttemptTimeoutMs: deadlines[1],
+      backoffMs: [1, 2],
+      fetchImpl: (input, init) => {
+        clock += deadlines[calls] ?? 0
+        calls += 1
+        return stall(input, init)
+      },
+      sleep: async ms => {
+        clock += ms
+      },
+      now: () => clock,
+    })
 
     const message = await fetch(URL_UNDER_TEST, {
       method: 'POST',
@@ -435,11 +455,10 @@ describe('createBoundedFetch', () => {
       (error: Error) => error.message
     )
 
-    expect(message).toMatch(
-      /^Vertex sent no response byte in \d+ ms across 2 attempt\(s\)$/
+    expect(message).toBe(
+      'Vertex sent no response byte in 31 ms across 2 attempt(s)'
     )
-    const elapsed = Number(/in (\d+) ms/.exec(message)?.[1])
-    expect(elapsed).toBeGreaterThanOrEqual(30)
+    expect(aborted.count).toBe(2)
   })
 
   test('the caller sees the request it made, minus our signal swap', async () => {
