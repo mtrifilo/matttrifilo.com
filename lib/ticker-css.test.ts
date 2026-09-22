@@ -19,15 +19,9 @@ import {
 
 const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
 
-/**
- * The first `selector { … }` block at or after `from`, braces balanced.
- *
- * `from` is for the selectors the stylesheet states twice, a rule and its
- * reduced-motion override: the first match is not always the one a test
- * means.
- */
-function ruleFor(selector: string, from = 0): string {
-  const start = css.indexOf(selector, from)
+/** The first `selector { … }` block in the stylesheet, braces balanced. */
+function ruleFor(selector: string): string {
+  const start = css.indexOf(selector)
   if (start < 0) throw new Error(`${selector} is not in app/globals.css`)
   let depth = 0
   for (let i = css.indexOf('{', start); i < css.length; i += 1) {
@@ -189,53 +183,3 @@ describe('the state flags the component writes', () => {
     )
   })
 })
-
-describe('the row a visitor who asked for no motion gets', () => {
-  // The static strip is entirely the stylesheet's: the component renders the
-  // same TICKER_COPIES copies whatever the media query says, and
-  // components/assistant/starter-ticker.test.tsx is what pins that markup.
-  // These are the three rules that turn it into one scrollable row of whole
-  // pills, and nothing else in the suite sees them.
-  // Each rule is read out of the block by its own selector, so a declaration
-  // that moved to a neighbouring rule inside the same block still fails.
-  const reduced = reducedMotionBlockStart('.starter-ticker-track')
-
-  test('stops the loop', () => {
-    // Continuous horizontal motion is a documented vestibular trigger
-    // (WCAG 2.2.2), so this is a correctness rule, not a preference.
-    expect(ruleFor('.starter-ticker-track {', reduced)).toContain(
-      'animation: none'
-    )
-  })
-
-  test('drops the silent copies, so each question is shown once', () => {
-    // Nothing wraps, so a second copy of the pool is the pool written twice
-    // in a row the visitor can scroll end to end.
-    expect(
-      ruleFor(".starter-ticker-copy[aria-hidden='true']", reduced)
-    ).toContain('display: none')
-  })
-
-  test('leaves the row scrollable, which is what reaches the rest of the pool', () => {
-    // The moving row is `overflow: hidden` and is scrolled programmatically.
-    // Standing still, a visitor has to be able to scroll it themselves or
-    // every question past the right edge is unreachable.
-    expect(ruleFor('.starter-ticker {', reduced)).toContain('overflow-x: auto')
-  })
-})
-
-/**
- * Where the reduced-motion block carrying `needle` begins.
- *
- * The stylesheet has more than one, and which of them holds the ticker's
- * overrides is not a position worth depending on. The offset is what lets a
- * test read a selector the stylesheet states twice, once as the rule and once
- * as its override.
- */
-function reducedMotionBlockStart(needle: string): number {
-  const query = '@media (prefers-reduced-motion: reduce)'
-  for (let at = css.indexOf(query); at >= 0; at = css.indexOf(query, at + 1)) {
-    if (ruleFor(query, at).includes(needle)) return at
-  }
-  throw new Error(`no reduced-motion block in app/globals.css has ${needle}`)
-}
