@@ -24,7 +24,7 @@ describe('parseUiMessageStream', () => {
           type: 'finish',
           finishReason: 'stop',
           messageMetadata: {
-            sources: [{ id: 'resume', title: 'Résumé', url: '/r' }],
+            followUps: ['What did he ship next?'],
           },
         },
       ])
@@ -32,9 +32,7 @@ describe('parseUiMessageStream', () => {
 
     expect(answer.text).toBe('He led the migration.')
     expect(answer.finishReason).toBe('stop')
-    expect(answer.metadata.sources).toEqual([
-      { id: 'resume', title: 'Résumé', url: '/r' },
-    ])
+    expect(answer.metadata.followUps).toEqual(['What did he ship next?'])
     expect(answer.errorText).toBeUndefined()
   })
 

@@ -100,8 +100,6 @@ export interface EvalMetadata extends Record<string, unknown> {
   activityRepos: string[]
   /** ISO dates carried by the digests this run was handed. */
   activityDates: string[]
-  /** The server's authoritative source list, absent on a decline. */
-  sourceIds: string[]
   /**
    * The follow-up questions the run proposed, as the browser would receive
    * them: already validated by the handler, empty on a decline (MTC-41).
@@ -276,7 +274,6 @@ export default class ChatRouteProvider {
         response.status
       ),
       attempt,
-      sourceIds: (answer.metadata.sources ?? []).map(source => source.id),
       followUps: answer.metadata.followUps ?? [],
       finishReason: answer.finishReason,
       ...flags(answer.metadata),
@@ -339,7 +336,6 @@ function baseMetadata(
     readIds,
     activityRepos,
     activityDates,
-    sourceIds: [],
     followUps: [],
     model,
     status,

@@ -13,7 +13,6 @@ import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
   assertAnswered,
-  assertChipsMatchReads,
   assertCites,
   isUncitedAnswer,
   assertCitesOnlyWhatItRead,
@@ -322,33 +321,6 @@ describe('assertReadsAnyOf', () => {
   })
 })
 
-describe('assertChipsMatchReads', () => {
-  test('a source list drawn from the reads passes', () => {
-    expect(
-      assertChipsMatchReads(
-        '',
-        ctx(undefined, { sourceIds: ['resume'], readIds: ['resume', 'faq'] })
-      ).pass
-    ).toBe(true)
-  })
-
-  test('no chips at all passes: a decline shows none', () => {
-    expect(
-      assertChipsMatchReads('', ctx(undefined, { sourceIds: [], readIds: [] }))
-        .pass
-    ).toBe(true)
-  })
-
-  test('a chip for a document the run never read fails and names it', () => {
-    const result = assertChipsMatchReads(
-      '',
-      ctx(undefined, { sourceIds: ['resume', 'faq'], readIds: ['resume'] })
-    )
-    expect(result.pass).toBe(false)
-    expect(result.reason).toContain('faq')
-  })
-})
-
 describe('assertFollowUpsAnswerable', () => {
   // Only the branches that decide before a second model call are exercised
   // here; the call itself is what an eval run is for, and `bun test` makes
@@ -397,6 +369,73 @@ describe('assertCitesOnlyWhatItRead', () => {
         ctx(undefined, { readIds: [] })
       ).pass
     ).toBe(true)
+  })
+
+  test('judges the trailer against the reads, whatever else the metadata says', () => {
+    // The route sends no source list, so a provider field that mirrors one
+    // is empty on every run; an empty list there must not stand in for a
+    // check of what the answer cites.
+    const result = assertCitesOnlyWhatItRead(
+      'He led it.\n\nSources: resume, faq',
+      ctx(undefined, { sourceIds: [], readIds: ['resume'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('faq')
+  })
+
+  test('a trailer on a run that read nothing fails', () => {
+    const result = assertCitesOnlyWhatItRead(
+      'He led it.\n\nSources: resume',
+      ctx(undefined, { readIds: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('resume')
+  })
+})
+
+describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => {
+  // Every groundedness citation test carries both (evals/config.test.ts
+  // enforces it). The first asks whether the answer cited at all, the second
+  // whether it cited only what the server read; a row passes only when both
+  // do, so the cases below are judged on the pair.
+  const bothPass = (output: string, context: AssertionContext) =>
+    assertCites(output, context).pass &&
+    assertCitesOnlyWhatItRead(output, context).pass
+  const answer = 'He led the migration in 2024.'
+  const readResume = ctx(
+    { expectReadsAny: ['resume'] },
+    { readIds: ['resume', 'faq'] }
+  )
+
+  test('a trailer drawn from the reads passes', () => {
+    expect(bothPass(`${answer}\n\nSources: resume`, readResume)).toBe(true)
+  })
+
+  test('a trailer naming an unread document fails', () => {
+    expect(
+      bothPass(`${answer}\n\nSources: resume, open-source`, readResume)
+    ).toBe(false)
+  })
+
+  test('no trailer, on a run that read the named document, passes with a warning', () => {
+    // The tolerance `missingTrailer` counts: the subset check has nothing to
+    // disagree with, and assertCites passes on the ledger's evidence.
+    expect(bothPass(answer, readResume)).toBe(true)
+    expect(assertCites(answer, readResume).reason).toContain('warning')
+  })
+
+  test('no trailer, on a run that did not read the named document, fails', () => {
+    const readOther = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['owned-systems-and-operations'] }
+    )
+    expect(bothPass(answer, readOther)).toBe(false)
+  })
+
+  test('no trailer and no reads fails, and so does an empty answer', () => {
+    const readNothing = ctx({ expectReadsAny: ['resume'] }, { readIds: [] })
+    expect(bothPass(answer, readNothing)).toBe(false)
+    expect(bothPass('', readResume)).toBe(false)
   })
 })
 

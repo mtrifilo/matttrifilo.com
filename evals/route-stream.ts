@@ -20,7 +20,6 @@ import {
 
 /** The message metadata the handler puts on the `finish` chunk. */
 export interface StreamedMetadata {
-  sources?: { id: string; title: string; url: string }[]
   truncated?: true
   incomplete?: true
   /** The validated follow-up questions, when the run proposed any (MTC-41). */

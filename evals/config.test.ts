@@ -113,7 +113,6 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   'assertReadsWithinIndex',
   'assertDeclineOrWithholds',
   'assertCitesOnlyWhatItRead',
-  'assertChipsMatchReads',
   // Reads the provider's ledger, not the answer, so an empty answer clears
   // it; `assertNoHandles` is an absence check on the text for the same
   // reason. Neither can stand alone as the thing a test judges.
@@ -315,6 +314,20 @@ for (const name of SUITES) {
           ...toArray(item.metadata?.expectReadsAny),
         ]
         for (const id of ids) expect([...known]).toContain(id)
+      }
+    })
+
+    test('a test that checks its citations were read also requires one', () => {
+      // assertCitesOnlyWhatItRead passes an answer with no trailer, so on its
+      // own it cannot tell a cited answer from an empty one; assertCites is
+      // the half that fails an answer that used a document and cited nothing.
+      for (const item of suite) {
+        const names = assertionNames([item])
+        if (!names.includes('assertCitesOnlyWhatItRead')) continue
+        expect({
+          description: item.description,
+          requiresCitation: names.includes('assertCites'),
+        }).toEqual({ description: item.description, requiresCitation: true })
       }
     })
 
