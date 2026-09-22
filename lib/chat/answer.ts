@@ -33,12 +33,16 @@ export const SOURCES_TRAILER_PREFIX = 'Sources: '
  * Prefix of the second trailer: the line after `Sources:` that introduces the
  * follow-up questions the policy asks for (MTC-41).
  *
- * It sits beside the citation prefix for the same reason that one is here.
- * The questions themselves never reach the visitor as text: the browser takes
- * this block back out of the answer and renders the list the server validated
- * onto the message metadata, so an unvalidated proposal cannot appear even as
- * prose. It carries no trailing space because nothing follows it on its own
- * line; the questions are the lines after it.
+ * It sits beside the citation prefix for the same reason that one is here,
+ * and the mechanism is the same: the block travels down the stream inside
+ * the answer and the browser takes it back out before the transcript renders
+ * a word. Nothing is ever drawn as a pill except the validated list on the
+ * message metadata, so a proposal that failed the check is never a button;
+ * what a marker this module cannot recognise costs is a block left on screen
+ * as prose, which is why the matching below is deliberately generous.
+ *
+ * It carries no trailing space because nothing follows it on its own line;
+ * the questions are the lines after it.
  */
 export const FOLLOW_UPS_TRAILER_PREFIX = 'Follow-ups:'
 
@@ -346,7 +350,8 @@ function stringsIn(value: unknown): string[] {
  * containing a regular-expression character would otherwise change what this
  * matches without anyone editing it. answer.test.ts pins the two together.
  */
-const FOLLOW_UPS_MARKER_LINE = /^[\s#>]*\**\s*follow[\s-]?ups\s*:\s*\**\s*$/i
+const FOLLOW_UPS_MARKER_LINE =
+  /^[\s#>]*[*_]*\s*follow[\s\u2010-\u2015-]?ups\s*:?\s*[*_]*\s*$/i
 
 /** A bullet or number a model puts in front of a list item. */
 const LIST_MARKER = /^\s*(?:[-*•]|\d+[.)])\s+/

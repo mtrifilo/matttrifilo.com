@@ -224,6 +224,10 @@ describe('parseFollowUps', () => {
     ['lower case', 'follow-ups:'],
     ['spaced instead of hyphenated', 'Follow ups:'],
     ['indented', '   Follow-ups:'],
+    ['italicised', '_Follow-ups:_'],
+    ['written without its colon', '**Follow-ups**'],
+    ['typeset with an en dash', 'Follow–ups:'],
+    ['quoted as a block', '> Follow-ups:'],
   ])('recognises a marker that is %s', (_name, marker) => {
     // Bolding a label is one of the commonest things a model does to it, and
     // a marker the parser misses leaves the whole block on the page.

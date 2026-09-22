@@ -125,6 +125,13 @@ describe('the follow-up row', () => {
     expect(row).toContain('overscroll-behavior-x: contain')
   })
 
+  test('clips vertically, which is what the reveal grows against', () => {
+    // The wrapper below animates the row from no height at all. Open this
+    // and the pills simply stand outside it: the animation becomes a no-op
+    // and nothing else here would notice.
+    expect(ruleFor('.follow-up-row {')).toContain('overflow-y: hidden')
+  })
+
   test('fades the right edge only, where the frame clips it', () => {
     // The row opens at scroll zero and stays there until it is dragged, so
     // the shared both-ends gradient would sit permanently over the first

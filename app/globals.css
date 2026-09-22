@@ -272,8 +272,16 @@
  */
 .follow-up-row {
   overflow-x: auto;
+  /*
+   * `hidden` vertically is what clips the row while the reveal below grows
+   * it, as well as what keeps a pill from spilling upwards. Opening it would
+   * turn the reveal into a no-op, so the two rules are one decision.
+   */
   overflow-y: hidden;
   overscroll-behavior-x: contain;
+  /* Only the end fades, so the start needs none of the padding the shared
+     rule reserves for a gradient that is not there. */
+  scroll-padding-inline-start: 0;
   mask-image: linear-gradient(
     to right,
     black 0,
@@ -289,6 +297,10 @@
  * actually has, so the transcript above is carried rather than jolted when
  * the run ends. A max-height would reach the content's height in the first
  * fraction of the duration and read as a snap.
+ *
+ * The row inside is what clips its own overflow while the track is shorter
+ * than it: this wrapper only sets `min-height: 0`, which is what lets a grid
+ * item shrink below its content at all.
  *
  * @starting-style is what gives a freshly mounted element a height to grow
  * from. A browser without it shows the row at once, which is also what a
