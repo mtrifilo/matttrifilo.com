@@ -398,9 +398,44 @@ describe('assertCitesOnlyWhatItRead', () => {
 })
 
 describe('assertCites', () => {
+  const read = ctx(undefined, { readIds: ['resume'] })
+  const readNothing = ctx(undefined, { readIds: [] })
+
   test('requires a trailer', () => {
-    expect(assertCites('He led it.\n\nSources: resume').pass).toBe(true)
-    expect(assertCites('He led it.').pass).toBe(false)
+    expect(assertCites('He led it.\n\nSources: resume', readNothing).pass).toBe(
+      true
+    )
+    expect(assertCites('He led it.', readNothing).pass).toBe(false)
+  })
+
+  test('warns instead of failing when the run did read a document', () => {
+    // The flake this tolerates: a correct, sourced answer that dropped one
+    // line of formatting. It is counted in the summary, not waved through
+    // silently, which is what the `warning` in the reason is for.
+    const result = assertCites('He led the migration in 2024.', read)
+    expect(result.pass).toBe(true)
+    expect(result.reason).toContain('warning')
+    expect(result.reason).toContain('resume')
+  })
+
+  test('still fails an answer that read nothing', () => {
+    expect(assertCites('He led the migration in 2024.', readNothing).pass).toBe(
+      false
+    )
+  })
+
+  test('still fails an empty answer, whatever the run read', () => {
+    expect(assertCites('', read).pass).toBe(false)
+    expect(assertCites('   \n', read).pass).toBe(false)
+  })
+
+  test('still fails a decline, whatever the run read', () => {
+    // A groundedness question the corpus answers must not pass by declining
+    // it after opening the document.
+    expect(assertCites(DECLINE_SENTENCE, read).pass).toBe(false)
+    expect(
+      assertCites("Matt's published work does not mention that.", read).pass
+    ).toBe(false)
   })
 })
 

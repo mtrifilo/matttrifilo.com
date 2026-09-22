@@ -20,9 +20,11 @@ const summary = (over: Partial<EvalSummary> = {}): EvalSummary => ({
   ranAt: '2026-09-21T16:59:31.433Z',
   model: 'gemini-3.8-flash',
   promptfooVersion: '0.123.0',
-  suites: [{ name: 'golden', passed: 3, total: 4 }],
-  totals: { passed: 3, total: 4 },
+  suites: [{ name: 'golden', passed: 40, total: 40 }],
+  totals: { passed: 40, total: 40 },
   retried: 0,
+  transportFailures: 0,
+  missingTrailer: 0,
   ...over,
 })
 
@@ -70,21 +72,13 @@ describe('planPublish', () => {
         ranAt: '2026-09-21T16:59:31.433Z',
         model: 'gemini-3.8-flash',
         promptfooVersion: '0.123.0',
-        suites: [{ name: 'golden', passed: 3, total: 4 }],
-        totals: { passed: 3, total: 4 },
+        suites: [{ name: 'golden', passed: 40, total: 40 }],
+        totals: { passed: 40, total: 40 },
         retried: 0,
+        transportFailures: 0,
+        missingTrailer: 0,
       },
     })
-  })
-
-  test('leaves out a promptfoo version the run did not record', () => {
-    const older = summary()
-    delete older.promptfooVersion
-    const decision = planPublish(older, null)
-    expect(decision).not.toHaveProperty('refusal')
-    expect(
-      Object.keys('record' in decision ? decision.record : {})
-    ).not.toContain('promptfooVersion')
   })
 
   test('refuses a summary with no totals, and says which field', () => {
@@ -97,8 +91,65 @@ describe('planPublish', () => {
 
   test('refuses a summary whose suites disagree with its totals', () => {
     expect(
-      planPublish(summary({ totals: { passed: 3, total: 9 } }), HEAD_SHA)
+      planPublish(summary({ totals: { passed: 40, total: 90 } }), HEAD_SHA)
     ).toEqual({ refusal: expect.stringContaining('do not add up') })
+  })
+
+  // The floor itself is covered in lib/evals/results.test.ts, where it
+  // lives; these pin that the gate applies it and says which number failed.
+  test('refuses a run that produced an ungradeable row', () => {
+    expect(planPublish(summary({ transportFailures: 1 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('no answer to grade'),
+    })
+  })
+
+  test('refuses a run that did not pass enough tests', () => {
+    expect(
+      planPublish(
+        summary({
+          suites: [{ name: 'golden', passed: 37, total: 40 }],
+          totals: { passed: 37, total: 40 },
+        }),
+        HEAD_SHA
+      )
+    ).toEqual({ refusal: expect.stringContaining('95 percent') })
+  })
+
+  test('refuses a run with one weak suite', () => {
+    expect(
+      planPublish(
+        summary({
+          suites: [
+            { name: 'golden', passed: 40, total: 40 },
+            { name: 'groundedness', passed: 8, total: 10 },
+          ],
+          totals: { passed: 48, total: 50 },
+        }),
+        HEAD_SHA
+      )
+    ).toEqual({ refusal: expect.stringContaining('`groundedness`') })
+  })
+
+  test('refuses a run that was retried past its flake budget', () => {
+    expect(planPublish(summary({ retried: 5 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('sent again'),
+    })
+  })
+
+  test('refuses a run whose answers kept dropping the trailer', () => {
+    expect(planPublish(summary({ missingTrailer: 5 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('Sources: trailer'),
+    })
+  })
+
+  test('refuses a run that names no promptfoo version', () => {
+    // It used to publish with a warning. The record is the claim that the
+    // suites ran; without the version it does not say what ran them.
+    const older = summary() as unknown as Record<string, unknown>
+    delete older.promptfooVersion
+    expect(planPublish(older, HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('promptfooVersion'),
+    })
   })
 
   test('refuses when no commit can be named', () => {
@@ -168,15 +219,35 @@ describe('the script itself', () => {
     expect(result.stderr.toString()).toContain('does not parse as JSON')
   })
 
-  test('says so when the record it writes names no promptfoo version', () => {
-    // The conventions ask every published summary to name one. It still
-    // publishes, but nobody should find the gap out from the page.
+  test('refuses a summary that names no promptfoo version', () => {
     const dir = workspace()
-    const older = summary()
+    const older = summary() as unknown as Record<string, unknown>
     delete older.promptfooVersion
     const result = publish(dir, writeSummary(dir, older))
-    expect(result.exitCode).toBe(0)
-    expect(result.stderr.toString()).toContain('no promptfoo version')
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('promptfooVersion')
+  })
+
+  test('refuses a run that cannot stand as a record, and says why', () => {
+    const dir = workspace()
+    const result = publish(
+      dir,
+      writeSummary(dir, summary({ transportFailures: 2 }))
+    )
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('no answer to grade')
+    expect(fs.existsSync(path.join(dir, 'evals', 'results'))).toBe(false)
+  })
+
+  test('refuses to publish from a dirty working copy', () => {
+    // The record claims a commit contains the suites and the corpus the run
+    // walked. With a change still uncommitted, no commit does.
+    const dir = workspace()
+    Bun.spawnSync({ cmd: ['git', 'init', '--quiet'], cwd: dir })
+    const result = publish(dir, writeSummary(dir, summary()))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('uncommitted changes')
+    expect(fs.existsSync(path.join(dir, 'evals', 'results'))).toBe(false)
   })
 
   test('writes the record, then refuses to replace it', () => {

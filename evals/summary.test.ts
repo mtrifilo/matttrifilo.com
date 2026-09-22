@@ -90,17 +90,54 @@ describe('summarise', () => {
     expect(summary.retried).toBe(3)
   })
 
+  test('counts the rows that produced no answer to grade', () => {
+    const stalled = {
+      ...row('golden', false),
+      metadata: { model: 'gemini-x', attempt: 3, transportFailure: true },
+    }
+    const summary = summarise({
+      results: file([row('golden', true), stalled, stalled]),
+      commit: 'c',
+      ranAt: 'r',
+    })
+    expect(summary.transportFailures).toBe(2)
+    expect(summary.missingTrailer).toBe(0)
+  })
+
+  test('counts the answers that used a document without citing it', () => {
+    const untrailered = {
+      ...row('groundedness', true),
+      metadata: { model: 'gemini-x', missingTrailer: true },
+    }
+    const summary = summarise({
+      results: file([row('golden', true), untrailered]),
+      commit: 'c',
+      ranAt: 'r',
+    })
+    expect(summary.missingTrailer).toBe(1)
+    expect(summary.transportFailures).toBe(0)
+  })
+
   test('an empty run reports nothing rather than throwing', () => {
     const summary = summarise({ results: {}, commit: 'c', ranAt: 'r' })
     expect(summary.suites).toEqual([])
     expect(summary.totals).toEqual({ passed: 0, total: 0 })
     expect(summary.model).toBe('unknown')
+    expect(summary.transportFailures).toBe(0)
+    expect(summary.missingTrailer).toBe(0)
   })
 })
 
 describe('allPassed', () => {
   test('true only when every test passed', () => {
-    const base = { commit: 'c', ranAt: 'r', model: 'm', retried: 0 }
+    const base = {
+      commit: 'c',
+      ranAt: 'r',
+      model: 'm',
+      retried: 0,
+      transportFailures: 0,
+      missingTrailer: 0,
+    }
     expect(
       allPassed({ ...base, suites: [], totals: { passed: 3, total: 3 } })
     ).toBe(true)
@@ -118,6 +155,8 @@ describe('allPassed', () => {
         suites: [],
         totals: { passed: 0, total: 0 },
         retried: 0,
+        transportFailures: 0,
+        missingTrailer: 0,
       })
     ).toBe(false)
   })
@@ -132,9 +171,15 @@ describe('markdownTable', () => {
       suites: [{ name: 'golden', passed: 31, total: 32 }],
       totals: { passed: 31, total: 32 },
       retried: 2,
+      transportFailures: 1,
+      missingTrailer: 3,
     })
 
     expect(table).toContain('| golden | 31 | 32 |')
+    expect(table).toContain('1 test(s) produced no answer to grade')
+    expect(table).toContain(
+      '3 answer(s) used a document without a Sources: trailer'
+    )
     expect(table).toContain('| **total** | **31** | **32** |')
     expect(table).toContain('abc1234')
     expect(table).toContain('gemini-3.8-flash')

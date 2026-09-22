@@ -774,15 +774,46 @@ function fail(reason: string): AssertionResult {
   return { pass: false, score: 0, reason }
 }
 
-/** An answer that used a document ends with the citation trailer. */
-export function assertCites(output: string): AssertionResult {
+/**
+ * An answer that used a document ends with the citation trailer.
+ *
+ * Tolerant in one direction only. A missing trailer on an answer the server
+ * can prove used a document is the model dropping one line of formatting
+ * from work it really did, and it was reddening whole runs; the provider
+ * counts it as `missingTrailer` and the run summary carries the number, so
+ * it is measured rather than hidden, and the publish gate refuses a run
+ * where it happens often. Everything else still fails: no read, no answer,
+ * or an answer that says the material does not cover the question is not a
+ * run that used a document, and a warning there would let a decline pass a
+ * suite whose whole subject is citation.
+ */
+export function assertCites(
+  output: string,
+  context: AssertionContext
+): AssertionResult {
   const cited = sourcesTrailerIds(output)
+  if (cited.length > 0)
+    return { pass: true, score: 1, reason: `cited ${cited.join(', ')}` }
+
+  const readIds = stringList(context.metadata?.readIds)
+  const prose = answerProse(output).trim()
+  const answered =
+    prose.length > 0 &&
+    prose !== DECLINE_SENTENCE &&
+    !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
+  if (readIds.length > 0 && answered) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `warning: no Sources: trailer, on an answer that read ${readIds.join(', ')}`,
+    }
+  }
   return {
-    pass: cited.length > 0,
-    score: cited.length > 0 ? 1 : 0,
+    pass: false,
+    score: 0,
     reason:
-      cited.length > 0
-        ? `cited ${cited.join(', ')}`
+      readIds.length > 0
+        ? 'no Sources: trailer, and the answer does not use what it read'
         : 'no Sources: trailer on an answer that used a document',
   }
 }

@@ -5,6 +5,8 @@ import path from 'path'
 import type { EvalSummary } from '@/evals/summary'
 import {
   evalHistory,
+  evalQualityProblem,
+  evalRecordProblem,
   evalResultsDir,
   evalSummaryProblem,
   hasPublishedEvalRun,
@@ -28,11 +30,13 @@ const run = (over: Partial<EvalSummary> = {}): EvalSummary => ({
   model: 'gemini-3.8-flash',
   promptfooVersion: '0.123.0',
   suites: [
-    { name: 'golden', passed: 67, total: 74 },
+    { name: 'golden', passed: 73, total: 74 },
     { name: 'refusals', passed: 24, total: 24 },
   ],
-  totals: { passed: 91, total: 98 },
+  totals: { passed: 97, total: 98 },
   retried: 5,
+  transportFailures: 0,
+  missingTrailer: 2,
   ...over,
 })
 
@@ -81,6 +85,8 @@ describe('isEvalSummary', () => {
       'suites',
       'totals',
       'retried',
+      'transportFailures',
+      'missingTrailer',
     ]) {
       const partial = run() as unknown as Record<string, unknown>
       delete partial[field]
@@ -238,6 +244,77 @@ describe('isEvalSummary', () => {
   })
 })
 
+describe('evalQualityProblem', () => {
+  // The floor the publish gate and this loader share. What it protects is a
+  // credibility page: a record of a run that proves nothing is worse than no
+  // record, so each of these is a refusal rather than a caveat on the page.
+
+  test('passes a run that is worth publishing', () => {
+    expect(evalQualityProblem(run())).toBe(null)
+    expect(evalRecordProblem(run())).toBe(null)
+  })
+
+  test('refuses a run where any test produced no answer to grade', () => {
+    expect(evalQualityProblem(run({ transportFailures: 1 }))).toContain(
+      'no answer to grade'
+    )
+  })
+
+  test('refuses a pass rate below the overall floor', () => {
+    expect(
+      evalQualityProblem(
+        run({
+          suites: [{ name: 'golden', passed: 92, total: 98 }],
+          totals: { passed: 92, total: 98 },
+        })
+      )
+    ).toContain('95 percent')
+  })
+
+  test('refuses one weak suite inside a strong run', () => {
+    // 96 of 100 overall, and a suite at 6 of 10: the aggregate hides it, so
+    // the suite floor is checked separately.
+    expect(
+      evalQualityProblem(
+        run({
+          suites: [
+            { name: 'golden', passed: 90, total: 90 },
+            { name: 'groundedness', passed: 6, total: 10 },
+          ],
+          totals: { passed: 96, total: 100 },
+        })
+      )
+    ).toContain('`groundedness`')
+  })
+
+  test('refuses a run that needed too many second attempts', () => {
+    // Ten percent of the 98 tests this fixture walked is 9.8.
+    expect(evalQualityProblem(run({ retried: 9 }))).toBe(null)
+    expect(evalQualityProblem(run({ retried: 10 }))).toContain('sent again')
+  })
+
+  test('refuses a run whose answers kept dropping the trailer', () => {
+    expect(evalQualityProblem(run({ missingTrailer: 9 }))).toBe(null)
+    expect(evalQualityProblem(run({ missingTrailer: 10 }))).toContain(
+      'Sources: trailer'
+    )
+  })
+
+  test('refuses a record that is not version-linked', () => {
+    const older = run() as unknown as Record<string, unknown>
+    delete older.promptfooVersion
+    // Still a summary in shape, which is why the floor is a separate check.
+    expect(isEvalSummary(older)).toBe(true)
+    expect(evalRecordProblem(older)).toContain('promptfooVersion')
+  })
+
+  test('refuses a run that walked no tests', () => {
+    expect(
+      evalQualityProblem(run({ suites: [], totals: { passed: 0, total: 0 } }))
+    ).toContain('no tests')
+  })
+})
+
 describe('isCommitSha', () => {
   test('recognises a git object name, short or full', () => {
     expect(isCommitSha('6406ee4')).toBe(true)
@@ -297,6 +374,24 @@ describe('readEvalRuns', () => {
     expect(hasPublishedEvalRun(dir)).toBe(true)
   })
 
+  test('skips a record that does not clear the publish floor', () => {
+    // The gate cannot be the only guard: this file could be hand-written or
+    // hand-edited into the repository, and the page would publish it.
+    const dir = resultsDir({
+      'good.json': run({ ranAt: '2026-09-21T16:59:31.433Z' }),
+      'weak.json': run({
+        ranAt: '2026-09-20T00:00:00.000Z',
+        suites: [{ name: 'golden', passed: 50, total: 98 }],
+        totals: { passed: 50, total: 98 },
+      }),
+      'no-answers.json': run({
+        ranAt: '2026-09-19T00:00:00.000Z',
+        transportFailures: 3,
+      }),
+    })
+    expect(readEvalRuns(dir).map(record => record.file)).toEqual(['good.json'])
+  })
+
   test('skips a malformed file and still publishes the rest', () => {
     // One unreadable record must not take the build, or the history, down.
     const dir = resultsDir({
@@ -347,7 +442,7 @@ describe('the committed records', () => {
       const parsed: unknown = JSON.parse(
         fs.readFileSync(path.join(evalResultsDir(), name), 'utf8')
       )
-      expect(isEvalSummary(parsed)).toBe(true)
+      expect(evalRecordProblem(parsed)).toBe(null)
     }
     expect(readEvalRuns().length).toBe(committed().length)
   })

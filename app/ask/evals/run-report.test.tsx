@@ -22,6 +22,8 @@ const run = (over: Partial<EvalRun> = {}): EvalRun => ({
   ],
   totals: { passed: 91, total: 98 },
   retried: 5,
+  transportFailures: 0,
+  missingTrailer: 2,
   ...over,
 })
 

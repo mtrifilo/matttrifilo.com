@@ -12,7 +12,12 @@ import {
   historyFrom,
   isTransportCode,
 } from './route-request'
-import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
+import {
+  answerProse,
+  parseUiMessageStream,
+  sourcesTrailerIds,
+  type StreamedMetadata,
+} from './route-stream'
 
 /**
  * The promptfoo target: the chat route's own code path, in process (MTC-32).
@@ -110,6 +115,21 @@ export interface EvalMetadata extends Record<string, unknown> {
   status: number
   /** 1, or higher when earlier attempts were lost to a transport stall. */
   attempt?: number
+  /**
+   * This row carries no answer to grade: an error envelope (a stalled
+   * connection, a refused token, any other API error) or a 200 whose stream
+   * held no text. Counted per run as `transportFailures` and refused by the
+   * publish gate, because an assertion that checks for the ABSENCE of
+   * something passes on an empty output and would publish as evidence.
+   */
+  transportFailure?: true
+  /**
+   * The answer used a document and wrote no `Sources:` trailer. Recorded
+   * rather than only failed: the run demonstrably read the document, so this
+   * is the policy's citation line going missing, and the count is what says
+   * how often that happens.
+   */
+  missingTrailer?: true
 }
 
 export default class ChatRouteProvider {
@@ -230,6 +250,7 @@ export default class ChatRouteProvider {
             response.status
           ),
           attempt,
+          transportFailure: true,
         }),
         transportFailure:
           attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
@@ -250,6 +271,7 @@ export default class ChatRouteProvider {
       followUps: answer.metadata.followUps ?? [],
       finishReason: answer.finishReason,
       ...flags(answer.metadata),
+      ...runQuality(answer.text, readIds),
     }
 
     // The route writes its envelope into the stream's error text when the
@@ -257,7 +279,10 @@ export default class ChatRouteProvider {
     if (answer.errorText !== undefined) {
       const code = envelopeCode(answer.errorText)
       return {
-        response: failure(`CHAT_ERROR: ${code}`, metadata),
+        response: failure(`CHAT_ERROR: ${code}`, {
+          ...metadata,
+          transportFailure: true,
+        }),
         transportFailure:
           attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
       }
@@ -300,6 +325,28 @@ function baseMetadata(
     followUps: [],
     model,
     status,
+  }
+}
+
+/**
+ * The two flake classes a run is measured by, read off the answer itself.
+ *
+ * Measured here rather than in an assertion because they are facts about the
+ * request, not judgements about the answer: every suite produces them, and
+ * only a count over the whole run says whether a red row was the assistant or
+ * the hour. An answer with no prose at all carries no evidence about the
+ * policy either, so it counts with the error envelopes.
+ */
+function runQuality(
+  text: string,
+  readIds: string[]
+): { transportFailure?: true; missingTrailer?: true } {
+  const empty = answerProse(text).trim().length === 0
+  const missingTrailer =
+    readIds.length > 0 && sourcesTrailerIds(text).length === 0
+  return {
+    ...(empty ? { transportFailure: true as const } : {}),
+    ...(missingTrailer ? { missingTrailer: true as const } : {}),
   }
 }
 

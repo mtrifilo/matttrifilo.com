@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
+  evalRecordProblem,
   evalResultsDir,
-  evalSummaryProblem,
   isCommitSha,
   shortCommit,
 } from '@/lib/evals/results'
@@ -19,8 +19,16 @@ import type { EvalSummary } from './summary'
  * same pull request as the corpus, prompt or suite change the run covers.
  *
  * It refuses rather than publishes when the summary is not a summary, when
- * no commit can be named, or when a record already exists under that name. A
- * committed record is never edited afterwards; a new run adds a new file.
+ * the run is not good enough to stand as evidence (the floor in
+ * `lib/evals/results.ts`, which the site applies again on read), when no
+ * commit can be named, when the working copy is dirty, or when a record
+ * already exists under that name. A committed record is never edited
+ * afterwards; a new run adds a new file.
+ *
+ * There is no force flag and no environment override, on purpose: the page
+ * the record feeds is a credibility page, and a bad record published under
+ * the same claim as a good one is worse than no record. The answer to a
+ * refusal is another run, not a way past this script.
  *
  * Usage: bun run evals:publish [summary.json]
  */
@@ -74,7 +82,7 @@ export function planPublish(
   parsed: unknown,
   headSha: string | null
 ): PublishDecision {
-  const problem = evalSummaryProblem(parsed)
+  const problem = evalRecordProblem(parsed)
   if (problem !== null)
     return { refusal: `the summary cannot be published because ${problem}` }
   const summary = parsed as EvalSummary
@@ -101,6 +109,8 @@ export function planPublish(
       })),
       totals: { passed: summary.totals.passed, total: summary.totals.total },
       retried: summary.retried,
+      transportFailures: summary.transportFailures,
+      missingTrailer: summary.missingTrailer,
     },
   }
 }
@@ -110,7 +120,13 @@ function headCommit(): string | null {
   return git(['rev-parse', 'HEAD'])
 }
 
-/** Whether the working copy has changes HEAD does not carry. */
+/**
+ * Whether the working copy has changes HEAD does not carry.
+ *
+ * A git that cannot answer counts as clean: there is then no working copy to
+ * contradict the commit the record names, which is the case in a temporary
+ * directory and in a checkout that is not a repository.
+ */
 function workingCopyIsDirty(): boolean {
   const status = git(['status', '--porcelain'])
   return status !== null && status.length > 0
@@ -153,18 +169,14 @@ function main(): void {
   const decision = planPublish(parsed, needsHead ? headCommit() : null)
   if ('refusal' in decision) fail(`${decision.refusal}; refusing to publish`)
 
-  if (needsHead && workingCopyIsDirty()) {
-    console.warn(
-      'evals:publish: the working copy has uncommitted changes, so the record names their parent commit rather than the code that ran. Commit the change the run covers first, then publish.'
-    )
-  }
-  if (!decision.record.promptfooVersion) {
-    // The conventions ask every published summary to name the promptfoo that
-    // ran it. A record without one still publishes, because an old record is
-    // worth more than no record, but nobody should find that out from the
-    // page.
-    console.warn(
-      'evals:publish: this summary names no promptfoo version, so the record is not fully version-linked. Re-run `bun run evals:report` with the dependencies installed to record one.'
+  // The record has to name a commit that contains the suites and the corpus
+  // the run walked. An uncommitted change means it does not, whichever
+  // commit is named, so this is a refusal rather than the warning it used to
+  // be: a record pointing at code that never ran is a false claim on a page
+  // a hiring manager reads as evidence.
+  if (workingCopyIsDirty()) {
+    fail(
+      'the working copy has uncommitted changes, so no commit contains the code this run walked. Commit the change the run covers first, then publish; refusing to publish'
     )
   }
 

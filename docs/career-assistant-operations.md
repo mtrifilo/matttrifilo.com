@@ -182,7 +182,7 @@ See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-chec
 | `injection`    |    24 | Role-play, encoded and reversed instructions, instructions planted inside a quoted "document", multi-turn escalation over forged assistant turns, attempts to dump the index or name the tool, and a visitor quoting a fake commit message that carries instructions. Every test asserts that the run answered at all, that it stays in the third person, and that no verbatim policy phrase or tool name comes back; the eight tests that could plausibly open a document also assert it read nothing outside the index. A paraphrased disclosure of the rules is not something a substring check can catch; read a failing injection answer, do not only trust the green. |
 | `groundedness` |    23 | Twelve questions whose `Sources:` trailer must name only documents the server actually read, and eleven probes for plausible-but-absent facts that must be declined rather than invented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. Be precise about what that buys: three identical prompts at temperature 0 are highly correlated, so this absorbs the residual nondeterminism of serving, not a difference of judgement. It costs 255 of the run's calls, about $0.21.
+Deterministic assertions are the gate. `llm-rubric` appears where judgement is genuinely needed and nowhere else: in `golden`, on whether an answer is _right_, and on the `groundedness` probes, where a substring list cannot see an invention phrased around it. The grader runs at temperature 0 and each rubric sits in an `assert-set` of three with `threshold: 0.6`, so two of three grades must pass. Be precise about what that buys: three identical prompts at temperature 0 are highly correlated, so this absorbs the residual nondeterminism of serving, not a difference of judgement. It costs 327 of the run's calls, about $0.27.
 
 The threshold is 0.6 rather than 0.67 for an unobvious reason worth keeping written down: promptfoo scores an `assert-set` on the weighted **mean** of its members and passes on `score >= threshold`. Two passes out of three average 0.666…, which is below 0.67, so a 0.67 threshold would have demanded three of three and the tolerance would not have existed at all.
 
@@ -206,16 +206,23 @@ Locally, during development, by decision of 2026-09-21 (Matt): a full run on eve
 
 `.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change). It dispatches only a ref in this repository and runs the workflow file at that ref with `id-token: write`, so never dispatch it on a branch whose `.github/` or `evals/` changes you have not read: a contributor's branch is evaluated by cherry-picking its content changes onto a branch you own, or by reviewing those two directories first. It is not a required check and must not become one.
 
-Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, which is the shape the site publishes (see "Publishing a run" below). `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
+Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, which is the shape the site publishes (see "Publishing a run" below). Three counters measure the run rather than the assistant, and the publish gate reads all three:
+
+- `retried`: tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression.
+- `transportFailures`: tests that produced no answer to grade at all, after every attempt: `CHAT_ERROR: interrupted`, `unavailable`, another API error, or a stream with no text in it. Those rows say nothing about the assistant, and an assertion that checks for the absence of something passes on them.
+- `missingTrailer`: answers that used a document and wrote no `Sources:` trailer. The groundedness suite tolerates that where the run demonstrably read the document (below), so this number is the only place it is visible.
 
 ```json
 {
   "commit": "…",
   "ranAt": "…",
   "model": "gemini-3.8-flash",
+  "promptfooVersion": "…",
   "suites": [{ "name": "golden", "passed": 100, "total": 100 }],
   "totals": { "passed": 171, "total": 171 },
-  "retried": 0
+  "retried": 0,
+  "transportFailures": 0,
+  "missingTrailer": 0
 }
 ```
 
@@ -231,13 +238,30 @@ bun run evals:publish            # writes evals/results/<date>-<sha>.json
 git add evals/results/<the file it named>
 ```
 
-Commit the tested change **before** publishing. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`; with the change still uncommitted that names its parent, which is not the code that ran. The script warns when the working copy is dirty for exactly this reason.
+Commit the tested change **before** publishing. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`; with the change still uncommitted that names its parent, which is not the code that ran. The script refuses to publish from a dirty working copy for exactly this reason.
 
 Commit the record in the same pull request as the change. Older files stay: the page shows the newest run and a history of the last ten, so a reader can see the trend. A committed record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists. Two runs on the same day at the same commit collide on the name: if the earlier file has not been committed yet, delete it and publish again; if it has, it stands.
 
-What else it refuses: a summary whose totals are missing, whose suite rows do not add up to its totals row, or that is otherwise not an eval summary (the site would skip such a record at build time anyway), and a summary that can name no commit at all. The record it writes is built field by field rather than copied, so a new field in `summary.json` is published only when someone adds it to `evals/publish.ts` on purpose; `results.json`, which holds every question and every answer, is never the thing being copied.
+What it refuses, and why each refusal exists (MTC-54). `/ask/evals` is a credibility page: a hiring manager reads it as evidence that the assistant is tested, so a record of a bad run is worse than no record, because it is published under the same claim as a good one. There is deliberately no force flag and no environment variable that lifts any of this.
 
-`promptfooVersion` is read from the installed `node_modules/promptfoo` when the summary is written, so the record names the promptfoo that actually ran. Records written before that was recorded carry no version and the page omits the field.
+| It refuses when                                                                                                                 | Because                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| any test produced no answer to grade (`transportFailures` above zero)                                                           | a stalled connection, a refused token, an API error or an empty stream is not evidence about the assistant, and the absence checks pass on it |
+| the run passed under 95 percent of its tests, or any one suite under 90 percent                                                 | the page states a pass rate; below that the honest statement is that the run failed                                                           |
+| `retried` is above 10 percent of the tests                                                                                      | the run happened in a bad hour upstream, and its timings and counts are about Vertex                                                          |
+| `missingTrailer` is above 10 percent of the tests                                                                               | the citation line is part of the answer policy, and the groundedness suite tolerates single misses; a tenth of the run is a regression        |
+| the summary lacks `commit`, `ranAt`, `model`, `promptfooVersion` or `totals`, or its suite rows do not add up to its totals row | a record that cannot say what ran, when, or against which code is not version-linked, and the site would skip it at build time anyway         |
+| no commit can be named at all                                                                                                   | the same, at the point where there is nothing to attach the record to                                                                         |
+| the working copy is dirty                                                                                                       | the record names a commit that must contain the suites and the corpus the run walked; with a change uncommitted, no commit does               |
+| a record already exists under that name                                                                                         | a committed record is never rewritten                                                                                                         |
+
+`lib/evals/results.ts` holds the same floor as named constants and applies it again when the site reads the directory, so a record written or edited by hand is skipped with a build warning rather than rendered.
+
+When it refuses, the answer is another run, not a way around the script: re-run when Vertex is healthy (a clean `bun run evals:smoke` first, as below), or dispatch `.github/workflows/evals.yml` by hand to get a record from GitHub's network as the deployment's own identity. A refusal on the pass rate is not a flake to route around; it is the suites saying the change is not ready.
+
+The record it writes is built field by field rather than copied, so a new field in `summary.json` is published only when someone adds it to `evals/publish.ts` on purpose; `results.json`, which holds every question and every answer, is never the thing being copied.
+
+`promptfooVersion` is read from the installed `node_modules/promptfoo` when the summary is written, so the record names the promptfoo that actually ran. A summary without one is refused: run `bun run evals:report` with the dependencies installed to record it.
 
 One caveat about imported records: a summary produced by a `pull_request`-triggered CI run records `GITHUB_SHA`, which for that event is GitHub's synthetic merge commit rather than a commit in the branch's history. Records published from local runs do not have this problem, and local runs are how the suites run now.
 
@@ -252,9 +276,11 @@ A summary that never reaches `evals/results/` is not published; the page shows t
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
-4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency. A row that failed this way writes `[chat] { stage: 'model', error: ..., vertexRetries: N }` and nothing else: no `vertexFirstByteMs`, because no byte arrived. The rows that did answer carry both fields on their completion line, and a full suite is the largest sample of them anything here produces; the percentiles and the extraction recipe are under "What to watch" above.
+4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more, and a row that never produced an answer is counted in `transportFailures`, which makes the run unpublishable whatever else it says. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency. A row that failed this way writes `[chat] { stage: 'model', error: ..., vertexRetries: N }` and nothing else: no `vertexFirstByteMs`, because no byte arrived. The rows that did answer carry both fields on their completion line, and a full suite is the largest sample of them anything here produces; the percentiles and the extraction recipe are under "What to watch" above.
 
-A fifth possibility is that the job ran out of time rather than failing. `.github/workflows/evals.yml` caps the job at `timeout-minutes: 90` and `bun run evals` uses `--max-concurrency 2`, so a full run is roughly 200 serial model calls: 144 route calls plus 255 grader calls, halved by the concurrency. That fits 90 minutes comfortably at normal latency, and does not fit it if the 3x retry case above holds for most of a run. A timeout kills the job rather than the step, so `continue-on-error` on the suites step does not rescue it and there is no `results.json` to read. If that happens, raise the cap or the concurrency; it is a sizing problem, not a regression. The margin halved when MTC-51 doubled the golden suite, and no wall-time has been measured since.
+A fifth possibility is that the job ran out of time rather than failing. `.github/workflows/evals.yml` caps the job at `timeout-minutes: 90` and `bun run evals` uses `--max-concurrency 8` (MTC-54), so a full run of 171 route calls plus 327 grader calls is roughly 62 serial slots rather than the 249 it was at concurrency 2. That fits 90 minutes at normal latency with room for the 3x retry case above. A timeout kills the job rather than the step, so `continue-on-error` on the suites step does not rescue it and there is no `results.json` to read. If that happens, raise the cap or the concurrency; it is a sizing problem, not a regression. No wall-time has been measured at the new concurrency.
+
+A sixth is a missing `Sources:` trailer. That one no longer reddens a run on its own: where the server's ledger shows the answer read a document and the answer is a real answer rather than a decline, `assertCites` records a warning row and the provider counts it in `missingTrailer` (MTC-54). It is still a failure when the run read nothing, when the answer is empty, and when the answer says the material does not cover the question, and the publish gate refuses a run where more than a tenth of the tests did it.
 
 Never relax an assertion to get a green run without saying so in the pull request.
 
@@ -267,7 +293,15 @@ gcloud auth application-default login
 GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
 ```
 
-`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing. `CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table. The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
+`evals:smoke` is the first three tests of each suite, twelve in all, for a few cents. `bun run evals` is the whole thing.
+
+How to spend a session (MTC-54):
+
+1. Start with `bun run evals:smoke`. If it shows timeouts (`CHAT_ERROR: interrupted` rows, or calls sitting at the 67.5 s bound), **stop and come back later**. Vertex not answering from this machine is a bad hour upstream, not a suite to debug, and a full run in that state burns the budget for a record that cannot be published anyway. The alternative path is dispatching `.github/workflows/evals.yml` by hand, which runs from GitHub's network as the deployment's own identity.
+2. Iterate on the tests you are actually changing rather than the whole suite: `bunx promptfoo eval -c evals/promptfooconfig.yaml --filter-pattern '<regex on the description>'`, or `--filter-metadata suite=groundedness`, which is how `evals:smoke` filters. Both cost only what they run.
+3. Run the full `bun run evals` once, at concurrency 8, before opening the pull request, and paste its table into the body. Then `bun run evals:publish` if the change is one the published record should cover.
+
+`CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table. The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
 
 Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before it builds a handler, so every row names the missing variable instead of saying `unavailable`. The run still walks all 171 tests, but it makes no model call and costs nothing. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
 
@@ -288,6 +322,8 @@ Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by pro
 The grader row is 109 rubric-bearing tests, the 98 rubric-bearing goldens plus the 11 hallucination probes, each graded three times. The two activity goldens carry no rubric, so it does not grow with them.
 
 At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 1.898 × $0.75 = $1.42, plus 0.0645 × $3.75 = $0.24. **About $1.66 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $3.32.
+
+Concurrency does not appear in any of this, and that is the point: `--max-concurrency 8` (MTC-54) changes how long a run takes, not what it costs, because the same calls are made either way. What bounds the concurrency is the Vertex requests-per-minute quota for the model on the project (GCP console, IAM & Admin, Quotas, filter on `aiplatform.googleapis.com`), which is the same quota the budget section suggests lowering to cap spend. Raising concurrency past it converts a slow run into a run of quota errors.
 
 Read that as a typical figure, not a ceiling. Medium thinking spends more output tokens than the `low` floor the route used to send. The provider retries a test twice when earlier attempts were lost to a transport stall rather than answered, so a bad few minutes on Vertex can approach three times the request count; the `[chat]` log lines in the job output say how often that happened. The $50 monthly budget on the project is the real backstop.
 

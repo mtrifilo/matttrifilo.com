@@ -9,9 +9,10 @@
  */
 
 /**
- * The stable artifact shape. `lib/evals/results.ts` validates it and
- * `app/ask/evals/page.tsx` renders every field of it on a public page, so a
- * field added here is a field published there.
+ * The stable artifact shape. `lib/evals/results.ts` validates every field of
+ * it, `app/ask/evals/page.tsx` renders the run and its suite counts, and the
+ * three quality counters below decide whether the record may be published at
+ * all, so a field added here is a field committed to a public repository.
  */
 export interface EvalSummary {
   commit: string
@@ -32,6 +33,20 @@ export interface EvalSummary {
    * regression, and because it is what the run actually cost.
    */
   retried: number
+  /**
+   * Tests that produced no answer to grade: an error envelope after every
+   * attempt, or a stream with no text in it. They are not evidence about the
+   * assistant, and an absence check passes on them, so a run with any of
+   * them cannot be published.
+   */
+  transportFailures: number
+  /**
+   * Answers that used a document and wrote no `Sources:` trailer. The
+   * groundedness suite tolerates this where the run demonstrably read the
+   * document, so the number is the only place the policy's citation line
+   * going missing is visible.
+   */
+  missingTrailer: number
 }
 
 export interface SuiteSummary {
@@ -103,7 +118,14 @@ export function summarise({
     },
     retried: rows.filter(row => (readNumber(row.metadata?.attempt) ?? 1) > 1)
       .length,
+    transportFailures: countFlagged(rows, 'transportFailure'),
+    missingTrailer: countFlagged(rows, 'missingTrailer'),
   }
+}
+
+/** Rows whose provider metadata raised one of the run-quality flags. */
+function countFlagged(rows: ResultRow[], flag: string): number {
+  return rows.filter(row => row.metadata?.[flag] === true).length
 }
 
 /** The GitHub step summary table. */
@@ -113,6 +135,12 @@ export function markdownTable(summary: EvalSummary): string {
     summary.retried > 0
       ? `${summary.retried} test(s) were sent twice after a stalled Vertex connection.`
       : 'No test needed a second attempt.',
+    summary.transportFailures > 0
+      ? `${summary.transportFailures} test(s) produced no answer to grade, so this run cannot be published.`
+      : 'Every test produced an answer to grade.',
+    summary.missingTrailer > 0
+      ? `${summary.missingTrailer} answer(s) used a document without a Sources: trailer.`
+      : 'Every answer that used a document carried its Sources: trailer.',
     '',
     '| Suite | Passed | Total |',
     '| --- | ---: | ---: |',
