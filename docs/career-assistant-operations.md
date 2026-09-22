@@ -372,6 +372,8 @@ Those two prices come from secondary sources, not from Google's own pricing page
 4. Run `bun test` first: `evals/config.test.ts` catches a bad id or a missing metadata key without spending anything.
 5. Then `bun run evals:smoke` while iterating, and `bun run evals` before the pull request; paste the summary in its body.
 
+A new document can make an existing golden's pin stale: the run opens the new document, answers correctly, and fails `assertReadsExpected` because the test still names the résumé. So when a document lands, check every golden whose reads name a document it overlaps, and choose each pin by what the reader needs. Pin the new document alone in `expectReads` when the question is about the subject that document is written about (its title names the programme or feature) and the older source gives it a line; the prompt tells the model to prefer that document, so a run that skips it is a worse run. Use `expectReadsAny` with `assertReadsAnyOf` when two documents each hold every fact the rubric requires, so either is a correct read. Keep the old pin when only it holds a fact the rubric grades. Never list two documents under `expectReads` to mean "either": that requires both. Whichever you choose, reword the rubric so an answer drawn only from any document the test accepts can pass, never by lowering the threshold or dropping a fact that document states, and record the choice in a one-line `# Reads:` comment above the test.
+
 Goldens are hand-written from the corpus. They are never mined from traffic, because nothing is stored (decision of 2026-09-13).
 
 ### Adding a starter question (MTC-51)
