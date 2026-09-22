@@ -25,6 +25,28 @@ const nextConfig: NextConfig = {
     '/ask/evals': ['./evals/results/*.json'],
   },
   experimental: {
+    /**
+     * Off for every `next build`, local and CI included, not only on Vercel.
+     *
+     * Vercel keys its build cache by branch and gives a branch's first build
+     * the last production deployment's cache. With this on, Turbopack then
+     * reused a stale stylesheet: PR #41's first preview served main's CSS
+     * under the branch's JavaScript, and the follow-up row it added had no
+     * rules at all (MTC-62, 2026-09-22; the same symptom on 16.3.0 is in
+     * vercel/next.js discussion 87283). Scoping the switch to previews was
+     * rejected because a stale production build is the same defect.
+     *
+     * Cost, measured 2026-09-22: CI's cold `bun run build` step took 22 s
+     * (run 35759355529) and a cache-free Vercel build 1 minute including
+     * install, so the cache buys little here and a wrong preview costs a
+     * review cycle.
+     *
+     * An unknown `experimental` key only warns, so a Next upgrade that
+     * renames this one would silently turn the cache back on;
+     * lib/next-config.test.ts fails instead. Revisit when a Next release
+     * names the invalidation fix.
+     */
+    turbopackFileSystemCacheForBuild: false,
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-dialog',
