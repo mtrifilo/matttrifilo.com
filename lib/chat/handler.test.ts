@@ -20,6 +20,7 @@ import {
   type ChatProgress,
 } from './progress'
 import type { ActivityFetchResult } from './github-activity'
+import { FOLLOW_UPS_TRAILER_PREFIX } from './answer'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
@@ -1270,6 +1271,115 @@ describe('what the browser is told was read', () => {
     // What the UI actually needs still arrives.
     expect(body).toContain('He led the platform migration.')
     expect(progressFrom(body).at(-1)?.steps).toHaveLength(1)
+  })
+})
+
+describe('the follow-ups the answer proposes', () => {
+  const FOLLOW_UPS = [
+    'What did the throughput study measure?',
+    'What confounders does Matt name?',
+  ]
+
+  /** An answer written the way the policy asks for one, trailers and all. */
+  const withFollowUps = (...questions: string[]) =>
+    [ANSWER, FOLLOW_UPS_TRAILER_PREFIX, ...questions].join('\n')
+
+  test('the questions arrive as validated metadata', async () => {
+    // The trailer itself still travels in the answer text, as the citation
+    // line does; lib/chat/answer.ts is what takes both back out before the
+    // transcript renders a word. The metadata is the only channel the row
+    // is built from.
+    const model = modelOf(
+      reads('resume'),
+      answers(withFollowUps(...FOLLOW_UPS))
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toEqual(FOLLOW_UPS)
+  })
+
+  test('a malformed proposal is dropped, and the good ones still stand', async () => {
+    // Model output about to be drawn as a button: a link is not a question a
+    // hiring manager asked. The proposals around it are still offered.
+    const model = modelOf(
+      reads('resume'),
+      answers(
+        withFollowUps(
+          'Read more at https://example.com?',
+          'What confounders does Matt name?'
+        )
+      )
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toEqual([
+      'What confounders does Matt name?',
+    ])
+  })
+
+  test('a run that proposed nothing well formed carries no key at all', async () => {
+    const model = modelOf(
+      reads('resume'),
+      answers(withFollowUps('Read more at https://example.com?'))
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('a decline carries none, even when the model wrote some', async () => {
+    const model = modelOf(
+      answers(
+        [DECLINE_SENTENCE, FOLLOW_UPS_TRAILER_PREFIX, ...FOLLOW_UPS].join('\n')
+      )
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', 'What does Matt earn?')] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('an answer cut off on the output cap carries none', async () => {
+    const model = modelOf(
+      reads('resume'),
+      answers(withFollowUps(...FOLLOW_UPS), 'length')
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).truncated).toBe(true)
+    expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('text a model wrote before a read is never mistaken for the trailer', async () => {
+    // The preamble is scratchpad, dropped from the stream; its end must not
+    // be the tail the metadata callback parses either.
+    const model = modelOf(
+      readsAfterSaying(
+        `Let me check.\n${FOLLOW_UPS_TRAILER_PREFIX}\nWhat does his team own?`,
+        'resume'
+      ),
+      answers()
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toBeUndefined()
   })
 })
 

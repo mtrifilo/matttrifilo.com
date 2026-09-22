@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import type { KnowledgeIndex } from '@/lib/knowledge'
 import {
+  FOLLOW_UPS_MAX,
+  FOLLOW_UP_MAX_CHARS,
+  FOLLOW_UP_MIN_CHARS,
+} from './answer'
+import {
   CURRENT_QUESTION_HEADING,
   DECLINE_SENTENCE,
+  FOLLOW_UPS_TRAILER_PREFIX,
   INDEX_HEADING,
   READ_DOCUMENT_TOOL_NAME,
   RECENT_ACTIVITY_TOOL_NAME,
@@ -53,6 +59,58 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT).toContain(
       `${SOURCES_TRAILER_PREFIX}first-document-id, second-document-id`
     )
+  })
+
+  describe('the follow-ups trailer it asks for', () => {
+    test('names the marker exactly as the parser recognises it', () => {
+      // The marker is prose here and a pattern over there. Spelled any other
+      // way in either place, the block is never taken off the answer.
+      expect(SYSTEM_PROMPT).toContain(`\n${FOLLOW_UPS_TRAILER_PREFIX}\n`)
+    })
+
+    test('tells the model the length bounds the parser enforces', () => {
+      // A bound the model is not told is a proposal dropped for a reason it
+      // could have avoided.
+      expect(SYSTEM_PROMPT).toContain(
+        `between ${FOLLOW_UP_MIN_CHARS} and ${FOLLOW_UP_MAX_CHARS} characters`
+      )
+    })
+
+    test('asks for as many questions as the parser will keep', () => {
+      // The prose says "two or three" in words, which is the readable way to
+      // say it and the one thing here that cannot be interpolated.
+      expect(FOLLOW_UPS_MAX).toBe(3)
+      expect(SYSTEM_PROMPT).toContain('two or three questions')
+    })
+
+    test('asks for them in the third person', () => {
+      expect(SYSTEM_PROMPT).toContain(
+        'Write them about Matt in the third person'
+      )
+    })
+
+    test('leads with the outcomes Matt features first', () => {
+      // The featuring order is a product decision (Matt, 2026-09-22); this
+      // pins that the policy still carries it in that order.
+      const order = [
+        'measured delivery change',
+        'product and platform outcomes',
+        'operational ownership',
+        'led AI adoption across an organisation',
+      ]
+      let cursor = -1
+      for (const phrase of order) {
+        const at = SYSTEM_PROMPT.indexOf(phrase)
+        expect(at).toBeGreaterThan(cursor)
+        cursor = at
+      }
+    })
+
+    test('keeps the decline free of both trailers', () => {
+      expect(SYSTEM_PROMPT).toContain(
+        `${SOURCES_TRAILER_PREFIX.trim()} line or a ${FOLLOW_UPS_TRAILER_PREFIX} line`
+      )
+    })
   })
 
   test('covers every category that is out of scope by policy', () => {

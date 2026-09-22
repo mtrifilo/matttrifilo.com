@@ -18,6 +18,7 @@ import {
   assertCitesOnlyWhatItRead,
   assertDecline,
   assertDeclineOrWithholds,
+  assertFollowUpsAnswerable,
   assertCheckedActivity,
   assertDatesFromActivity,
   assertHasRecentDate,
@@ -342,6 +343,28 @@ describe('assertChipsMatchReads', () => {
     )
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('faq')
+  })
+})
+
+describe('assertFollowUpsAnswerable', () => {
+  // Only the branches that decide before a second model call are exercised
+  // here; the call itself is what an eval run is for, and `bun test` makes
+  // none.
+  test('an answer that proposed nothing fails and says so', async () => {
+    const result = await assertFollowUpsAnswerable(
+      'He led it.',
+      ctx(undefined, { followUps: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('no follow-up')
+  })
+
+  test('a test with no question of its own fails rather than guessing', async () => {
+    const result = await assertFollowUpsAnswerable('He led it.', {
+      metadata: { followUps: ['What does his team own?'] },
+    })
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('no question')
   })
 })
 

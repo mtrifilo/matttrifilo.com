@@ -14,6 +14,7 @@ import { Suggestion } from '@/components/ai-elements/suggestion'
 import { cn } from '@/lib/utils'
 import { STARTER_QUESTIONS } from './copy'
 import {
+  EDGE_FADE_PROPERTY,
   loopSeconds,
   offsetForStartAt,
   progressForScrollLeft,
@@ -221,7 +222,10 @@ export function StarterTicker({
       // The vertical padding is room for a focus ring the row would
       // otherwise clip; the negative margin gives it back to the layout, so
       // the row occupies what the design says it does.
-      className={cn('starter-ticker -my-1 w-full py-1', className)}
+      className={cn(
+        'edge-faded-row starter-ticker -my-1 w-full py-1',
+        className
+      )}
       onBlur={handleBlur}
       onFocus={handleFocus}
       onTouchStart={handleTouchStart}
@@ -316,7 +320,8 @@ function animationNameOf(animation: Animation): string | undefined {
 
 /** The edge fade, read from the stylesheet so one number defines it. */
 function fadeWidth(viewport: Element): number {
-  const declared = getComputedStyle(viewport).getPropertyValue('--ticker-fade')
+  const declared =
+    getComputedStyle(viewport).getPropertyValue(EDGE_FADE_PROPERTY)
   return Number.parseFloat(declared) || 0
 }
 

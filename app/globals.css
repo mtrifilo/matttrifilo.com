@@ -203,45 +203,122 @@
   }
 }
 
-.starter-ticker {
+/*
+ * A row of pills that runs off both edges of its box: the starter ticker and
+ * the follow-up row after an answer (MTC-41) are the same window onto more
+ * questions, so the gradient and the scroll padding are declared once, here,
+ * and each row adds only how it moves.
+ */
+.edge-faded-row {
   /* Read back by starter-ticker.tsx to place a focused pill clear of the
      gradient, so it belongs on this element and has to stay in pixels. */
-  --ticker-fade: 56px;
-  /*
-   * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
-   * a box that can still be scrolled programmatically, and scrollLeft is how
-   * a focused pill is brought into view once the track stops moving.
-   */
-  overflow: hidden;
+  --edge-fade: 56px;
   /*
    * Keep a focused pill out of the gradient. This is what the browser's own
-   * focus scrolling obeys, which is the only thing that moves the row under
-   * prefers-reduced-motion.
+   * focus scrolling obeys, which is the only thing that moves the ticker
+   * under prefers-reduced-motion, and the only thing that moves the
+   * follow-up row at all.
    *
    * It is scroll-padding and NOT padding. Padding here would give the row a
-   * blank strip at each end, and the track has nothing to put in the left
-   * one for the last few seconds of every loop: the strip would fade in as
-   * an empty sliver and then snap full at the wrap. The cost of leaving it
-   * out is that the pool's first question, which starts at scroll zero and
-   * has nothing to its left, cannot be brought fully clear of the left
-   * gradient by any scroll. Every other question can.
+   * blank strip at each end, and the ticker's track has nothing to put in
+   * the left one for the last few seconds of every loop: the strip would
+   * fade in as an empty sliver and then snap full at the wrap. The cost of
+   * leaving it out is that a row's first pill, which starts at scroll zero
+   * and has nothing to its left, cannot be brought fully clear of the left
+   * gradient by any scroll. Every other pill can.
    */
-  scroll-padding-inline: var(--ticker-fade);
+  scroll-padding-inline: var(--edge-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
      blur-on-scroll note in this file explains why a hand-written prefix is
      a hazard, and lib/globals-css.test.ts is the guard. */
   mask-image: linear-gradient(
     to right,
     transparent 0,
-    black var(--ticker-fade),
-    black calc(100% - var(--ticker-fade)),
+    black var(--edge-fade),
+    black calc(100% - var(--edge-fade)),
     transparent 100%
   );
 }
 
 @media (min-width: 48rem) {
-  .starter-ticker {
-    --ticker-fade: 72px;
+  .edge-faded-row {
+    --edge-fade: 72px;
+  }
+}
+
+.starter-ticker {
+  /*
+   * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
+   * a box that can still be scrolled programmatically, and scrollLeft is how
+   * a focused pill is brought into view once the track stops moving.
+   */
+  overflow: hidden;
+}
+
+/*
+ * The follow-up row (MTC-41).
+ *
+ * Nothing loops here: the pills are this answer's proposals, so the row is an
+ * ordinary scroll container the visitor drags, at every width.
+ *
+ * It fades at the right edge only, not both. The ticker is always mid-loop,
+ * so its left gradient always has content under it; this row opens at scroll
+ * zero and stays there until the visitor drags it, so a left gradient would
+ * sit permanently over the first pill. The approved frame clips the right
+ * edge and shows the first pill whole.
+ *
+ * `overscroll-behavior-x` keeps a drag that reaches the start of the row from
+ * becoming the browser's back gesture, which on a phone would leave the page.
+ */
+.follow-up-row {
+  overflow-x: auto;
+  /*
+   * `hidden` vertically is what clips the row while the reveal below grows
+   * it, as well as what keeps a pill from spilling upwards. Opening it would
+   * turn the reveal into a no-op, so the two rules are one decision.
+   */
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  /* Only the end fades, so the start needs none of the padding the shared
+     rule reserves for a gradient that is not there. */
+  scroll-padding-inline-start: 0;
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+}
+
+/*
+ * The row's arrival, animated as its real height.
+ *
+ * `0fr` to `1fr` on a one-row grid is what animates the height the content
+ * actually has, so the transcript above is carried rather than jolted when
+ * the run ends. A max-height would reach the content's height in the first
+ * fraction of the duration and read as a snap.
+ *
+ * The row inside is what clips its own overflow while the track is shorter
+ * than it: this wrapper only sets `min-height: 0`, which is what lets a grid
+ * item shrink below its content at all.
+ *
+ * @starting-style is what gives a freshly mounted element a height to grow
+ * from. A browser without it shows the row at once, which is also what a
+ * visitor who asked for no motion gets.
+ */
+.follow-up-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 180ms ease-out;
+}
+
+.follow-up-reveal > * {
+  min-height: 0;
+}
+
+@starting-style {
+  .follow-up-reveal {
+    grid-template-rows: 0fr;
   }
 }
 
@@ -287,6 +364,10 @@
   /* Nothing loops, so the second copy would just be the pool said twice. */
   .starter-ticker-copy[aria-hidden='true'] {
     display: none;
+  }
+  /* The row is still offered; it just stops growing into place. */
+  .follow-up-reveal {
+    transition: none;
   }
 }
 

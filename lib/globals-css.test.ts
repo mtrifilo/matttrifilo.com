@@ -55,13 +55,18 @@ describe('app/globals.css through the build optimiser', () => {
     expect(out).toContain('-webkit-mask-image:linear-gradient(')
   })
 
-  test('the starter ticker keeps both mask-image declarations', () => {
-    // Same hazard as the hex canvas, on a row whose edge fades are the whole
-    // reason the loop reads as a window onto more questions (MTC-39).
-    const out = emitted(ruleFor('.starter-ticker {'))
-    expect(out).toContain('mask-image:linear-gradient(')
-    expect(out).toContain('-webkit-mask-image:linear-gradient(')
-  })
+  test.each(['.edge-faded-row {', '.follow-up-row {'])(
+    '%s keeps both mask-image declarations',
+    selector => {
+      // Same hazard as the hex canvas, on the rules whose edge fades are the
+      // whole reason a row of pills reads as a window onto more questions
+      // (MTC-39, MTC-41). Both, because the follow-up row overrides the
+      // shared gradient with one that fades its end only.
+      const out = emitted(ruleFor(selector))
+      expect(out).toContain('mask-image:linear-gradient(')
+      expect(out).toContain('-webkit-mask-image:linear-gradient(')
+    }
+  )
 
   test('no hand-written vendor prefix sits in the source', () => {
     // The optimiser adds every prefix it needs from its own targets. A

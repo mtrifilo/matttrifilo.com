@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import {
+  EDGE_FADE_PROPERTY,
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   TICKER_KEYFRAME_FROM,
@@ -77,23 +78,93 @@ describe('the row the component scrolls', () => {
     expect(row).toContain('overflow: hidden')
     expect(row).not.toContain('overflow: clip')
   })
+})
 
-  test('declares the fade width on itself, in pixels, at every width', () => {
-    // starter-ticker.tsx reads --ticker-fade off this element with
+describe('the shared edge fade', () => {
+  const faded = ruleFor('.edge-faded-row {')
+
+  test('declares the fade width on the row, in pixels, at every width', () => {
+    // starter-ticker.tsx reads this property off the row element with
     // getComputedStyle and parses it as pixels. Declared on the track
     // instead it would not inherit upwards, and declared in rem it would
     // parse to a number sixteen times too small; both fail silently, and
     // the focused pill lands under the gradient. Every declaration is
     // checked, not just the first: the breakpoint override is the one that
     // applies on the desktop the frames were drawn at.
-    expect(row).toMatch(/--ticker-fade:/)
-    const declared = [...css.matchAll(/--ticker-fade:\s*([^;]+);/g)].map(
-      match => match[1].trim()
-    )
+    expect(faded).toContain(`${EDGE_FADE_PROPERTY}:`)
+    const declared = [
+      ...css.matchAll(new RegExp(`${EDGE_FADE_PROPERTY}:\\s*([^;]+);`, 'g')),
+    ].map(match => match[1].trim())
     expect(declared.length).toBeGreaterThanOrEqual(2)
     for (const value of declared) expect(value).toMatch(/^\d+(?:\.\d+)?px$/)
   })
+
+  test('the fade width is what the scroll padding and the mask use', () => {
+    // Declaring the property and then hard-coding a different number in
+    // either of the two places that consume it is a silent half-fix: the
+    // gradient and the focus offset would stop agreeing.
+    expect(faded).toContain(`scroll-padding-inline: var(${EDGE_FADE_PROPERTY})`)
+    expect(faded).toContain(`var(${EDGE_FADE_PROPERTY})`)
+  })
+
+  test('both rows of pills wear the class that declares it', () => {
+    // The fade, the scroll padding and the property the component reads all
+    // live on this one class now (MTC-41). A row that renders without it
+    // loses its gradient and puts a focused pill under the edge, and neither
+    // failure is visible to any other test here.
+    for (const file of ['starter-ticker.tsx', 'assistant-answer.tsx']) {
+      expect(componentSource(file)).toContain('edge-faded-row')
+    }
+  })
 })
+
+describe('the follow-up row', () => {
+  test('scrolls, and keeps a drag from becoming the back gesture', () => {
+    const row = ruleFor('.follow-up-row {')
+    expect(row).toContain('overflow-x: auto')
+    expect(row).toContain('overscroll-behavior-x: contain')
+  })
+
+  test('clips vertically, which is what the reveal grows against', () => {
+    // The wrapper below animates the row from no height at all. Open this
+    // and the pills simply stand outside it: the animation becomes a no-op
+    // and nothing else here would notice.
+    expect(ruleFor('.follow-up-row {')).toContain('overflow-y: hidden')
+  })
+
+  test('fades the right edge only, where the frame clips it', () => {
+    // The row opens at scroll zero and stays there until it is dragged, so
+    // the shared both-ends gradient would sit permanently over the first
+    // pill. See the rule's own comment.
+    const row = ruleFor('.follow-up-row {')
+    expect(row).toContain('mask-image: linear-gradient(')
+    expect(row).toContain(`black 0,`)
+  })
+
+  test('the reveal animates the height the content actually has', () => {
+    // A max-height transition reaches the content's height in the first
+    // fraction of its duration and reads as a snap; this is the shape that
+    // does not.
+    const reveal = ruleFor('.follow-up-reveal {')
+    expect(reveal).toContain('grid-template-rows: 1fr')
+    expect(reveal).toContain('transition: grid-template-rows')
+    expect(css).toContain('grid-template-rows: 0fr')
+    expect(css).toContain('@starting-style')
+  })
+
+  test('the component renders both halves of it', () => {
+    const source = componentSource('assistant-answer.tsx')
+    expect(source).toContain('follow-up-reveal')
+    expect(source).toContain('follow-up-row')
+  })
+})
+
+function componentSource(file: string): string {
+  return readFileSync(
+    new URL(`../components/assistant/${file}`, import.meta.url),
+    'utf8'
+  )
+}
 
 describe('the state flags the component writes', () => {
   test('the stylesheet reads the attributes the component sets', () => {

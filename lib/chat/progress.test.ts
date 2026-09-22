@@ -28,6 +28,7 @@ function viewWith(
 ): AnswerView {
   return {
     text,
+    followUps: [],
     truncated: flags.truncated ?? false,
     incomplete: flags.incomplete ?? false,
     progress,

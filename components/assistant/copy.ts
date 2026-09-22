@@ -89,6 +89,16 @@ export const STARTER_QUESTIONS = [
  */
 export const RESET_LABEL = 'New conversation'
 
+/**
+ * The group a screen reader names before the row of proposed next questions
+ * (MTC-41).
+ *
+ * It says "follow-up" rather than "suggested" because that is what the row
+ * is: questions that follow from the answer just given, not a menu the
+ * assistant would have offered anyway.
+ */
+export const FOLLOW_UPS_LABEL = 'Follow-up questions'
+
 /** Shown under an answer the model started but the output cap cut off. */
 export const TRUNCATED_NOTICE =
   'That answer was cut short. Ask a narrower question and the assistant can finish it.'

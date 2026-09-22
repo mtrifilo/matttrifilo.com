@@ -14,6 +14,7 @@ import {
   announcementFor,
   discardsQuestion,
   joinTextParts,
+  showsFollowUps,
   toAnswerView,
   toChatErrorView,
   type AnswerView,
@@ -47,6 +48,7 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
  */
 const EMPTY_VIEW: AnswerView = {
   text: '',
+  followUps: [],
   truncated: false,
   incomplete: false,
 }
@@ -246,6 +248,7 @@ export function AssistantChat() {
                   </Message>
                 )
               }
+              const view = toAnswerView(message)
               return (
                 <Message from="assistant" key={message.id}>
                   <MessageContent>
@@ -259,8 +262,18 @@ export function AssistantChat() {
                       // Earlier ones show the duration the server sent with
                       // them, which is on the message itself.
                       elapsedMs={isLast ? elapsedMs : 0}
+                      onFollowUp={
+                        showsFollowUps({
+                          isLast,
+                          ready: status === 'ready',
+                          stopped,
+                          view,
+                        })
+                          ? ask
+                          : undefined
+                      }
                       pending={isLast && busy}
-                      view={toAnswerView(message)}
+                      view={view}
                     />
                   </MessageContent>
                 </Message>

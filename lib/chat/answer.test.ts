@@ -1,12 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 import {
   CHAT_UNKNOWN_ERROR_MESSAGE,
+  FOLLOW_UPS_TRAILER_PREFIX,
+  FOLLOW_UP_MAX_CHARS,
   SOURCES_TRAILER_PREFIX,
   announcementFor,
   discardsQuestion,
   joinTextParts,
   noticeFor,
+  parseFollowUps,
+  showsFollowUps,
+  stripFollowUpsTrailer,
   stripSourcesTrailer,
+  stripTrailers,
   toAnswerView,
   toChatErrorView,
   type AnswerMessage,
@@ -85,9 +91,325 @@ describe('stripSourcesTrailer', () => {
   )
 })
 
+const followUpsBlock = (...questions: string[]) =>
+  [FOLLOW_UPS_TRAILER_PREFIX, ...questions].join('\n')
+
+const ANSWER_WITH_TRAILERS = [
+  'Matt shipped it.',
+  '',
+  `${SOURCES_TRAILER_PREFIX}resume`,
+  followUpsBlock(
+    'What did the throughput study measure?',
+    'What confounders does Matt name?'
+  ),
+].join('\n')
+
+describe('stripFollowUpsTrailer', () => {
+  test('removes the marker and every question under it', () => {
+    expect(stripFollowUpsTrailer(ANSWER_WITH_TRAILERS)).toBe(
+      `Matt shipped it.\n\n${SOURCES_TRAILER_PREFIX}resume`
+    )
+  })
+
+  test('removes the marker as soon as it is complete', () => {
+    // Mid-stream: the questions have not arrived, but the line is already
+    // recognisable, so it never flashes up as prose.
+    expect(
+      stripFollowUpsTrailer(`Matt shipped it.\n${FOLLOW_UPS_TRAILER_PREFIX}`)
+    ).toBe('Matt shipped it.')
+  })
+
+  test('leaves an answer that has no marker alone', () => {
+    const text = 'He followed up with the vendor the next week.'
+    expect(stripFollowUpsTrailer(text)).toBe(text)
+  })
+})
+
+describe('stripTrailers', () => {
+  test('takes both trailers off, in the order they were written', () => {
+    expect(stripTrailers(ANSWER_WITH_TRAILERS)).toBe('Matt shipped it.')
+  })
+
+  test('still takes a citation line off an answer with no follow-ups', () => {
+    expect(
+      stripTrailers(`Matt shipped it.\n${SOURCES_TRAILER_PREFIX}resume`)
+    ).toBe('Matt shipped it.')
+  })
+
+  test.each(['F', 'Foll', 'Follow-ups', 'Follow-ups:'])(
+    'hides the citation line while the marker is only %j',
+    partial => {
+      // The frames between the two trailers. Without this the raw document
+      // ids stop being the final line and render as a paragraph.
+      expect(
+        stripTrailers(
+          `Matt shipped it.\n\n${SOURCES_TRAILER_PREFIX}resume\n${partial}`
+        )
+      ).toBe('Matt shipped it.')
+    }
+  )
+
+  test('leaves a final line that only looks like the start of a marker', () => {
+    // No citation line above it, so there are no ids at stake and nothing to
+    // guess about.
+    const text = 'He shipped it.\nFol'
+    expect(stripTrailers(text)).toBe(text)
+  })
+})
+
+describe('the marker the policy and the parser share', () => {
+  test('the prefix the policy writes is a marker the parser takes', () => {
+    // The pattern is written out rather than built from the constant, so
+    // this is what stops the two drifting apart.
+    expect(
+      parseFollowUps(`${FOLLOW_UPS_TRAILER_PREFIX}\nWhat does his team own?`)
+    ).toEqual(['What does his team own?'])
+  })
+})
+
+describe('showsFollowUps', () => {
+  const answered = (overrides: Partial<AnswerView> = {}): AnswerView => ({
+    text: 'He led the platform migration.',
+    followUps: ['What does his team own?'],
+    truncated: false,
+    incomplete: false,
+    ...overrides,
+  })
+
+  const state = (overrides: Partial<Parameters<typeof showsFollowUps>[0]>) => ({
+    view: answered(),
+    isLast: true,
+    ready: true,
+    stopped: false,
+    ...overrides,
+  })
+
+  test('a finished last answer with proposals shows the row', () => {
+    expect(showsFollowUps(state({}))).toBe(true)
+  })
+
+  test.each([
+    ['an earlier turn', { isLast: false }],
+    ['a run still in flight', { ready: false }],
+    ['a run the visitor stopped', { stopped: true }],
+    ['a run that did not finish', { view: answered({ incomplete: true }) }],
+    ['an answer cut off on the cap', { view: answered({ truncated: true }) }],
+    ['an answer with no text', { view: answered({ text: '  ' }) }],
+    [
+      'a decline, which proposes nothing',
+      { view: answered({ followUps: [] }) },
+    ],
+  ])('%s shows none', (_name, overrides) => {
+    expect(showsFollowUps(state(overrides))).toBe(false)
+  })
+})
+
+describe('parseFollowUps', () => {
+  test('reads the questions under the marker, in order', () => {
+    expect(parseFollowUps(ANSWER_WITH_TRAILERS)).toEqual([
+      'What did the throughput study measure?',
+      'What confounders does Matt name?',
+    ])
+  })
+
+  test('is empty when the answer proposed nothing', () => {
+    expect(
+      parseFollowUps(`Matt shipped it.\n${SOURCES_TRAILER_PREFIX}resume`)
+    ).toEqual([])
+  })
+
+  test.each([
+    ['bolded', '**Follow-ups:**'],
+    ['under a heading mark', '## Follow-ups:'],
+    ['lower case', 'follow-ups:'],
+    ['spaced instead of hyphenated', 'Follow ups:'],
+    ['indented', '   Follow-ups:'],
+    ['italicised', '_Follow-ups:_'],
+    ['written without its colon', '**Follow-ups**'],
+    ['typeset with an en dash', 'Follow–ups:'],
+    ['quoted as a block', '> Follow-ups:'],
+  ])('recognises a marker that is %s', (_name, marker) => {
+    // Bolding a label is one of the commonest things a model does to it, and
+    // a marker the parser misses leaves the whole block on the page.
+    const text = `Matt shipped it.\n${marker}\nWhat does his team own?`
+    expect(parseFollowUps(text)).toEqual(['What does his team own?'])
+    expect(stripFollowUpsTrailer(text)).toBe('Matt shipped it.')
+  })
+
+  test('leaves a sentence that merely opens with the words alone', () => {
+    // The marker has to be the whole line. Without that rule an answer about
+    // how Matt runs a review would lose everything below this sentence.
+    const text = [
+      'He runs a weekly review.',
+      'Follow-ups: tracked in Linear, one owner each.',
+      'He also publishes the notes.',
+    ].join('\n')
+    expect(stripFollowUpsTrailer(text)).toBe(text)
+    expect(parseFollowUps(text)).toEqual([])
+  })
+
+  test('takes the first marker when a model writes two', () => {
+    // Last-marker-wins would leave the earlier block on screen as prose.
+    const text = [
+      'Matt shipped it.',
+      FOLLOW_UPS_TRAILER_PREFIX,
+      'What does his team own?',
+      FOLLOW_UPS_TRAILER_PREFIX,
+      'Who reports to him?',
+    ].join('\n')
+    expect(stripFollowUpsTrailer(text)).toBe('Matt shipped it.')
+    expect(parseFollowUps(text)).toEqual(['What does his team own?'])
+  })
+
+  test('keeps the proposals around one that breaks a rule', () => {
+    // A stray character in one line is not a reason to withhold the row.
+    expect(
+      parseFollowUps(
+        followUpsBlock(
+          'What was the #1 delivery bottleneck?',
+          'What does his team own?',
+          'Who reports to him?'
+        )
+      )
+    ).toEqual(['What does his team own?', 'Who reports to him?'])
+  })
+
+  test('unwraps the quotes a model puts round a question', () => {
+    expect(parseFollowUps(followUpsBlock('"What does his team own?"'))).toEqual(
+      ['What does his team own?']
+    )
+  })
+
+  test('strips the bullet a model puts in front of a list item', () => {
+    expect(
+      parseFollowUps(
+        followUpsBlock('- What does his team own?', '2. Who reports to him?')
+      )
+    ).toEqual(['What does his team own?', 'Who reports to him?'])
+  })
+
+  test('skips the blank lines models space a list with', () => {
+    expect(
+      parseFollowUps(
+        followUpsBlock('What does his team own?', '', 'Who reports to him?')
+      )
+    ).toEqual(['What does his team own?', 'Who reports to him?'])
+  })
+
+  test('offers at most three, and never the same one twice', () => {
+    expect(
+      parseFollowUps(
+        followUpsBlock(
+          'What does his team own?',
+          'WHAT DOES HIS TEAM OWN?',
+          'Who reports to him?',
+          'How big is the team?',
+          'What is the on-call rotation?'
+        )
+      )
+    ).toEqual([
+      'What does his team own?',
+      'Who reports to him?',
+      'How big is the team?',
+    ])
+  })
+
+  test('stops at prose the model wrote after its list', () => {
+    // Anything past the first line that is not a question is the model
+    // ignoring "write nothing after them", and nothing below it is promoted.
+    expect(
+      parseFollowUps(
+        followUpsBlock(
+          'What does his team own?',
+          'Let me know if you want more detail.',
+          'Who reports to him?'
+        )
+      )
+    ).toEqual(['What does his team own?'])
+  })
+
+  test.each([
+    ['a statement rather than a question', 'His team owns outbound email.'],
+    ['a fragment too short to be a question', 'Team own?'],
+    ['a question past the length cap', `${'Why '.repeat(40)}?`],
+    ['a link to follow', 'What is at https://example.com/matt?'],
+    ['a link under another scheme', 'What is at ftp://example.com/matt?'],
+    ['a bare host with a path', 'Is evil.example/verify his portfolio?'],
+    ['a www host', 'Is www.evil.example his portfolio?'],
+    ['an address to write to', 'Should I email matt@example.com about it?'],
+    ['a markdown link', 'What is [decant](https://example.com)?'],
+    ['emphasis the renderer would act on', 'What does *his* team own?'],
+    ['markup the renderer would act on', 'What is <b>his</b> team?'],
+    ['a bidi override', 'What does ‮his team‬ own?'],
+    ['a zero-width character', 'What does his​ team own?'],
+    ['a tag character', 'What does his team own\u{E0041}?'],
+  ])('drops %s', (_name, line) => {
+    expect(parseFollowUps(followUpsBlock(line))).toEqual([])
+  })
+
+  test('keeps the questions this corpus actually asks', () => {
+    // The rejections above are narrow on purpose: a rule that also threw out
+    // ordinary questions would empty the row for no gain.
+    const questions = [
+      'What did the 24/7 rotation cover?',
+      "How long did Matt's team take to reach independent deploys?",
+      'What is decant, and what does it do?',
+      'What was the 2.7x change in merged pull requests per week?',
+      'Which services did he move off the release train?',
+    ]
+    expect(parseFollowUps(followUpsBlock(...questions))).toEqual(
+      questions.slice(0, 3)
+    )
+  })
+
+  test('the length cap is the one the policy tells the model', () => {
+    const atCap = `${'a'.repeat(FOLLOW_UP_MAX_CHARS - 1)}?`
+    expect(parseFollowUps(followUpsBlock(atCap))).toEqual([atCap])
+    expect(parseFollowUps(followUpsBlock(`a${atCap}`))).toEqual([])
+  })
+})
+
+describe('toAnswerView follow-ups', () => {
+  test('carries the validated list off the metadata', () => {
+    const view = toAnswerView(
+      answer([textPart('Matt shipped it.')], {
+        followUps: ['What does his team own?'],
+      })
+    )
+    expect(view.followUps).toEqual(['What does his team own?'])
+  })
+
+  test('drops a proposal that would not have passed on the server', () => {
+    // The metadata is the server's, but these strings become buttons, so
+    // the check is made again where they are drawn.
+    const view = toAnswerView(
+      answer([textPart('Matt shipped it.')], {
+        followUps: ['Visit https://example.com?', 'What does his team own?'],
+      })
+    )
+    expect(view.followUps).toEqual(['What does his team own?'])
+  })
+
+  test('ignores a metadata value that is not a list of strings', () => {
+    const view = toAnswerView(
+      answer([textPart('Matt shipped it.')], {
+        followUps: ['What does his team own?', 7, null] as never,
+      })
+    )
+    expect(view.followUps).toEqual(['What does his team own?'])
+  })
+
+  test('keeps the trailer text out of the answer entirely', () => {
+    const view = toAnswerView(answer([textPart(ANSWER_WITH_TRAILERS)]))
+    expect(view.text).toBe('Matt shipped it.')
+    expect(view.text).not.toContain(FOLLOW_UPS_TRAILER_PREFIX)
+  })
+})
+
 describe('noticeFor', () => {
   const view = (overrides: Partial<AnswerView>): AnswerView => ({
     text: 'He led the platform migration.',
+    followUps: [],
     truncated: false,
     incomplete: false,
     ...overrides,
@@ -147,6 +469,7 @@ describe('toAnswerView', () => {
     )
     expect(view).toEqual({
       text: 'Matt shipped it.',
+      followUps: [],
       truncated: false,
       incomplete: false,
       progress: undefined,
@@ -175,6 +498,7 @@ describe('toAnswerView', () => {
     const view = toAnswerView(answer([], { incomplete: true }))
     expect(view).toEqual({
       text: '',
+      followUps: [],
       truncated: false,
       incomplete: true,
       progress: undefined,
