@@ -106,25 +106,26 @@ export interface BoundedFetchOptions {
  * How long an attempt *before the last* may take to send its first response
  * byte.
  *
- * Measured, not assumed. 448 chat requests across six eval runs, on GitHub
- * runners against the global Vertex endpoint at concurrency 2 (runs
- * 35141498434, 35146960224, 35615460739, 35619729850, 35622479143 and
+ * Measured, not assumed. 514 chat requests over 1,136 model calls in six eval
+ * runs, on GitHub runners against the global Vertex endpoint at concurrency 2
+ * (runs 35141498434, 35146960224, 35615460739, 35619729850, 35622479143 and
  * 35640340223, dated 2026-09-16 to 2026-09-21, read 2026-09-22), put
- * `vertexFirstByteMs` at p50 5,554 ms, p90 17,325, p95 21,742, p99 26,276 and
- * a maximum of 33,958. Chat steps run at thinking `medium` and thought tokens
+ * `vertexFirstByteMs` at p50 5,288 ms, p90 17,013, p95 22,051, p99 26,838 and
+ * a maximum of 35,970. Chat steps run at thinking `medium` and thought tokens
  * are not streamed (`sendReasoning: false`), so the connection is quiet
  * through that phase; 30 s sits above p99 of it, which is why a healthy step
- * does not meet this bound.
+ * does not meet this bound. 28 of those 1,136 calls did, 2.5%.
  *
  * The sample is censored at exactly this number and cannot say otherwise: a
  * first byte later than 30 s is only ever observed on a last attempt, because
- * every earlier attempt is cut here. The 33,958 ms maximum is one of those
- * observations, and it is the evidence that steps do run past this bound and
- * that the wider ceiling below is what answers them.
+ * every earlier attempt is cut here. Three samples are above it, and they are
+ * the evidence that steps do run past this bound and that the wider ceiling
+ * below is what answers them.
  *
  * Moving it is not free in either direction. The two deadlines sum to a
  * constant the arithmetic below derives, so a second added here is a second
- * taken off the only attempt whose deadline a visitor ever sees.
+ * taken off the only attempt whose deadline a visitor ever sees, and that
+ * attempt has about a second of margin to give.
  *
  * `msSinceStart` on the `[chat] step` line is not this measurement: it is
  * elapsed time to the *end* of a step, generation included.
@@ -181,11 +182,16 @@ export const VERTEX_MAX_ATTEMPTS = 2
  *     backoff                 500 ms
  *   left for the last      37_000 ms
  *
- * 37 s is that, not rounded, and the sample above says it is enough. The
- * slowest first byte in those 448 requests was 33,958 ms, on a last attempt,
- * and that request answered; nothing reached 37,000. About 3 s of margin is
- * all that separates the two, so this is the number to defend when the probe
- * above is argued upward.
+ * 37 s is that, not rounded, and the sample above says it is enough by very
+ * little. The slowest first byte in those 514 requests was 35,970 ms and the
+ * slowest on a request that went on to answer was 33,958, both necessarily on
+ * a last attempt, since no earlier one lives past 30 s. Nothing reached
+ * 37,000. About 1 s separates this ceiling from the worst thing measured
+ * against it, so it is the number to defend when the probe above is argued
+ * upward: a ceiling that fires is a visitor's failed answer, and widening it
+ * without taking the seconds from the probe needs either fewer steps or a
+ * larger share of the function limit than VERTEX_REQUEST_WAIT_BUDGET_MS
+ * reserves.
  *
  * The worst case that arithmetic reaches — every step stalling once, then its
  * last attempt running to the ceiling — is 4 x (30 + 0.5 + 37) = 270 s. Read

@@ -25,10 +25,10 @@ export async function GET(request: Request) {
   // count `modelMs` is confounded: a stalled call that the wrapper abandoned
   // and reopened spends its deadline inside that number while looking like
   // one slow call, and the probe's "first call" would not be the single clean
-  // call it reads as. `firstByteMs` is the other half — the wait before
+  // call it reads as. `firstByteMs` is the other half: the wait before
   // Vertex said anything, which is the number the wrapper's deadlines are
-  // guesses at and which `modelMs` folds together with the generation
-  // (MTC-38).
+  // calibrated against and which `modelMs` folds together with the
+  // generation.
   const calls = createVertexCallCounter()
   try {
     // Built inside the try: it reads the five GCP_* variables, and a missing
@@ -95,7 +95,7 @@ export async function GET(request: Request) {
         retries: calls.retries(),
         // The slowest wait before Vertex sent a byte, which is what
         // VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS are
-        // hypotheses about; modelMs cannot answer it, since it also contains
+        // calibrated against; modelMs cannot answer it, since it also contains
         // the generation.
         firstByteMs: calls.firstByteMs(),
         ms: Date.now() - started,

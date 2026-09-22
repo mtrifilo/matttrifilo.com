@@ -69,6 +69,24 @@ Vercel function logs for `/api/chat`, one line per request, all numeric:
 - `[chat] { stage: 'github', repository, status }`: a GitHub call that did not answer. A run of them on one repository means the rate limit or an outage; see the activity section below.
 - Vercel Firewall overview: hits on the rate-limit rule and BotID's blocked count.
 
+### Vertex first-byte latency, measured (MTC-47)
+
+`vertexFirstByteMs` is the slowest wait before Vertex sent a byte on any model call of one request, and it is the number the two deadlines in `lib/ai/bounded-fetch.ts` are set from. Measured 2026-09-22 over 514 chat requests and 1,136 model calls in six eval runs (35141498434, 35146960224, 35615460739, 35619729850, 35622479143, 35640340223; dated 2026-09-16 to 2026-09-21), on GitHub's Ubuntu runners against the global Vertex endpoint at concurrency 2. To reproduce: `gh run view <id> --log`, then take the `vertexFirstByteMs` field off every `[chat] {` and `[chat] incomplete {` block. All figures in ms:
+
+| class                   | n   | p50    | p90    | p95    | p99    | max    |
+| ----------------------- | --- | ------ | ------ | ------ | ------ | ------ |
+| all requests            | 514 | 5,288  | 17,013 | 22,051 | 26,838 | 35,970 |
+| no document read        | 173 | 3,322  | 9,695  | 13,842 | 22,999 | 25,634 |
+| one document read       | 117 | 5,468  | 17,925 | 26,187 | 31,661 | 33,958 |
+| two documents read      | 158 | 7,443  | 20,624 | 23,437 | 27,738 | 35,970 |
+| three documents read    | 66  | 6,619  | 18,545 | 22,959 | 25,217 | 25,217 |
+| `vertexRetries` = 0     | 492 | 5,193  | 15,842 | 20,624 | 26,187 | 27,738 |
+| `vertexRetries` above 0 | 22  | 15,789 | 31,661 | 33,958 | 35,970 | 35,970 |
+
+22 of the 514 requests recorded `vertexRetries` above zero, 28 retries over 1,136 model calls; 12 of those 22 still answered and 10 did not, which is every unanswered request in the sample. 18 requests failed the wrapper outright, each reporting 67,501 to 67,504 ms across two attempts, which is the 30,000 + 500 + 37,000 arithmetic to within 4 ms: read an elapsed far above that as a bug in the bound, not as upstream latency.
+
+Three caveats before these numbers are read as production's. They are runner egress to the global endpoint rather than Vercel's. The distribution is censored at 30,000 ms, because a first byte slower than the first-attempt deadline is only ever observed on a last attempt, which is why every sample above 27,738 ms sits in the retried row. And the figure is one request's slowest call, not one call, so it cannot be split by step type.
+
 ## Runbook: something is wrong
 
 1. Spend or request rate is climbing and it is not visitors: set `CHAT_DISABLED=1` on production and redeploy. The assistant disappears from the site on that deploy (panel, nav entry, résumé button, sitemap entries; `/ask` becomes a 404) and the route refuses. Nothing else on the site changes.
@@ -185,7 +203,7 @@ A summary that never reaches `evals/results/` is not published; the page shows t
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
 3. **A grader flake.** Only on a rubric, and only if two of three grades disagreed. Re-run before touching anything.
-4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement MTC-38's timeout constants are hypotheses about, and a full suite is the largest sample of it anything here produces.
+4. **Vertex was slow, or impersonation was not ready.** A row reading `CHAT_ERROR: interrupted` or `unavailable` is a stalled connection or a refused token, not an answer; the provider retries transport failures twice more. The CI workflow also pings Vertex (`evals/warmup.ts`) after GitHub OIDC auth so the first goldens are not measuring IAM eventual consistency. A run with several of them after a successful warmup is upstream latency, and the `[chat]` lines in the log carry `vertexRetries` and `vertexFirstByteMs` for it. That is the same measurement the timeout constants are calibrated against, and a full suite is the largest sample of it anything here produces; the percentiles it has produced so far are under "What to watch" above.
 
 A fifth possibility is that the job ran out of time rather than failing. `.github/workflows/evals.yml` caps the job at `timeout-minutes: 90` and `bun run evals` uses `--max-concurrency 2`, so a full run is roughly 200 serial model calls: 144 route calls plus 255 grader calls, halved by the concurrency. That fits 90 minutes comfortably at normal latency, and does not fit it if the 3x retry case above holds for most of a run. A timeout kills the job rather than the step, so `continue-on-error` on the suites step does not rescue it and there is no `results.json` to read. If that happens, raise the cap or the concurrency; it is a sizing problem, not a regression. The margin halved when MTC-51 doubled the golden suite, and no wall-time has been measured since.
 

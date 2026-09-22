@@ -724,6 +724,16 @@ describe('createVertexCallCounter', () => {
   })
 })
 
+/**
+ * The sample the two deadlines are calibrated against: `vertexFirstByteMs` on
+ * 514 chat requests over 1,136 model calls, in the six eval runs named in
+ * bounded-fetch.ts, read 2026-09-22. Named here so the assertions below cite
+ * one figure each rather than repeating a literal, and so a recalibration is a
+ * two-line edit whose consequences the tests spell out.
+ */
+const MEASURED_P99_MS = 26_838
+const MEASURED_MAX_MS = 35_970
+
 describe('the constants the 300 s function limit allows', () => {
   /** Every attempt before the last stalls, then the last one runs long. */
   const worstCasePerModelCall =
@@ -768,23 +778,33 @@ describe('the constants the 300 s function limit allows', () => {
   })
 
   test('the fast bound sits above the measured p99 of a healthy step', () => {
-    // 448 requests over six eval runs, 2026-09-16 to 2026-09-21 (the run ids
-    // are in bounded-fetch.ts): p95 21,742 ms, p99 26,276. A probe below p99
+    // 514 requests over six eval runs, 2026-09-16 to 2026-09-21 (the run ids
+    // are in bounded-fetch.ts): p95 22,051 ms, p99 26,838. A probe below p99
     // spends a second billed generation on steps that were only slow, so the
     // measurement is the floor.
-    expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(26_276)
+    expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(MEASURED_P99_MS)
     // And below the point where a stall is unmistakable: healthy calls on
     // this deployment never approached 80 s, stalled ones sat at 80 to 110.
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeLessThan(80_000)
   })
 
   test('the last attempt clears the slowest first byte measured', () => {
-    // 33,958 ms in the same sample, on a last attempt, and that request
-    // answered. A ceiling under it turns a slow answer into no answer, which
-    // is the one outcome this attempt has no retry to cover.
-    expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(33_958)
+    // A ceiling under the slowest measured wait turns a slow answer into no
+    // answer, which is the one outcome this attempt has no retry to cover.
+    expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(MEASURED_MAX_MS)
     expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(
       VERTEX_FIRST_BYTE_TIMEOUT_MS
     )
+  })
+
+  test('the two bounds still fit inside the per-call budget together', () => {
+    // The two tests above set a floor under each bound and the budget test
+    // sets a ceiling over their sum, which is the whole feasible region. It is
+    // asserted rather than left implied, because a future recalibration that
+    // raises one floor past the room the other leaves has no valid answer and
+    // should fail here rather than in the arithmetic.
+    expect(
+      MEASURED_P99_MS + VERTEX_RETRY_BACKOFF_MS[0] + MEASURED_MAX_MS
+    ).toBeLessThan(VERTEX_REQUEST_WAIT_BUDGET_MS / CHAT_MAX_STEPS)
   })
 })
