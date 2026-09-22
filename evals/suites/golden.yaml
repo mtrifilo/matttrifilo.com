@@ -1623,8 +1623,8 @@
         - type: llm-rubric
           value: &r44 >-
             The answer names at least two pieces of work the documents date to
-            2025 or 2026: the AI Email Engagement Summary, the Symphony agent
-            orchestrator, the plugin marketplace governance or the team
+            2025 or 2026: the AI Email Engagement Summary, the Symphony-based
+            security-remediation agents, the plugin marketplace governance or the team
             marketplace, the move of nine microservices to independent gated
             deploys, or the compliance case-system migration to the parent
             company's Salesforce. It is written about Matt in the third
@@ -1683,16 +1683,15 @@
         - type: llm-rubric
           value: *r45
 
-# resume: "Built a team-scoped agent orchestrator (Symphony) that opens PRs
-# for CVE tickets the moment they are created, running the team's
-# security-ticket skill with full service context: 17 PRs across 7 services,
-# ~80% hands-free, in month one." The only place Symphony appears.
+# Symphony is OpenAI's open-source orchestration harness; Matt adapted it
+# through a colleague-built internal fork (MTC-66). The dedicated career
+# document is the source; the résumé bullet says the same in one line.
 - description: 'golden: what Symphony is and automates'
   vars:
-    question: What is Symphony, the agent orchestrator Matt built, and what did it automate?
+    question: How did Matt use OpenAI's Symphony harness to automate security fixes?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReads: [symphony-autonomous-security-remediation]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1714,12 +1713,15 @@
       assert:
         - type: llm-rubric
           value: &r46 >-
-            The answer says Symphony is a team-scoped agent orchestrator Matt
-            built that opens pull requests for CVE tickets as soon as they are
-            created, by running the team's security-ticket skill with full
-            service context. Giving the month-one figures, 17 pull requests
-            across 7 services at about 80 percent hands-free, is correct but
-            not required; a different figure stated as fact is wrong. It is
+            The answer says Symphony is OpenAI's open-source orchestration
+            harness, which Matt adapted, through an internal fork built by
+            colleagues, to dispatch Claude Code agents that open pull requests
+            for the team's dependency-vulnerability tickets using the team's
+            security-ticket skill, with humans reviewing and merging. An
+            answer that says Matt built, created, or owns Symphony is wrong.
+            Giving the first-month figures, 17 pull requests across 7
+            services at about 80 percent hands-free, is correct but not
+            required; a different figure stated as fact is wrong. It is
             written about Matt in the third person, and it must not present an
             inferred characterisation as a documented one.
         - type: llm-rubric
