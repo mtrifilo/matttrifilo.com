@@ -695,11 +695,23 @@ function withProgress({
   /** Reads that succeeded, duplicates included, as the read budget counts them. */
   let reads = 0
   /**
-   * Checks whose digest reached the model. Not the same as the session's
-   * `activityCalls`, which counts failures too: a row is for work the visitor
-   * can be told happened, and a fetch that returned nothing is not that.
+   * Repositories whose digest reached the model. Not the same as the
+   * session's `activityCalls`, which counts failures too: a row is for work
+   * the visitor can be told happened, and a fetch that returned nothing is
+   * not that.
+   *
+   * A set of ids rather than a count of outputs, because one fetch can
+   * answer two calls. The activity session answers a repeat call for a
+   * repository whose fetch is still running with that same fetch
+   * (lib/chat/recent-activity.ts), so a step that asks for one repository
+   * twice ends with two successful outputs for one check. The session's cap
+   * counts it once, and so must the prediction in `toStep`: counted per
+   * output, a repository asked for in a later step would be fetched with no
+   * row over it. The dedup lives here rather than in `toStep` because this is
+   * where the second output arrives; by the time `toStep` sees a call, the
+   * repeat's row is already refused by `listed`.
    */
-  let checks = 0
+  const checked = new Set<string>()
   let phase: ChatProgressPhase = 'reading'
   let emitted = false
   let failed = false
@@ -726,11 +738,13 @@ function withProgress({
     transform(chunk, controller) {
       switch (chunk.type) {
         case 'tool-input-available': {
-          const step = toStep(chunk, indexed, reads, checks)
+          const step = toStep(chunk, indexed, reads, checked.size)
           if (!step) break
           const callId = toolCallId(chunk)
-          // Remembered even when it earns no row, because the outcome below
-          // is what spends the budget and a repeat call spends it too.
+          // Remembered even when it earns no row, because its outcome below
+          // still counts: a repeated read is charged again, and a repeat of
+          // either tool decides, with the call it repeats, whether the row
+          // they share stays.
           if (callId !== undefined) inFlight.set(callId, step)
           if (listed.has(step.id)) break
           listed.add(step.id)
@@ -754,16 +768,20 @@ function withProgress({
 
           if (!refusedOutput(chunk)) {
             succeeded.add(step.id)
-            if (step.kind === 'activity') checks += 1
+            if (step.kind === 'activity') checked.add(step.id)
             else reads += 1
             break
           }
           // Refused. Withdraw the row unless some other call for the same id
-          // produced something, or still might: a step's tool calls run
-          // concurrently, so a model that asks for one repository twice gets
-          // one digest and one `repository_already_checked`, in either order.
-          // Withdrawing on the refusal would take the row away from a check
-          // that did happen.
+          // produced something, or still might. Two calls that share a row
+          // can end differently: a document read twice whose repeat is
+          // refused for the budget, or a repository asked for again once its
+          // fetch has settled, which is told `repository_already_checked`.
+          // The SDK runs a step's calls concurrently and emits each outcome
+          // as it settles, so the refusal can arrive first, and withdrawing
+          // on it would take the row away from work that did happen. Calls
+          // for a repository whose fetch is still running never end
+          // differently: they share that fetch's outcome.
           if (succeeded.has(step.id)) break
           let stillWaiting = false
           for (const other of inFlight.values()) {
@@ -824,7 +842,8 @@ function withProgress({
  * refuses on count alone, and past RECENT_ACTIVITY_MAX_CALLS the activity
  * session does the same, both before looking at the id. `reads` and `checks`
  * are counted from tool OUTPUTS rather than from calls, so they hold work
- * that happened; a refusal this stage cannot predict, such as a document
+ * that happened, and `checks` counts repositories rather than outputs, as the
+ * session's cap does; a refusal this stage cannot predict, such as a document
  * larger than the remaining token budget, withdraws its row when the outcome
  * arrives instead of being guessed at here.
  *
@@ -913,7 +932,17 @@ function flatRefusals(r: {
   }
 }
 
-/** The same, for the activity checks. Flat fields a log query can aggregate. */
+/**
+ * The same, for the activity checks. Flat fields a log query can aggregate.
+ *
+ * `activityRefusedDuplicate` is the one that is not only refusals: it counts
+ * every repeated check, the ones answered from a fetch still in flight as
+ * well as the ones refused `repository_already_checked`. A model that repeats
+ * a check is looping whether or not the session could answer the repeat, and
+ * this field is how an operator sees it. The progress view counts a
+ * repository once however often it was asked for (`withProgress`), so a
+ * repeat costs no row.
+ */
 function flatActivityRefusals(r: ActivityRefused) {
   return {
     activityRefusedUnknown: r.unknown,
