@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { planPublish, publishedCommit, resultFileName } from './publish'
 import type { EvalSummary } from './summary'
 
@@ -84,18 +87,18 @@ describe('planPublish', () => {
     ).not.toContain('promptfooVersion')
   })
 
-  test('refuses a summary with no totals', () => {
+  test('refuses a summary with no totals, and says which field', () => {
     const broken = summary() as unknown as Record<string, unknown>
     delete broken.totals
     expect(planPublish(broken, HEAD_SHA)).toEqual({
-      refusal: expect.stringContaining('totals'),
+      refusal: expect.stringContaining('`totals`'),
     })
   })
 
   test('refuses a summary whose suites disagree with its totals', () => {
     expect(
       planPublish(summary({ totals: { passed: 3, total: 9 } }), HEAD_SHA)
-    ).toEqual({ refusal: expect.stringContaining('suite counts') })
+    ).toEqual({ refusal: expect.stringContaining('do not add up') })
   })
 
   test('refuses when no commit can be named', () => {
@@ -110,5 +113,78 @@ describe('planPublish', () => {
       file: '2026-09-21-1f2e3d4.json',
       record: { commit: HEAD_SHA },
     })
+  })
+})
+
+describe('the script itself', () => {
+  const dirs: string[] = []
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0))
+      fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  const workspace = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-'))
+    dirs.push(dir)
+    return dir
+  }
+
+  const writeSummary = (dir: string, contents: unknown) => {
+    const file = path.join(dir, 'summary.json')
+    fs.writeFileSync(
+      file,
+      typeof contents === 'string' ? contents : JSON.stringify(contents)
+    )
+    return file
+  }
+
+  // Run in a temporary working directory: the script writes relative to the
+  // directory it is run from, and a test must never touch the published one.
+  const publish = (dir: string, summaryPath: string) =>
+    Bun.spawnSync({
+      cmd: [
+        'bun',
+        'run',
+        path.join(process.cwd(), 'evals', 'publish.ts'),
+        summaryPath,
+      ],
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+
+  test('refuses when there is no summary to publish', () => {
+    const dir = workspace()
+    const result = publish(dir, path.join(dir, 'missing.json'))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('no summary at')
+  })
+
+  test('refuses a summary that is not JSON', () => {
+    const dir = workspace()
+    const result = publish(dir, writeSummary(dir, '{ not json'))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('does not parse as JSON')
+  })
+
+  test('writes the record, then refuses to replace it', () => {
+    // The safety property the runbook advertises: a record that exists is
+    // never rewritten, whatever is published at it.
+    const dir = workspace()
+    const file = writeSummary(dir, summary())
+    expect(publish(dir, file).exitCode).toBe(0)
+    const written = path.join(
+      dir,
+      'evals',
+      'results',
+      '2026-09-21-6406ee4.json'
+    )
+    expect(JSON.parse(fs.readFileSync(written, 'utf8'))).toEqual(summary())
+
+    const again = publish(dir, file)
+    expect(again.exitCode).toBe(1)
+    expect(again.stderr.toString()).toContain('already exists')
+    expect(JSON.parse(fs.readFileSync(written, 'utf8'))).toEqual(summary())
   })
 })

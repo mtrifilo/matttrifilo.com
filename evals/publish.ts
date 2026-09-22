@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
-  EVAL_RESULTS_DIR,
+  evalResultsDir,
+  evalSummaryProblem,
   isCommitSha,
-  isEvalSummary,
   shortCommit,
 } from '@/lib/evals/results'
 import type { EvalSummary } from './summary'
@@ -74,34 +74,33 @@ export function planPublish(
   parsed: unknown,
   headSha: string | null
 ): PublishDecision {
-  if (!isEvalSummary(parsed))
-    return {
-      refusal:
-        'the summary is missing its totals, disagrees with its own suite counts, or is otherwise not an eval summary',
-    }
+  const problem = evalSummaryProblem(parsed)
+  if (problem !== null)
+    return { refusal: `the summary cannot be published because ${problem}` }
+  const summary = parsed as EvalSummary
 
-  const commit = publishedCommit(parsed.commit, headSha)
+  const commit = publishedCommit(summary.commit, headSha)
   if (!commit)
     return {
-      refusal: `the run recorded commit "${parsed.commit}" and git HEAD could not be read, so the record would name no commit`,
+      refusal: `the run recorded commit "${summary.commit}" and git HEAD could not be read, so the record would name no commit`,
     }
 
   return {
-    file: resultFileName(parsed.ranAt, commit),
+    file: resultFileName(summary.ranAt, commit),
     record: {
       commit,
-      ranAt: parsed.ranAt,
-      model: parsed.model,
-      ...(parsed.promptfooVersion
-        ? { promptfooVersion: parsed.promptfooVersion }
+      ranAt: summary.ranAt,
+      model: summary.model,
+      ...(summary.promptfooVersion
+        ? { promptfooVersion: summary.promptfooVersion }
         : {}),
-      suites: parsed.suites.map(({ name, passed, total }) => ({
+      suites: summary.suites.map(({ name, passed, total }) => ({
         name,
         passed,
         total,
       })),
-      totals: { passed: parsed.totals.passed, total: parsed.totals.total },
-      retried: parsed.retried,
+      totals: { passed: summary.totals.passed, total: summary.totals.total },
+      retried: summary.retried,
     },
   }
 }
@@ -159,8 +158,17 @@ function main(): void {
       'evals:publish: the working copy has uncommitted changes, so the record names their parent commit rather than the code that ran. Commit the change the run covers first, then publish.'
     )
   }
+  if (!decision.record.promptfooVersion) {
+    // The conventions ask every published summary to name the promptfoo that
+    // ran it. A record without one still publishes, because an old record is
+    // worth more than no record, but nobody should find that out from the
+    // page.
+    console.warn(
+      'evals:publish: this summary names no promptfoo version, so the record is not fully version-linked. Re-run `bun run evals:report` with the dependencies installed to record one.'
+    )
+  }
 
-  const dir = resolve(EVAL_RESULTS_DIR)
+  const dir = evalResultsDir()
   const target = join(dir, decision.file)
   mkdirSync(dir, { recursive: true })
   try {

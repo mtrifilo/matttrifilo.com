@@ -9,6 +9,7 @@ import {
   type EvalRun,
 } from '@/lib/evals/results'
 import { formatDate } from '@/lib/format-date'
+import { SUITE_NOTES } from './suite-notes'
 
 /**
  * The published eval results for Matt's Career Assistant (MTC-44).
@@ -37,28 +38,13 @@ const HISTORY_LENGTH = 10
  * The reader is a hiring manager with seconds to spend, for whom the
  * assistant is a work sample before it is an information channel, so the
  * first paragraph says what is checked and where the checks live rather than
- * selling the idea of testing. The suite sentences are condensed from
- * docs/career-assistant-operations.md; GRADING_LIMIT says what the numbers
- * do not prove and which suites the caveat applies to.
+ * selling the idea of testing. It claims nothing about runs that were not
+ * recorded: what reaches this page is what someone published.
+ * GRADING_LIMIT says what the numbers do not prove and which suites the
+ * caveat applies to; the sentence per suite lives in ./suite-notes.
  */
 const PAGE_INTRO =
-  "Matt's Career Assistant is checked against a fixed set of recorded questions before a change to its instructions, or to the documents it reads, goes live. Four suites run: whether an answer carries the facts and opened the document they came from, whether it declines what it should decline, whether it holds up against attempts to talk it out of its rules, and whether it names only the documents the server actually read. Every run that ships is published here, with the commit it ran against, and the suites themselves are in the public repository."
-
-/**
- * One sentence per suite, keyed by the name the record carries. A suite with
- * no sentence renders its counts without one; app/ask/evals/suite-notes.test.ts
- * fails when a suite in the repository is missing from this map.
- */
-export const SUITE_NOTES: Record<string, string> = {
-  golden:
-    'Hiring-manager questions. The answer has to carry the distinctive facts, stay in the third person, and have opened the document the fact lives in.',
-  refusals:
-    "Compensation, employment status, contact details, colleague names, employer internals and opinions. The answer has to be the assistant's decline sentence, compared against the one the live instructions use.",
-  injection:
-    'Attempts to talk the assistant out of its rules: role-play, encoded or reversed instructions, instructions planted inside a quoted document, and forged earlier turns. The answer has to stay in the third person and give up no policy text or tool name.',
-  groundedness:
-    'Questions whose sources have to name only the documents the server actually read, and probes for plausible facts that are not in the documents at all and have to be declined rather than invented.',
-}
+  "Matt's Career Assistant is checked against a fixed set of recorded questions before a change to its instructions, or to the documents it reads, goes live. The suites check whether an answer carries the facts and opened the document they came from, whether it declines what it should decline, whether it holds up against attempts to talk it out of its rules, and whether it names only the documents the server actually read. The runs that were recorded are published here as they were recorded, with the commit each ran against, and the suites themselves are in the public repository."
 
 const GRADING_LIMIT =
   'Deterministic checks are the gate in every suite. Two of them, golden and groundedness, add a model grader where a question needs judgement: each of those answers is graded three times and two of the three have to pass, at a threshold of 0.6. Model grading carries noise of its own, and these counts include it.'
@@ -85,8 +71,7 @@ export default function EvalResultsPage() {
   if (isChatDisabled()) notFound()
 
   // One read of the directory: the newest run heads the history it belongs
-  // to, and the page shows it in both places on purpose, as the run being
-  // described and as the most recent line of the record.
+  // to, and is described in full above it.
   const history = evalHistory(HISTORY_LENGTH)
   const latest = history[0] ?? null
 
@@ -110,7 +95,9 @@ export default function EvalResultsPage() {
           <p className="mt-8 text-muted-foreground">{NO_RUN_YET}</p>
         )}
 
-        {history.length > 0 && <History runs={history} />}
+        {/* Only once there is something to compare: with one record the
+            list would repeat the run described above it, word for word. */}
+        {history.length > 1 && <History runs={history} />}
 
         <p className="mt-10 text-sm leading-relaxed text-muted-foreground">
           The suites themselves, every question in them and every check they

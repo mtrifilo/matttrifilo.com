@@ -61,7 +61,7 @@ export function shortCommit(value: string): string {
 function isLabel(value: unknown): value is string {
   return (
     typeof value === 'string' &&
-    value.length > 0 &&
+    value.trim().length > 0 &&
     value.length <= MAX_LABEL_LENGTH &&
     !/\p{C}/u.test(value)
   )
@@ -114,33 +114,47 @@ const FIELD_GUARDS: Record<keyof EvalSummary, (value: unknown) => boolean> = {
   ranAt: isTimestamp,
   model: isLabel,
   promptfooVersion: value => value === undefined || isLabel(value),
-  suites: value => Array.isArray(value) && value.every(isSuiteSummary),
+  suites: value =>
+    Array.isArray(value) &&
+    value.every(isSuiteSummary) &&
+    // One row per suite. Two rows under one name are two React keys and two
+    // readings of the same number.
+    new Set(value.map(suite => suite.name)).size === value.length,
   totals: isTotals,
   retried: isCount,
 }
 
 /**
- * Validate a record at the boundary instead of trusting a cast, the way
- * lib/github.ts validates GitHub's response. This file is committed rather
- * than fetched, but it is still data written by another process and the page
- * renders every field of it.
+ * Why a record cannot be published, in the words of the field that failed,
+ * or null when it can be. Named rather than merely refused: a run costs
+ * money and minutes, and "not an eval summary" does not say what to fix.
+ *
+ * Validating at the boundary instead of trusting a cast follows
+ * lib/github.ts, which validates GitHub's response the same way. This file
+ * is committed rather than fetched, but it is still data written by another
+ * process and the page renders every field of it.
  *
  * Two invariants beyond the field types, both because the page reads the
  * counts as fractions: no count exceeds its total, and the suite rows add up
  * to the totals row. `summarise` derives the totals from the suites, so a
  * record that fails either was not written by a run.
  */
-export function isEvalSummary(value: unknown): value is EvalSummary {
-  if (!value || typeof value !== 'object') return false
+export function evalSummaryProblem(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return 'it is not an object'
   const record = value as Record<string, unknown>
   for (const [field, guard] of Object.entries(FIELD_GUARDS))
-    if (!guard(record[field])) return false
+    if (!guard(record[field]))
+      return `its \`${field}\` is missing or not something this page can publish`
   const suites = record.suites as SuiteSummary[]
   const totals = record.totals as EvalSummary['totals']
-  return (
-    sum(suites, suite => suite.passed) === totals.passed &&
+  return sum(suites, suite => suite.passed) === totals.passed &&
     sum(suites, suite => suite.total) === totals.total
-  )
+    ? null
+    : 'its suite rows do not add up to its totals row'
+}
+
+export function isEvalSummary(value: unknown): value is EvalSummary {
+  return evalSummaryProblem(value) === null
 }
 
 /**
@@ -172,11 +186,12 @@ export function readEvalRuns(dir: string = evalResultsDir()): EvalRun[] {
       warnSkipped(dir, name, 'it does not parse as JSON')
       continue
     }
-    if (!isEvalSummary(parsed)) {
-      warnSkipped(dir, name, 'it is not shaped like an eval summary')
+    const problem = evalSummaryProblem(parsed)
+    if (problem !== null) {
+      warnSkipped(dir, name, problem)
       continue
     }
-    runs.push({ ...parsed, file: name })
+    runs.push({ ...(parsed as EvalSummary), file: name })
   }
 
   // Newest first by when the run happened rather than by file name, so a

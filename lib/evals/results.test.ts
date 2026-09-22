@@ -5,6 +5,7 @@ import path from 'path'
 import type { EvalSummary } from '@/evals/summary'
 import {
   evalHistory,
+  evalResultsDir,
   hasPublishedEvalRun,
   isCommitSha,
   isEvalSummary,
@@ -280,26 +281,32 @@ describe('readEvalRuns', () => {
 })
 
 describe('the committed records', () => {
+  // The guard that matters: this is the published directory, not a fixture.
+  // A record that fails it would vanish from the page with only a build
+  // warning. The directory is allowed to be empty, which is the state the
+  // page calls "no published run yet".
+  const committed = () => {
+    try {
+      return fs
+        .readdirSync(evalResultsDir())
+        .filter(name => name.endsWith('.json'))
+    } catch {
+      return []
+    }
+  }
+
   test('every file in evals/results is one the site can publish', () => {
-    // The guard that matters: this is the published directory, not a
-    // fixture. A record that fails it would vanish from the page with only
-    // a build warning.
-    const dir = path.join(process.cwd(), 'evals', 'results')
-    const files = fs.readdirSync(dir).filter(name => name.endsWith('.json'))
-    expect(files.length).toBeGreaterThan(0)
-    for (const name of files) {
+    for (const name of committed()) {
       const parsed: unknown = JSON.parse(
-        fs.readFileSync(path.join(dir, name), 'utf8')
+        fs.readFileSync(path.join(evalResultsDir(), name), 'utf8')
       )
       expect(isEvalSummary(parsed)).toBe(true)
     }
-    expect(readEvalRuns(dir).length).toBe(files.length)
+    expect(readEvalRuns().length).toBe(committed().length)
   })
 
   test('every record names a commit, so every run is version-linked', () => {
-    for (const record of readEvalRuns(
-      path.join(process.cwd(), 'evals', 'results')
-    ))
+    for (const record of readEvalRuns())
       expect(isCommitSha(record.commit)).toBe(true)
   })
 })
