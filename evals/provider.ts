@@ -187,9 +187,9 @@ export default class ChatRouteProvider {
       },
       // The counters are forwarded rather than dropped so the route's own
       // `[chat]` completion line carries real vertexRetries and
-      // vertexFirstByteMs for an eval run. Those two numbers are what MTC-38's
-      // timeout constants are hypotheses about, and a full suite is the
-      // largest sample of them anything here produces.
+      // vertexFirstByteMs for an eval run. Those two numbers are what the
+      // timeout constants in lib/ai/bounded-fetch.ts are checked against, and
+      // a full suite is the largest sample of them anything here produces.
       model: modelRequest =>
         getVertex({
           onRetry: modelRequest.onVertexRetry,

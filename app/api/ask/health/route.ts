@@ -25,10 +25,9 @@ export async function GET(request: Request) {
   // count `modelMs` is confounded: a stalled call that the wrapper abandoned
   // and reopened spends its deadline inside that number while looking like
   // one slow call, and the probe's "first call" would not be the single clean
-  // call it reads as. `firstByteMs` is the other half — the wait before
+  // call it reads as. `firstByteMs` is the other half: the wait before
   // Vertex said anything, which is the number the wrapper's deadlines are
-  // guesses at and which `modelMs` folds together with the generation
-  // (MTC-38).
+  // checked against and which `modelMs` folds together with the generation.
   const calls = createVertexCallCounter()
   try {
     // Built inside the try: it reads the five GCP_* variables, and a missing
@@ -93,10 +92,13 @@ export async function GET(request: Request) {
         // Above zero means modelMs contains an abandoned connection's wait
         // and a second billed generation, not one slow call.
         retries: calls.retries(),
-        // The slowest wait before Vertex sent a byte, which is what
-        // VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS are
-        // hypotheses about; modelMs cannot answer it, since it also contains
-        // the generation.
+        // The slowest wait before Vertex sent a byte; modelMs cannot answer
+        // it, since it also contains the generation. Not comparable with the
+        // percentiles in bounded-fetch.ts: this route sends one word at
+        // reasoning 'none', so its waits are systematically shorter than a
+        // medium-thinking chat step's. What it is good for is the same
+        // deployment's network on two dates, and telling a stalled connection
+        // apart from a slow one.
         firstByteMs: calls.firstByteMs(),
         ms: Date.now() - started,
       },
