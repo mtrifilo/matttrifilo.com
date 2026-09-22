@@ -2,11 +2,8 @@
 
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { MATT_MAILTO } from './copy'
+import { ASSISTANT_EVALS_TITLE, MATT_MAILTO } from './copy'
 import { useEvalsPublished } from './evals-published'
-
-/** Matt's copy, like the two sentences above it. */
-const EVALS_LINK_LABEL = 'How this assistant is tested'
 
 /**
  * The required disclosure under the input: what the answers are, and who to
@@ -21,9 +18,11 @@ const EVALS_LINK_LABEL = 'How this assistant is tested'
  * nicety: nothing about a conversation is written down on the server, and the
  * transcript lives only until the tab is closed.
  *
- * The third line is the published eval results (MTC-44). It appears only
- * when a run has been published, because a link to a page that can only say
- * "no published run yet" is worse than no link.
+ * The link to the published eval results is offered only when a run has
+ * been published, because a link to a page that can only say "no published
+ * run yet" is worse than no link. Whether one has been is filesystem
+ * knowledge, and this renders in the browser, so the server pages provide
+ * it through ./evals-published.
  */
 export function AssistantDisclosure({ className }: { className?: string }) {
   const evalsPublished = useEvalsPublished()
@@ -53,7 +52,7 @@ export function AssistantDisclosure({ className }: { className?: string }) {
             className="underline underline-offset-2 hover:text-foreground"
             href="/ask/evals"
           >
-            {EVALS_LINK_LABEL}
+            {ASSISTANT_EVALS_TITLE}
           </Link>
         </p>
       )}

@@ -25,6 +25,13 @@ export const ASSISTANT_INTRO =
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
 /**
+ * The published eval results. One string for three places that must agree:
+ * the line under the chat pane, the page's own heading and title, and the
+ * sitemap entry in lib/site-routes.ts.
+ */
+export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
+
+/**
  * The starter questions both surfaces offer (MTC-39).
  *
  * One pool, one order, shown by the ticker on the homepage panel and at

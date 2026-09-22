@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { ASSISTANT_EVALS_TITLE } from '@/components/assistant/copy'
 
 type ChangeFrequency = NonNullable<
   MetadataRoute.Sitemap[number]['changeFrequency']
@@ -42,7 +43,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     // who is already looking at the assistant and wants to know what backs
     // it; in the sitemap because it is a page worth finding.
     href: '/ask/evals',
-    label: 'How the assistant is tested',
+    label: ASSISTANT_EVALS_TITLE,
     changeFrequency: 'monthly',
     priority: 0.4,
     assistant: true,

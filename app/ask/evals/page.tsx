@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { ASSISTANT_EVALS_TITLE } from '@/components/assistant/copy'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import {
   evalHistory,
   isCommitSha,
-  latestEvalSummary,
   shortCommit,
   type EvalRun,
 } from '@/lib/evals/results'
@@ -13,10 +13,11 @@ import { formatDate } from '@/lib/format-date'
 /**
  * The published eval results for Matt's Career Assistant (MTC-44).
  *
- * Static, and read from the files committed under `evals/results/` at build
- * time. What it may show is settled: aggregates only, which is why the suite
- * definitions are linked rather than quoted. No question, no answer and no
- * grader rationale appears here, and none is in the record it reads.
+ * Static, and read from the files committed under `evals/results/` while the
+ * page is prerendered. What it may show is settled: aggregates only, which
+ * is why the suite definitions are linked rather than quoted. No question,
+ * no answer and no grader rationale appears here, and none is in the record
+ * it reads.
  *
  * It lives behind the same kill switch as /ask. An assistant that is not
  * serving has no test results worth publishing, and the link under the chat
@@ -33,17 +34,22 @@ const HISTORY_LENGTH = 10
  * Copy, and Matt's to change. The voice is the assistant's: a third party
  * describing how Matt's assistant is checked, never Matt.
  *
- * The suite sentences are condensed from docs/career-assistant-operations.md
- * and say what each suite checks; GRADING_LIMIT says what the numbers do not
- * prove. A suite with no sentence here renders its counts without a
- * description rather than borrowing someone else's.
+ * The reader is a hiring manager with seconds to spend, for whom the
+ * assistant is a work sample before it is an information channel, so the
+ * first paragraph says what is checked and where the checks live rather than
+ * selling the idea of testing. The suite sentences are condensed from
+ * docs/career-assistant-operations.md; GRADING_LIMIT says what the numbers
+ * do not prove and which suites the caveat applies to.
  */
-const PAGE_TITLE = 'How the assistant is tested'
-
 const PAGE_INTRO =
-  "Matt's Career Assistant is checked against a fixed set of recorded questions before a change to its instructions, or to the documents it reads, goes live. The runs that shipped are published here: which suites ran, how many checks passed, and the commit they ran against."
+  "Matt's Career Assistant is checked against a fixed set of recorded questions before a change to its instructions, or to the documents it reads, goes live. Four suites run: whether an answer carries the facts and opened the document they came from, whether it declines what it should decline, whether it holds up against attempts to talk it out of its rules, and whether it names only the documents the server actually read. Every run that ships is published here, with the commit it ran against, and the suites themselves are in the public repository."
 
-const SUITE_NOTES: Record<string, string> = {
+/**
+ * One sentence per suite, keyed by the name the record carries. A suite with
+ * no sentence renders its counts without one; app/ask/evals/suite-notes.test.ts
+ * fails when a suite in the repository is missing from this map.
+ */
+export const SUITE_NOTES: Record<string, string> = {
   golden:
     'Hiring-manager questions. The answer has to carry the distinctive facts, stay in the third person, and have opened the document the fact lives in.',
   refusals:
@@ -55,7 +61,7 @@ const SUITE_NOTES: Record<string, string> = {
 }
 
 const GRADING_LIMIT =
-  'Deterministic checks are the gate. Where a question needs judgement, a model grades the answer three times and two of the three have to pass, at a threshold of 0.6. Model grading carries noise of its own, and these counts include it.'
+  'Deterministic checks are the gate in every suite. Two of them, golden and groundedness, add a model grader where a question needs judgement: each of those answers is graded three times and two of the three have to pass, at a threshold of 0.6. Model grading carries noise of its own, and these counts include it.'
 
 const RETRY_NOTE =
   'Retried counts tests whose first attempt was lost to a stalled connection upstream and was sent again, rather than answered badly.'
@@ -68,7 +74,7 @@ const NO_RUN_YET = 'No published run yet.'
 export function generateMetadata(): Metadata {
   if (isChatDisabled()) notFound()
   return {
-    title: PAGE_TITLE,
+    title: ASSISTANT_EVALS_TITLE,
     description:
       "Published results from the suites that check Matt's Career Assistant for accuracy, refusals, injection resistance and groundedness before a change ships.",
     alternates: { canonical: '/ask/evals' },
@@ -78,8 +84,11 @@ export function generateMetadata(): Metadata {
 export default function EvalResultsPage() {
   if (isChatDisabled()) notFound()
 
-  const latest = latestEvalSummary()
+  // One read of the directory: the newest run heads the history it belongs
+  // to, and the page shows it in both places on purpose, as the run being
+  // described and as the most recent line of the record.
   const history = evalHistory(HISTORY_LENGTH)
+  const latest = history[0] ?? null
 
   return (
     <div className="flex min-h-screen items-start justify-center">
@@ -88,7 +97,7 @@ export default function EvalResultsPage() {
           className="mb-6 font-bold"
           style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
         >
-          {PAGE_TITLE}
+          {ASSISTANT_EVALS_TITLE}
         </h1>
 
         <p className="max-w-2xl leading-relaxed text-foreground/90">
@@ -122,6 +131,10 @@ export default function EvalResultsPage() {
 }
 
 function LatestRun({ run }: { run: EvalRun }) {
+  const described = run.suites.filter(suite =>
+    Object.hasOwn(SUITE_NOTES, suite.name)
+  )
+
   return (
     <section aria-labelledby="latest-run-heading" className="mt-10">
       <h2 className="text-xl font-semibold" id="latest-run-heading">
@@ -145,6 +158,12 @@ function LatestRun({ run }: { run: EvalRun }) {
           <dt>Model</dt>
           <dd className="text-foreground/90">{run.model}</dd>
         </div>
+        {run.promptfooVersion ? (
+          <div className="flex gap-2">
+            <dt>Promptfoo</dt>
+            <dd className="text-foreground/90">{run.promptfooVersion}</dd>
+          </div>
+        ) : null}
         <div className="flex gap-2">
           <dt>Retried</dt>
           <dd className="tabular-nums text-foreground/90">{run.retried}</dd>
@@ -190,18 +209,18 @@ function LatestRun({ run }: { run: EvalRun }) {
         </tbody>
       </table>
 
-      <dl className="mt-6 space-y-3 text-sm leading-relaxed">
-        {run.suites.map(suite =>
-          SUITE_NOTES[suite.name] ? (
+      {described.length > 0 && (
+        <dl className="mt-6 space-y-3 text-sm leading-relaxed">
+          {described.map(suite => (
             <div key={suite.name}>
               <dt className="font-medium">{suite.name}</dt>
               <dd className="text-muted-foreground">
                 {SUITE_NOTES[suite.name]}
               </dd>
             </div>
-          ) : null
-        )}
-      </dl>
+          ))}
+        </dl>
+      )}
 
       <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
         {GRADING_LIMIT}

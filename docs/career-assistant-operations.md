@@ -159,15 +159,22 @@ The site publishes eval results at `/ask/evals`, linked from the line under the 
 After a local `bun run evals` that accompanies a corpus, prompt or suite change:
 
 ```
-bun run evals:publish            # copies evals/out/summary.json into evals/results/
+git commit ...                   # the change the run covers, first
+bun run evals:publish            # writes evals/results/<date>-<sha>.json
 git add evals/results/<the file it named>
 ```
 
-Commit it in the same pull request as the change the run covers. Older files stay: the page shows the newest run and a history of the last ten, and a reader can see the trend. A published record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists.
+Commit the tested change **before** publishing. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`; with the change still uncommitted that names its parent, which is not the code that ran. The script warns when the working copy is dirty for exactly this reason.
 
-What it refuses, and why: a summary whose totals are missing or malformed (the site would skip it at build time anyway), and a record that can name no commit. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes the working copy's `git rev-parse HEAD` and the record stays version-linked; a summary that already carries a real sha keeps it, and the file is named after that sha.
+Commit the record in the same pull request as the change. Older files stay: the page shows the newest run and a history of the last ten, so a reader can see the trend. A committed record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists. Two runs on the same day at the same commit collide on the name: if the earlier file has not been committed yet, delete it and publish again; if it has, it stands.
 
-The page renders aggregates only: suite, passed, total, the run date, the commit, the model id, the retry count, and a sentence per suite on what it checks. No question, no answer and no grader rationale is published; the suite definitions in `evals/suites/` are the public detail. Nothing is published for an assistant that is switched off: with `CHAT_DISABLED=1` the page is a 404 and the link is not rendered, exactly like `/ask`. With no record in `evals/results/` the page says there is no published run yet and the link is not rendered.
+What else it refuses: a summary whose totals are missing, whose suite rows do not add up to its totals row, or that is otherwise not an eval summary (the site would skip such a record at build time anyway), and a summary that can name no commit at all. The record it writes is built field by field rather than copied, so a new field in `summary.json` is published only when someone adds it to `evals/publish.ts` on purpose; `results.json`, which holds every question and every answer, is never the thing being copied.
+
+`promptfooVersion` is read from the installed `node_modules/promptfoo` when the summary is written, so the record names the promptfoo that actually ran. Records written before that was recorded carry no version and the page omits the field.
+
+One caveat about imported records: a summary produced by a `pull_request`-triggered CI run records `GITHUB_SHA`, which for that event is GitHub's synthetic merge commit rather than a commit in the branch's history. Records published from local runs do not have this problem, and local runs are how the suites run now.
+
+The page renders aggregates only: suite, passed, total, the run date, the commit, the model id, the promptfoo version, the retry count, and a sentence per suite on what it checks. No question, no answer and no grader rationale is published; the suite definitions in `evals/suites/` are the public detail. `app/ask/evals/suite-notes.test.ts` fails when a suite in `evals/suites/` has no sentence, so a new suite cannot ship as an unexplained row. Nothing is published for an assistant that is switched off: with `CHAT_DISABLED=1` the page is a 404 and the link is not rendered, exactly like `/ask`. With no record in `evals/results/` the page says there is no published run yet and the link is not rendered.
 
 A summary that never reaches `evals/results/` is not published; the page shows the newest run that did, dated, so a long gap is visible rather than hidden.
 

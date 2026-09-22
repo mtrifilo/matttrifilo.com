@@ -24,8 +24,12 @@ const run = (over: Partial<EvalSummary> = {}): EvalSummary => ({
   commit: '6406ee4d4afe1da0290d23a1f0afa3bf6e225902',
   ranAt: '2026-09-21T16:59:31.433Z',
   model: 'gemini-3.8-flash',
-  suites: [{ name: 'golden', passed: 67, total: 74 }],
-  totals: { passed: 136, total: 144 },
+  promptfooVersion: '0.123.0',
+  suites: [
+    { name: 'golden', passed: 67, total: 74 },
+    { name: 'refusals', passed: 24, total: 24 },
+  ],
+  totals: { passed: 91, total: 98 },
   retried: 5,
   ...over,
 })
@@ -82,39 +86,107 @@ describe('isEvalSummary', () => {
     }
   })
 
+  test('accepts a record from before the promptfoo version was recorded', () => {
+    const older = run() as unknown as Record<string, unknown>
+    delete older.promptfooVersion
+    expect(isEvalSummary(older)).toBe(true)
+  })
+
   test('rejects totals that are not whole, countable numbers', () => {
-    expect(isEvalSummary(run({ totals: { passed: 1.5, total: 2 } }))).toBe(
-      false
-    )
-    expect(isEvalSummary(run({ totals: { passed: -1, total: 2 } }))).toBe(false)
     expect(
-      isEvalSummary(run({ totals: { passed: '136', total: 144 } as never }))
+      isEvalSummary(run({ suites: [], totals: { passed: 1.5, total: 2 } }))
+    ).toBe(false)
+    expect(
+      isEvalSummary(run({ suites: [], totals: { passed: -1, total: 2 } }))
+    ).toBe(false)
+    expect(
+      isEvalSummary(
+        run({ suites: [], totals: { passed: '136', total: 144 } as never })
+      )
     ).toBe(false)
   })
 
   test('rejects more passes than tests, in the totals and in a suite', () => {
     // The page reads the two as a fraction; "153 of 144" is not a state a
     // visitor can interpret.
-    expect(isEvalSummary(run({ totals: { passed: 153, total: 144 } }))).toBe(
-      false
-    )
+    expect(
+      isEvalSummary(run({ suites: [], totals: { passed: 153, total: 144 } }))
+    ).toBe(false)
     expect(
       isEvalSummary(run({ suites: [{ name: 'golden', passed: 9, total: 4 }] }))
     ).toBe(false)
   })
 
-  test('rejects a suite with no name', () => {
+  test('rejects suite rows that do not add up to the totals row', () => {
+    // A table whose rows contradict its own total is not something a
+    // visitor can read, and no run produces one: summarise sums the suites.
     expect(
-      isEvalSummary(run({ suites: [{ name: '', passed: 1, total: 1 }] }))
+      isEvalSummary(
+        run({
+          suites: [{ name: 'golden', passed: 1000, total: 1000 }],
+          totals: { passed: 0, total: 0 },
+        })
+      )
     ).toBe(false)
     expect(
-      isEvalSummary(run({ suites: [{ passed: 1, total: 1 } as never] }))
+      isEvalSummary(
+        run({
+          suites: [{ name: 'golden', passed: 4, total: 5 }],
+          totals: { passed: 4, total: 6 },
+        })
+      )
     ).toBe(false)
+  })
+
+  test('rejects a suite with no usable name', () => {
+    expect(
+      isEvalSummary(
+        run({
+          suites: [{ name: '', passed: 1, total: 1 }],
+          totals: { passed: 1, total: 1 },
+        })
+      )
+    ).toBe(false)
+    expect(
+      isEvalSummary(
+        run({
+          suites: [{ passed: 1, total: 1 } as never],
+          totals: { passed: 1, total: 1 },
+        })
+      )
+    ).toBe(false)
+  })
+
+  test('rejects text the page cannot put in front of a visitor as it stands', () => {
+    // A bidirectional override rearranges the text around it and React
+    // escapes markup, not formatting characters. Length is bounded for the
+    // same reason: these are labels in a table, not prose.
+    expect(isEvalSummary(run({ model: 'gemini‮3.8' }))).toBe(false)
+    expect(isEvalSummary(run({ model: 'a'.repeat(65) }))).toBe(false)
+    expect(isEvalSummary(run({ commit: 'local\n' }))).toBe(false)
+    expect(
+      isEvalSummary(
+        run({
+          suites: [{ name: 'gold\u0007en', passed: 1, total: 1 }],
+          totals: { passed: 1, total: 1 },
+        })
+      )
+    ).toBe(false)
+    expect(isEvalSummary(run({ promptfooVersion: '0.123.0‮' }))).toBe(false)
   })
 
   test('rejects a ranAt the history cannot be sorted by', () => {
     for (const ranAt of ['', 'yesterday', '2026-09-21', '2026-13-99T00:00:00Z'])
       expect(isEvalSummary(run({ ranAt }))).toBe(false)
+  })
+
+  test('rejects a ranAt that is not UTC', () => {
+    // The file name is the first ten characters of this string and the page
+    // formats it in UTC, so an offset would date one record three ways.
+    expect(isEvalSummary(run({ ranAt: '2026-09-21T23:00:00-07:00' }))).toBe(
+      false
+    )
+    expect(isEvalSummary(run({ ranAt: '2026-09-21T16:59:31.433' }))).toBe(false)
   })
 })
 

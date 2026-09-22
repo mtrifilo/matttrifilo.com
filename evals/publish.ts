@@ -19,11 +19,18 @@ import type { EvalSummary } from './summary'
  * same pull request as the corpus, prompt or suite change the run covers.
  *
  * It refuses rather than publishes when the summary is not a summary, when
- * no commit can be named, or when a record already exists under that name.
- * A published record is never edited afterwards; a new run adds a new file.
+ * no commit can be named, or when a record already exists under that name. A
+ * committed record is never edited afterwards; a new run adds a new file.
  *
  * Usage: bun run evals:publish [summary.json]
  */
+
+export interface PublishPlan {
+  file: string
+  record: EvalSummary
+}
+
+export type PublishDecision = PublishPlan | { refusal: string }
 
 /**
  * The commit the record names.
@@ -31,8 +38,10 @@ import type { EvalSummary } from './summary'
  * A run in CI records the commit it tested. A local run has no `GITHUB_SHA`
  * and records `local`, which is true but not a version, so the working
  * copy's HEAD stands in: it is the commit the publisher is about to attach
- * the record to. Returns null when neither is a git object name, because a
- * record that names no commit cannot be version-linked and must not ship.
+ * the record to, and it names the code that ran only if that code is
+ * committed, which is why main() warns on a dirty tree. Returns null when
+ * neither is a git object name, because a record that names no commit cannot
+ * be version-linked and must not ship.
  */
 export function publishedCommit(
   summaryCommit: string,
@@ -44,17 +53,73 @@ export function publishedCommit(
 
 /**
  * `<YYYY-MM-DD>-<7-char sha>.json`: the date the run happened, in UTC as
- * `ranAt` records it, and the commit it covers. Sortable, unique per run,
- * and readable in a directory listing without opening anything.
+ * `ranAt` records it, and the commit it covers. Sortable, readable in a
+ * directory listing, and the name the site reads the record by.
  */
 export function resultFileName(ranAt: string, commit: string): string {
   return `${ranAt.slice(0, 10)}-${shortCommit(commit)}.json`
 }
 
+/**
+ * What to write, or why nothing is written. Pure, so every refusal is
+ * covered by a test rather than by running the script.
+ *
+ * The record is built field by field rather than copied: `summary.json` is
+ * produced from a results file that holds every question and every answer,
+ * and this directory is committed to a public repository. A field that is
+ * meant to be published is added here, deliberately, by someone reading the
+ * diff.
+ */
+export function planPublish(
+  parsed: unknown,
+  headSha: string | null
+): PublishDecision {
+  if (!isEvalSummary(parsed))
+    return {
+      refusal:
+        'the summary is missing its totals, disagrees with its own suite counts, or is otherwise not an eval summary',
+    }
+
+  const commit = publishedCommit(parsed.commit, headSha)
+  if (!commit)
+    return {
+      refusal: `the run recorded commit "${parsed.commit}" and git HEAD could not be read, so the record would name no commit`,
+    }
+
+  return {
+    file: resultFileName(parsed.ranAt, commit),
+    record: {
+      commit,
+      ranAt: parsed.ranAt,
+      model: parsed.model,
+      ...(parsed.promptfooVersion
+        ? { promptfooVersion: parsed.promptfooVersion }
+        : {}),
+      suites: parsed.suites.map(({ name, passed, total }) => ({
+        name,
+        passed,
+        total,
+      })),
+      totals: { passed: parsed.totals.passed, total: parsed.totals.total },
+      retried: parsed.retried,
+    },
+  }
+}
+
 /** The working copy's HEAD, or null when git cannot answer. */
 function headCommit(): string | null {
+  return git(['rev-parse', 'HEAD'])
+}
+
+/** Whether the working copy has changes HEAD does not carry. */
+function workingCopyIsDirty(): boolean {
+  const status = git(['status', '--porcelain'])
+  return status !== null && status.length > 0
+}
+
+function git(args: string[]): string | null {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
+    return execFileSync('git', args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
@@ -82,30 +147,35 @@ function main(): void {
   } catch {
     fail(`${summaryPath} does not parse as JSON`)
   }
-  if (!isEvalSummary(parsed)) {
-    fail(
-      `${summaryPath} is missing its totals or is otherwise not an eval summary; refusing to publish it`
-    )
-  }
-  const summary: EvalSummary = parsed
 
-  const commit = publishedCommit(summary.commit, headCommit())
-  if (!commit) {
-    fail(
-      `the run recorded commit "${summary.commit}" and git HEAD could not be read, so the record would name no commit`
+  // git is only consulted for a run that recorded no commit of its own.
+  const recorded = (parsed as { commit?: unknown } | null)?.commit
+  const needsHead = typeof recorded !== 'string' || !isCommitSha(recorded)
+  const decision = planPublish(parsed, needsHead ? headCommit() : null)
+  if ('refusal' in decision) fail(`${decision.refusal}; refusing to publish`)
+
+  if (needsHead && workingCopyIsDirty()) {
+    console.warn(
+      'evals:publish: the working copy has uncommitted changes, so the record names their parent commit rather than the code that ran. Commit the change the run covers first, then publish.'
     )
   }
 
   const dir = resolve(EVAL_RESULTS_DIR)
-  const target = join(dir, resultFileName(summary.ranAt, commit))
-  if (existsSync(target)) {
-    fail(
-      `${target} already exists. Published records are not edited; delete it first if this run is meant to replace it.`
-    )
-  }
-
+  const target = join(dir, decision.file)
   mkdirSync(dir, { recursive: true })
-  writeFileSync(target, `${JSON.stringify({ ...summary, commit }, null, 2)}\n`)
+  try {
+    // `wx` is the refusal, not a check before it: a published record is never
+    // edited, and an existence test followed by a write is only mostly true.
+    writeFileSync(target, `${JSON.stringify(decision.record, null, 2)}\n`, {
+      flag: 'wx',
+    })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'EEXIST')
+      fail(
+        `${target} already exists. A committed record is never replaced; delete the file first only if this run supersedes one that has not been committed yet.`
+      )
+    throw error
+  }
   console.log(
     `published ${target}\ncommit it in the same pull request as the change this run covers.`
   )

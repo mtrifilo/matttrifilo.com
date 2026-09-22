@@ -1,18 +1,28 @@
 /**
  * Shaping a promptfoo run into the two things anyone reads afterwards
- * (MTC-32): a per-suite table in the job summary, and a small JSON file a
- * follow-up ticket can publish on the site.
+ * (MTC-32): a per-suite table in the job summary, and a small JSON file the
+ * site publishes.
  *
  * Pure: it takes the parsed results object and returns values. The file
  * reading and writing lives in ./summarize.ts so this can be covered by
  * `bun test` without a run.
  */
 
-/** The stable artifact shape. A published page will depend on it. */
+/**
+ * The stable artifact shape. `lib/evals/results.ts` validates it and
+ * `app/ask/evals/page.tsx` renders every field of it on a public page, so a
+ * field added here is a field published there.
+ */
 export interface EvalSummary {
   commit: string
   ranAt: string
   model: string
+  /**
+   * The promptfoo that ran the suites. Optional because a record written
+   * before it was recorded carries no version, and a run that could not read
+   * its own installed version publishes nothing rather than a guess.
+   */
+  promptfooVersion?: string
   suites: SuiteSummary[]
   totals: { passed: number; total: number }
   /**
@@ -56,6 +66,8 @@ export interface SummariseInput {
   ranAt: string
   /** Falls back to the model the provider reported on each row. */
   model?: string
+  /** Omitted when the caller could not read the installed promptfoo. */
+  promptfooVersion?: string
 }
 
 export function summarise({
@@ -63,6 +75,7 @@ export function summarise({
   commit,
   ranAt,
   model,
+  promptfooVersion,
 }: SummariseInput): EvalSummary {
   const rows = results.results?.results ?? []
   const bySuite = new Map<string, SuiteSummary>()
@@ -82,6 +95,7 @@ export function summarise({
     commit,
     ranAt,
     model: model ?? reportedModel(rows) ?? 'unknown',
+    ...(promptfooVersion ? { promptfooVersion } : {}),
     suites,
     totals: {
       passed: suites.reduce((sum, suite) => sum + suite.passed, 0),
