@@ -15,9 +15,10 @@ import type { EvalSummary, SuiteSummary } from '@/evals/summary'
  * production.
  *
  * A record is published exactly as the run wrote it. Nothing here recomputes
- * a count or repairs a file: a file that is not a summary is skipped with a
- * warning rather than taking a build down, and rewriting one would publish a
- * number no run produced.
+ * a count or repairs a file: a file that is not a summary, or that is a
+ * summary of a run too poor to stand as evidence, is skipped with a warning
+ * rather than taking a build down, and rewriting one would publish a number
+ * no run produced.
  */
 
 export type { EvalSummary, SuiteSummary }
@@ -106,8 +107,9 @@ function isTotals(value: unknown): value is EvalSummary['totals'] {
 
 /**
  * One guard per field of the record, keyed by the field, so a field added to
- * EvalSummary is a type error here until it is validated. Every field is
- * rendered on a public page; none of them may arrive unchecked.
+ * EvalSummary is a type error here until it is validated. Every field either
+ * reaches a public page or decides whether the record may be published at
+ * all; none of them may arrive unchecked.
  */
 const FIELD_GUARDS: Record<keyof EvalSummary, (value: unknown) => boolean> = {
   commit: isLabel,
@@ -117,6 +119,64 @@ const FIELD_GUARDS: Record<keyof EvalSummary, (value: unknown) => boolean> = {
   suites: value => Array.isArray(value) && value.every(isSuiteSummary),
   totals: isTotals,
   retried: isCount,
+  transportFailures: isCount,
+  missingTrailer: isCount,
+}
+
+/**
+ * The floor a run has to clear before it is published, and the reason it is
+ * a floor rather than a judgement call.
+ *
+ * `/ask/evals` is a credibility page: a hiring manager reads it as evidence
+ * that the assistant is tested, and a record of a bad run is worse than no
+ * record at all, because it is published under the same claim as a good one.
+ * So the numbers below are refusals, not warnings, and there is deliberately
+ * no flag and no environment variable that lifts them. A run that cannot
+ * clear them is re-run, not overridden.
+ *
+ * The same floor runs in two places: `evals/publish.ts` before a record is
+ * written, and `readEvalRuns` below when the site reads one, so a file
+ * committed by hand is skipped at build time rather than rendered.
+ */
+export const MIN_PASS_RATE = 0.95
+export const MIN_SUITE_PASS_RATE = 0.9
+/** Flake budget, as a share of the tests the run walked. */
+export const MAX_RETRIED_SHARE = 0.1
+export const MAX_MISSING_TRAILER_SHARE = 0.1
+
+/**
+ * Why a run is not publishable, in the words of the number that failed, or
+ * null when it is. Takes a record that has already passed
+ * `evalSummaryProblem`, so every field it reads is the type it says.
+ */
+export function evalQualityProblem(summary: EvalSummary): string | null {
+  const { passed, total } = summary.totals
+  if (total === 0) return 'it walked no tests, so it is evidence of nothing'
+  if (!summary.promptfooVersion)
+    return 'it names no `promptfooVersion`, so the record is not version-linked'
+  if (summary.transportFailures > 0)
+    return `${summary.transportFailures} of its ${total} tests produced no answer to grade, so those rows say nothing about the assistant; the run's results.json names the code on each of them, and it can be a stalled connection, a refused token, the kill switch, or an answer with no text in it`
+  if (passed < total * MIN_PASS_RATE)
+    return `it passed ${passed} of ${total}, below the ${percent(MIN_PASS_RATE)} a published run has to clear`
+  for (const suite of summary.suites) {
+    if (suite.passed < suite.total * MIN_SUITE_PASS_RATE)
+      return `its \`${suite.name}\` suite passed ${suite.passed} of ${suite.total}, below the ${percent(MIN_SUITE_PASS_RATE)} every suite has to clear`
+  }
+  if (summary.retried > total * MAX_RETRIED_SHARE)
+    return `${summary.retried} of its ${total} tests had to be sent again, above the ${percent(MAX_RETRIED_SHARE)} that says the run happened in a bad hour upstream`
+  if (summary.missingTrailer > total * MAX_MISSING_TRAILER_SHARE)
+    return `${summary.missingTrailer} of its ${total} answers used a document without a Sources: trailer, above the ${percent(MAX_MISSING_TRAILER_SHARE)} the citation policy tolerates`
+  return null
+}
+
+/** Shape first, then the floor: everything that stops a record publishing. */
+export function evalRecordProblem(value: unknown): string | null {
+  const problem = evalSummaryProblem(value)
+  return problem ?? evalQualityProblem(value as EvalSummary)
+}
+
+function percent(share: number): string {
+  return `${Math.round(share * 100)} percent`
 }
 
 /**
@@ -185,7 +245,7 @@ export function readEvalRuns(dir: string = evalResultsDir()): EvalRun[] {
       warnSkipped(dir, name, 'it does not parse as JSON')
       continue
     }
-    const problem = evalSummaryProblem(parsed)
+    const problem = evalRecordProblem(parsed)
     if (problem !== null) {
       warnSkipped(dir, name, problem)
       continue

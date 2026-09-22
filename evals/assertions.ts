@@ -842,17 +842,93 @@ function fail(reason: string): AssertionResult {
   return { pass: false, score: 0, reason }
 }
 
-/** An answer that used a document ends with the citation trailer. */
-export function assertCites(output: string): AssertionResult {
+/**
+ * An answer that used a document ends with the citation trailer.
+ *
+ * Tolerant in one direction only. A missing trailer on an answer the server
+ * can prove used a document is the model dropping one line of formatting
+ * from work it really did, and it was reddening whole runs; the provider
+ * counts it as `missingTrailer` and the run summary carries the number, so
+ * it is measured rather than hidden, and the publish gate refuses a run
+ * where it happens often. Everything else still fails: no read, no answer,
+ * or an answer that says the material does not cover the question is not a
+ * run that used a document, and a warning there would let a decline pass a
+ * suite whose whole subject is citation.
+ */
+export function assertCites(
+  output: string,
+  context: AssertionContext
+): AssertionResult {
   const cited = sourcesTrailerIds(output)
-  return {
-    pass: cited.length > 0,
-    score: cited.length > 0 ? 1 : 0,
-    reason:
-      cited.length > 0
-        ? `cited ${cited.join(', ')}`
-        : 'no Sources: trailer on an answer that used a document',
+  if (cited.length > 0)
+    return { pass: true, score: 1, reason: `cited ${cited.join(', ')}` }
+
+  const readIds = stringList(context.metadata?.readIds)
+  if (!isUncitedAnswer(output, readIds)) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        readIds.length === 0
+          ? 'no Sources: trailer, and the run opened no document'
+          : 'no Sources: trailer, and the answer is a decline or no answer at all',
+    }
   }
+
+  // Tolerance rests on the run having opened the document the test names,
+  // not on its having opened anything: `readIds` is a superset of what the
+  // answer saw, and "it read something" would tolerate a trailer missing
+  // from an answer about a different document entirely. A test that names
+  // no expected document gets no tolerance, because nothing then says which
+  // document the answer was supposed to use.
+  const expected = [
+    ...stringList(context.test?.metadata?.expectReads),
+    ...stringList(context.test?.metadata?.expectReadsAny),
+  ]
+  const used = expected.filter(id => readIds.includes(id))
+  if (used.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason:
+        expected.length === 0
+          ? 'no Sources: trailer, and the test names no document the answer should have used'
+          : `no Sources: trailer, and the run read none of ${expected.join(', ')}`,
+    }
+  }
+  return {
+    pass: true,
+    score: 1,
+    reason: `warning: no Sources: trailer, on an answer that read ${used.join(', ')}`,
+  }
+}
+
+/**
+ * The answer used a document and did not cite it: the flake class MTC-54
+ * counts as `missingTrailer`.
+ *
+ * The one definition of it. `assertCites` above asks this before it
+ * tolerates a missing trailer, and `evals/provider.ts` asks it to raise the
+ * per-test flag the run summary counts, so the number on a summary and the
+ * warnings in a results file are the same question asked once.
+ *
+ * A decline is not an uncited answer: the policy asks for a trailer on an
+ * answer that USED a document, and an answer that says the material does not
+ * cover the question used none of it. An empty answer is not one either;
+ * that row has nothing to grade at all.
+ *
+ * `readIds` is the server's ledger, which is a superset of what the answer
+ * saw: a document refused afterwards for its size still appears in it. So
+ * this counts at most the answers that dropped a citation, never fewer,
+ * which is the safe direction for a count a publish gate refuses on.
+ */
+export function isUncitedAnswer(output: string, readIds: string[]): boolean {
+  if (readIds.length === 0) return false
+  if (sourcesTrailerIds(output).length > 0) return false
+  const prose = answerProse(output).trim()
+  if (prose.length === 0) return false
+  if (prose === DECLINE_SENTENCE) return false
+  return !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
 }
 
 /**

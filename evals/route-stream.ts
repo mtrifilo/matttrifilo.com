@@ -127,6 +127,19 @@ export function answerProse(text: string): string {
 }
 
 /**
+ * The row has nothing to grade: no prose at all, whatever else came back.
+ *
+ * A fact about the request rather than a judgement about the answer, which
+ * is why the provider records it per test and the run summary counts it
+ * (`transportFailures`): an assertion that checks for the absence of
+ * something passes on an empty answer, so a run carrying such rows is not
+ * evidence about the assistant and is not publishable.
+ */
+export function hasNothingToGrade(text: string): boolean {
+  return answerProse(text).trim().length === 0
+}
+
+/**
  * The visitor-authored parts of an answer that must not be read as the
  * assistant's own voice: markdown block quotes and anything inside double
  * quotes.

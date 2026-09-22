@@ -20,9 +20,11 @@ const summary = (over: Partial<EvalSummary> = {}): EvalSummary => ({
   ranAt: '2026-09-21T16:59:31.433Z',
   model: 'gemini-3.8-flash',
   promptfooVersion: '0.123.0',
-  suites: [{ name: 'golden', passed: 3, total: 4 }],
-  totals: { passed: 3, total: 4 },
+  suites: [{ name: 'golden', passed: 40, total: 40 }],
+  totals: { passed: 40, total: 40 },
   retried: 0,
+  transportFailures: 0,
+  missingTrailer: 0,
   ...over,
 })
 
@@ -70,21 +72,13 @@ describe('planPublish', () => {
         ranAt: '2026-09-21T16:59:31.433Z',
         model: 'gemini-3.8-flash',
         promptfooVersion: '0.123.0',
-        suites: [{ name: 'golden', passed: 3, total: 4 }],
-        totals: { passed: 3, total: 4 },
+        suites: [{ name: 'golden', passed: 40, total: 40 }],
+        totals: { passed: 40, total: 40 },
         retried: 0,
+        transportFailures: 0,
+        missingTrailer: 0,
       },
     })
-  })
-
-  test('leaves out a promptfoo version the run did not record', () => {
-    const older = summary()
-    delete older.promptfooVersion
-    const decision = planPublish(older, null)
-    expect(decision).not.toHaveProperty('refusal')
-    expect(
-      Object.keys('record' in decision ? decision.record : {})
-    ).not.toContain('promptfooVersion')
   })
 
   test('refuses a summary with no totals, and says which field', () => {
@@ -97,8 +91,65 @@ describe('planPublish', () => {
 
   test('refuses a summary whose suites disagree with its totals', () => {
     expect(
-      planPublish(summary({ totals: { passed: 3, total: 9 } }), HEAD_SHA)
+      planPublish(summary({ totals: { passed: 40, total: 90 } }), HEAD_SHA)
     ).toEqual({ refusal: expect.stringContaining('do not add up') })
+  })
+
+  // The floor itself is covered in lib/evals/results.test.ts, where it
+  // lives; these pin that the gate applies it and says which number failed.
+  test('refuses a run that produced an ungradeable row', () => {
+    expect(planPublish(summary({ transportFailures: 1 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('no answer to grade'),
+    })
+  })
+
+  test('refuses a run that did not pass enough tests', () => {
+    expect(
+      planPublish(
+        summary({
+          suites: [{ name: 'golden', passed: 37, total: 40 }],
+          totals: { passed: 37, total: 40 },
+        }),
+        HEAD_SHA
+      )
+    ).toEqual({ refusal: expect.stringContaining('95 percent') })
+  })
+
+  test('refuses a run with one weak suite', () => {
+    expect(
+      planPublish(
+        summary({
+          suites: [
+            { name: 'golden', passed: 40, total: 40 },
+            { name: 'groundedness', passed: 8, total: 10 },
+          ],
+          totals: { passed: 48, total: 50 },
+        }),
+        HEAD_SHA
+      )
+    ).toEqual({ refusal: expect.stringContaining('`groundedness`') })
+  })
+
+  test('refuses a run that was retried past its flake budget', () => {
+    expect(planPublish(summary({ retried: 5 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('sent again'),
+    })
+  })
+
+  test('refuses a run whose answers kept dropping the trailer', () => {
+    expect(planPublish(summary({ missingTrailer: 5 }), HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('Sources: trailer'),
+    })
+  })
+
+  test('refuses a run that names no promptfoo version', () => {
+    // It used to publish with a warning. The record is the claim that the
+    // suites ran; without the version it does not say what ran them.
+    const older = summary() as unknown as Record<string, unknown>
+    delete older.promptfooVersion
+    expect(planPublish(older, HEAD_SHA)).toEqual({
+      refusal: expect.stringContaining('promptfooVersion'),
+    })
   })
 
   test('refuses when no commit can be named', () => {
@@ -124,14 +175,37 @@ describe('the script itself', () => {
       fs.rmSync(dir, { recursive: true, force: true })
   })
 
-  const workspace = () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-'))
+  const tempDir = (prefix: string) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix))
     dirs.push(dir)
     return dir
   }
 
-  const writeSummary = (dir: string, contents: unknown) => {
-    const file = path.join(dir, 'summary.json')
+  const run = (dir: string, args: string[]) =>
+    Bun.spawnSync({
+      cmd: ['git', ...args],
+      cwd: dir,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+
+  /**
+   * A clean checkout to publish from. The script consults git for the state
+   * of the working copy and refuses when it cannot be read, so a test that
+   * publishes has to run somewhere git answers.
+   */
+  const checkout = () => {
+    const dir = tempDir('publish-')
+    run(dir, ['init', '--quiet'])
+    run(dir, ['config', 'user.email', 'test@example.invalid'])
+    run(dir, ['config', 'user.name', 'Publish Test'])
+    run(dir, ['commit', '--quiet', '--allow-empty', '-m', 'base'])
+    return dir
+  }
+
+  /** The summary to publish, kept outside the checkout so it stays clean. */
+  const summaryFile = (contents: unknown) => {
+    const file = path.join(tempDir('summary-'), 'summary.json')
     fs.writeFileSync(
       file,
       typeof contents === 'string' ? contents : JSON.stringify(contents)
@@ -154,48 +228,89 @@ describe('the script itself', () => {
       stderr: 'pipe',
     })
 
+  const published = (dir: string) =>
+    path.join(dir, 'evals', 'results', '2026-09-21-6406ee4.json')
+
   test('refuses when there is no summary to publish', () => {
-    const dir = workspace()
+    const dir = checkout()
     const result = publish(dir, path.join(dir, 'missing.json'))
     expect(result.exitCode).toBe(1)
     expect(result.stderr.toString()).toContain('no summary at')
   })
 
   test('refuses a summary that is not JSON', () => {
-    const dir = workspace()
-    const result = publish(dir, writeSummary(dir, '{ not json'))
+    const result = publish(checkout(), summaryFile('{ not json'))
     expect(result.exitCode).toBe(1)
     expect(result.stderr.toString()).toContain('does not parse as JSON')
   })
 
-  test('says so when the record it writes names no promptfoo version', () => {
-    // The conventions ask every published summary to name one. It still
-    // publishes, but nobody should find the gap out from the page.
-    const dir = workspace()
-    const older = summary()
+  test('refuses a summary that names no promptfoo version', () => {
+    const older = summary() as unknown as Record<string, unknown>
     delete older.promptfooVersion
-    const result = publish(dir, writeSummary(dir, older))
-    expect(result.exitCode).toBe(0)
-    expect(result.stderr.toString()).toContain('no promptfoo version')
+    const result = publish(checkout(), summaryFile(older))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('promptfooVersion')
+  })
+
+  test('refuses a run that cannot stand as a record, and says why', () => {
+    const dir = checkout()
+    const result = publish(dir, summaryFile(summary({ transportFailures: 2 })))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('no answer to grade')
+    expect(fs.existsSync(path.join(dir, 'evals', 'results'))).toBe(false)
+  })
+
+  test('a refusal says what to do next', () => {
+    const result = publish(
+      checkout(),
+      summaryFile(summary({ transportFailures: 2 }))
+    )
+    expect(result.stderr.toString()).toContain('results.json')
+    expect(result.stderr.toString()).toContain(
+      'docs/career-assistant-operations.md'
+    )
+  })
+
+  test('refuses to publish from a dirty working copy', () => {
+    // The record claims a commit contains the suites and the corpus the run
+    // walked. With a change still uncommitted, no commit does.
+    const dir = checkout()
+    fs.writeFileSync(path.join(dir, 'uncommitted.txt'), 'work in progress')
+    const result = publish(dir, summaryFile(summary()))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('uncommitted changes')
+    expect(fs.existsSync(path.join(dir, 'evals', 'results'))).toBe(false)
+  })
+
+  test('refuses where git cannot say whether the tree is clean', () => {
+    // Fails closed on purpose: otherwise pointing GIT_DIR at nothing would
+    // lift the refusal above from outside the script.
+    const dir = tempDir('not-a-repository-')
+    const result = publish(dir, summaryFile(summary()))
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain('could not say')
+    expect(fs.existsSync(path.join(dir, 'evals', 'results'))).toBe(false)
   })
 
   test('writes the record, then refuses to replace it', () => {
     // The safety property the runbook advertises: a record that exists is
     // never rewritten, whatever is published at it.
-    const dir = workspace()
-    const file = writeSummary(dir, summary())
+    const dir = checkout()
+    const file = summaryFile(summary())
     expect(publish(dir, file).exitCode).toBe(0)
-    const written = path.join(
-      dir,
-      'evals',
-      'results',
-      '2026-09-21-6406ee4.json'
+    expect(JSON.parse(fs.readFileSync(published(dir), 'utf8'))).toEqual(
+      summary()
     )
-    expect(JSON.parse(fs.readFileSync(written, 'utf8'))).toEqual(summary())
+
+    // The runbook's next step, and what makes the tree clean again.
+    run(dir, ['add', 'evals'])
+    run(dir, ['commit', '--quiet', '-m', 'the record'])
 
     const again = publish(dir, file)
     expect(again.exitCode).toBe(1)
     expect(again.stderr.toString()).toContain('already exists')
-    expect(JSON.parse(fs.readFileSync(written, 'utf8'))).toEqual(summary())
+    expect(JSON.parse(fs.readFileSync(published(dir), 'utf8'))).toEqual(
+      summary()
+    )
   })
 })

@@ -15,6 +15,7 @@ import {
   assertAnswered,
   assertChipsMatchReads,
   assertCites,
+  isUncitedAnswer,
   assertCitesOnlyWhatItRead,
   assertDecline,
   assertDeclineOrWithholds,
@@ -400,9 +401,83 @@ describe('assertCitesOnlyWhatItRead', () => {
 })
 
 describe('assertCites', () => {
+  const answer = 'He led the migration in 2024.'
+  // What a groundedness citation test looks like: the document it expects,
+  // and the ledger of what the run opened.
+  const read = ctx({ expectReadsAny: ['resume'] }, { readIds: ['resume'] })
+  const readNothing = ctx({ expectReadsAny: ['resume'] }, { readIds: [] })
+
   test('requires a trailer', () => {
-    expect(assertCites('He led it.\n\nSources: resume').pass).toBe(true)
-    expect(assertCites('He led it.').pass).toBe(false)
+    expect(assertCites(`${answer}\n\nSources: resume`, readNothing).pass).toBe(
+      true
+    )
+    expect(assertCites(answer, readNothing).pass).toBe(false)
+  })
+
+  test('warns instead of failing when the run read the expected document', () => {
+    // The flake this tolerates: a correct, sourced answer that dropped one
+    // line of formatting. The provider counts it and the publish gate refuses
+    // a run where it happens often, which is what keeps this honest.
+    const result = assertCites(answer, read)
+    expect(result.pass).toBe(true)
+    expect(result.reason).toContain('warning')
+    expect(result.reason).toContain('resume')
+  })
+
+  test('does not tolerate a miss on the strength of any read at all', () => {
+    // `readIds` is a superset of what the answer saw, so "it opened
+    // something" is not evidence that THIS answer used a document.
+    const other = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['owned-systems-and-operations'] }
+    )
+    const result = assertCites(answer, other)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('resume')
+  })
+
+  test('does not tolerate a miss on a test that expects no document', () => {
+    const result = assertCites(answer, ctx(undefined, { readIds: ['resume'] }))
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('names no document')
+  })
+
+  test('still fails an answer on a run that read nothing', () => {
+    expect(assertCites(answer, readNothing).pass).toBe(false)
+    expect(assertCites(answer, readNothing).reason).toContain(
+      'opened no document'
+    )
+  })
+
+  test('still fails an empty answer, whatever the run read', () => {
+    expect(assertCites('', read).pass).toBe(false)
+    expect(assertCites('   \n', read).pass).toBe(false)
+  })
+
+  test('still fails a decline, whatever the run read', () => {
+    // A groundedness question the corpus answers must not pass by declining
+    // it after opening the document.
+    expect(assertCites(DECLINE_SENTENCE, read).pass).toBe(false)
+    expect(
+      assertCites("Matt's published work does not mention that.", read).pass
+    ).toBe(false)
+  })
+})
+
+describe('isUncitedAnswer', () => {
+  // The one definition the provider's `missingTrailer` flag and the tolerance
+  // above both use.
+  test('true only for a real answer that read a document and cited none', () => {
+    expect(isUncitedAnswer('He led it.', ['resume'])).toBe(true)
+    expect(isUncitedAnswer('He led it.\n\nSources: resume', ['resume'])).toBe(
+      false
+    )
+    expect(isUncitedAnswer('He led it.', [])).toBe(false)
+    expect(isUncitedAnswer('', ['resume'])).toBe(false)
+    expect(isUncitedAnswer(DECLINE_SENTENCE, ['resume'])).toBe(false)
+    expect(
+      isUncitedAnswer("Matt's work does not mention that.", ['resume'])
+    ).toBe(false)
   })
 })
 

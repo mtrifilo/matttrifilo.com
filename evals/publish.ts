@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
+  evalRecordProblem,
   evalResultsDir,
-  evalSummaryProblem,
   isCommitSha,
   shortCommit,
 } from '@/lib/evals/results'
@@ -19,8 +19,21 @@ import type { EvalSummary } from './summary'
  * same pull request as the corpus, prompt or suite change the run covers.
  *
  * It refuses rather than publishes when the summary is not a summary, when
- * no commit can be named, or when a record already exists under that name. A
- * committed record is never edited afterwards; a new run adds a new file.
+ * the run is not good enough to stand as evidence (the floor in
+ * `lib/evals/results.ts`, which the site applies again on read), when no
+ * commit can be named, when the working copy is dirty, or when a record
+ * already exists under that name. A committed record is never edited
+ * afterwards; a new run adds a new file.
+ *
+ * There is no force flag and no environment override, on purpose: the page
+ * the record feeds is a credibility page, and a bad record published under
+ * the same claim as a good one is worse than no record. The answer to a
+ * refusal is another run.
+ *
+ * What it cannot do is stop someone writing a false record deliberately:
+ * `evals/out/` is not committed, so a hand-edited summary reaches this script
+ * as a summary. Reviewing the record in the diff is what catches that. This
+ * gate is against publishing a run that went badly, not against fraud.
  *
  * Usage: bun run evals:publish [summary.json]
  */
@@ -39,7 +52,7 @@ export type PublishDecision = PublishPlan | { refusal: string }
  * and records `local`, which is true but not a version, so the working
  * copy's HEAD stands in: it is the commit the publisher is about to attach
  * the record to, and it names the code that ran only if that code is
- * committed, which is why main() warns on a dirty tree. Returns null when
+ * committed, which is why main() refuses to publish from a dirty tree. Returns null when
  * neither is a git object name, because a record that names no commit cannot
  * be version-linked and must not ship.
  */
@@ -74,7 +87,7 @@ export function planPublish(
   parsed: unknown,
   headSha: string | null
 ): PublishDecision {
-  const problem = evalSummaryProblem(parsed)
+  const problem = evalRecordProblem(parsed)
   if (problem !== null)
     return { refusal: `the summary cannot be published because ${problem}` }
   const summary = parsed as EvalSummary
@@ -91,9 +104,8 @@ export function planPublish(
       commit,
       ranAt: summary.ranAt,
       model: summary.model,
-      ...(summary.promptfooVersion
-        ? { promptfooVersion: summary.promptfooVersion }
-        : {}),
+      // Always present: the floor refuses a summary that names no version.
+      promptfooVersion: summary.promptfooVersion,
       suites: summary.suites.map(({ name, passed, total }) => ({
         name,
         passed,
@@ -101,6 +113,8 @@ export function planPublish(
       })),
       totals: { passed: summary.totals.passed, total: summary.totals.total },
       retried: summary.retried,
+      transportFailures: summary.transportFailures,
+      missingTrailer: summary.missingTrailer,
     },
   }
 }
@@ -110,10 +124,19 @@ function headCommit(): string | null {
   return git(['rev-parse', 'HEAD'])
 }
 
-/** Whether the working copy has changes HEAD does not carry. */
-function workingCopyIsDirty(): boolean {
+/**
+ * Whether the working copy is known to carry changes HEAD does not.
+ *
+ * Fails closed: a git that cannot answer is `unknown`, not `clean`. The
+ * record's claim is that some commit contains the suites and the corpus the
+ * run walked, and a directory where git will not say cannot support it. That
+ * also closes the one way the refusal could be lifted from outside the
+ * script, by pointing `GIT_DIR` somewhere git fails.
+ */
+function workingCopyState(): 'clean' | 'dirty' | 'unknown' {
   const status = git(['status', '--porcelain'])
-  return status !== null && status.length > 0
+  if (status === null) return 'unknown'
+  return status.length > 0 ? 'dirty' : 'clean'
 }
 
 function git(args: string[]): string | null {
@@ -151,20 +174,22 @@ function main(): void {
   const recorded = (parsed as { commit?: unknown } | null)?.commit
   const needsHead = typeof recorded !== 'string' || !isCommitSha(recorded)
   const decision = planPublish(parsed, needsHead ? headCommit() : null)
-  if ('refusal' in decision) fail(`${decision.refusal}; refusing to publish`)
-
-  if (needsHead && workingCopyIsDirty()) {
-    console.warn(
-      'evals:publish: the working copy has uncommitted changes, so the record names their parent commit rather than the code that ran. Commit the change the run covers first, then publish.'
+  if ('refusal' in decision)
+    fail(
+      `${decision.refusal}; refusing to publish. Re-run the suites when Vertex is healthy, or dispatch .github/workflows/evals.yml by hand; the per-row flags behind these counts are in the run's results.json under \`metadata\`, and the rules are in docs/career-assistant-operations.md under "Publishing a run"`
     )
-  }
-  if (!decision.record.promptfooVersion) {
-    // The conventions ask every published summary to name the promptfoo that
-    // ran it. A record without one still publishes, because an old record is
-    // worth more than no record, but nobody should find that out from the
-    // page.
-    console.warn(
-      'evals:publish: this summary names no promptfoo version, so the record is not fully version-linked. Re-run `bun run evals:report` with the dependencies installed to record one.'
+
+  // The record has to name a commit that contains the suites and the corpus
+  // the run walked. An uncommitted change means it does not, whichever
+  // commit is named, so this is a refusal rather than the warning it used to
+  // be: a record pointing at code that never ran is a false claim on a page
+  // a hiring manager reads as evidence.
+  const tree = workingCopyState()
+  if (tree !== 'clean') {
+    fail(
+      tree === 'dirty'
+        ? 'the working copy has uncommitted changes, so no commit contains the code this run walked. Commit the change the run covers first, then publish; refusing to publish'
+        : 'git could not say whether this working copy is clean, so nothing here can name the code the run walked. Run this from the repository; refusing to publish'
     )
   }
 

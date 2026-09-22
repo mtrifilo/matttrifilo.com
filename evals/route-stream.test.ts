@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   answerProse,
+  hasNothingToGrade,
   parseUiMessageStream,
   sourcesTrailerIds,
   withoutQuotations,
@@ -161,5 +162,22 @@ describe('withoutQuotations', () => {
     expect(withoutQuotations('Matt led the migration.')).toBe(
       'Matt led the migration.'
     )
+  })
+})
+
+describe('hasNothingToGrade', () => {
+  test('false for an answer, with or without a trailer', () => {
+    expect(hasNothingToGrade('He led the migration in 2024.')).toBe(false)
+    expect(hasNothingToGrade('He led it.\n\nSources: resume')).toBe(false)
+  })
+
+  test('true for a row with no prose at all', () => {
+    expect(hasNothingToGrade('')).toBe(true)
+    expect(hasNothingToGrade('   \n')).toBe(true)
+  })
+
+  test('true for a trailer with no answer above it', () => {
+    // The stream carried a citation line and nothing to cite.
+    expect(hasNothingToGrade('Sources: resume')).toBe(true)
   })
 })

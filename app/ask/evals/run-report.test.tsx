@@ -17,11 +17,13 @@ const run = (over: Partial<EvalRun> = {}): EvalRun => ({
   model: 'gemini-3.8-flash',
   promptfooVersion: '0.123.0',
   suites: [
-    { name: 'golden', passed: 67, total: 74 },
+    { name: 'golden', passed: 73, total: 74 },
     { name: 'refusals', passed: 24, total: 24 },
   ],
-  totals: { passed: 91, total: 98 },
+  totals: { passed: 97, total: 98 },
   retried: 5,
+  transportFailures: 0,
+  missingTrailer: 2,
   ...over,
 })
 
@@ -61,10 +63,10 @@ describe('the latest run', () => {
   test('shows every suite row and the total', () => {
     const html = renderToStaticMarkup(<LatestRun run={run()} />)
     expect(html).toContain('>golden<')
-    expect(html).toContain('>67<')
+    expect(html).toContain('>73<')
     expect(html).toContain('>74<')
     expect(html).toContain('All suites')
-    expect(html).toContain('>91<')
+    expect(html).toContain('>97<')
     expect(html).toContain('>98<')
   })
 
@@ -106,7 +108,7 @@ describe('the history', () => {
         ]}
       />
     )
-    expect(html).toContain('91 of 98 passed')
+    expect(html).toContain('97 of 98 passed')
     expect(html).toContain('September 21, 2026')
     expect(html).toContain('August 1, 2026')
     expect(html.indexOf('September 21')).toBeLessThan(html.indexOf('August 1'))

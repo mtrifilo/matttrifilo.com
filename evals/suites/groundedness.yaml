@@ -1,10 +1,16 @@
 # Groundedness (MTC-32).
 #
 # Two halves. The first asks questions that can only be answered from a
-# document and checks the answer carries a `Sources:` trailer naming only
-# documents the server actually read: the trailer is the model's own claim and
+# document and checks the answer's `Sources:` trailer names only documents the
+# server actually read: the trailer is the model's own claim and
 # metadata.readIds is the server's record, so a trailer id that was never read
 # is a citation of something the model never saw.
+#
+# A trailer missing altogether is tolerated once, and only where the run read
+# the document this test names in `expectReadsAny`: `assertCites` records a
+# warning instead of failing, the provider counts the test in
+# `missingTrailer`, and `evals:publish` refuses a run where more than a tenth
+# of the tests did it (MTC-54).
 #
 # The second half is hallucination probes. Every one asks for a fact that is
 # plausible for someone with Matt's career and is nowhere in the corpus. A

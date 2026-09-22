@@ -12,7 +12,12 @@ import {
   historyFrom,
   isTransportCode,
 } from './route-request'
-import { parseUiMessageStream, type StreamedMetadata } from './route-stream'
+import { isUncitedAnswer } from './assertions'
+import {
+  hasNothingToGrade,
+  parseUiMessageStream,
+  type StreamedMetadata,
+} from './route-stream'
 
 /**
  * The promptfoo target: the chat route's own code path, in process (MTC-32).
@@ -110,6 +115,30 @@ export interface EvalMetadata extends Record<string, unknown> {
   status: number
   /** 1, or higher when earlier attempts were lost to a transport stall. */
   attempt?: number
+  /**
+   * This row carries no answer to grade: any error envelope, or a 200 whose
+   * stream held no text. Wider than the two transport codes the retry loop
+   * acts on, because the question here is whether the row is evidence, not
+   * whose fault it is: a route decision the suites never expect (the kill
+   * switch, a rejected body) leaves as little to grade as a stalled
+   * connection. Counted per run as `transportFailures` and refused by the
+   * publish gate, because an assertion that checks for the ABSENCE of
+   * something passes on an empty output and would publish as evidence.
+   */
+  transportFailure?: true
+  /**
+   * The answer used a document and wrote no `Sources:` trailer, as
+   * `isUncitedAnswer` defines that. Recorded rather than only failed: the
+   * count is what says how often the citation line goes missing, and the
+   * publish gate refuses a run where it is more than a tenth of the tests.
+   *
+   * Never set together with `transportFailure`: a row with nothing to grade
+   * has no answer to be missing a trailer from. It is set independently of
+   * whether the test passed, though, so a row the trailer assertion still
+   * fails (it read a document other than the one its test names) is counted
+   * here and also costs the run a pass.
+   */
+  missingTrailer?: true
 }
 
 export default class ChatRouteProvider {
@@ -230,6 +259,7 @@ export default class ChatRouteProvider {
             response.status
           ),
           attempt,
+          transportFailure: true,
         }),
         transportFailure:
           attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
@@ -257,14 +287,27 @@ export default class ChatRouteProvider {
     if (answer.errorText !== undefined) {
       const code = envelopeCode(answer.errorText)
       return {
-        response: failure(`CHAT_ERROR: ${code}`, metadata),
+        response: failure(`CHAT_ERROR: ${code}`, {
+          ...metadata,
+          transportFailure: true,
+        }),
         transportFailure:
           attempt < EVAL_TRANSPORT_ATTEMPTS && isTransportCode(code),
       }
     }
 
     return {
-      response: { output: answer.text, metadata },
+      response: {
+        output: answer.text,
+        metadata: {
+          ...metadata,
+          ...(hasNothingToGrade(answer.text)
+            ? { transportFailure: true as const }
+            : isUncitedAnswer(answer.text, readIds)
+              ? { missingTrailer: true as const }
+              : {}),
+        },
+      },
       transportFailure: false,
     }
   }
