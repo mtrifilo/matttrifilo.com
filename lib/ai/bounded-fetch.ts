@@ -94,7 +94,8 @@ export interface BoundedFetchOptions {
   /**
    * Time from an attempt's request to its first body byte, once per attempt
    * that produced one. This is the number the two deadlines above are
-   * guesses at, so it is measured rather than inferred from a step duration.
+   * calibrated against, so it is measured rather than inferred from a step
+   * duration.
    */
   onFirstByte?: (ms: number) => void
   /** Injected so the measured duration is assertable. */
@@ -105,23 +106,32 @@ export interface BoundedFetchOptions {
  * How long an attempt *before the last* may take to send its first response
  * byte.
  *
- * This number is a hypothesis, and it is worth saying which one. It was drawn
- * from the health route's one-word, non-streaming calls at thinking `low`:
- * healthy ones took 1 to 14 s end to end on this deployment while stalls
- * took 80 to 110 s. Chat steps now default to thinking `medium`, and
- * thought tokens are not streamed (`sendReasoning: false`), so the
- * connection can stay quiet through that phase. 30 s sits above the
- * one-word measurements and still leaves the last attempt the rest of
- * the per-call budget. Nothing has yet measured a medium-thinking chat
- * step's time to first byte — `vertexFirstByteMs` on preview is what
- * would, and until it does both this bound and
- * VERTEX_LAST_ATTEMPT_TIMEOUT_MS are hypotheses. `msSinceStart` on the
- * `[chat] step` line is not that measurement: it is elapsed time to the
- * *end* of a step, generation included.
+ * Measured, not assumed. 448 chat requests across six eval runs, on GitHub
+ * runners against the global Vertex endpoint at concurrency 2 (runs
+ * 35141498434, 35146960224, 35615460739, 35619729850, 35622479143 and
+ * 35640340223, dated 2026-09-16 to 2026-09-21, read 2026-09-22), put
+ * `vertexFirstByteMs` at p50 5,554 ms, p90 17,325, p95 21,742, p99 26,276 and
+ * a maximum of 33,958. Chat steps run at thinking `medium` and thought tokens
+ * are not streamed (`sendReasoning: false`), so the connection is quiet
+ * through that phase; 30 s sits above p99 of it, which is why a healthy step
+ * does not meet this bound.
  *
- * Because it is a guess, it bounds only the attempts that have a retry behind
- * them. A slow-but-healthy step that trips it is retried, not failed, and the
- * last attempt below is given room to simply be slow.
+ * The sample is censored at exactly this number and cannot say otherwise: a
+ * first byte later than 30 s is only ever observed on a last attempt, because
+ * every earlier attempt is cut here. The 33,958 ms maximum is one of those
+ * observations, and it is the evidence that steps do run past this bound and
+ * that the wider ceiling below is what answers them.
+ *
+ * Moving it is not free in either direction. The two deadlines sum to a
+ * constant the arithmetic below derives, so a second added here is a second
+ * taken off the only attempt whose deadline a visitor ever sees.
+ *
+ * `msSinceStart` on the `[chat] step` line is not this measurement: it is
+ * elapsed time to the *end* of a step, generation included.
+ *
+ * Because a retry stands behind it, a slow-but-healthy step that trips it is
+ * retried, not failed, and the last attempt below is given room to simply be
+ * slow.
  */
 export const VERTEX_FIRST_BYTE_TIMEOUT_MS = 30_000
 
@@ -171,9 +181,11 @@ export const VERTEX_MAX_ATTEMPTS = 2
  *     backoff                 500 ms
  *   left for the last      37_000 ms
  *
- * 37 s is that, not rounded — and like the fast bound above it is
- * arithmetic over a hypothesis, not a measurement: `vertexFirstByteMs` on
- * preview is what should confirm it or move it.
+ * 37 s is that, not rounded, and the sample above says it is enough. The
+ * slowest first byte in those 448 requests was 33,958 ms, on a last attempt,
+ * and that request answered; nothing reached 37,000. About 3 s of margin is
+ * all that separates the two, so this is the number to defend when the probe
+ * above is argued upward.
  *
  * The worst case that arithmetic reaches — every step stalling once, then its
  * last attempt running to the ceiling — is 4 x (30 + 0.5 + 37) = 270 s. Read
@@ -229,10 +241,10 @@ export interface VertexCallCounter {
  * A retry is invisible to the visitor and, without this, invisible in the
  * logs of the request that paid for it: a `modelMs` or a `[chat] ms` that
  * quietly contains a second billed generation is a measurement no one can
- * read correctly. The first-byte time is the other half — the number both
- * deadlines in this file are guesses at, which nothing measured until it was
- * counted here. One counter per request, wired into the model client that
- * request uses, is what makes either reportable.
+ * read correctly. The first-byte time is the other half: the number both
+ * deadlines in this file are calibrated against, which nothing measures
+ * unless it is counted here. One counter per request, wired into the model
+ * client that request uses, is what makes either reportable.
  */
 export function createVertexCallCounter(): VertexCallCounter {
   let retries = 0
@@ -290,7 +302,12 @@ export function createBoundedFetch({
         : stall.signal
       const attemptStarted = now()
       try {
-        const response = await fetchImpl(input, { ...init, signal })
+        const response = await fetchUnderSignal(
+          fetchImpl,
+          input,
+          { ...init, signal },
+          signal
+        )
         // Still inside the timer, on purpose: headers are not the first byte
         // on a streaming response. Only the chunk clears the deadline, and
         // the `finally` below is what clears it, so the wait for it is
@@ -333,6 +350,47 @@ export function createBoundedFetch({
   // postToApi in @ai-sdk/provider-utils — so the extra members of that type
   // are never reached.
   return boundedFetch as typeof globalThis.fetch
+}
+
+/**
+ * One `fetch`, losing the race to the deadline or a disconnect.
+ *
+ * The signal still reaches the transport, so a cooperative one tears its own
+ * connection down. This race is what holds the deadline when it is not.
+ * Waiting on the transport's promise alone gives the attempt no ceiling at
+ * all: a connection stuck in DNS, in connect or in the TLS handshake may
+ * never reject, and every number in this file is then a number the wrapper
+ * reports rather than enforces. The elapsed in `firstByteTimeout` is measured
+ * against the wall clock, so an attempt that outlives its abort is reported
+ * as the time it really took, which is how an elapsed many times the sum of
+ * the ceilings reaches a log line.
+ *
+ * The body phase downstream races the same signal for the same reason. Both
+ * halves of the wait need it, because the deadline has to end the wait
+ * whatever the transport does with the signal.
+ */
+function fetchUnderSignal(
+  fetchImpl: FetchLike,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  signal: AbortSignal
+): Promise<Response> {
+  let onAbort: (() => void) | undefined
+  return new Promise<Response>((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason)
+    onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+    fetchImpl(input, init).then(response => {
+      // A response that arrives after the race is lost is abandoned, and
+      // `resolve` is already a no-op. Cancelling its body is not: an unread
+      // stream holds the connection open for the rest of the function's life,
+      // which is the cost this wrapper exists to stop paying.
+      if (signal.aborted) void response.body?.cancel().catch(() => {})
+      resolve(response)
+    }, reject)
+  }).finally(() => {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  })
 }
 
 /**

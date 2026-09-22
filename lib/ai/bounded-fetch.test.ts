@@ -68,6 +68,34 @@ function headersThenSilence(): FetchLike {
     )
 }
 
+/**
+ * Never answers and never listens for the abort: a connection stuck in DNS,
+ * in connect or in the handshake, where no response object exists yet for the
+ * body phase to race. The deadline has to end this wait without the
+ * transport's help, exactly as it does for a silent body.
+ */
+function deafToAbort(): FetchLike {
+  return () => new Promise<Response>(() => {})
+}
+
+/**
+ * Answers only once the abort has fired, with a live body: a transport that
+ * reads the cancellation as a request to finish rather than to stop.
+ */
+function answersAfterAbort(onCancel: () => void): FetchLike {
+  return (_input, init) =>
+    new Promise<Response>(resolve => {
+      init?.signal?.addEventListener(
+        'abort',
+        () =>
+          resolve(
+            new Response(new ReadableStream<Uint8Array>({ cancel: onCancel }))
+          ),
+        { once: true }
+      )
+    })
+}
+
 const encode = (text: string) => new TextEncoder().encode(text)
 
 describe('createBoundedFetch', () => {
@@ -171,6 +199,65 @@ describe('createBoundedFetch', () => {
       fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
     ).rejects.toMatchObject({ name: 'TimeoutError' })
     expect(calls).toBe(VERTEX_MAX_ATTEMPTS)
+  })
+
+  test('a transport that ignores the abort is still cut at the deadline', async () => {
+    // The headers phase has no response to race, so for a while nothing but
+    // the transport's own cooperation ended this wait. A connection stuck
+    // before any response exists does not cooperate, and the attempt then had
+    // no ceiling at all.
+    let calls = 0
+    const { fetch, retries } = harness((input, init) => {
+      calls += 1
+      return calls === 1 ? deafToAbort()(input, init) : answers(input, init)
+    })
+
+    const response = await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+
+    expect(await response.text()).toBe('ok')
+    expect(calls).toBe(2)
+    expect(retries.map(r => r.attempt)).toEqual([1])
+  })
+
+  test('the elapsed a failure reports cannot outrun its own deadlines', async () => {
+    // The reading this pins: two attempts bounded at 10 and 20 ms reporting
+    // an elapsed hundreds of times their sum, because the abort fired on time
+    // and the wait on it did not end. An elapsed far past the ceilings is not
+    // a slow model, it is a ceiling that was reported rather than enforced.
+    const { fetch } = harness(deafToAbort())
+    const started = Date.now()
+
+    const error = await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+      .then(() => new Error('the wrapper resolved instead of timing out'))
+      .catch((thrown: Error) => thrown)
+
+    expect(error.name).toBe('TimeoutError')
+    const reported = Number(/in (\d+) ms/.exec(error.message)?.[1])
+    // Loose on purpose against the harness's 30 ms of deadlines: what fails
+    // here is an unenforced ceiling, never a busy machine.
+    expect(reported).toBeLessThan(5_000)
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  test('a response that arrives after its deadline has its body cancelled', async () => {
+    // An unread stream holds the abandoned connection open for the rest of the
+    // function's life, which is the cost this wrapper exists to stop paying.
+    let cancelled = false
+    let calls = 0
+    const { fetch } = harness((input, init) => {
+      calls += 1
+      return calls === 1
+        ? answersAfterAbort(() => {
+            cancelled = true
+          })(input, init)
+        : answers(input, init)
+    })
+
+    const response = await fetch(URL_UNDER_TEST, { method: 'POST', body: BODY })
+
+    expect(await response.text()).toBe('ok')
+    expect(calls).toBe(2)
+    expect(cancelled).toBe(true)
   })
 
   test('once the first chunk has arrived, a slow body is never cut', async () => {
@@ -680,16 +767,22 @@ describe('the constants the 300 s function limit allows', () => {
     ).toBeGreaterThan(VERCEL_FUNCTION_LIMIT_MS)
   })
 
-  test('the fast bound is a hypothesis, and sits where the episode put it', () => {
-    // Healthy one-word health calls: 1 to 14 s end to end. Stalls: 80 to
-    // 110 s. Nothing has yet measured a chat step's time to first byte —
-    // `vertexFirstByteMs` on preview is what would, and until it does both
-    // this bound and the last-attempt ceiling are arithmetic over a guess.
-    expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(14_000)
+  test('the fast bound sits above the measured p99 of a healthy step', () => {
+    // 448 requests over six eval runs, 2026-09-16 to 2026-09-21 (the run ids
+    // are in bounded-fetch.ts): p95 21,742 ms, p99 26,276. A probe below p99
+    // spends a second billed generation on steps that were only slow, so the
+    // measurement is the floor.
+    expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeGreaterThan(26_276)
+    // And below the point where a stall is unmistakable: healthy calls on
+    // this deployment never approached 80 s, stalled ones sat at 80 to 110.
     expect(VERTEX_FIRST_BYTE_TIMEOUT_MS).toBeLessThan(80_000)
   })
 
-  test('the last attempt is given the remainder of the per-call budget', () => {
+  test('the last attempt clears the slowest first byte measured', () => {
+    // 33,958 ms in the same sample, on a last attempt, and that request
+    // answered. A ceiling under it turns a slow answer into no answer, which
+    // is the one outcome this attempt has no retry to cover.
+    expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(33_958)
     expect(VERTEX_LAST_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(
       VERTEX_FIRST_BYTE_TIMEOUT_MS
     )
