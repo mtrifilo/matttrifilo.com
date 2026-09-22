@@ -14,6 +14,7 @@ import {
   announcementFor,
   discardsQuestion,
   joinTextParts,
+  showsFollowUps,
   toAnswerView,
   toChatErrorView,
   type AnswerView,
@@ -247,6 +248,7 @@ export function AssistantChat() {
                   </Message>
                 )
               }
+              const view = toAnswerView(message)
               return (
                 <Message from="assistant" key={message.id}>
                   <MessageContent>
@@ -260,17 +262,18 @@ export function AssistantChat() {
                       // Earlier ones show the duration the server sent with
                       // them, which is on the message itself.
                       elapsedMs={isLast ? elapsedMs : 0}
-                      // The row belongs to the answer the conversation has
-                      // arrived at. An earlier turn's proposals were answered
-                      // or passed over, and a run the visitor stopped is not
-                      // a place to be offered more.
                       onFollowUp={
-                        isLast && status === 'ready' && !stopped
+                        showsFollowUps({
+                          isLast,
+                          ready: status === 'ready',
+                          stopped,
+                          view,
+                        })
                           ? ask
                           : undefined
                       }
                       pending={isLast && busy}
-                      view={toAnswerView(message)}
+                      view={view}
                     />
                   </MessageContent>
                 </Message>

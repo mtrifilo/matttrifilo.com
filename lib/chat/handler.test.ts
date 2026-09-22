@@ -1301,9 +1301,9 @@ describe('the follow-ups the answer proposes', () => {
     expect(metadataFrom(body).followUps).toEqual(FOLLOW_UPS)
   })
 
-  test('a malformed proposal is dropped rather than offered', async () => {
-    // Model output about to be drawn as a button: a link, an address and an
-    // instruction are not questions a hiring manager asked.
+  test('a malformed proposal is dropped, and the good ones still stand', async () => {
+    // Model output about to be drawn as a button: a link is not a question a
+    // hiring manager asked. The proposals around it are still offered.
     const model = modelOf(
       reads('resume'),
       answers(
@@ -1312,6 +1312,21 @@ describe('the follow-ups the answer proposes', () => {
           'What confounders does Matt name?'
         )
       )
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toEqual([
+      'What confounders does Matt name?',
+    ])
+  })
+
+  test('a run that proposed nothing well formed carries no key at all', async () => {
+    const model = modelOf(
+      reads('resume'),
+      answers(withFollowUps('Read more at https://example.com?'))
     )
     const response = await handlerWith(model)(
       post({ messages: [uiMessage('user', QUESTION)] })

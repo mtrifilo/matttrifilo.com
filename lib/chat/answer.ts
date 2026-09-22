@@ -147,20 +147,31 @@ export function stripSourcesTrailer(text: string): string {
  *
  * The marker line and the questions under it are a channel to this code, not
  * to the reader: the row the visitor sees is drawn from the validated list on
- * the message metadata. So the whole block goes, from the last line that
- * opens with the literal prefix. The policy says nothing follows those
- * questions, and taking the block wholesale is what keeps a half-written
- * proposal off the screen while the rest of it streams in.
+ * the message metadata. So the whole block goes, from the FIRST marker line
+ * on. First and not last, because a model that writes the marker twice would
+ * otherwise leave the earlier block on screen as prose, which is the one
+ * thing taking the block wholesale exists to prevent.
  */
 export function stripFollowUpsTrailer(text: string): string {
-  const marker = lastFollowUpsMarker(text.split('\n'))
+  const lines = text.split('\n')
+  const marker = followUpsMarker(lines)
   if (marker < 0) return text
-  return text.split('\n').slice(0, marker).join('\n').trimEnd()
+  return lines.slice(0, marker).join('\n').trimEnd()
 }
 
-/** Both trailers, in the order they are written. */
+/**
+ * Both trailers, in the order they are written.
+ *
+ * The middle step is the window between them. Text reaches the browser a step
+ * at a time rather than a token at a time, but the chunks of one step still
+ * arrive as separate frames, so there is a paint or two in which the marker
+ * is half written and the citation line is no longer the last line. Without
+ * it the raw document ids show for those frames.
+ */
 export function stripTrailers(text: string): string {
-  return stripSourcesTrailer(stripFollowUpsTrailer(text))
+  return stripSourcesTrailer(
+    stripPartialFollowUpsMarker(stripFollowUpsTrailer(text))
+  )
 }
 
 /**
@@ -168,34 +179,108 @@ export function stripTrailers(text: string): string {
  *
  * Everything below the marker is model output that will be drawn as a button
  * and, when tapped, sent back as the next question, so it is treated the way
- * any other untrusted text is: read as lines, judged one at a time, and kept
- * only if it is the shape the policy asked for. Scanning stops at the first
- * proposal that is not, rather than skipping it, so prose the model added
- * after its list can never be promoted into a pill.
+ * any other untrusted text is: read as lines and judged one at a time.
+ *
+ * Two failures are distinguished on purpose. A line that is not a question at
+ * all is the model writing past its list, and nothing below it is a proposal
+ * either, so scanning stops there: prose can never be promoted into a pill. A
+ * line that is a question but breaks one of the other rules is dropped on its
+ * own, because one stray character is not a reason to withhold the proposals
+ * around it.
  */
 export function parseFollowUps(text: string): string[] {
   const lines = text.split('\n')
-  const marker = lastFollowUpsMarker(lines)
+  const marker = followUpsMarker(lines)
   if (marker < 0) return []
-  return takeFollowUps([
-    // The policy puts the questions on the lines after the marker, but a
-    // model that starts the first one on the marker line has still proposed
-    // it, and dropping it would cost the visitor a pill for a formatting slip.
-    lines[marker].replace(FOLLOW_UPS_LINE, ''),
-    ...lines.slice(marker + 1),
-  ])
+  return takeFollowUps(lines.slice(marker + 1))
 }
 
 /**
- * Whether one line is a proposal a visitor may be offered.
+ * Whether a finished answer shows a row of proposals (MTC-41).
  *
- * Every clause is about what a hiring manager's next question looks like, and
- * every one of them also closes a way for model output to become something
- * other than a question in the visitor's hands: a link to follow, an address
- * to write to, markup the renderer might act on, or a line of instructions
- * dressed as a suggestion.
+ * The conditions live here, together and testable, rather than as a
+ * expression in the transcript: which answer may offer more is a decision
+ * about the conversation, and it was split across two components before it
+ * was written down.
+ *
+ * `truncated` is named as well as `incomplete` even though the server always
+ * sets both: this view is the browser's own reading of the answer, and it
+ * should not depend on a rule enforced in another module.
  */
-export function isWellFormedFollowUp(question: string): boolean {
+export interface FollowUpRowState {
+  view: AnswerView
+  /** This is the answer the conversation has arrived at. */
+  isLast: boolean
+  /** Nothing is in flight: no question sent, no stream open, no error. */
+  ready: boolean
+  /** The visitor stopped the most recent run. */
+  stopped: boolean
+}
+
+export function showsFollowUps({
+  view,
+  isLast,
+  ready,
+  stopped,
+}: FollowUpRowState): boolean {
+  if (!isLast || !ready || stopped) return false
+  if (view.incomplete || view.truncated) return false
+  // Proposals under an empty bubble would be a row of questions about an
+  // answer the visitor never got.
+  if (view.text.trim().length === 0) return false
+  return view.followUps.length > 0
+}
+
+/**
+ * Index of the line that opens the follow-ups block, or -1.
+ *
+ * The marker has to be alone on its line, which is what the policy asks for
+ * and what keeps an ordinary sentence opening "Follow-ups: ..." from
+ * truncating a real answer. Around that it is read generously: a model that
+ * bolds the label or shouts it has still written the trailer, and the block
+ * has to come off the screen either way.
+ */
+function followUpsMarker(lines: readonly string[]): number {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (FOLLOW_UPS_MARKER_LINE.test(lines[index])) return index
+  }
+  return -1
+}
+
+/**
+ * A trailing line that is the marker only half written.
+ *
+ * Taken only when the line above it is the citation line, which is the one
+ * place this can happen and the only place it matters: without it the raw
+ * document ids stop being the final line for a frame and render as prose.
+ */
+function stripPartialFollowUpsMarker(text: string): string {
+  const trimmed = text.trimEnd()
+  const lastBreak = trimmed.lastIndexOf('\n')
+  if (lastBreak < 0) return text
+  const lastLine = trimmed.slice(lastBreak + 1).trim()
+  if (lastLine.length === 0) return text
+  if (!FOLLOW_UPS_TRAILER_PREFIX.startsWith(lastLine)) return text
+  const rest = trimmed.slice(0, lastBreak).trimEnd()
+  if (!TRAILER_LINE.test(rest.slice(rest.lastIndexOf('\n') + 1))) return text
+  return rest
+}
+
+/**
+ * Whether one question is a proposal a visitor may be offered.
+ *
+ * The length bounds are what a pill can carry and what a real question is
+ * longer than. The rest close the ways model output could become something
+ * other than a question in the visitor's hands: a link to follow, an address
+ * to write to, markup the renderer might act on, or characters that make a
+ * pill read as one thing and send another.
+ *
+ * It does not, and cannot, tell a question from an instruction phrased as
+ * one. Nothing here needs to: a tapped pill arrives at the route as an
+ * ordinary visitor question, which the policy already treats as untrusted
+ * text with no authority over anything.
+ */
+function isWellFormedFollowUp(question: string): boolean {
   if (
     question.length < FOLLOW_UP_MIN_CHARS ||
     question.length > FOLLOW_UP_MAX_CHARS
@@ -205,38 +290,47 @@ export function isWellFormedFollowUp(question: string): boolean {
   if (!question.endsWith('?')) return false
   if (question.includes('@')) return false
   if (MARKDOWN_CHARACTER.test(question)) return false
-  if (LINK.test(question)) return false
-  if (CONTROL_CHARACTER.test(question)) return false
+  if (SCHEME_URL.test(question)) return false
+  if (HOST_PATH_URL.test(question)) return false
+  if (WWW_URL.test(question)) return false
+  if (INVISIBLE_CHARACTER.test(question)) return false
+  if (TAG_CHARACTER.test(question)) return false
   return true
-}
-
-/** Index of the last line that opens the follow-ups block, or -1. */
-function lastFollowUpsMarker(lines: readonly string[]): number {
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (FOLLOW_UPS_LINE.test(lines[index])) return index
-  }
-  return -1
 }
 
 /**
  * The first few well-formed, distinct proposals, in the order they were
- * written. Blank lines are skipped, because models space their lists out;
- * anything else that fails the check ends the list.
+ * written. Blank lines are skipped, because models space their lists out.
+ *
+ * One function guards both ends of the wire: it reads the model's lines on
+ * the server and it reads the list back off the metadata in the browser, so a
+ * proposal is judged by the same rules wherever it is drawn.
  */
 function takeFollowUps(lines: readonly string[]): string[] {
   const kept: string[] = []
   const seen = new Set<string>()
   for (const line of lines) {
     if (kept.length === FOLLOW_UPS_MAX) break
-    const question = line.replace(LIST_MARKER, '').trim()
+    const question = unwrapQuotes(line.replace(LIST_MARKER, '').trim())
     if (question.length === 0) continue
-    if (!isWellFormedFollowUp(question)) break
-    const key = question.toLowerCase()
+    if (!question.endsWith('?')) break
+    if (!isWellFormedFollowUp(question)) continue
+    const key = question.toLowerCase().replace(/\s+/g, ' ')
     if (seen.has(key)) continue
     seen.add(key)
     kept.push(question)
   }
   return kept
+}
+
+/** One pair of wrapping quotes, which a model adds and a pill should not. */
+function unwrapQuotes(text: string): string {
+  for (const [open, close] of QUOTE_PAIRS) {
+    if (text.length > 1 && text.startsWith(open) && text.endsWith(close)) {
+      return text.slice(1, -1).trim()
+    }
+  }
+  return text
 }
 
 /** The strings in a value that arrived as JSON, and nothing else. */
@@ -245,17 +339,43 @@ function stringsIn(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string')
 }
 
-const FOLLOW_UPS_LINE = new RegExp(`^\\s*${FOLLOW_UPS_TRAILER_PREFIX}`)
+/**
+ * The marker line, read generously.
+ *
+ * Written out rather than built from FOLLOW_UPS_TRAILER_PREFIX: a prefix
+ * containing a regular-expression character would otherwise change what this
+ * matches without anyone editing it. answer.test.ts pins the two together.
+ */
+const FOLLOW_UPS_MARKER_LINE = /^[\s#>]*\**\s*follow[\s-]?ups\s*:\s*\**\s*$/i
 
 /** A bullet or number a model puts in front of a list item. */
 const LIST_MARKER = /^\s*(?:[-*•]|\d+[.)])\s+/
 
+const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
+  ['"', '"'],
+  ['“', '”'],
+  ["'", "'"],
+]
+
 /** Characters markdown gives a meaning, so a pill cannot smuggle one in. */
 const MARKDOWN_CHARACTER = /[*_`[\]<>|#~\\]/
 
-const LINK = /https?:\/\/|www\.|mailto:/i
-
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
+/*
+ * The link and invisible-character shapes, kept the same as the ones
+ * lib/chat/github-activity.ts applies to third-party text, and for the
+ * reasons its comments give: any scheme rather than only http, a bare host
+ * with a path because that is the shape a renderer turns into a live anchor,
+ * and the bidi and zero-width ranges because they let rendered text differ
+ * from the bytes behind it. They are written again rather than imported
+ * because that module reaches lib/knowledge through ./validate and this one
+ * is in the client bundle. answer.test.ts holds them to the same cases.
+ */
+const SCHEME_URL = /\b[a-z][\w+.-]*:\/\//i
+const HOST_PATH_URL = /\b[\w-]+(?:\.[\w-]+)+\//
+const WWW_URL = /\bwww\./i
+const INVISIBLE_CHARACTER =
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufff9-\ufffb\ufeff]/
+const TAG_CHARACTER = /[\u{E0000}-\u{E007F}]/u
 
 /** Which notice, if any, sits under an answer once its run has ended. */
 export type AnswerNotice = 'truncated' | 'incomplete'

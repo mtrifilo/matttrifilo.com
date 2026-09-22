@@ -261,27 +261,52 @@
  * Nothing loops here: the pills are this answer's proposals, so the row is an
  * ordinary scroll container the visitor drags, at every width.
  *
- * It grows into place rather than arriving at full height, so the answer
- * above it is not jolted at the moment the run ends. @starting-style is what
- * gives a freshly mounted element a height to grow from; a browser without it
- * simply shows the row at once, which is also what a visitor who asked for no
- * motion gets. The cap is far above what one line of pills needs, so it
- * bounds the transition rather than the content.
+ * It fades at the right edge only, not both. The ticker is always mid-loop,
+ * so its left gradient always has content under it; this row opens at scroll
+ * zero and stays there until the visitor drags it, so a left gradient would
+ * sit permanently over the first pill. The approved frame clips the right
+ * edge and shows the first pill whole.
+ *
+ * `overscroll-behavior-x` keeps a drag that reaches the start of the row from
+ * becoming the browser's back gesture, which on a phone would leave the page.
  */
 .follow-up-row {
   overflow-x: auto;
   overflow-y: hidden;
-  max-height: 12rem;
-  opacity: 1;
-  transition:
-    max-height 180ms ease-out,
-    opacity 180ms ease-out;
+  overscroll-behavior-x: contain;
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - var(--edge-fade)),
+    transparent 100%
+  );
+}
+
+/*
+ * The row's arrival, animated as its real height.
+ *
+ * `0fr` to `1fr` on a one-row grid is what animates the height the content
+ * actually has, so the transcript above is carried rather than jolted when
+ * the run ends. A max-height would reach the content's height in the first
+ * fraction of the duration and read as a snap.
+ *
+ * @starting-style is what gives a freshly mounted element a height to grow
+ * from. A browser without it shows the row at once, which is also what a
+ * visitor who asked for no motion gets.
+ */
+.follow-up-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 180ms ease-out;
+}
+
+.follow-up-reveal > * {
+  min-height: 0;
 }
 
 @starting-style {
-  .follow-up-row {
-    max-height: 0;
-    opacity: 0;
+  .follow-up-reveal {
+    grid-template-rows: 0fr;
   }
 }
 
@@ -329,7 +354,7 @@
     display: none;
   }
   /* The row is still offered; it just stops growing into place. */
-  .follow-up-row {
+  .follow-up-reveal {
     transition: none;
   }
 }

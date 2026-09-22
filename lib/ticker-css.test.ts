@@ -99,20 +99,65 @@ describe('the shared edge fade', () => {
     for (const value of declared) expect(value).toMatch(/^\d+(?:\.\d+)?px$/)
   })
 
+  test('the fade width is what the scroll padding and the mask use', () => {
+    // Declaring the property and then hard-coding a different number in
+    // either of the two places that consume it is a silent half-fix: the
+    // gradient and the focus offset would stop agreeing.
+    expect(faded).toContain(`scroll-padding-inline: var(${EDGE_FADE_PROPERTY})`)
+    expect(faded).toContain(`var(${EDGE_FADE_PROPERTY})`)
+  })
+
   test('both rows of pills wear the class that declares it', () => {
     // The fade, the scroll padding and the property the component reads all
     // live on this one class now (MTC-41). A row that renders without it
     // loses its gradient and puts a focused pill under the edge, and neither
     // failure is visible to any other test here.
     for (const file of ['starter-ticker.tsx', 'assistant-answer.tsx']) {
-      const source = readFileSync(
-        new URL(`../components/assistant/${file}`, import.meta.url),
-        'utf8'
-      )
-      expect(source).toContain('edge-faded-row')
+      expect(componentSource(file)).toContain('edge-faded-row')
     }
   })
 })
+
+describe('the follow-up row', () => {
+  test('scrolls, and keeps a drag from becoming the back gesture', () => {
+    const row = ruleFor('.follow-up-row {')
+    expect(row).toContain('overflow-x: auto')
+    expect(row).toContain('overscroll-behavior-x: contain')
+  })
+
+  test('fades the right edge only, where the frame clips it', () => {
+    // The row opens at scroll zero and stays there until it is dragged, so
+    // the shared both-ends gradient would sit permanently over the first
+    // pill. See the rule's own comment.
+    const row = ruleFor('.follow-up-row {')
+    expect(row).toContain('mask-image: linear-gradient(')
+    expect(row).toContain(`black 0,`)
+  })
+
+  test('the reveal animates the height the content actually has', () => {
+    // A max-height transition reaches the content's height in the first
+    // fraction of its duration and reads as a snap; this is the shape that
+    // does not.
+    const reveal = ruleFor('.follow-up-reveal {')
+    expect(reveal).toContain('grid-template-rows: 1fr')
+    expect(reveal).toContain('transition: grid-template-rows')
+    expect(css).toContain('grid-template-rows: 0fr')
+    expect(css).toContain('@starting-style')
+  })
+
+  test('the component renders both halves of it', () => {
+    const source = componentSource('assistant-answer.tsx')
+    expect(source).toContain('follow-up-reveal')
+    expect(source).toContain('follow-up-row')
+  })
+})
+
+function componentSource(file: string): string {
+  return readFileSync(
+    new URL(`../components/assistant/${file}`, import.meta.url),
+    'utf8'
+  )
+}
 
 describe('the state flags the component writes', () => {
   test('the stylesheet reads the attributes the component sets', () => {

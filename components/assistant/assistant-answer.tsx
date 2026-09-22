@@ -3,7 +3,7 @@
 import { Check, Copy, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { MessageResponse } from '@/components/ai-elements/message'
-import { Suggestion } from '@/components/ai-elements/suggestion'
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { noticeFor, type AnswerView } from '@/lib/chat/answer'
 import { IncompleteNotice, TruncatedNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
@@ -35,9 +35,9 @@ export interface AssistantAnswerProps {
   /** Copy and regenerate are offered on the last answer only, once it is done. */
   actions?: { onRegenerate: () => void }
   /**
-   * Asks one of the proposed follow-ups. Given only for the last answer of a
-   * run that ended on its own, so an earlier turn keeps no row and a run the
-   * visitor stopped offers nothing to carry on with.
+   * Asks one of the proposed follow-ups, when this answer is one that offers
+   * any. Present or absent is the whole decision, and `showsFollowUps` in
+   * lib/chat/answer.ts is where it is made and tested.
    */
   onFollowUp?: (question: string) => void
 }
@@ -68,10 +68,7 @@ export function AssistantAnswer({
         <AnswerActions onRegenerate={actions.onRegenerate} text={view.text} />
       )}
 
-      {/* A decline carries no proposals, and a run that did not finish is not
-          asked to suggest anything, so both of those end up here as an empty
-          list rather than as conditions of their own. */}
-      {onFollowUp && !pending && !view.incomplete && (
+      {onFollowUp && (
         <FollowUpRow onPick={onFollowUp} questions={view.followUps} />
       )}
     </>
@@ -84,14 +81,15 @@ export function AssistantAnswer({
  *
  * It is the approved frame's row: a single line of pills between the answer
  * and the composer, clipped at the right edge, at every width. It shares the
- * starter ticker's edge fades and its scroll padding, so a pill reached by
+ * starter ticker's fade width and its scroll padding, so a pill reached by
  * keyboard is scrolled clear of the gradient rather than under it, and it
  * borrows none of the motion: there is no track and no loop, only a scroll
  * box the visitor drags.
  *
- * It grows into place instead of appearing at full height, so the answer
- * above it is not jolted the moment the run ends. app/globals.css owns that,
- * and drops it for a visitor who asked for no motion.
+ * The reveal wrapper is what keeps the answer above from being jolted when
+ * the run ends: the row's real height is what animates, rather than the row
+ * appearing at full size in one frame. app/globals.css owns that, and drops
+ * it for a visitor who asked for no motion.
  */
 function FollowUpRow({
   questions,
@@ -103,25 +101,28 @@ function FollowUpRow({
   if (questions.length === 0) return null
 
   return (
-    <div
-      aria-label={FOLLOW_UPS_LABEL}
-      // The vertical padding is room for a focus ring the row would
-      // otherwise clip; the negative margin gives it back to the layout.
-      className="edge-faded-row follow-up-row -my-1 w-full py-1"
-      role="group"
-    >
-      <div className="flex w-max items-start gap-2">
-        {questions.map(question => (
-          // One line each, as the frame draws them: the row scrolls rather
-          // than growing a second line, and a proposal long enough to need
-          // one is the row's problem, not the answer's.
-          <Suggestion
-            className="max-w-none whitespace-nowrap"
-            key={question}
-            onClick={onPick}
-            suggestion={question}
-          />
-        ))}
+    // The negative margin sits out here so the reveal animates the row's own
+    // box; the padding inside the row is room for a focus ring it would
+    // otherwise clip.
+    <div className="follow-up-reveal -my-1">
+      <div
+        aria-label={FOLLOW_UPS_LABEL}
+        className="edge-faded-row follow-up-row w-full py-1"
+        role="group"
+      >
+        <Suggestions className="w-max flex-nowrap">
+          {questions.map(question => (
+            // One line each, as the frame draws them: the row scrolls rather
+            // than growing a second line, and a proposal long enough to need
+            // one is the row's problem, not the answer's.
+            <Suggestion
+              className="max-w-none whitespace-nowrap"
+              key={question}
+              onClick={onPick}
+              suggestion={question}
+            />
+          ))}
+        </Suggestions>
       </div>
     </div>
   )
