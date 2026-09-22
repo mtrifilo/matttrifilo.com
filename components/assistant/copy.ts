@@ -25,19 +25,54 @@ export const ASSISTANT_INTRO =
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
 /**
- * Starter questions. The homepage panel offers short ones that fit a card;
- * /ask has room for the fuller questions the assistant answers best.
+ * The starter questions both surfaces offer (MTC-39).
+ *
+ * One pool, one order, shown by the ticker on the homepage panel and at
+ * /ask. The order is the product decision: the questions a hiring manager
+ * most wants answered lead, then the depth, then the person. Nothing here is
+ * shuffled per load, so the two surfaces stay hydratable and a visitor who
+ * came from the homepage meets a different part of the row at /ask only
+ * because the ticker starts it at a different offset.
+ *
+ * Every question here has to draw a sourced answer rather than a decline,
+ * and evals/suites/golden.yaml is the only place that is measured. Its
+ * coverage of this pool is partial: the second tranche has a golden each,
+ * most of the first tranche is covered by a golden on the same subject, and
+ * a handful are not covered at all. Nothing enforces the correspondence, so
+ * a question added here needs its golden added by hand.
+ *
+ * The cap in copy.test.ts is the pill's constraint, not a style rule: the
+ * ticker renders each question on one line, so a longer one would widen the
+ * row past what a 390px screen can read.
  */
-export const HOME_STARTER_QUESTIONS = [
-  "What does Matt's team own?",
-  'How does he use AI coding agents?',
-  'What did he ship recently?',
-] as const
-
-export const ASK_STARTER_QUESTIONS = [
-  'What did Matt actually do on the AI Email Engagement Summary?',
-  "How did his team's delivery change after adopting AI coding agents?",
-  'What does the Email Reliability team own at Thryv?',
+export const STARTER_QUESTIONS = [
+  'How does Matt use AI coding agents?',
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
+  "What measurable results did Matt's team get from adopting AI coding agents?",
+  'How does Matt keep quality high when AI agents write most of the code?',
+  'How much code does Matt ship himself as an engineering manager?',
+  "What does Matt's Email Reliability team own at Thryv?",
+  'What did Matt ship recently?',
+  'What is the AI Email Engagement Summary feature Matt built?',
+  'What is Symphony, the agent orchestrator Matt built, and what did it automate?',
+  "How did Matt's team move to independent deploys, and how long did it take?",
+  'How does Matt run 24/7 on-call for an email service provider?',
+  'How does Matt prepare email sending for Black Friday and Cyber Monday?',
+  'How did Matt handle the February 2024 cloud-provider outage?',
+  "What was Matt's part in breaking the Keap monolith into services?",
+  "How does Matt think the engineer's job changes when agents write the code?",
+  "What is Matt's advice to junior engineers in 2026?",
+  'What languages, frameworks, and infrastructure do Matt and his team use?',
+  'What is decant, the CLI Matt open-sourced?',
+  'What is Psychic Homily, and what is it built with?',
+  'What awards and recognition has Matt received?',
+  'Where is Matt based, and is he open to relocating?',
+  'What did Matt do before software engineering?',
+  'How has Matt led a team through an acquisition?',
+  'How does Matt manage the cost of AI tooling?',
+  'How did Matt handle resistance to AI tools on the team?',
+  'What does Matt think good engineering leadership looks like?',
+  'How does Matt build a team that keeps running without him?',
 ] as const
 
 /**

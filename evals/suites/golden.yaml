@@ -1077,3 +1077,196 @@
           value: *r32
         - type: llm-rubric
           value: *r32
+
+# The five questions the starter-question pool's second tranche adds
+# (MTC-39). They ship only because the drafts that answer them are in the
+# corpus, and these are what prove each one draws a sourced answer rather
+# than a decline.
+
+- description: 'golden: leading a team through the acquisition'
+  vars:
+    question: How has Matt led a team through an acquisition?
+  metadata:
+    suite: golden
+    expectReads: [post-acquisition-integration]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - Salesforce
+        - compliance
+        - integration
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r33 >-
+            The answer describes the integration work the acquisition
+            required, naming the move of compliance case handling to the
+            parent company's Salesforce, and at least one mechanism Matt put
+            in place such as the per-target configuration toggle, the
+            field-parity analysis, or the gap-annotation convention that let
+            the work be handed to another engineer. It is written about Matt
+            in the third person.
+        - type: llm-rubric
+          value: *r33
+        - type: llm-rubric
+          value: *r33
+
+- description: 'golden: the cost of AI tooling'
+  vars:
+    question: How does Matt manage the cost of AI tooling?
+  metadata:
+    suite: golden
+    expectReadsAny: [ai-tooling-leadership, team-throughput-study-2025-2026]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - seat
+        - licence
+        - license
+        - spend
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r34 >-
+            The answer says Matt owns his organisation's AI tooling access
+            and spend, and gives at least one concrete decision behind that:
+            a trial that concluded against buying a third-party agent, or
+            giving up his own seat on the other editor to pay for the first
+            enterprise licences. It is written about Matt in the third
+            person.
+        - type: llm-rubric
+          value: *r34
+        - type: llm-rubric
+          value: *r34
+
+- description: 'golden: engineers who were wary of the AI tools'
+  vars:
+    question: How did Matt handle resistance to AI tools on the team?
+  metadata:
+    suite: golden
+    expectReadsAny: [ai-tooling-leadership, engineering-philosophy]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - trial
+        - review
+        - adoption
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r35 >-
+            The answer describes how Matt won engineers over rather than
+            ordering them: evaluating tools honestly, including a trial that
+            concluded against purchase; adopting first and in public through
+            talks, demos, and a forum; and keeping a person on the merge
+            button so the automation was accepted rather than resisted. It
+            is written about Matt in the third person, and it does not invent
+            an incident the material does not describe.
+        - type: llm-rubric
+          value: *r35
+        - type: llm-rubric
+          value: *r35
+
+- description: 'golden: what good engineering leadership looks like'
+  vars:
+    question: What does Matt think good engineering leadership looks like?
+  metadata:
+    suite: golden
+    expectReads: [engineering-philosophy]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - hands-on
+        - grow
+        - ownership
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r36 >-
+            The answer gives at least two of Matt's stated leadership
+            positions: that hands-on coding is a feature of senior technical
+            leadership rather than a bug, that growing people compounds,
+            that delivery commitments are kept on time and at quality and
+            good news is shared fast, or that a leader writes the business
+            case for their own systems. It is written about Matt in the
+            third person.
+        - type: llm-rubric
+          value: *r36
+        - type: llm-rubric
+          value: *r36
+
+- description: 'golden: a team that keeps running without him'
+  vars:
+    question: How does Matt build a team that keeps running without him?
+  metadata:
+    suite: golden
+    expectReadsAny:
+      - owned-systems-and-operations
+      - plugin-marketplaces-and-sme-knowledge-bases
+      - engineering-philosophy
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - runbook
+        - knowledge base
+        - handoff
+        - any engineer
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r37 >-
+            The answer names the mechanisms that make the work survive
+            without Matt: permanent runbooks and the on-call knowledge base
+            written by the whole rotation, the shift-handoff skill,
+            per-service knowledge bases any engineer or agent can load, or
+            the deployment gates that let any engineer ship to production.
+            It is written about Matt in the third person.
+        - type: llm-rubric
+          value: *r37
+        - type: llm-rubric
+          value: *r37
