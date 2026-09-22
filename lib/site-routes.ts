@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { ASSISTANT_EVALS_TITLE } from '@/components/assistant/copy'
 
 type ChangeFrequency = NonNullable<
   MetadataRoute.Sitemap[number]['changeFrequency']
@@ -13,6 +14,11 @@ export interface SiteRoute {
   assistant?: true
   /** Keep the page in the sitemap but out of the header nav. */
   hideFromNav?: boolean
+  /**
+   * The page is served whatever happens, but it is only worth offering to a
+   * search engine once there is a published eval run on it.
+   */
+  needsPublishedEvalRun?: true
 }
 
 /**
@@ -35,6 +41,19 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'monthly',
     priority: 0.7,
     assistant: true,
+  },
+  {
+    // The assistant's published eval results (MTC-44). Out of the nav
+    // because it is reached from the line under the chat pane, by someone
+    // who is already looking at the assistant and wants to know what backs
+    // it; in the sitemap because it is a page worth finding.
+    href: '/ask/evals',
+    label: ASSISTANT_EVALS_TITLE,
+    changeFrequency: 'monthly',
+    priority: 0.4,
+    assistant: true,
+    hideFromNav: true,
+    needsPublishedEvalRun: true,
   },
   {
     href: '/open-source',
@@ -73,4 +92,19 @@ export function visibleSiteRoutes(options: {
   return options.assistantDisabled
     ? siteRoutes.filter(route => !route.assistant)
     : siteRoutes
+}
+
+/**
+ * The routes worth submitting to a search engine. Narrower than the served
+ * site: the eval results page is real in both states, but until a run is
+ * published its whole body is a sentence saying there is none, and the line
+ * under the chat pane withholds its link for the same reason.
+ */
+export function sitemapRoutes(options: {
+  assistantDisabled: boolean
+  evalResultsPublished: boolean
+}): readonly SiteRoute[] {
+  return visibleSiteRoutes(options).filter(
+    route => options.evalResultsPublished || !route.needsPublishedEvalRun
+  )
 }

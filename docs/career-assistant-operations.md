@@ -139,7 +139,7 @@ Locally, during development, by decision of 2026-09-21 (Matt): a full run on eve
 
 `.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change). It dispatches only a ref in this repository and runs the workflow file at that ref with `id-token: write`, so never dispatch it on a branch whose `.github/` or `evals/` changes you have not read: a contributor's branch is evaluated by cherry-picking its content changes onto a branch you own, or by reviewing those two directories first. It is not a required check and must not become one.
 
-Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, so a later ticket can publish it on the site. `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
+Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/summary.json`, both gitignored (in CI also uploaded as the `evals` workflow artifact, plus the per-suite table in the job summary). `summary.json` has a stable shape, which is the shape the site publishes (see "Publishing a run" below). `retried` counts the tests whose first attempt was lost to a stalled Vertex connection and was sent again, which is the difference between a bad few minutes upstream and a real regression:
 
 ```json
 {
@@ -151,6 +151,32 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
   "retried": 0
 }
 ```
+
+### Publishing a run (MTC-44)
+
+The site publishes eval results at `/ask/evals`, linked from the line under the chat pane. It reads them from `evals/results/`, which is committed: one file per recorded run, named `<YYYY-MM-DD>-<7-char sha>.json`, holding exactly the `summary.json` above.
+
+After a local `bun run evals` that accompanies a corpus, prompt or suite change:
+
+```
+git commit ...                   # the change the run covers, first
+bun run evals:publish            # writes evals/results/<date>-<sha>.json
+git add evals/results/<the file it named>
+```
+
+Commit the tested change **before** publishing. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`; with the change still uncommitted that names its parent, which is not the code that ran. The script warns when the working copy is dirty for exactly this reason.
+
+Commit the record in the same pull request as the change. Older files stay: the page shows the newest run and a history of the last ten, so a reader can see the trend. A committed record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists. Two runs on the same day at the same commit collide on the name: if the earlier file has not been committed yet, delete it and publish again; if it has, it stands.
+
+What else it refuses: a summary whose totals are missing, whose suite rows do not add up to its totals row, or that is otherwise not an eval summary (the site would skip such a record at build time anyway), and a summary that can name no commit at all. The record it writes is built field by field rather than copied, so a new field in `summary.json` is published only when someone adds it to `evals/publish.ts` on purpose; `results.json`, which holds every question and every answer, is never the thing being copied.
+
+`promptfooVersion` is read from the installed `node_modules/promptfoo` when the summary is written, so the record names the promptfoo that actually ran. Records written before that was recorded carry no version and the page omits the field.
+
+One caveat about imported records: a summary produced by a `pull_request`-triggered CI run records `GITHUB_SHA`, which for that event is GitHub's synthetic merge commit rather than a commit in the branch's history. Records published from local runs do not have this problem, and local runs are how the suites run now.
+
+The page renders aggregates only: suite, passed, total, the run date, the commit, the model id, the promptfoo version, the retry count, and a sentence per suite on what it checks. No question, no answer and no grader rationale is published; the suite definitions in `evals/suites/` are the public detail. `app/ask/evals/suite-notes.test.ts` fails when a suite in `evals/suites/`, or in a published record, has no sentence, and when a sentence describes neither, so a new suite cannot ship as an unexplained row and a deleted one cannot leave its sentence behind. Nothing is published for an assistant that is switched off: with `CHAT_DISABLED=1` the page is a 404 and the link is not rendered, exactly like `/ask`. With no record in `evals/results/` the page says there is no published run yet and the link is not rendered.
+
+A summary that never reaches `evals/results/` is not published; the page shows the newest run that did, dated, so a long gap is visible rather than hidden.
 
 ### A red run
 

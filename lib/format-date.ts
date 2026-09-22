@@ -1,5 +1,6 @@
 /**
- * Formats a `YYYY-MM-DD` frontmatter date for display.
+ * Formats a `YYYY-MM-DD` frontmatter date, or a full ISO timestamp, for
+ * display.
  *
  * `new Date('2026-03-01')` parses as UTC midnight, so formatting in a
  * timezone west of UTC would render February 28. Pinning the output

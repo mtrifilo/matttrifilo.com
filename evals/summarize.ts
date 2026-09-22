@@ -40,11 +40,28 @@ if (!existsSync(resultsPath)) {
   process.exit(1)
 }
 
+/**
+ * The promptfoo that ran, read from the installed package rather than from
+ * the version range in package.json, so the record names what actually ran.
+ * A summary written where it cannot be read carries no version at all.
+ */
+function installedPromptfooVersion(): string | undefined {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(resolve('node_modules/promptfoo/package.json'), 'utf8')
+    ) as { version?: unknown }
+    return typeof manifest.version === 'string' ? manifest.version : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsFile
 const summary = summarise({
   results,
   commit: process.env.GITHUB_SHA ?? 'local',
   ranAt: new Date().toISOString(),
+  promptfooVersion: installedPromptfooVersion(),
 })
 
 mkdirSync(dirname(summaryPath), { recursive: true })

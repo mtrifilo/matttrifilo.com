@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
+import { EvalsPublishedProvider } from '@/components/assistant/evals-published'
 import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { getAllBlogPosts } from '@/lib/blog'
+import { hasPublishedEvalRun } from '@/lib/evals/results'
 import { formatDate } from '@/lib/format-date'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
 
@@ -57,7 +59,9 @@ export default function Home() {
             Submitting from here opens /ask with the answer already coming. */}
         {!isChatDisabled() && (
           <div className="mb-16">
-            <HomeAssistantPanel />
+            <EvalsPublishedProvider published={hasPublishedEvalRun()}>
+              <HomeAssistantPanel />
+            </EvalsPublishedProvider>
           </div>
         )}
 

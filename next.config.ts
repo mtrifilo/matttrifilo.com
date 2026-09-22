@@ -4,19 +4,25 @@ import { withBotId } from 'botid/next/config'
 const nextConfig: NextConfig = {
   /**
    * The career assistant reads content/knowledge/<topic>/*.md from the
-   * filesystem at request time (lib/knowledge). Next's tracer follows
-   * imports, and these are data files nothing imports, so without this
-   * they are left out of the serverless bundle and the route throws ENOENT
-   * in production while passing every check locally.
+   * filesystem at request time (lib/knowledge), and the published eval
+   * records under evals/results/ are read the same way (lib/evals/results).
+   * Next's tracer follows imports, and these are data files nothing imports,
+   * so without this they are left out of the serverless bundle and the route
+   * throws ENOENT, or publishes nothing, in production while passing every
+   * check locally.
    *
-   * Routes listed here: /api/chat is the chat route, and /ask is the page
-   * that calls it. Nothing renders a corpus document, so no other route
-   * needs the files. Keep this in step with wherever the corpus is loaded;
-   * a preview deploy is the only thing that actually proves they shipped.
+   * Routes listed here: /api/chat is the chat route and /ask is the page
+   * that calls it; /, /ask and /ask/evals are the three pages that read a
+   * published record. Nothing renders a corpus document, so no other route
+   * needs the markdown. Keep this in step with wherever either directory is
+   * loaded; a preview deploy is the only thing that actually proves they
+   * shipped.
    */
   outputFileTracingIncludes: {
     '/api/chat': ['./content/knowledge/**/*.md'],
-    '/ask': ['./content/knowledge/**/*.md'],
+    '/ask': ['./content/knowledge/**/*.md', './evals/results/*.json'],
+    '/': ['./evals/results/*.json'],
+    '/ask/evals': ['./evals/results/*.json'],
   },
   experimental: {
     optimizePackageImports: [

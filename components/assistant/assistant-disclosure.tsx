@@ -1,6 +1,9 @@
+'use client'
+
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { MATT_MAILTO } from './copy'
+import { ASSISTANT_EVALS_TITLE, MATT_MAILTO } from './copy'
+import { useEvalsPublished } from './evals-published'
 
 /**
  * The required disclosure under the input: what the answers are, and who to
@@ -14,8 +17,16 @@ import { MATT_MAILTO } from './copy'
  * "Conversations aren't saved" is a statement about the whole system, not a
  * nicety: nothing about a conversation is written down on the server, and the
  * transcript lives only until the tab is closed.
+ *
+ * The link to the published eval results is offered only when a run has
+ * been published, because a link to a page that can only say "no published
+ * run yet" is worse than no link. Whether one has been is filesystem
+ * knowledge, and this renders in the browser, so the server pages provide
+ * it through ./evals-published.
  */
 export function AssistantDisclosure({ className }: { className?: string }) {
+  const evalsPublished = useEvalsPublished()
+
   return (
     <div
       className={cn(
@@ -35,6 +46,16 @@ export function AssistantDisclosure({ className }: { className?: string }) {
         .
       </p>
       <p>Conversations aren&rsquo;t saved.</p>
+      {evalsPublished && (
+        <p>
+          <Link
+            className="underline underline-offset-2 hover:text-foreground"
+            href="/ask/evals"
+          >
+            {ASSISTANT_EVALS_TITLE}
+          </Link>
+        </p>
+      )}
     </div>
   )
 }
