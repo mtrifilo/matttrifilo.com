@@ -9,7 +9,7 @@ Matt Trifilo's site: Next.js 16 app router, React 19, Bun, Tailwind v4, deployed
 
 ## Commands
 
-- `bun run typecheck`, `bun run lint`, `bun test`: run all three before any push. CI runs the same three with `TZ=America/Phoenix` (a timezone bug `formatDate` guards against) and then `bun run build`, which agents do not run locally; the Vercel preview is where a build problem shows.
+- `bun run typecheck`, `bun run lint`, `bun test`: run all three before any push. CI runs the same three, with `TZ=America/Phoenix` on `bun test` (a timezone bug `formatDate` guards against), then `bun run build`, which agents do not run locally; the Vercel preview is where a build problem shows.
 - `bun run knowledge:check`: the corpus guards, after any change under `content/knowledge` or `lib/knowledge`.
 - `scripts/knowledge-denylist-check.sh`: greps the corpus against a private denylist before any push that touches `content/knowledge`. It exits 0 without the denylist file, so its "OK" is not proof on a machine that lacks the file.
 - `GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke` (and `bun run evals`): the eval suites, run locally with Application Default Credentials. When they must run, and their traps, are in `docs/career-assistant-operations.md` under "Eval suites". They do not run in CI on pull requests; the `workflow_dispatch` path has its own rules there.

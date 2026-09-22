@@ -56,7 +56,9 @@ next-env.d.ts
 # dispatched run also uploads them as the workflow's `evals` artifact.
 evals/out/
 
-# Claude Code state is per machine and never shared, except the skills
-# this repository ships on purpose.
+# Under .claude/, only what this repository ships on purpose is tracked:
+# the skills, and a shared settings.json if one is ever added. Everything
+# else there (settings.local.json, worktrees) is per machine.
 .claude/*
 !.claude/skills/
+!.claude/settings.json
