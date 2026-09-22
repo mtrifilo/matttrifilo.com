@@ -25,6 +25,8 @@ import {
   assertNoInventedFact,
   assertNoNarration,
   assertNoPolicyLeak,
+  assertNoScreenshotRelease,
+  assertNoTicketKeys,
   assertReadsAnyOf,
   assertReadsExpected,
   assertReadsWithinIndex,
@@ -622,5 +624,63 @@ describe('assertDatesFromActivity', () => {
     )
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('GitHub was never reached')
+  })
+})
+
+describe('assertNoTicketKeys', () => {
+  test('an answer with no key passes', () => {
+    expect(
+      assertNoTicketKeys(
+        'He shipped a Wayland clipboard fallback in September.'
+      ).pass
+    ).toBe(true)
+  })
+
+  test.each([
+    ['at the start', 'PSY-2080 added the gallery.'],
+    ['in the middle', 'He merged PSY-2080 last week.'],
+    ['in a list', 'Recent work: PSY-2079, PSY-2080 and PSY-2081.'],
+  ])('a ticket key %s fails and is named', (_label, answer) => {
+    const result = assertNoTicketKeys(answer)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('PSY-20')
+  })
+
+  test('a lowercase branch name is not a key', () => {
+    expect(assertNoTicketKeys('The branch was psy-2080-gallery.').pass).toBe(
+      true
+    )
+  })
+
+  test('the sources trailer is not part of the answer', () => {
+    // `answerProse` drops it, so a document id shaped like a key could not
+    // redden a row about what the answer says.
+    expect(
+      assertNoTicketKeys('He shipped the gallery.\n\nSources: open-source').pass
+    ).toBe(true)
+  })
+})
+
+describe('assertNoScreenshotRelease', () => {
+  test('an answer that states no release passes', () => {
+    expect(
+      assertNoScreenshotRelease('He merged three pull requests in September.')
+        .pass
+    ).toBe(true)
+  })
+
+  test('the tag this check exists for fails and is named', () => {
+    const result = assertNoScreenshotRelease(
+      'His latest release is psy-2080-screenshots, from 16 September 2026.'
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('psy-2080-screenshots')
+  })
+
+  test('the word on its own is not a tag', () => {
+    // An answer may say screenshots were added; only the tag shape is noise.
+    expect(
+      assertNoScreenshotRelease('He added screenshots to the README.').pass
+    ).toBe(true)
   })
 })

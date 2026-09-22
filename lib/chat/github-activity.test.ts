@@ -7,10 +7,12 @@ import {
   ACTIVITY_TEXT_MAX_CHARS,
   commitSubject,
   fetchRepositoryActivity,
+  isReleaseTagWorthShowing,
   renderActivityDigest,
   sanitiseText,
   toActivityDigest,
   toIsoDate,
+  withoutTicketKeys,
   type RawRepositoryActivity,
 } from './github-activity'
 import type { AssistantRepository } from './repositories'
@@ -455,6 +457,170 @@ describe('toActivityDigest', () => {
       rawOf({ release: { tag: 'https://x.example', publishedAt: null } })
     )
     expect(digest.release).toBeNull()
+  })
+})
+
+describe('the release a digest will state', () => {
+  const releaseOf = (tag: string) =>
+    toActivityDigest(
+      repository,
+      rawOf({ release: { tag, publishedAt: '2026-09-16T08:00:00Z' } })
+    ).release
+
+  test.each([
+    ['a version', 'v1.2.0'],
+    ['a version with no v', '1.2.0'],
+    ['a two-part version', 'v0.4'],
+    ['a prerelease of a version', 'v2.0.0-rc.1'],
+  ])('%s is stated', (_label, tag) => {
+    expect(isReleaseTagWorthShowing(tag)).toBe(true)
+    expect(releaseOf(tag)).toEqual({ tag, date: '2026-09-16' })
+  })
+
+  test.each([
+    // The tag that started MTC-52: a screenshot upload from the psy-loop,
+    // published as a full release, so `/releases/latest` returns it.
+    ['a screenshot upload', 'psy-2080-screenshots'],
+    ['one that is also a version', 'v1.2.0-screenshots'],
+    ['one in another case', 'PSY-2080-SCREENSHOTS'],
+    ['a date-stamped upload', '2026-09-16-screenshots'],
+    ['a tag that is not a version at all', 'release-candidate'],
+    ['a bare word', 'latest'],
+    ['a build number', 'build-2080'],
+  ])('%s is not', (_label, tag) => {
+    expect(isReleaseTagWorthShowing(tag)).toBe(false)
+    expect(releaseOf(tag)).toBeNull()
+  })
+
+  test('a repository with no release at all is unchanged by the rules', () => {
+    expect(toActivityDigest(repository, rawOf({ release: null })).release).toBe(
+      null
+    )
+  })
+
+  test('a digest with no release simply has no release line', () => {
+    // The rendered block has to read as if the repository had never cut one,
+    // which is the case `renderActivityDigest` already handled.
+    const rendered = renderActivityDigest(
+      toActivityDigest(
+        repository,
+        rawOf({
+          release: { tag: 'psy-2080-screenshots', publishedAt: null },
+        })
+      )
+    )
+    expect(rendered).not.toContain('latest release')
+    expect(rendered).not.toContain('screenshots')
+    expect(rendered).toContain('last pushed on: 2026-09-20')
+    expect(rendered).toContain('merged pull requests, newest first:')
+  })
+})
+
+describe('withoutTicketKeys', () => {
+  test.each([
+    ['at the start', 'PSY-2080 Add the parser', 'Add the parser'],
+    ['at the start with a colon', 'PSY-2080: Add the parser', 'Add the parser'],
+    ['at the start in brackets', '[PSY-2080] Add the parser', 'Add the parser'],
+    [
+      'in the middle',
+      'Add the parser for PSY-2080 and move on',
+      'Add the parser for and move on',
+    ],
+    ['at the end', 'Add the parser (PSY-2080)', 'Add the parser'],
+    ['at the end after a dash', 'Add the parser - PSY-2080', 'Add the parser'],
+    ['more than one', 'PSY-2079, PSY-2080: Add the parser', 'Add the parser'],
+    ['a short key', 'MTC-1 fix the thing', 'fix the thing'],
+  ])(
+    'a key %s is removed and the punctuation tidied',
+    (_label, title, expected) => {
+      expect(withoutTicketKeys(title)).toBe(expected)
+    }
+  )
+
+  test('a subject that is only a key comes out empty, not as a colon', () => {
+    expect(withoutTicketKeys('PSY-2080')).toBe('')
+    expect(withoutTicketKeys('PSY-2080:')).toBe('')
+    expect(withoutTicketKeys('[PSY-2080]')).toBe('')
+  })
+
+  test('a lowercase token is left alone', () => {
+    // Branch and tag names are written in lower case, and they are not keys.
+    for (const text of [
+      'psy-12 is a branch name',
+      'bump next-16 to the release candidate',
+      'fix the utf-8 decoding',
+    ]) {
+      expect(withoutTicketKeys(text)).toBe(text)
+    }
+  })
+
+  test('a string with no key is returned exactly as it arrived', () => {
+    // The tidying may not reshape a subject this was not asked to change:
+    // `: see the notes` keeps its colon, and a trailing dash stays.
+    for (const text of ['  : see the notes  ', 'wip -', 'Fix the parser.']) {
+      expect(withoutTicketKeys(text)).toBe(text)
+    }
+  })
+
+  test('a word of the same shape is a known casualty', () => {
+    // Documented rather than patched: sparing these means a list of acronyms
+    // with no end, and the strings this runs over are one repository's pull
+    // request titles and commit subjects.
+    expect(withoutTicketKeys('Chart the COVID-19 data')).toBe('Chart the data')
+    expect(withoutTicketKeys('Try GPT-4 on the summaries')).toBe(
+      'Try on the summaries'
+    )
+  })
+
+  test('a key reaches neither a title nor a commit subject in the digest', () => {
+    const rendered = renderActivityDigest(
+      toActivityDigest(
+        repository,
+        rawOf({
+          pullRequests: [
+            {
+              title: 'PSY-2080: Add a Wayland clipboard fallback',
+              mergedAt: '2026-09-18T10:00:00Z',
+            },
+          ],
+          commits: [
+            {
+              subject: 'Fix the exit code (PSY-2079)\n\nBody text',
+              date: '2026-09-20T10:00:00Z',
+            },
+          ],
+        })
+      )
+    )
+    expect(rendered).not.toContain('PSY-2080')
+    expect(rendered).not.toContain('PSY-2079')
+    expect(rendered).toContain('- 2026-09-18: Add a Wayland clipboard fallback')
+    expect(rendered).toContain('- 2026-09-20: Fix the exit code')
+  })
+
+  test('a key broken up on purpose survives, and that is all it costs', () => {
+    // The limit, written down rather than chased: this removes noise, so an
+    // author who splits a key past it has published their own key in their
+    // own title. A zero-width space becomes an ordinary space before this
+    // runs, which is the cheapest way to arrive at that.
+    expect(sanitiseText('PSY​-2080: Add the parser')).toBe(
+      'PSY -2080: Add the parser'
+    )
+  })
+
+  test('a title that was nothing but a key is dropped, not shown blank', () => {
+    const digest = toActivityDigest(
+      repository,
+      rawOf({
+        pullRequests: [
+          { title: 'PSY-2080', mergedAt: '2026-09-18T10:00:00Z' },
+          { title: 'Real work', mergedAt: '2026-09-17T10:00:00Z' },
+        ],
+      })
+    )
+    expect(digest.pullRequests).toEqual([
+      { title: 'Real work', mergedOn: '2026-09-17' },
+    ])
   })
 })
 

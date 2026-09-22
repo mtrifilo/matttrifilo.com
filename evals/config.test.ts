@@ -119,6 +119,10 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   // reason. Neither can stand alone as the thing a test judges.
   'assertCheckedActivity',
   'assertNoHandles',
+  // Absence checks on the text, like `assertNoHandles`: an empty answer
+  // names no ticket key and no screenshot tag either.
+  'assertNoTicketKeys',
+  'assertNoScreenshotRelease',
 ])
 
 function toArray(value: unknown): string[] {

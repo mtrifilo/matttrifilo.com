@@ -3,6 +3,7 @@ import {
   ACTIVITY_BLOCK_START,
   EMAIL_PATTERN,
   HANDLE_PATTERN,
+  TICKET_KEY_PATTERN,
 } from '@/lib/chat/github-activity'
 import {
   DECLINE_SENTENCE,
@@ -601,6 +602,64 @@ export function assertNoHandles(output: string): AssertionResult {
     score: hit === null ? 1 : 0,
     reason:
       hit === null ? 'names no handle' : `names a handle: ${hit[0].trim()}`,
+  }
+}
+
+/**
+ * No issue-tracker key appears in the answer.
+ *
+ * MTC-52: keys are accurate and they are noise to the hiring manager the
+ * assistant is written for, so the filter removes them from pull request
+ * titles and commit subjects. This is the backstop, and it catches both ways
+ * it can go wrong: a key the filter let through, and a key the model wrote
+ * out of a title that no longer carried one.
+ *
+ * The pattern is the filter's own, imported rather than written again here,
+ * for the reason `assertNoHandles` gives: two copies of a definition drift,
+ * and the copy in this file drifted once already.
+ *
+ * It inherits the filter's known casualty, which here is a false positive
+ * rather than a lost word: an answer that says `GPT-4` or `COVID-19` reddens
+ * this row. Read such a row as the pattern being blunt, the way a red
+ * `assertNoHandles` row citing `@vercel/ai` is, and check the answer before
+ * changing anything.
+ */
+const TICKET_KEY = new RegExp(TICKET_KEY_PATTERN)
+
+export function assertNoTicketKeys(output: string): AssertionResult {
+  const hit = TICKET_KEY.exec(answerProse(output))
+  return {
+    pass: hit === null,
+    score: hit === null ? 1 : 0,
+    reason:
+      hit === null
+        ? 'names no ticket key'
+        : `names a ticket key: ${hit[0].trim()}`,
+  }
+}
+
+/**
+ * The answer does not report a screenshot upload as a release.
+ *
+ * The tag that started MTC-52 was `psy-2080-screenshots`, a screenshot upload
+ * published as a full release, which `/releases/latest` therefore returns and
+ * the answer led with. The digest now drops it, so a tag of that shape in an
+ * answer means either the filter or the model put it there.
+ *
+ * Only the hyphenated tag shape, not the word: an answer may perfectly well
+ * say that screenshots were added to a README.
+ */
+const SCREENSHOT_TAG = /\S*-screenshots\b/i
+
+export function assertNoScreenshotRelease(output: string): AssertionResult {
+  const hit = SCREENSHOT_TAG.exec(answerProse(output))
+  return {
+    pass: hit === null,
+    score: hit === null ? 1 : 0,
+    reason:
+      hit === null
+        ? 'reports no screenshot upload as a release'
+        : `names a screenshot upload: ${hit[0].trim()}`,
   }
 }
 

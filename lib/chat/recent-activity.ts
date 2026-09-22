@@ -100,19 +100,26 @@ export interface RecentActivitySession {
   activityCalls(): number
   /** Tokens of digest charged to the shared read budget. */
   activityTokens(): number
-  /** Checks refused, by reason, so the failure modes stay distinguishable. */
+  /**
+   * Checks refused or coalesced, by reason, so the failure modes stay
+   * distinguishable.
+   */
   activityRefused(): ActivityRefused
 }
 
 /**
- * How many checks each guard turned away during one request.
+ * How many checks each guard turned away during one request, plus the
+ * repeats it coalesced.
  *
  * Split the way `ReadsRefused` is, and for the same reason: the three call
  * for three different fixes. `unknown` means the model is guessing at ids, or
- * the repository list in the prompt is wrong. `duplicate` means it is looping.
- * `budget` means a GitHub call was spent and its digest then discarded for
- * want of tokens, which is the one failure here that costs a request and
- * yields nothing, and the only way an operator can see it.
+ * the repository list in the prompt is wrong. `duplicate` means it is
+ * looping, and counts every repeated check, the ones answered from the
+ * in-flight call as well as the ones refused: what an operator reads it for
+ * is the looping, which is the same either way. `budget` means a GitHub call
+ * was spent and its digest then discarded for want of tokens, which is the
+ * one failure here that costs a request and yields nothing, and the only way
+ * an operator can see it.
  *
  * `activity_unavailable` is deliberately absent: it has its own log line,
  * with the repository and the status, which is more use than a count.
@@ -180,16 +187,20 @@ export function createRecentActivitySession({
    */
   const outcome = new Map<string, RecentActivityError | undefined>()
   /**
-   * Repositories whose fetch is in the air right now.
+   * The check that is in the air right now for a repository, as the promise
+   * every caller for it shares.
    *
-   * Separate from `outcome`, and not merged into it as a pessimistic entry,
-   * because the two mean different things and the SDK runs a step's tool
-   * calls concurrently: a model that emits `recent_activity(decant)` twice in
-   * one step would otherwise have the second call read the first's
-   * placeholder and be told GitHub could not be reached, in the same step it
-   * was handed that repository's digest.
+   * The SDK runs a step's tool calls concurrently, and a model that emits
+   * `recent_activity(decant)` twice in one step gets one fetch and one
+   * outcome: the second call awaits this promise and returns what the first
+   * returned. Coalescing rather than refusing, because the two calls are
+   * about the same repository in the same step, and any other answer for the
+   * second one contradicts the first: told `repository_already_checked` it
+   * would be pointed at activity that had not arrived yet, and told the
+   * outcome recorded so far it could read a failure in the same step the
+   * first call was handed that repository's digest.
    */
-  const inFlight = new Set<string>()
+  const inFlight = new Map<string, Promise<RecentActivityResult>>()
   const refused: ActivityRefused = { unknown: 0, duplicate: 0, budget: 0 }
   let calls = 0
   let spentTokens = 0
@@ -221,11 +232,13 @@ export function createRecentActivitySession({
       return { error: 'unknown_repository' }
     }
 
-    // A second call while the first is still waiting on GitHub. It is a
-    // duplicate, not a failure: the first call will answer.
-    if (inFlight.has(repository.id)) {
+    // A second call while the first is still waiting on GitHub. Counted as a
+    // duplicate, because that is what it is and a model looping is what the
+    // counter exists to show, and then answered with the first call's result.
+    const running = inFlight.get(repository.id)
+    if (running) {
       refused.duplicate += 1
-      return { error: 'repository_already_checked' }
+      return running
     }
     if (outcome.has(repository.id)) {
       // The recorded outcome again, whatever it was: a repository is fetched
@@ -238,17 +251,22 @@ export function createRecentActivitySession({
     }
     // Counted before the fetch, so a repository GitHub cannot answer for
     // costs one attempt rather than as many as the model has steps left.
-    inFlight.add(repository.id)
     calls += 1
-
-    let result: ActivityFetchResult
-    try {
-      result = await fetchActivity(repository, onFailure)
-    } finally {
-      // Whatever happened, this repository is no longer in the air. The
-      // outcome recorded below is what a later call reads.
+    // Registered before it is awaited, so a call that arrives while this one
+    // is waiting on GitHub finds it. The entry goes whatever the fetch did;
+    // the outcome recorded inside is what a later call reads.
+    const pending = fetchAndRecord(repository).finally(() => {
       inFlight.delete(repository.id)
-    }
+    })
+    inFlight.set(repository.id, pending)
+    return pending
+  }
+
+  /** One repository's fetch, its digest, and the outcome it leaves behind. */
+  async function fetchAndRecord(
+    repository: AssistantRepository
+  ): Promise<RecentActivityResult> {
+    const result = await fetchActivity(repository, onFailure)
     // `missing` and `unavailable` collapse into one code on purpose: there is
     // nothing the model could usefully do differently for a repository that
     // has been renamed, and telling it a repository it was just offered does
