@@ -58,10 +58,12 @@ updated: 2026-09-21
 - **Daily drivers:** Claude Code as the primary harness, with a
   planning-and-writing model for planning and business writing and a
   faster model for unattended agents; plus a second editor.
-- **Agent infrastructure he built or runs:** two Claude Code plugin
+- **Agent infrastructure he built, adapted, or runs:** two Claude Code plugin
   marketplaces (one organisation-wide and co-maintained, one team-owned and
   solo), the subject-matter plugin system with its scaffold and capture
-  skills, the unattended security-remediation daemon, an adversarial
+  skills, the unattended security-remediation daemon (OpenAI's open-source
+  Symphony harness, adapted through an internal fork two colleagues built),
+  an adversarial
   pull-request review action, the security-fix skill, the
   independent-deployment skill, ticket- and epic-drafting skills, a
   pull-request-opening skill, a weekly-wins skill, and roughly forty
@@ -99,7 +101,9 @@ updated: 2026-09-21
   they come up for the team.
 - Delivers security tickets within target; 323 security and
   dependency-scanner tickets resolved in 2026 through September 10.
-- Built autonomous vulnerability remediation with human merge gates.
+- Stood up autonomous vulnerability remediation with human merge gates, on
+  OpenAI's open-source Symphony harness adapted through an internal fork two
+  colleagues built.
 - Ran a two-organisation supply-chain audit across 528 repositories in
   response to an active registry worm.
 - Built phishing detection and blocking capability, including

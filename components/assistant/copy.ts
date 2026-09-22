@@ -64,7 +64,8 @@ export const STARTER_QUESTIONS = [
   "What does Matt's Email Reliability team own at Thryv?",
   'What did Matt ship recently?',
   'What is the AI Email Engagement Summary feature Matt built?',
-  'What is Symphony, the agent orchestrator Matt built, and what did it automate?',
+  // Symphony is OpenAI's open-source project; Matt adapted it (MTC-66).
+  'What is Symphony, and what did Matt do with it?',
   "How did Matt's team move to independent deploys, and how long did it take?",
   'How does Matt run 24/7 on-call for an email service provider?',
   'How does Matt prepare email sending for Black Friday and Cyber Monday?',
