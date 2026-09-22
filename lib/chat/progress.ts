@@ -54,6 +54,26 @@ export type ChatProgressPhase = 'reading' | 'writing' | 'done'
 export type ChatProgressKind = 'document' | 'activity'
 
 /**
+ * The corpus topics a read step may name, in the index's own order.
+ *
+ * A copy of TOPIC_ORDER in lib/knowledge/build.ts rather than an import of
+ * it: that module reads the filesystem at module scope and this one is
+ * imported by the browser. Two things keep the copy honest without one.
+ * `toStep` in ./handler.ts assigns a `KnowledgeSource` straight into
+ * `topic`, so a topic added there and not here fails typecheck; and
+ * ./progress.test.ts compares the two lists outright.
+ */
+export const PROGRESS_TOPICS = [
+  'resume',
+  'career',
+  'faq',
+  'open-source',
+  'blog',
+] as const
+
+export type ChatProgressTopic = (typeof PROGRESS_TOPICS)[number]
+
+/**
  * One piece of work the model asked for, named by the server, never by the
  * model: a document's title from the index, or a repository's id from the
  * allowlist, which is also the name the visitor is shown.
@@ -71,6 +91,24 @@ export interface ChatProgressStep {
    * still see.
    */
   kind?: ChatProgressKind
+  /**
+   * The corpus topic the document sits in, on a read step only (MTC-50).
+   *
+   * Looked up from the index at emission time, like the title, so the row
+   * cannot report a topic the model made up. Optional for the same reason
+   * `kind` is: a browser is holding transcripts whose steps predate it.
+   */
+  topic?: ChatProgressTopic
+  /**
+   * The document's `##` section titles, in document order, on a read step
+   * only (MTC-50).
+   *
+   * Titles, never body text: the tool hands the model a whole document, so
+   * this is that document's outline and not a claim about which parts of it
+   * were used. Capped by MAX_HEADINGS and MAX_HEADING_CHARS, and optional
+   * like the two fields above.
+   */
+  headings?: readonly string[]
 }
 
 export interface ChatProgress {
@@ -118,6 +156,23 @@ export interface ProgressView {
  * it: `lib/knowledge/knowledge.test.ts` fails if any title comes close.
  */
 export const MAX_TITLE_CHARS = 200
+
+/**
+ * How many section titles one read row may carry, and how long each may be.
+ *
+ * Distrust bounds on the wire. An over-long heading is not a `##` line from
+ * the corpus, so it is dropped rather than truncated, the same way an
+ * over-long title is.
+ *
+ * The count is the exception to that rule, and the only reason it is safe
+ * is that nothing is meant to reach it: a row that showed eight of a
+ * document's nine sections without saying so would be the quiet half-truth
+ * this view exists to avoid. lib/knowledge/knowledge.test.ts fails before a
+ * corpus document reaches either bound, which is what keeps the truncation
+ * theoretical; the corpus stands at nine sections and 88 characters today.
+ */
+export const MAX_HEADINGS = 12
+export const MAX_HEADING_CHARS = 120
 
 const PHASES: ReadonlySet<string> = new Set<ChatProgressPhase>([
   'reading',
@@ -177,6 +232,11 @@ function findProgressData(parts: ReadonlyArray<{ type: string }>): unknown {
  * reads as a document. A step is still a step the server narrated, and
  * dropping it over a label would undercount the work, which is the one kind
  * of false claim this module exists to prevent.
+ *
+ * `topic` and `headings` are read the same way, one field at a time: a
+ * transcript written before they existed has neither, and a value that does
+ * not check out costs the row its detail rather than costing the visitor the
+ * row. Both belong to a read, so an activity step keeps neither.
  */
 function readSteps(steps: readonly unknown[]): ChatProgressStep[] {
   const kept: ChatProgressStep[] = []
@@ -185,9 +245,42 @@ function readSteps(steps: readonly unknown[]): ChatProgressStep[] {
     const { id, title, kind } = step
     if (typeof id !== 'string' || typeof title !== 'string') continue
     if (title.length === 0 || title.length > MAX_TITLE_CHARS) continue
-    kept.push(kind === 'activity' ? { id, title, kind } : { id, title })
+    if (kind === 'activity') {
+      kept.push({ id, title, kind })
+      continue
+    }
+    const read: ChatProgressStep = { id, title }
+    if (isProgressTopic(step.topic)) read.topic = step.topic
+    const headings = readHeadings(step.headings)
+    if (headings.length > 0) read.headings = headings
+    kept.push(read)
   }
   return kept
+}
+
+const TOPICS: ReadonlySet<string> = new Set<ChatProgressTopic>(PROGRESS_TOPICS)
+
+function isProgressTopic(value: unknown): value is ChatProgressTopic {
+  return typeof value === 'string' && TOPICS.has(value)
+}
+
+/**
+ * The section titles a row may show: strings inside the caps, in the order
+ * they arrived, and at most MAX_HEADINGS of them.
+ *
+ * A bad entry is skipped rather than ending the list, so one malformed
+ * heading does not hide the ones after it.
+ */
+function readHeadings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const headings: string[] = []
+  for (const heading of value) {
+    if (typeof heading !== 'string') continue
+    if (heading.length === 0 || heading.length > MAX_HEADING_CHARS) continue
+    headings.push(heading)
+    if (headings.length === MAX_HEADINGS) break
+  }
+  return headings
 }
 
 /**
@@ -317,6 +410,10 @@ export interface ProgressRow {
   title?: string
   /** Which sentence the row earns. Absent on the writing row. */
   kind?: ChatProgressKind
+  /** The corpus topic of a read, when the server named one. */
+  topic?: ChatProgressTopic
+  /** A read's section titles, when the server sent them. */
+  headings?: readonly string[]
   state: StepState
 }
 
@@ -337,17 +434,26 @@ export function progressRows(
   progress: ProgressView | undefined
 ): ProgressRow[] {
   const steps = progress?.steps ?? []
-  const rows: ProgressRow[] = steps.map(step => ({
-    // Prefixed, because the writing row's key is a literal and a document id
-    // is a file name: `content/knowledge/<topic>/writing.md` would otherwise
-    // give two rows the same React key. The prefix is the same for both
-    // kinds, and it can be: a repository id and a document id come from
-    // disjoint lists, and neither is the writing row's literal.
-    key: `${READ_ROW_KEY_PREFIX}${step.id}`,
-    title: step.title,
-    kind: step.kind ?? 'document',
-    state: 'complete',
-  }))
+  const rows: ProgressRow[] = steps.map(step => {
+    const row: ProgressRow = {
+      // Prefixed, because the writing row's key is a literal and a document
+      // id is a file name: `content/knowledge/<topic>/writing.md` would
+      // otherwise give two rows the same React key. The prefix is the same
+      // for both kinds, and it can be: a repository id and a document id
+      // come from disjoint lists, and neither is the writing row's literal.
+      key: `${READ_ROW_KEY_PREFIX}${step.id}`,
+      title: step.title,
+      kind: step.kind ?? 'document',
+      state: 'complete',
+    }
+    // Carried only when the step has them, so a row from a transcript
+    // written before MTC-50 is the same object it was.
+    if (step.topic !== undefined) row.topic = step.topic
+    if (step.headings !== undefined && step.headings.length > 0) {
+      row.headings = step.headings
+    }
+    return row
+  })
   if (rows.length === 0) return rows
 
   if (progress?.phase === 'writing') {

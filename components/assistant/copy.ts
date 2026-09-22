@@ -11,6 +11,8 @@
  * fallback in lib/chat/answer.ts, decided alongside the parsing it covers.
  */
 
+import type { ChatProgressTopic } from '@/lib/chat/progress'
+
 export const MATT_EMAIL = 'matt.trifilo@gmail.com'
 export const MATT_MAILTO = `mailto:${MATT_EMAIL}`
 
@@ -127,12 +129,24 @@ export const RATE_LIMIT_NOTICE = {
  *
  * These are Matt's to change, like every other line in this file. They are
  * deliberately plain: the visitor is reading them for ten to twenty seconds
- * and a clever phrase wears out fast. Nothing here names a model, a tool or
- * a step count the run did not actually reach.
+ * and a clever phrase wears out fast. Nothing here names a model or a step
+ * count the run did not actually reach.
+ *
+ * The tool is named, in the one line most visitors see (MTC-50): the panel
+ * is shut by default, so the collapsed summary is where "this is a harness
+ * reading a corpus" has to be legible without a click.
  */
 
 /** Before the first read: the model is still choosing what to open. */
 export const PROGRESS_THINKING = 'Thinking…'
+
+/**
+ * The reading tool, spelled for the visitor exactly as the route registers
+ * it. `copy.test.ts` compares it against READ_DOCUMENT_TOOL_NAME in
+ * lib/chat/prompt.ts, which this file may not import: that module builds the
+ * system prompt off the knowledge index, which reads the filesystem.
+ */
+export const PROGRESS_TOOL_NAME = 'read_document'
 
 /**
  * One line per document, titled from the server's index, never the model.
@@ -157,6 +171,33 @@ export const progressReading = (title: string) => `Reading ${title}…`
  */
 export const progressChecking = (name: string) => `Checking GitHub for ${name}…`
 
+/**
+ * The corpus topic of a read, as the expanded row shows it (MTC-50).
+ *
+ * It is the answer to "which part of his material is this?", so a hiring
+ * manager can see that a claim came from the résumé rather than from a blog
+ * post. The record is keyed by the closed set the progress wire validates
+ * against, so a topic added there without a label here fails typecheck.
+ */
+const PROGRESS_TOPIC_LABELS: Record<ChatProgressTopic, string> = {
+  resume: 'Résumé',
+  career: 'Career',
+  faq: 'FAQ',
+  'open-source': 'Open source',
+  blog: 'Blog',
+}
+
+export const progressTopic = (topic: ChatProgressTopic): string =>
+  PROGRESS_TOPIC_LABELS[topic]
+
+/**
+ * A document's section titles under its row, in the order the document has
+ * them. The whole document was read, so the whole outline is shown; a
+ * shortened list would invite the reading that only those parts were opened.
+ */
+export const progressHeadings = (headings: readonly string[]): string =>
+  headings.join(' · ')
+
 /** The last step: the reading is done and the answer is being written. */
 export const PROGRESS_WRITING = 'Writing answer…'
 
@@ -170,6 +211,11 @@ export const PROGRESS_STOPPED = 'Stopped'
 
 /**
  * The collapsed line above a finished answer. Only ever shown truthfully.
+ *
+ * The reading clause names the tool (Matt's wording, 2026-09-22): most
+ * visitors never open the panel, so this line is the only place the harness
+ * is visible. "sources" rather than "documents" because it is what the tool
+ * call did, and a source is what a hiring manager is looking for.
  *
  * Documents and GitHub checks are counted apart because they are different
  * work, and calling one the other in the line that stands in for the whole
@@ -189,7 +235,7 @@ export const progressSummary = (
   const parts: string[] = []
   if (documents > 0) {
     parts.push(
-      `Read ${documents} ${documents === 1 ? 'document' : 'documents'}`
+      `Used ${PROGRESS_TOOL_NAME} on ${documents} ${documents === 1 ? 'source' : 'sources'}`
     )
   }
   if (activity > 0)
@@ -200,6 +246,6 @@ export const progressSummary = (
 /**
  * The header above the steps of a run that finished without writing an
  * answer. It names the disclosure without claiming that the reading produced
- * anything, which "Read 3 documents in 14s" over an empty reply would.
+ * anything, which the summary line above an empty reply would.
  */
 export const PROGRESS_UNFINISHED = 'Steps taken'

@@ -1216,7 +1216,7 @@ describe('reading documents', () => {
     // is the case that cannot be predicted at the call, because the size of
     // the text is not knowable from the id.
     expect(progressFrom(body).at(0)?.steps).toEqual([
-      { id: 'huge', title: 'Huge' },
+      { id: 'huge', title: 'Huge', topic: 'resume' },
     ])
     expect(progressFrom(body).at(-1)?.steps).toEqual([])
     expect(body).not.toContain(huge.text)
@@ -1391,33 +1391,91 @@ describe('progress on the stream', () => {
     )
     const body = await response.text()
 
-    // Titles come from the index, never from the model: the model only ever
-    // sent an id.
+    // Titles and topics come from the index, never from the model: the model
+    // only ever sent an id. The topic is the entry's `source`, which is why
+    // the résumé fixture reports `resume` and not its `topic` field.
     expect(progressFrom(body)).toEqual([
-      { phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] },
+      {
+        phase: 'reading',
+        steps: [{ id: 'resume', title: 'Résumé', topic: 'resume' }],
+      },
       {
         phase: 'reading',
         steps: [
-          { id: 'resume', title: 'Résumé' },
-          { id: 'faq', title: 'FAQ' },
+          { id: 'resume', title: 'Résumé', topic: 'resume' },
+          { id: 'faq', title: 'FAQ', topic: 'faq' },
         ],
       },
       {
         phase: 'writing',
         steps: [
-          { id: 'resume', title: 'Résumé' },
-          { id: 'faq', title: 'FAQ' },
+          { id: 'resume', title: 'Résumé', topic: 'resume' },
+          { id: 'faq', title: 'FAQ', topic: 'faq' },
         ],
       },
       {
         phase: 'done',
         steps: [
-          { id: 'resume', title: 'Résumé' },
-          { id: 'faq', title: 'FAQ' },
+          { id: 'resume', title: 'Résumé', topic: 'resume' },
+          { id: 'faq', title: 'FAQ', topic: 'faq' },
         ],
         ms: 0,
       },
     ])
+  })
+
+  test('a read row carries the topic and the headings the index holds', async () => {
+    // The detail an expanded row shows (MTC-50). Both fields are looked up
+    // on the server at emission time, like the title: the model sent an id
+    // and nothing else, and a row may only describe a document the index
+    // actually lists.
+    const outlined = {
+      ...asEntry(documents[0]),
+      headings: ['What the team owns', 'How it is run'],
+    }
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => ({ ...index, entries: [outlined] }),
+      readKnowledgeDocument,
+      model: () => modelOf(reads('resume'), answers()),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      {
+        id: 'resume',
+        title: 'Résumé',
+        topic: 'resume',
+        headings: ['What the team owns', 'How it is run'],
+      },
+    ])
+  })
+
+  test('a document with no sections carries no headings field', async () => {
+    // One corpus document has no `##` line at all, so this is a real state
+    // and not a hypothetical. An empty array on the wire would put an empty
+    // second line under the row, so the entry is given the empty array the
+    // build would give it and the step must still omit the field.
+    const sectionless = { ...asEntry(documents[0]), headings: [] }
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => ({ ...index, entries: [sectionless] }),
+      readKnowledgeDocument,
+      model: () => modelOf(reads('resume'), answers()),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+
+    const step = progressFrom(body).at(-1)?.steps[0]
+    expect(step).toEqual({ id: 'resume', title: 'Résumé', topic: 'resume' })
+    expect(step).not.toHaveProperty('headings')
   })
 
   test('every progress chunk carries the same part id', async () => {
@@ -1494,7 +1552,7 @@ describe('progress on the stream', () => {
 
     expect(progressFrom(body)[0]).toEqual({
       phase: 'reading',
-      steps: [{ id: 'resume', title: 'Résumé' }],
+      steps: [{ id: 'resume', title: 'Résumé', topic: 'resume' }],
     })
     expect(JSON.stringify(progressFrom(body))).not.toContain('salary-history')
   })
@@ -1537,7 +1595,7 @@ describe('progress on the stream', () => {
     ).text()
 
     expect(progressFrom(body).at(-1)?.steps).toEqual([
-      { id: 'resume', title: 'Résumé' },
+      { id: 'resume', title: 'Résumé', topic: 'resume' },
     ])
     const entry = logged.find(
       args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
@@ -1722,7 +1780,7 @@ describe('logging', () => {
     // is still real text drawn from what was read, and the read is reported.
     expect(metadataFrom(body).incomplete).toBe(true)
     expect(progressFrom(body).at(-1)?.steps).toEqual([
-      { id: 'resume', title: 'Résumé' },
+      { id: 'resume', title: 'Résumé', topic: 'resume' },
     ])
   })
 

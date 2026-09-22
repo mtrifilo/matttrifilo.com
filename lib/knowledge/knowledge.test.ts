@@ -3,9 +3,14 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { openSourceRepos } from '@/content/open-source'
-import { MAX_TITLE_CHARS } from '@/lib/chat/progress'
+import {
+  MAX_HEADINGS,
+  MAX_HEADING_CHARS,
+  MAX_TITLE_CHARS,
+} from '@/lib/chat/progress'
 import {
   buildKnowledgeCorpus,
+  documentHeadings,
   estimateTokens,
   findPlaceholder,
   KNOWLEDGE_DIR,
@@ -281,6 +286,14 @@ describe('knowledge corpus content guards', () => {
     // …and an escaped backtick does not make a code span, so the
     // placeholder inside one is still a placeholder.
     expect(placeholder('\\`TODO (Matt)\\`')).toBe(true)
+
+    // A heading is prose too, and since MTC-50 it is prose a visitor is
+    // shown: an editor's note written as a section title is a placeholder
+    // even when the section under it is finished.
+    expect(placeholder('## TODO (Matt): confirm the date\n\nWritten.')).toBe(
+      true
+    )
+    expect(placeholder('## What TODO comments cost\n\nWritten.')).toBe(false)
   })
 
   test('no surface contains a comment marker, closed or unterminated', () => {
@@ -465,6 +478,91 @@ describe('knowledge corpus structure', () => {
     expect(longestEntryLine).toBeLessThan(SUMMARY_MAX_LENGTH * 3)
 
     expect(index.tokenEstimate).toBeLessThan(KNOWLEDGE_INDEX_TOKEN_CEILING)
+  })
+})
+
+describe('the section titles the progress view shows (MTC-50)', () => {
+  test('reads the `##` titles in document order, and nothing under them', () => {
+    expect(
+      documentHeadings(
+        'Intro prose.\n\n## First\nBody of the first.\n\n## Second\nBody of the second.'
+      )
+    ).toEqual(['First', 'Second'])
+  })
+
+  test('a document with no sections has no headings', () => {
+    expect(documentHeadings('')).toEqual([])
+    expect(documentHeadings('Just prose, no headings at all.')).toEqual([])
+    // A `#` title or a `###` subheading is not a section of the document.
+    expect(documentHeadings('# Title\n\n### Deeper\nBody.')).toEqual([])
+  })
+
+  test('a heading inside a fenced code block is not a section', () => {
+    expect(
+      documentHeadings('## Real\n\n```md\n## Not a heading\n```\n')
+    ).toEqual(['Real'])
+  })
+
+  test('an over-long heading is skipped rather than truncated', () => {
+    // The same rule an over-long document title follows: a name that cannot
+    // be shown honestly is better left out than shown cut in half.
+    const long = 'x'.repeat(MAX_HEADING_CHARS + 1)
+    expect(documentHeadings(`## ${long}\nBody.\n\n## Kept\nBody.`)).toEqual([
+      'Kept',
+    ])
+    const edge = 'y'.repeat(MAX_HEADING_CHARS)
+    expect(documentHeadings(`## ${edge}\nBody.`)).toEqual([edge])
+  })
+
+  test('no more than the cap, whatever the document holds', () => {
+    const many = Array.from(
+      { length: MAX_HEADINGS + 3 },
+      (_, i) => `## Section ${i}\nBody.`
+    ).join('\n\n')
+    expect(documentHeadings(many)).toHaveLength(MAX_HEADINGS)
+  })
+
+  test('every corpus document stays inside both caps', () => {
+    // The caps are there to distrust the wire, not to trim the corpus. A
+    // document that reached one would have a row showing some of its
+    // sections without saying so, which is the quiet half-truth the whole
+    // view exists to avoid: this fails first instead.
+    //
+    // Counted with the extractor rather than a regex of its own. A `##`
+    // line inside a fenced code block is not a section, and a second
+    // definition of that here would fail a correct document and report it
+    // as a blown cap.
+    for (const document of corpus.documents) {
+      const sections = documentHeadings(document.text)
+      expect({ id: document.id, headings: document.headings ?? [] }).toEqual({
+        id: document.id,
+        headings: sections,
+      })
+      expect(sections.length).toBeLessThan(MAX_HEADINGS)
+      for (const heading of sections) {
+        expect(heading.length).toBeLessThan(MAX_HEADING_CHARS)
+      }
+    }
+  })
+
+  test('the index the model reads does not grow by a single heading', () => {
+    // They are on the entry object for the progress view only. The index is
+    // in every request, so anything added to it is paid for by every
+    // question; and a section list is not how the model chooses a document.
+    const outlined = index.entries.filter(
+      entry => (entry.headings?.length ?? 0) > 0
+    )
+    expect(outlined.length).toBeGreaterThan(0)
+
+    // Every entry line is exactly the catalogue line and nothing more, so a
+    // heading appended to one would fail here. Compared whole rather than by
+    // substring for that reason.
+    const lines = index.text.split('\n').filter(line => line.startsWith('- '))
+    const catalogue = index.entries.map(
+      entry =>
+        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+    )
+    expect(new Set(lines)).toEqual(new Set(catalogue))
   })
 })
 

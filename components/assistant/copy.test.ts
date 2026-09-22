@@ -1,15 +1,19 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor } from '@/lib/chat/answer'
-import type { ProgressView } from '@/lib/chat/progress'
+import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
+import { PROGRESS_TOPICS, type ProgressView } from '@/lib/chat/progress'
 import {
   MATT_EMAIL,
   PROGRESS_THINKING,
+  PROGRESS_TOOL_NAME,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   STARTER_QUESTIONS,
   progressChecking,
+  progressHeadings,
   progressReading,
   progressSummary,
+  progressTopic,
 } from './copy'
 
 /**
@@ -99,20 +103,34 @@ describe('the rate-limit notice', () => {
 })
 
 describe('the progress copy', () => {
-  test('counts documents in English', () => {
-    expect(progressSummary(1, 0, 9)).toBe('Read 1 document in 9s')
-    expect(progressSummary(3, 0, 14)).toBe('Read 3 documents in 14s')
-    expect(progressSummary(2, 0, 1)).toBe('Read 2 documents in 1s')
+  test('names the tool, and counts sources in English', () => {
+    // Matt's wording, 2026-09-22: most visitors never open the panel, so
+    // the collapsed line is where the tool call is visible.
+    expect(progressSummary(1, 0, 9)).toBe(
+      'Used read_document on 1 source in 9s'
+    )
+    expect(progressSummary(3, 0, 14)).toBe(
+      'Used read_document on 3 sources in 14s'
+    )
+    expect(progressSummary(2, 0, 1)).toBe(
+      'Used read_document on 2 sources in 1s'
+    )
+  })
+
+  test('spells the tool the way the route registers it', () => {
+    // This file may not import lib/chat/prompt.ts at runtime, so the name is
+    // written out twice. This is the tripwire for the two drifting apart.
+    expect(PROGRESS_TOOL_NAME).toBe(READ_DOCUMENT_TOOL_NAME)
   })
 
   test('counts a GitHub check apart from the documents', () => {
     // A check is not a read, and the one line that stands in for the whole
     // run must not call it one.
     expect(progressSummary(2, 1, 11)).toBe(
-      'Read 2 documents and checked GitHub in 11s'
+      'Used read_document on 2 sources and checked GitHub in 11s'
     )
     expect(progressSummary(1, 1, 8)).toBe(
-      'Read 1 document and checked GitHub in 8s'
+      'Used read_document on 1 source and checked GitHub in 8s'
     )
     expect(progressSummary(0, 1, 6)).toBe('Checked GitHub in 6s')
     // Three repositories checked is still one sentence: the visitor is being
@@ -155,6 +173,31 @@ describe('the progress copy', () => {
 
   test('the wait before a first read is Thinking', () => {
     expect(PROGRESS_THINKING).toBe('Thinking…')
+  })
+
+  test('every corpus topic a row can carry has a label', () => {
+    // The record is keyed by the closed set, so a missing label is a
+    // typecheck failure; this is the guard on a label that is empty or is
+    // still the slug the wire carries.
+    for (const topic of PROGRESS_TOPICS) {
+      const label = progressTopic(topic)
+      expect(label.length).toBeGreaterThan(0)
+      expect(label).not.toBe(topic)
+    }
+    expect(PROGRESS_TOPICS.map(progressTopic)).toEqual([
+      'Résumé',
+      'Career',
+      'FAQ',
+      'Open source',
+      'Blog',
+    ])
+  })
+
+  test('section titles are shown in the order the document has them', () => {
+    expect(progressHeadings(['Headline ratios', "Matt's own output"])).toBe(
+      "Headline ratios · Matt's own output"
+    )
+    expect(progressHeadings(['Only one'])).toBe('Only one')
   })
 })
 
