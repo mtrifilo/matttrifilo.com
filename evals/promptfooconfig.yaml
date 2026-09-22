@@ -8,7 +8,7 @@
 #
 # Deterministic assertions are the gate. `llm-rubric` appears only where a
 # question needs judgement, and each of those is graded three times inside an
-# assert-set at `threshold: 0.6`, so one stray grade cannot redden a merge.
+# assert-set at `threshold: 0.6`, so one stray grade cannot redden a run.
 # 0.6 and not 0.67 because an assert-set scores on the weighted mean of its
 # members: two of three average 0.666..., which 0.67 would reject.
 #

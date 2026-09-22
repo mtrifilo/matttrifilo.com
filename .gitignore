@@ -52,5 +52,6 @@ next-env.d.ts
 .claude/worktrees/
 
 # Eval run output (MTC-32). The suites are the reviewable artefact; a run's
-# results are per-commit and land on the workflow's `evals` artifact instead.
+# results are per-commit: the table goes in the pull request body, and a
+# dispatched run also uploads them as the workflow's `evals` artifact.
 evals/out/
