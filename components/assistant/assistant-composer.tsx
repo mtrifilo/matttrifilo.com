@@ -166,7 +166,7 @@ export function AssistantComposer({
         >
           {question.length.toLocaleString('en-US')} /{' '}
           {CHAT_MAX_MESSAGE_CHARS.toLocaleString('en-US')}
-          {overLimit && ` — ${OVER_LIMIT_HINT}`}
+          {overLimit && `: ${OVER_LIMIT_HINT}`}
         </p>
       )}
       {/* The counter itself is not live: it would be read on every
