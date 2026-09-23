@@ -24,8 +24,7 @@ are deliberately omitted.
 Internal ladder note: Technical Manager is the only rung on the company's
 management track that formally requires and protects more than half
 hands-on coding. The rung above it drops to code review only. Matt is on
-that rung deliberately; its HR title is Manager, Product Engineering, the
-title the résumé carries.
+that rung deliberately; its HR title is Manager, Product Engineering.
 
 ## Company recognition, March 2026
 

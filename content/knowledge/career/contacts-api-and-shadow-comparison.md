@@ -1,7 +1,7 @@
 ---
 id: contacts-api-and-shadow-comparison
 title: The Contacts API program and the shadow-comparison harness, 2019
-summary: Matt's first end-to-end decomposition, verified field for field by a shadow-comparison harness before any customer saw the new path.
+summary: "The 2019 Contacts decomposition Matt contributed to, verified field for field by a shadow-comparison harness before any customer saw the new path."
 tags: [decomposition, api, verification, mobile, java, platform]
 updated: 2026-09-21
 ---
@@ -9,12 +9,12 @@ updated: 2026-09-21
 # The Contacts API program and the shadow-comparison harness, 2019
 
 The first decomposition Matt worked end to end as a contributing engineer,
-not as its lead, two years before the merge service. Contacts lived entirely inside the core monolith and were read
-through two different legacy paths: a servlet API used by the web front end
-and a front-facing controller used by the mobile app. A newer internal
-Contacts API had been partly built the year before but was not
-production-ready, and nobody had proven it matched the legacy behaviour
-field for field.
+not as its lead, two years before the merge service. Contacts lived entirely
+inside the core monolith and were read through two different legacy paths: a
+servlet API used by the web front end and a front-facing controller used by
+the mobile app. A newer internal Contacts API had been partly built the year
+before but was not production-ready, and nobody had proven it matched the
+legacy behaviour field for field.
 
 The trigger was a decision to make it real. Two tickets opened the same day
 in March 2019: one to review unit, integration, and end-to-end coverage and
