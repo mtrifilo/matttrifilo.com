@@ -27,7 +27,8 @@ routing internal calls through the monolith.
 
 ## The numbers
 
-**75 ticket-linked pull requests** between February and September 2019,
+**75 ticket-linked pull requests of Matt's own** between February and
+September 2019,
 adding about 17,200 lines and removing about 2,800, across the monolith
 (47), the mobile app (14), the web backend-for-frontend (7), and the web
 app (7). Six epics; five closed Done in 2019. Matt was a Software Engineer
