@@ -39,6 +39,7 @@ import { ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { hasPendingQuestion, takePendingQuestion } from './pending-question'
+import { hasCoarsePointer, usePickPointer } from './pointer'
 import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
@@ -86,6 +87,7 @@ const STOPPED_VIEW: AnswerView = {
 export function AssistantChat() {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const statusRef = useRef<HTMLParagraphElement>(null)
 
   // True when the visitor stopped the most recent run. The SDK reports an
   // abort as an ordinary `ready` with no error and no metadata, so nothing
@@ -174,12 +176,49 @@ export function AssistantChat() {
       setStopped(false)
       askedRef.current = question
       void sendMessage({ text: question })
-      // The next question is usually a follow-up, and a starter question that
-      // moved focus to a pill would leave the visitor tabbing back.
-      textareaRef.current?.focus()
     },
     [clearError, sendMessage]
   )
+
+  // The next question is usually a follow-up, so the caret goes back to the
+  // composer after a send.
+  const askTyped = useCallback(
+    (question: string) => {
+      ask(question)
+      textareaRef.current?.focus()
+    },
+    [ask]
+  )
+
+  // A picked question also has to take focus somewhere, because the pill
+  // that had it is about to go. A mouse or keyboard pick puts the caret in
+  // the composer, as a typed one does. A touch pick must not: focusing the
+  // composer raises the on-screen keyboard over the answer as it streams.
+  // Focus goes to the status region instead, which is also where a screen
+  // reader hears the answer begin.
+  //
+  // It moves there once the run has started, not in the click: a screen
+  // reader reads a region as it takes focus, and until the SDK reports the
+  // send (a few microtasks later, still before the browser paints) this one
+  // still holds the last run's "Response complete". A run that fails before
+  // it starts reports that too, and "Error" is worth hearing.
+  const { pressHandlers, pickedByTouch } = usePickPointer()
+  const focusStatusOnceRunning = useRef(false)
+  const askPicked = useCallback(
+    (question: string) => {
+      ask(question)
+      if (pickedByTouch()) focusStatusOnceRunning.current = true
+      else textareaRef.current?.focus()
+    },
+    [ask, pickedByTouch]
+  )
+  useLayoutEffect(() => {
+    if (!focusStatusOnceRunning.current || status === 'ready') return
+    focusStatusOnceRunning.current = false
+    // Visually hidden, so there is nothing to bring into view, and a browser
+    // that tried would jump the transcript.
+    statusRef.current?.focus({ preventScroll: true })
+  })
 
   // Empties the transcript, not the composer: what is typed there is the
   // next question (or the refused one, just handed back), and "new
@@ -204,15 +243,23 @@ export function AssistantChat() {
   // The ref, not the storage read, is what keeps it to one send: React runs
   // effects twice in development. A layout effect, so the question is taken
   // and sent in the same frame the docked layout is first drawn in.
+  //
+  // It also decides where focus starts. A question picked by touch on the
+  // homepage lands as a pick made here would: on the status region, keyboard
+  // down. Otherwise the composer is the page's focal point and is focused,
+  // except on a touch device, where that would raise the keyboard over the
+  // page before the visitor has touched anything.
   const handedOff = useRef(false)
   useLayoutEffect(() => {
     if (handedOff.current) return
     handedOff.current = true
     const pending = takePendingQuestion()
     if (pending) {
-      askedRef.current = pending
-      void sendMessage({ text: pending })
+      askedRef.current = pending.question
+      void sendMessage({ text: pending.question })
     }
+    if (pending?.pickedByTouch) focusStatusOnceRunning.current = true
+    else if (!hasCoarsePointer()) textareaRef.current?.focus()
   }, [sendMessage])
 
   const lastMessage = messages.at(-1)
@@ -246,6 +293,7 @@ export function AssistantChat() {
         // than the page, which /ask never does.
         !docked && 'overflow-y-auto'
       )}
+      {...pressHandlers}
     >
       <div className="flex items-center justify-between gap-4">
         <AssistantHeader />
@@ -266,7 +314,15 @@ export function AssistantChat() {
           part of its centred group. */}
       {docked && <h1 className="sr-only">{ASSISTANT_NAME}</h1>}
 
-      <p aria-atomic="true" className="sr-only" role="status">
+      {/* Focusable only by script: a touch pick sends focus here so the
+          keyboard stays down, and the tab order never meets it. */}
+      <p
+        aria-atomic="true"
+        className="sr-only"
+        ref={statusRef}
+        role="status"
+        tabIndex={-1}
+      >
         {announcement}
       </p>
 
@@ -311,7 +367,7 @@ export function AssistantChat() {
                           stopped,
                           view,
                         })
-                          ? ask
+                          ? askPicked
                           : undefined
                       }
                       pending={isLast && busy}
@@ -339,7 +395,7 @@ export function AssistantChat() {
           <ConversationScrollButton />
         </Conversation>
       ) : (
-        <AssistantEmptyState onPick={ask} />
+        <AssistantEmptyState onPick={askPicked} />
       )}
 
       <div className="space-y-2">
@@ -351,7 +407,7 @@ export function AssistantChat() {
         )}
         <AssistantComposer
           onStop={stopRun}
-          onSubmit={ask}
+          onSubmit={askTyped}
           onValueChange={setInput}
           streaming={busy}
           textareaRef={textareaRef}

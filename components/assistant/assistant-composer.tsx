@@ -41,7 +41,10 @@ export interface AssistantComposerProps {
   onStop?: () => void
   /** Swaps the send button for a stop button. */
   streaming?: boolean
-  /** Lets the page keep the caret here after a send or a starter question. */
+  /**
+   * Lets the page place the caret here: on load and after a send or a pick,
+   * except where that would raise a touch device's on-screen keyboard.
+   */
   textareaRef?: RefObject<HTMLTextAreaElement | null>
   className?: string
 }

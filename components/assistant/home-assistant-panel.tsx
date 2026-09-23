@@ -6,7 +6,8 @@ import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
-import { handOffQuestion } from './pending-question'
+import { handOffQuestion, type PendingQuestion } from './pending-question'
+import { usePickPointer } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import { HOME_START_AT } from './ticker-geometry'
 
@@ -15,7 +16,7 @@ import { HOME_START_AT } from './ticker-geometry'
  *
  * It looks like the real thing and behaves like one input: a question typed
  * here, or a starter question tapped here, opens /ask with the answer already
- * arriving. What it deliberately is not is a second chat — one transcript, one
+ * arriving. What it deliberately is not is a second chat: one transcript, one
  * place, so a visitor never has half a conversation behind them on a page
  * about something else.
  */
@@ -28,26 +29,39 @@ export function HomeAssistantPanel() {
   useEffect(() => router.prefetch('/ask'), [router])
 
   const start = useCallback(
-    (question: string) => {
-      handOffQuestion(question)
+    (pending: PendingQuestion) => {
+      handOffQuestion(pending)
       router.push('/ask')
     },
     [router]
+  )
+
+  // The tap happens here and the answer streams on /ask, so how the question
+  // was picked travels with it: /ask keeps the keyboard down on arrival.
+  const { pressHandlers, pickedByTouch } = usePickPointer()
+  const pick = useCallback(
+    (question: string) => start({ question, pickedByTouch: pickedByTouch() }),
+    [pickedByTouch, start]
+  )
+  const submit = useCallback(
+    (question: string) => start({ question, pickedByTouch: false }),
+    [start]
   )
 
   return (
     <section
       aria-labelledby="career-assistant-heading"
       className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6"
+      {...pressHandlers}
     >
       <AssistantHeader />
       <h2 className="text-xl font-semibold" id="career-assistant-heading">
         {ASSISTANT_NAME}
       </h2>
       <p className="leading-relaxed text-muted-foreground">{ASSISTANT_INTRO}</p>
-      <StarterTicker onPick={start} startAt={HOME_START_AT} />
+      <StarterTicker onPick={pick} startAt={HOME_START_AT} />
       <AssistantComposer
-        onSubmit={start}
+        onSubmit={submit}
         onValueChange={setInput}
         value={input}
       />

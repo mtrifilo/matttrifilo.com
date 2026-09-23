@@ -198,6 +198,10 @@ A byte budget in validation was rejected because a wrong one would refuse a real
 
 **Old transcripts.** The browser replays the whole message back with the next question, so parts narrated by an earlier deployment are validated by a newer one all the time. `topic`, `headings` and `kind` are therefore optional, and a field that does not check out costs the row its detail rather than costing the visitor the row.
 
+## Focus on /ask (MTC-74, MTC-67)
+
+A suggested question picked on a device whose primary pointer is coarse, or picked by a finger on any device (a starter or a follow-up, on /ask or on the homepage before the hand-off), moves focus to the transcript's visually hidden status region rather than the composer, so a phone's keyboard stays down while the answer streams; any other pick returns focus to the composer, and /ask focuses the composer on load only when the primary pointer is not coarse (`components/assistant/pointer.ts`; tests state a touch device with `test/touch-device.ts`).
+
 ## The Turbopack build cache (MTC-62)
 
 Vercel restores a build cache before every build, keyed by team, project, framework, root directory, Node version, package manager and Git branch; a branch's first build has no cache of its own and gets the last production deployment's ([Vercel: caching process](https://vercel.com/docs/deployments/troubleshoot-a-build#caching-process)). Next.js 16.3 turned on Turbopack's persistent build cache inside that restore. On 2026-09-22 the first preview of PR #41, which changed `app/globals.css`, served the branch's JavaScript with main's stylesheet: the follow-up row it added had no rules at all and the transcript scrolled sideways. CI runs `bun run build` cold and was green.
