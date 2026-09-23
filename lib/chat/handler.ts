@@ -97,9 +97,12 @@ import {
  *
  * `onVertexFirstByte` carries the other number that wrapper knows and nothing
  * else does: how long a model call waited before Vertex said anything. The
- * deadlines that decide whether a call is stalled or merely slow are guesses
- * at it, and `msSinceStart` on the step line cannot stand in — that is
- * elapsed time to the end of a step, generation included.
+ * wrapper's two deadlines (VERTEX_FIRST_BYTE_TIMEOUT_MS and
+ * VERTEX_LAST_ATTEMPT_TIMEOUT_MS) bound that wait and are checked against a
+ * measurement of it; their values and that measurement are on
+ * `vertexFirstByteMs` in `logCompletion`. `msSinceStart` on the step line
+ * cannot stand in for it: that is elapsed time to the end of a step,
+ * generation included.
  */
 export interface ChatModelRequest {
   onVertexRetry: (retry: BoundedFetchRetry) => void
@@ -943,22 +946,32 @@ function flatRefusals(r: {
 /**
  * The same, for the activity checks. Flat fields a log query can aggregate.
  *
- * `activityRefusedDuplicate` is the one that is not only refusals: it counts
- * repeats answered from a fetch still in flight as well as repeats refused
- * `repository_already_checked`. A model that repeats a check is looping
- * whether or not the session could answer the repeat, and this field is how
- * an operator sees it. Some repeats land elsewhere, because the session
- * repeats the outcome it recorded or meets another guard first: one past the
- * call cap, or for a repository whose digest the budget refused, counts as
- * `activityRefusedBudget`, and one for a repository GitHub did not answer is
- * told `activity_unavailable` again and counted nowhere. The progress view
- * counts a repository once however often it was asked for (`withProgress`),
- * so a repeat costs no row.
+ * `activityRepeated` is the one that is not a refusal count: it counts
+ * repeats answered from a fetch still in flight, which are not refused, as
+ * well as repeats refused `repository_already_checked`. A model that repeats
+ * a check is looping whether or not the session could answer the repeat, and
+ * this field is how an operator sees it. Some repeats land elsewhere, because
+ * the session repeats the outcome it recorded or meets another guard first:
+ * one past the call cap, or for a repository whose digest the budget refused,
+ * counts as `activityRefusedBudget`, and one for a repository GitHub did not
+ * answer is told `activity_unavailable` again and counted nowhere. The
+ * progress view counts a repository once however often it was asked for
+ * (`withProgress`), so a repeat costs no row.
+ *
+ * `activityRefusedBudget` counts two refusals under one name. One is a check
+ * turned away at RECENT_ACTIVITY_MAX_CALLS, which reaches no network; every
+ * check past the cap that no fetch in flight can answer lands here, an
+ * unknown id included. The other is a digest fetched and then dropped because
+ * the read budget could not take it, which spent a check and gave the visitor
+ * nothing; a repeat of that repository is told the same and counted here too.
+ * The line cannot tell the two apart, with one exception: a cap refusal needs
+ * `activityCalls` to have reached RECENT_ACTIVITY_MAX_CALLS, so on a line
+ * below it every budget refusal is a dropped digest or a repeat of one.
  */
 function flatActivityRefusals(r: ActivityRefused) {
   return {
     activityRefusedUnknown: r.unknown,
-    activityRefusedDuplicate: r.duplicate,
+    activityRepeated: r.duplicate,
     activityRefusedBudget: r.budget,
   }
 }
@@ -1050,10 +1063,11 @@ function logCompletion({
     activityCalls,
     activityTokens,
     // Split for the same reason the read refusals are: an unknown id means
-    // the model is guessing at the repository list, a duplicate means it is
-    // looping, and a budget refusal means a GitHub call was spent and its
-    // digest then dropped, which is the one failure here that costs a request
-    // and gives the visitor nothing.
+    // the model is guessing at the repository list, a repeat means it is
+    // looping, and a budget refusal means the check met the call cap or its
+    // digest did not fit the read budget. The second kind is the one failure
+    // here that spends a check and gives the visitor nothing; the two share
+    // a counter, and `flatActivityRefusals` says when a line tells them apart.
     ...flatActivityRefusals(activityRefused),
     // False here is the signal that a request burned tokens and gave the
     // visitor nothing. It should be rare; if it is not, CHAT_MAX_STEPS is
@@ -1066,10 +1080,19 @@ function logCompletion({
     // generation the visitor never saw: abandoning a connection does not
     // cancel the generation behind it.
     vertexRetries,
-    // What VERTEX_FIRST_BYTE_TIMEOUT_MS and VERTEX_LAST_ATTEMPT_TIMEOUT_MS
-    // are hypotheses about: the longest a model call on this request waited
-    // before Vertex sent a byte. A run of these from preview is what decides
-    // whether either bound sits in the right place.
+    // The longest a model call on this request waited before Vertex sent a
+    // byte: the wait VERTEX_FIRST_BYTE_TIMEOUT_MS (30 s, then a retry) and
+    // VERTEX_LAST_ATTEMPT_TIMEOUT_MS (37 s, then a failure) bound. Both stand
+    // on a measurement of this field over 523 requests from six eval runs on
+    // GitHub runners (MTC-47, PR #40), tabled with its re-measure triggers in
+    // the operations runbook under "Vertex first-byte latency, measured". The
+    // probe sits above the recorded p99. The ceiling is set by arithmetic,
+    // not by the sample: probe, 500 ms backoff and ceiling share 67.5 s per
+    // model call (VERTEX_REQUEST_WAIT_BUDGET_MS over CHAT_MAX_STEPS), and
+    // 3.4% of the measured requests exhausted the ceiling. A wait cut at a
+    // deadline records nothing here, so these values are survivor
+    // statistics: how often a deadline fires is counted from attempts, as
+    // the runbook does, not read off this field.
     vertexFirstByteMs,
     ms,
   }
