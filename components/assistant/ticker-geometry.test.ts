@@ -9,6 +9,7 @@ import {
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  sidewaysWheelPixels,
   tickerRows,
   TICKER_SPEED_PX_PER_SECOND,
 } from './ticker-geometry'
@@ -308,5 +309,41 @@ describe('bringing a focused pill into view', () => {
         maxScrollLeft: COPY_WIDTH,
       })
     ).toBe(COPY_WIDTH)
+  })
+})
+
+describe('how far a wheel event moves a handed-over row', () => {
+  const LINE = 16
+  const PAGE = 358
+  const motion = (
+    deltaX: number,
+    deltaY: number,
+    { deltaMode = 0, shiftKey = false } = {}
+  ) => ({ deltaX, deltaY, deltaMode, shiftKey })
+
+  test('a mostly sideways gesture moves the row by its sideways delta', () => {
+    expect(sidewaysWheelPixels(motion(40, 3), LINE, PAGE)).toBe(40)
+    expect(sidewaysWheelPixels(motion(-25, 10), LINE, PAGE)).toBe(-25)
+  })
+
+  test('a mostly upright gesture is the page being scrolled, and moves nothing', () => {
+    expect(sidewaysWheelPixels(motion(2, 60), LINE, PAGE)).toBe(0)
+    // A tie is not a request to read along the row either.
+    expect(sidewaysWheelPixels(motion(20, 20), LINE, PAGE)).toBe(0)
+  })
+
+  test('shift with an upright wheel reads as sideways', () => {
+    expect(
+      sidewaysWheelPixels(motion(0, 50, { shiftKey: true }), LINE, PAGE)
+    ).toBe(50)
+  })
+
+  test('lines and pages become pixels', () => {
+    expect(
+      sidewaysWheelPixels(motion(3, 0, { deltaMode: 1 }), LINE, PAGE)
+    ).toBe(48)
+    expect(
+      sidewaysWheelPixels(motion(1, 0, { deltaMode: 2 }), LINE, PAGE)
+    ).toBe(PAGE)
   })
 })

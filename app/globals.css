@@ -229,9 +229,9 @@
    * the left one for the last few seconds of every loop: the strip would
    * fade in as an empty sliver and then snap full at the wrap. A row's first
    * pill starts at scroll zero with nothing to its left, so the ticker gives
-   * its track a lead of its own whenever the track is not looping (held
-   * still for focus, or under reduced motion); the follow-up row has no left
-   * gradient to clear.
+   * its track a lead of its own whenever the track is not looping (frozen,
+   * for focus or once handed over to the visitor, or under reduced motion);
+   * the follow-up row has no left gradient to clear.
    */
   scroll-padding-inline: var(--edge-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
@@ -259,6 +259,24 @@
    * a focused pill is brought into view once the track stops moving.
    */
   overflow: hidden;
+}
+
+/*
+ * Where the primary pointer is a finger, a moving row is a scroll container
+ * from the first paint, still at scroll zero while the loop runs. A touch
+ * browser picks the box a drag will scroll when the finger lands, before
+ * any handler has run, so a row that only became scrollable in its
+ * touchstart handler would stop under the first drag without moving. The
+ * hand-over then only has to swap the transform for scrollLeft.
+ * Scrollbars there are overlays, so nothing is drawn until the row scrolls.
+ * A fine pointer keeps `hidden`, where a classic scrollbar would be drawn
+ * under every moving row; it becomes scrollable when it is handed over.
+ */
+@media (pointer: coarse) {
+  .starter-ticker-row {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
 }
 
 /*
@@ -361,12 +379,21 @@
  * A pill that is being read, or reached for with a mouse or the keyboard,
  * holds still, and so does the other row: a row still drifting beside the
  * one being read is the distraction the pause exists to remove. That is why
- * both conditions are read off the group rather than off a single row. A
- * touch is not a pause: it hands the touched row over for good (below).
+ * both conditions are read off the group rather than off a single row.
+ *
+ * A touch is not a pause: it hands the touched row over for good (below)
+ * and leaves the other one moving. Hover is therefore read only where a
+ * pointer can hover, because a touch browser keeps `:hover` on whatever was
+ * last tapped, which would stop the other row as well.
  */
-.starter-ticker:hover .starter-ticker-track,
 .starter-ticker:focus-within .starter-ticker-track {
   animation-play-state: paused;
+}
+
+@media (hover: hover) {
+  .starter-ticker:hover .starter-ticker-track {
+    animation-play-state: paused;
+  }
 }
 
 /*

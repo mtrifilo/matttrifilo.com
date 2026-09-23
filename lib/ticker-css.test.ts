@@ -7,6 +7,7 @@ import {
   TICKER_KEYFRAME_FROM,
   TICKER_KEYFRAME_TO,
 } from '@/components/assistant/ticker-geometry'
+import { cssBlock } from '@/test/css-block'
 
 /**
  * The contract between app/globals.css and the starter ticker (MTC-39,
@@ -24,17 +25,7 @@ const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
 
 /** The first `selector { … }` block in the stylesheet, braces balanced. */
 function ruleFor(selector: string): string {
-  const start = css.indexOf(selector)
-  if (start < 0) throw new Error(`${selector} is not in app/globals.css`)
-  let depth = 0
-  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
-    if (css[i] === '{') depth += 1
-    if (css[i] === '}') {
-      depth -= 1
-      if (depth === 0) return css.slice(start, i + 1)
-    }
-  }
-  throw new Error(`${selector} is not closed`)
+  return cssBlock(css, selector)
 }
 
 /** The at-rule a declaration sits inside, braces balanced. */
@@ -108,6 +99,20 @@ describe('the rows the component scrolls', () => {
     // focused pill into view once the track has stopped moving.
     expect(row).toContain('overflow: hidden')
     expect(row).not.toContain('overflow: clip')
+  })
+
+  test('is already a scroll container under a finger, before any touch', () => {
+    // A touch browser picks the box a drag scrolls when the finger lands.
+    // A row made scrollable only by the touchstart handler would stop under
+    // the first drag without moving; this block is what lets that drag
+    // scroll the strip it has just been handed.
+    const coarse = cssBlock(css, '@media (pointer: coarse)')
+    expect(coarse).toContain('.starter-ticker-row {')
+    expect(coarse).toContain('overflow-x: auto')
+    expect(coarse).toContain('overscroll-behavior-x: contain')
+    // Only there: a fine pointer would draw a classic scrollbar under every
+    // moving row.
+    expect(row).not.toContain('overflow-x: auto')
   })
 })
 
@@ -278,19 +283,21 @@ describe('the state flags the component writes', () => {
   })
 
   test('hover and focus stop both rows, not just the one under the pointer', () => {
-    const pause = ruleFor('.starter-ticker:hover .starter-ticker-track')
-    expect(pause).toContain(
-      '.starter-ticker:focus-within .starter-ticker-track'
-    )
-    expect(pause).toContain('animation-play-state: paused')
+    expect(
+      ruleFor('.starter-ticker:focus-within .starter-ticker-track {')
+    ).toContain('animation-play-state: paused')
+    expect(
+      blockAround('.starter-ticker:hover .starter-ticker-track {')
+    ).toContain('animation-play-state: paused')
   })
 
-  test('a touch is not a pause of both rows', () => {
-    // A touch hands the touched row over for good and leaves the other one
-    // moving until it is touched itself. A group-wide touch pause would stop
-    // the other row too, and then start it again under the reader.
-    expect(css).not.toContain('data-touched')
-    expect(componentSource('starter-ticker.tsx')).not.toContain('setTimeout')
+  test('hover pauses only where a pointer can hover', () => {
+    // A touch hands the touched row over and leaves the other moving. A
+    // touch browser keeps :hover on the last thing tapped, so an unscoped
+    // hover pause would stop the other row too.
+    expect(
+      blockAround('.starter-ticker:hover .starter-ticker-track {')
+    ).toContain('@media (hover: hover)')
   })
 
   test('reduced motion turns both rows into plain scroll strips', () => {

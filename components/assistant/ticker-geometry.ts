@@ -226,3 +226,44 @@ function wrapFraction(value: number): number {
   if (!Number.isFinite(value)) return 0
   return ((value % 1) + 1) % 1
 }
+
+/**
+ * How long a pause between wheel events ends the gesture that handed a row
+ * over. A trackpad swipe and its momentum arrive every few milliseconds, so
+ * anything this long apart is a new gesture, which the browser can scroll
+ * natively because the row was already scrollable when it began.
+ */
+export const WHEEL_GESTURE_GAP_MS = 200
+
+/** The part of a wheel event that says how far and which way it moves. */
+export interface WheelMotion {
+  deltaX: number
+  deltaY: number
+  /** 0 for pixels, 1 for lines, 2 for pages, as `WheelEvent.deltaMode`. */
+  deltaMode: number
+  shiftKey: boolean
+}
+
+const DELTA_LINE = 1
+const DELTA_PAGE = 2
+
+/**
+ * How far a wheel event asks to move a row sideways, in pixels; zero when
+ * the gesture is mostly upright, which is the page being scrolled past.
+ *
+ * Shift with an upright wheel is read as sideways, because some browsers
+ * report it that way rather than swapping the axes themselves. Lines and
+ * pages (a mouse wheel in some browsers) become pixels at the sizes given.
+ */
+export function sidewaysWheelPixels(
+  motion: WheelMotion,
+  linePixels: number,
+  pagePixels: number
+): number {
+  let delta = 0
+  if (Math.abs(motion.deltaX) > Math.abs(motion.deltaY)) delta = motion.deltaX
+  else if (motion.shiftKey && motion.deltaX === 0) delta = motion.deltaY
+  if (motion.deltaMode === DELTA_LINE) return delta * linePixels
+  if (motion.deltaMode === DELTA_PAGE) return delta * pagePixels
+  return delta
+}

@@ -21,8 +21,10 @@ import {
   revealScrollLeft,
   scrollLeftForProgress,
   TICKER_ANIMATION_NAME,
+  sidewaysWheelPixels,
   TICKER_COPIES,
   tickerRows,
+  WHEEL_GESTURE_GAP_MS,
 } from './ticker-geometry'
 
 /**
@@ -66,13 +68,13 @@ import {
  * only way a row's first pill, with nothing to its left, can be scrolled
  * clear of the gradient.
  *
- * **A row a visitor reaches for becomes theirs.** A touch, or a horizontal
- * wheel or trackpad gesture, freezes that row the same way focus does and
- * then hands it over for good: the row turns into a real scroll strip and
- * never moves on its own again, because a row that resumed under a reader's
- * finger would take the question they were reading away from them. Only the
- * row reached for stops; the other keeps drifting until it is reached for
- * itself.
+ * **A row a visitor reaches for is handed over to them.** A touch, or a
+ * sideways wheel or trackpad gesture, freezes that row the same way focus
+ * does and then hands it over for good: the row becomes a real scroll strip
+ * and never moves on its own again, because a row that resumed under a
+ * reader's finger would take the question they were reading away from them.
+ * Only the row reached for stops; the other keeps drifting until it is
+ * reached for itself.
  */
 
 /**
@@ -219,13 +221,16 @@ function TickerRow({
     // inside the fades because the row sets scroll-padding to match them.
     if (prefersReducedMotion()) return
 
-    // A row already frozen, because the visitor is tabbing along it or has
-    // taken it over by hand, stays at its scroll offset and only the reveal
+    // A row already frozen, because the visitor is tabbing along it or it
+    // has been handed over, stays at its scroll offset and only the reveal
     // below applies. With no loop running the row can simply be scrolled.
     // A loop with no measured width cannot be converted, and scrolling a
     // track that is still transformed would add one offset to the other:
     // leaving the row where it is beats moving it wrongly.
-    if (holdStill(track, viewport, copyWidthRef.current) === 'unmeasured') {
+    if (
+      freezeAtLoopPosition(track, viewport, copyWidthRef.current) ===
+      'unmeasured'
+    ) {
       return
     }
 
@@ -252,8 +257,8 @@ function TickerRow({
       const viewport = viewportRef.current
       const track = trackRef.current
       if (!viewport || !track || track.dataset.frozen !== 'true') return
-      // A row the visitor has taken over is theirs for the rest of the
-      // visit; losing focus is not a reason to set it moving again.
+      // A handed-over row is the visitor's for the rest of the visit;
+      // losing focus is not a reason to set it moving again.
       if (isHandedOver(viewport)) return
       // Tabbing from one pill to the next keeps the row frozen.
       const next = event.relatedTarget
@@ -283,7 +288,7 @@ function TickerRow({
    * stylesheet then lets the row scroll by hand. Nothing takes the row back:
    * blur leaves it frozen, nothing measures it again, and no timer exists to
    * resume it. A row whose position cannot be read yet is left moving rather
-   * than moved wrongly, and the next touch tries again.
+   * than moved wrongly, and the next touch or wheel tries again.
    *
    * Returns whether this call is the one that handed the row over.
    */
@@ -293,28 +298,50 @@ function TickerRow({
     if (!viewport || !track || isHandedOver(viewport)) return false
     // Under reduced motion the row is already a strip the visitor scrolls.
     if (prefersReducedMotion()) return false
-    if (holdStill(track, viewport, copyWidthRef.current) !== 'held') {
+    if (
+      freezeAtLoopPosition(track, viewport, copyWidthRef.current) !== 'frozen'
+    ) {
       return false
     }
     viewport.dataset.handedOver = 'true'
     return true
   }, [])
 
-  // Attached by hand because the handler has to be able to cancel, and
-  // React listens for wheel events passively.
+  /**
+   * A sideways wheel or trackpad gesture over a moving row hands it over,
+   * and the rest of that gesture is scrolled here rather than natively.
+   *
+   * The gesture began over a row that could not scroll, and browsers decide
+   * which box a gesture scrolls when it begins, so after the hand-over the
+   * rest of it may go to the page (or to the history swipe) instead of the
+   * strip. Cancelling each of its events and moving the strip by their
+   * deltas lets the first gesture read ahead whichever box the browser
+   * chose, as long as its events can still be cancelled. The
+   * next gesture begins over a strip that can scroll, so the browser takes
+   * over and the listener, which has to be able to cancel and so is attached
+   * by hand, is removed.
+   */
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
+    // When this row last moved under the gesture that handed it over.
+    let steeredAt = Number.NEGATIVE_INFINITY
     const handleWheel = (event: WheelEvent) => {
-      // Only a sideways gesture asks to read along the row; an upright one
-      // is the page being scrolled past it, and the row keeps moving.
-      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
-      if (!handOver()) return
-      // The event that stops the row began over a box that could not scroll
-      // sideways, which a browser may take as a swipe back through history.
-      // It is spent on the hand-over; the ones after it scroll the strip,
-      // which overscroll-behavior then keeps from reaching history.
+      const handedOver = isHandedOver(viewport)
+      if (handedOver && event.timeStamp - steeredAt > WHEEL_GESTURE_GAP_MS) {
+        viewport.removeEventListener('wheel', handleWheel)
+        return
+      }
+      const pixels = sidewaysWheelPixels(
+        event,
+        rootFontSize(),
+        viewport.clientWidth
+      )
+      if (pixels === 0) return
+      if (!handedOver && !handOver()) return
+      steeredAt = event.timeStamp
       event.preventDefault()
+      viewport.scrollLeft += pixels
     }
     viewport.addEventListener('wheel', handleWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', handleWheel)
@@ -419,24 +446,25 @@ function animationNameOf(animation: Animation): string | undefined {
 }
 
 /**
- * What holding a row still came to: `held` is a frozen track whose
- * scrollLeft shows what its loop showed, `not-moving` is a row with no loop
- * running and so no position to hand over, and `unmeasured` is a loop with
- * no width to convert it by, which is left exactly as it was.
+ * What freezing a row came to: `frozen` is a track whose scrollLeft shows
+ * what its loop showed (now, or since an earlier freeze), `not-moving` is a
+ * row with no loop running and so no position to hand over, and
+ * `unmeasured` is a loop with no width to convert it by, which is left
+ * exactly as it was.
  */
-type Hold = 'held' | 'not-moving' | 'unmeasured'
+type FreezeResult = 'frozen' | 'not-moving' | 'unmeasured'
 
 /**
  * Stops a moving row where its loop has got to, handing the position from
  * the track's transform to the row's scrollLeft. Focus and the visitor's own
  * hand both come through here, which is why neither moves the row.
  */
-function holdStill(
+function freezeAtLoopPosition(
   track: HTMLElement,
   viewport: HTMLElement,
   copyWidth: number
-): Hold {
-  if (track.dataset.frozen === 'true') return 'held'
+): FreezeResult {
+  if (track.dataset.frozen === 'true') return 'frozen'
   const progress = animationProgress(track)
   if (progress === null) return 'not-moving'
   if (copyWidth <= 0) return 'unmeasured'
@@ -449,10 +477,14 @@ function holdStill(
     copyWidth,
     leadOf(track)
   )
-  return 'held'
+  return 'frozen'
 }
 
-/** Whether the visitor has taken this row over for the rest of the visit. */
+/**
+ * Whether the visitor has had this row handed over for the rest of the
+ * visit. A handed-over row's track is always frozen too: the flag is only
+ * written after a freeze, and the one path that thaws (blur) skips it.
+ */
 function isHandedOver(viewport: HTMLElement): boolean {
   return viewport.dataset.handedOver === 'true'
 }
@@ -476,6 +508,11 @@ function pillStart(copy: HTMLElement, startAt: number): number {
  */
 function leadOf(track: Element): number {
   return Number.parseFloat(getComputedStyle(track).paddingInlineStart) || 0
+}
+
+/** One line of a line-based wheel delta, as the page sets its text. */
+function rootFontSize(): number {
+  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
 }
 
 /** The edge fade, read from the stylesheet so one number defines it. */

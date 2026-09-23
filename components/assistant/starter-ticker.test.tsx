@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { cssBlock } from '@/test/css-block'
 import { STARTER_QUESTIONS } from './copy'
 import { StarterTicker } from './starter-ticker'
 import {
@@ -9,6 +10,7 @@ import {
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   tickerRows,
+  WHEEL_GESTURE_GAP_MS,
 } from './ticker-geometry'
 
 /**
@@ -184,6 +186,11 @@ describe('the questions the ticker offers', () => {
   })
 })
 
+const GLOBALS_CSS = readFileSync(
+  new URL('../../app/globals.css', import.meta.url),
+  'utf8'
+)
+
 const COPY_WIDTH_MEASURED = 600
 const REAL_BOUNDING_RECT = Element.prototype.getBoundingClientRect
 
@@ -319,7 +326,7 @@ describe('a moving row, while a pill has focus', () => {
   })
 })
 
-describe('a row the visitor takes over by touch or wheel', () => {
+describe('a row handed over to the visitor by touch or wheel', () => {
   /**
    * The stylesheet's own declarations for the fade, the freeze's lead and
    * the handed-over strip, so the lead the component reads back is the one
@@ -352,7 +359,9 @@ describe('a row the visitor takes over by touch or wheel', () => {
    */
   function renderLaidOutRows(progress = 0.25) {
     stylesheet = document.createElement('style')
-    stylesheet.textContent = TICKER_RULES.map(stylesheetRule).join('\n')
+    stylesheet.textContent = TICKER_RULES.map(rule =>
+      cssBlock(GLOBALS_CSS, rule)
+    ).join('\n')
     document.head.append(stylesheet)
 
     const copyWidth = FIRST_ROW.length * PILL_PITCH
@@ -426,25 +435,78 @@ describe('a row the visitor takes over by touch or wheel', () => {
     )
   })
 
-  test('a sideways wheel does the same hand-over, and spends its first event on it', () => {
+  /**
+   * A wheel event at a stated time. The gesture rule reads `timeStamp`,
+   * which an event is given when it is made and cannot be passed in.
+   */
+  function wheelAt(
+    target: HTMLElement,
+    timeStamp: number,
+    init: WheelEventInit
+  ): boolean {
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    })
+    Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+    // Happy DOM's WheelEvent is not a MouseEvent, as a browser's is, and
+    // drops the modifier keys it is given.
+    Object.defineProperty(event, 'shiftKey', { value: init.shiftKey ?? false })
+    return target.dispatchEvent(event)
+  }
+
+  test('a sideways wheel does the same hand-over, and moves the strip by its own delta', () => {
     const progress = 0.61
     const { rows, copyWidth } = renderLaidOutRows(progress)
     const [first] = rows
     const before = pillAtLeftEdge(first.track, progress * copyWidth)
 
-    const scrolledNatively = fireEvent.wheel(first.viewport, {
+    const notCancelled = wheelAt(first.viewport, 1000, {
       deltaX: 40,
       deltaY: 3,
     })
 
     expect(isHandedOver(first.viewport)).toBe(true)
-    expect(pillAtLeftEdge(first.track, first.viewport.scrollLeft)).toBe(before)
-    // Cancelled: the gesture began over a row that could not scroll.
-    expect(scrolledNatively).toBe(false)
-    // After the hand-over the browser scrolls the strip itself.
-    expect(fireEvent.wheel(first.viewport, { deltaX: 40, deltaY: 0 })).toBe(
+    // Cancelled, and applied here instead: the browser may already have
+    // given the gesture to the page.
+    expect(notCancelled).toBe(false)
+    expect(first.viewport.scrollLeft).toBeCloseTo(
+      progress * copyWidth + leadOf(first.track) + 40
+    )
+    // The hand-over itself kept the pill at the edge where it was.
+    expect(pillAtLeftEdge(first.track, first.viewport.scrollLeft - 40)).toBe(
+      before
+    )
+  })
+
+  test('the rest of that gesture scrolls the strip too, then the browser takes over', () => {
+    const { rows } = renderLaidOutRows()
+    const [first] = rows
+    wheelAt(first.viewport, 1000, { deltaX: 40, deltaY: 0 })
+    const handedOverAt = first.viewport.scrollLeft
+
+    // Momentum: close together, and not only sideways.
+    expect(wheelAt(first.viewport, 1016, { deltaX: 25, deltaY: 1 })).toBe(false)
+    expect(wheelAt(first.viewport, 1032, { deltaX: 10, deltaY: 0 })).toBe(false)
+    expect(first.viewport.scrollLeft).toBeCloseTo(handedOverAt + 35)
+
+    // A new gesture begins over a strip that can scroll: left to the
+    // browser, which here means not cancelled and not moved by hand.
+    const later = 1032 + WHEEL_GESTURE_GAP_MS + 1
+    expect(wheelAt(first.viewport, later, { deltaX: 40, deltaY: 0 })).toBe(true)
+    expect(wheelAt(first.viewport, later + 16, { deltaX: 40, deltaY: 0 })).toBe(
       true
     )
+    expect(first.viewport.scrollLeft).toBeCloseTo(handedOverAt + 35)
+  })
+
+  test('shift with an upright wheel counts as sideways', () => {
+    const { rows } = renderLaidOutRows()
+    const [first] = rows
+
+    wheelAt(first.viewport, 1000, { deltaX: 0, deltaY: 50, shiftKey: true })
+    expect(isHandedOver(first.viewport)).toBe(true)
   })
 
   test('an upright wheel is the page being scrolled, and leaves the row moving', () => {
@@ -576,18 +638,3 @@ describe('a row the visitor takes over by touch or wheel', () => {
     }
   })
 })
-
-/**
- * One rule from app/globals.css, braces balanced, by the selector text that
- * opens it.
- */
-function stylesheetRule(opening: string): string {
-  const css = readFileSync(
-    new URL('../../app/globals.css', import.meta.url),
-    'utf8'
-  )
-  const start = css.indexOf(opening)
-  if (start < 0) throw new Error(`${opening} is not in app/globals.css`)
-  const end = css.indexOf('}', start)
-  return css.slice(start, end + 1)
-}
