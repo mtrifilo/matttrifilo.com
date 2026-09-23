@@ -96,13 +96,13 @@ import {
  * without this, to the `ms` on the completion line.
  *
  * `onVertexFirstByte` carries the other number that wrapper knows and nothing
- * else does: how long a model call waited before Vertex said anything. The
- * wrapper's two deadlines (VERTEX_FIRST_BYTE_TIMEOUT_MS and
- * VERTEX_LAST_ATTEMPT_TIMEOUT_MS) bound that wait and are checked against a
- * measurement of it; their values and that measurement are on
- * `vertexFirstByteMs` in `logCompletion`. `msSinceStart` on the step line
- * cannot stand in for it: that is elapsed time to the end of a step,
- * generation included.
+ * else does: how long each attempt at a model call waited before Vertex said
+ * anything. The wrapper's two deadlines (VERTEX_FIRST_BYTE_TIMEOUT_MS and
+ * VERTEX_LAST_ATTEMPT_TIMEOUT_MS) bound that wait; their values, and how they
+ * were checked against a measurement of it, are in lib/ai/bounded-fetch.ts
+ * and summarised on `vertexFirstByteMs` in `logCompletion`. `msSinceStart` on
+ * the step line cannot stand in for it: that is elapsed time to the end of a
+ * step, generation included.
  */
 export interface ChatModelRequest {
   onVertexRetry: (retry: BoundedFetchRetry) => void
@@ -1065,7 +1065,7 @@ function logCompletion({
     // Split for the same reason the read refusals are: an unknown id means
     // the model is guessing at the repository list, a repeat means it is
     // looping, and a budget refusal means the check met the call cap or its
-    // digest did not fit the read budget. The second kind is the one failure
+    // digest did not fit the read budget. The second kind is the one counted
     // here that spends a check and gives the visitor nothing; the two share
     // a counter, and `flatActivityRefusals` says when a line tells them apart.
     ...flatActivityRefusals(activityRefused),
@@ -1080,19 +1080,20 @@ function logCompletion({
     // generation the visitor never saw: abandoning a connection does not
     // cancel the generation behind it.
     vertexRetries,
-    // The longest a model call on this request waited before Vertex sent a
-    // byte: the wait VERTEX_FIRST_BYTE_TIMEOUT_MS (30 s, then a retry) and
-    // VERTEX_LAST_ATTEMPT_TIMEOUT_MS (37 s, then a failure) bound. Both stand
-    // on a measurement of this field over 523 requests from six eval runs on
-    // GitHub runners (MTC-47, PR #40), tabled with its re-measure triggers in
-    // the operations runbook under "Vertex first-byte latency, measured". The
-    // probe sits above the recorded p99. The ceiling is set by arithmetic,
-    // not by the sample: probe, 500 ms backoff and ceiling share 67.5 s per
-    // model call (VERTEX_REQUEST_WAIT_BUDGET_MS over CHAT_MAX_STEPS), and
-    // 3.4% of the measured requests exhausted the ceiling. A wait cut at a
-    // deadline records nothing here, so these values are survivor
-    // statistics: how often a deadline fires is counted from attempts, as
-    // the runbook does, not read off this field.
+    // The longest any single attempt on this request waited before Vertex
+    // sent a byte: the wait VERTEX_FIRST_BYTE_TIMEOUT_MS (30 s, then a
+    // retry) and VERTEX_LAST_ATTEMPT_TIMEOUT_MS (37 s, then a failure) bound,
+    // each per attempt. Measured 2026-09-22 (MTC-47, PR #40) from six eval
+    // runs on GitHub runners, in which 514 of 523 requests recorded this
+    // field; the table, its limits and its re-measure triggers are in the
+    // operations runbook under "Vertex first-byte latency, measured". The
+    // measurement did not set the ceiling and cannot confirm it: probe,
+    // 500 ms backoff and ceiling share a fixed 67.5 s per model call
+    // (VERTEX_REQUEST_WAIT_BUDGET_MS over CHAT_MAX_STEPS), and 18 of the 523
+    // requests, 3.4%, exhausted the ceiling. A wait cut at either deadline
+    // records nothing here, so these values are survivor statistics: how
+    // often a deadline fires is counted from attempts (4.5% of them in that
+    // sample), not read off this field.
     vertexFirstByteMs,
     ms,
   }
