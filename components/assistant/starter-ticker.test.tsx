@@ -203,14 +203,22 @@ describe('holding the rows still', () => {
     expect(group.dataset.touched).toBeUndefined()
   })
 
-  test('a focused pill leaves a row that has not been measured alone', () => {
-    // Without a copy width the loop's position cannot be converted into a
-    // scroll offset, and freezing anyway would move the row wrongly.
+  test('a focused pill leaves a moving row that has not been measured alone', () => {
+    // A loop is running but the copy has no width yet (the first frames, or
+    // before the font loads), so the loop's position cannot be converted
+    // into a scroll offset; freezing anyway would move the row wrongly. The
+    // loop is stubbed and the width is left at Happy DOM's zero on purpose:
+    // this is the width guard, not the no-loop guard tested below.
     const { container } = render(<StarterTicker onPick={() => {}} />)
-    const [first] = tickerOf(container).rows
+    const { rows } = tickerOf(container)
+    const loop = {
+      animationName: TICKER_ANIMATION_NAME,
+      effect: { getComputedTiming: () => ({ progress: 0.25 }) },
+    } as unknown as Animation
+    for (const { track } of rows) track.getAnimations = () => [loop]
 
     screen.getAllByRole('button')[0].focus()
-    expect(first.track.dataset.frozen).toBeUndefined()
+    expect(rows[0].track.dataset.frozen).toBeUndefined()
   })
 })
 

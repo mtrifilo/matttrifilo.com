@@ -76,6 +76,14 @@ describe('the ticker keyframe', () => {
     expect(TICKER_KEYFRAME_FROM).toBe('translateX(0)')
   })
 
+  test('no ticker rule reverses the direction for one row', () => {
+    // Both rows share the one keyframe above. A per-row
+    // `animation-direction: reverse` would run that row left to right, which
+    // shows its last words first (Matt, 2026-09-22), and the keyframe test
+    // alone would not notice.
+    expect(css).not.toMatch(/animation-direction/)
+  })
+
   test('the distance matches the number of copies the track renders', () => {
     // 100 / TICKER_COPIES percent of the track is one copy only while the
     // component renders exactly that many.
