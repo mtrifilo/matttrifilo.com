@@ -1,0 +1,5 @@
+[test]
+# Registers a Happy DOM on globalThis before any test file is imported, which
+# is what lets *.test.tsx render React components. test/dom-preload.ts says
+# what it does and does not replace.
+preload = ["./test/dom-preload.ts"]

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import {
   handOffQuestion,
   hasPendingQuestion,
@@ -12,26 +12,14 @@ import {
  * lost between the render and the send.
  */
 
-const store = new Map<string, string>()
-const original = globalThis.sessionStorage
-
+// The test DOM's own sessionStorage, shared by every test file in the run,
+// so each test starts from an empty one and leaves nothing behind.
 beforeEach(() => {
-  store.clear()
-  globalThis.sessionStorage = {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => void store.set(key, value),
-    removeItem: (key: string) => void store.delete(key),
-  } as Storage
+  sessionStorage.clear()
 })
 
 afterEach(() => {
-  // Bun has no sessionStorage of its own, and assigning undefined back would
-  // leave an own property behind for every later test file to see.
-  if (original === undefined) {
-    delete (globalThis as { sessionStorage?: Storage }).sessionStorage
-  } else {
-    globalThis.sessionStorage = original
-  }
+  sessionStorage.clear()
 })
 
 describe('the pending question', () => {
@@ -51,16 +39,21 @@ describe('the pending question', () => {
   })
 
   test('is not waiting when what is stored is not a question', () => {
-    store.set('matt-career-assistant:pending-question', '{not json')
+    sessionStorage.setItem(
+      'matt-career-assistant:pending-question',
+      '{not json'
+    )
     expect(hasPendingQuestion()).toBe(false)
   })
 
   test('is not waiting when storage is blocked', () => {
-    globalThis.sessionStorage = {
-      getItem: () => {
-        throw new Error('blocked')
-      },
-    } as unknown as Storage
-    expect(hasPendingQuestion()).toBe(false)
+    const blocked = spyOn(sessionStorage, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    try {
+      expect(hasPendingQuestion()).toBe(false)
+    } finally {
+      blocked.mockRestore()
+    }
   })
 })
