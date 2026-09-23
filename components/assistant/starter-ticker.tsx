@@ -186,8 +186,9 @@ function TickerRow({
         )
     // The opening is computed for a row at scroll zero. Under a finger a
     // moving row is already a scroll container, and a drag that landed
-    // before the page's script ran would otherwise offset the opening.
-    if (!placedRef.current) viewport.scrollLeft = 0
+    // before the page's script ran would otherwise offset the opening. A
+    // static strip has no opening, and where its visitor scrolled it stays.
+    if (!placedRef.current && !prefersReducedMotion()) viewport.scrollLeft = 0
     placedRef.current = true
     track.dataset.restarting = 'true'
     // Read to flush the style change, so removing it below starts a new
@@ -348,8 +349,9 @@ function TickerRow({
       if (pixels === 0) return
       if (!handedOver && !handOver()) return
       steeredAt = event.timeStamp
-      // An event the browser will not let go of is one it is scrolling
-      // itself; moving the strip as well would scroll it twice.
+      // An event that cannot be cancelled may be one the browser is
+      // scrolling itself; moving the strip as well could scroll it twice.
+      // The row is handed over either way, and the next gesture scrolls it.
       if (!event.cancelable) return
       event.preventDefault()
       viewport.scrollLeft += pixels

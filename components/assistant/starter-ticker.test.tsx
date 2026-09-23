@@ -570,6 +570,41 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     expect(isHandedOver(second.viewport)).toBe(true)
   })
 
+  /**
+   * Scroll a row before its first placement, then place it. A row measures
+   * zero wide until its copy has a width, so the scroll lands first, and
+   * a new `startAt` is what makes it measure again.
+   */
+  function scrollThenPlace(scrolledTo: number) {
+    const { container, rerender } = render(
+      <StarterTicker onPick={() => {}} startAt={0} />
+    )
+    const [first] = tickerOf(container).rows
+    first.viewport.scrollLeft = scrolledTo
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const rect = REAL_BOUNDING_RECT.call(this)
+      if (!this.classList.contains('starter-ticker-copy')) return rect
+      return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
+    }
+    rerender(<StarterTicker onPick={() => {}} startAt={1} />)
+    return first
+  }
+
+  test('a moving row opens at scroll zero even if a finger scrolled it first', () => {
+    // Under a coarse pointer a moving row is a scroll container from the
+    // first paint, so a drag before the script runs can leave it scrolled;
+    // the opening is computed for scroll zero.
+    const first = scrollThenPlace(300)
+    expect(first.track.dataset.placed).toBe('true')
+    expect(first.viewport.scrollLeft).toBe(0)
+  })
+
+  test('a static strip keeps the scroll its visitor gave it', () => {
+    setReducedMotion(true)
+    const first = scrollThenPlace(300)
+    expect(first.viewport.scrollLeft).toBe(300)
+  })
+
   test('a row whose width is not measured yet is left moving', () => {
     // Converting the loop by a zero width would park the row at its start.
     const { container } = render(<StarterTicker onPick={() => {}} />)
