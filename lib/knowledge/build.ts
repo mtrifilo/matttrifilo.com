@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/chat/progress'
+import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
 
 /**
  * Builds the career assistant's corpus: a small index the model always

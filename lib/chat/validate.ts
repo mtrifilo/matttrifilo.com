@@ -349,6 +349,20 @@ function readTurns(messages: unknown[]): ChatTurn[] | null {
       // payloads that no limit below counts, since every cap here measures
       // concatenated text: the request would reach the model and be billed
       // where it used to be refused for free.
+      //
+      // Its size is deliberately not measured. The largest part a finished
+      // run leaves, every field at its cap, is 6,383 characters of JSON. A
+      // run stopped while one step's calls are in flight can hold a row per
+      // distinct id it named, up to the whole index and allowlist, and a
+      // conversation at the input budget carrying that on every answer
+      // still fits the 4.5 MB request body Vercel accepts at three bytes a
+      // character. validate.test.ts pins the first and asserts the second,
+      // so a cap, a new field, or a corpus grown far enough reopens this. A
+      // byte budget here would have to be exactly right or refuse a real
+      // visitor's next question, and it would buy nothing against a
+      // tampered body: the body is parsed whole before this runs, and the
+      // part is discarded unread like any other field the route ignores.
+      // The runbook's progress section has the measurements.
       if (part.type === PROGRESS_PART_TYPE) {
         if (dataParts > 0) return null
         dataParts += 1

@@ -3,11 +3,8 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { openSourceRepos } from '@/content/open-source'
-import {
-  MAX_HEADINGS,
-  MAX_HEADING_CHARS,
-  MAX_TITLE_CHARS,
-} from '@/lib/chat/progress'
+import { MAX_TITLE_CHARS } from '@/lib/chat/progress'
+import { MAX_HEADINGS, MAX_HEADING_CHARS } from '@/lib/progress-caps'
 import {
   buildKnowledgeCorpus,
   documentHeadings,

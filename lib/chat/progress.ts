@@ -1,3 +1,4 @@
+import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
 import type { AnswerView } from './answer'
 
 /**
@@ -14,11 +15,11 @@ import type { AnswerView } from './answer'
  * Two rules shape everything below.
  *
  * The first is that it must be client-safe. It is imported by
- * `components/assistant`, so it has no runtime imports at all and reaches
- * nothing that touches `lib/knowledge`, which reads the filesystem at module
- * scope. It decides counts and states, never sentences: the copy for them
- * lives in `components/assistant/copy.ts`, where the rest of the visitor-
- * facing strings are.
+ * `components/assistant`, so its one runtime import is `lib/progress-caps`,
+ * which has none, and it reaches nothing that touches `lib/knowledge`, which
+ * reads the filesystem at module scope. It decides counts and states, never
+ * sentences: the copy for them lives in `components/assistant/copy.ts`,
+ * where the rest of the visitor-facing strings are.
  *
  * The second is that it must never claim more than happened. A run that
  * stops (a dropped stream, a timeout, the visitor's Stop button, a closed
@@ -105,8 +106,8 @@ export interface ChatProgressStep {
    *
    * Titles, never body text: the tool hands the model a whole document, so
    * this is that document's outline and not a claim about which parts of it
-   * were used. Capped by MAX_HEADINGS and MAX_HEADING_CHARS, and optional
-   * like the two fields above.
+   * were used. Capped by MAX_HEADINGS and MAX_HEADING_CHARS from
+   * lib/progress-caps, and optional like the two fields above.
    */
   headings?: readonly string[]
 }
@@ -156,23 +157,6 @@ export interface ProgressView {
  * it: `lib/knowledge/knowledge.test.ts` fails if any title comes close.
  */
 export const MAX_TITLE_CHARS = 200
-
-/**
- * How many section titles one read row may carry, and how long each may be.
- *
- * Distrust bounds on the wire. An over-long heading is not a `##` line from
- * the corpus, so it is dropped rather than truncated, the same way an
- * over-long title is.
- *
- * The count is the exception to that rule, and the only reason it is safe
- * is that nothing is meant to reach it: a row that showed eight of a
- * document's nine sections without saying so would be the quiet half-truth
- * this view exists to avoid. lib/knowledge/knowledge.test.ts fails before a
- * corpus document reaches either bound, which is what keeps the truncation
- * theoretical; the corpus stands at nine sections and 88 characters today.
- */
-export const MAX_HEADINGS = 12
-export const MAX_HEADING_CHARS = 120
 
 const PHASES: ReadonlySet<string> = new Set<ChatProgressPhase>([
   'reading',

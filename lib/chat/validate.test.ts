@@ -1,5 +1,21 @@
 import { describe, expect, test } from 'bun:test'
-import { KNOWLEDGE_INDEX_TOKEN_CEILING } from '@/lib/knowledge'
+import {
+  KNOWLEDGE_INDEX_TOKEN_CEILING,
+  KNOWLEDGE_READ_BUDGET,
+  loadKnowledgeIndex,
+} from '@/lib/knowledge'
+import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
+import {
+  MAX_TITLE_CHARS,
+  PROGRESS_PART_ID,
+  PROGRESS_PART_TYPE,
+  PROGRESS_TOPICS,
+  type ChatProgress,
+  type ChatProgressStep,
+} from './progress'
+import { REPOSITORY_BLOCK, SYSTEM_PROMPT } from './prompt'
+import { RECENT_ACTIVITY_MAX_CALLS } from './recent-activity'
+import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
   CHAT_ERROR_MESSAGE,
   CHAT_ERROR_STATUS,
@@ -429,6 +445,185 @@ describe('rejecting a request', () => {
       })
     )
     expect(codeOf(result)).toBe('invalid')
+  })
+})
+
+describe('the replayed progress part', () => {
+  // validate.ts skips this part without measuring it. That is sound only
+  // while the largest part the route can write stays small beside the
+  // request body Vercel accepts, so these tests build that part from the
+  // caps and fail when a cap, a field, the corpus or the allowlist grows
+  // enough to reopen the decision. When one fails, update the numbers in
+  // the comment on the replay path in validate.ts and in the runbook's
+  // progress section along with the pin here.
+
+  /**
+   * Ids are the one field the wire does not cap. Every real id, a corpus
+   * file name or an allowlisted repository, is held under this stand-in
+   * below, so the worst case can use it without depending on the corpus.
+   */
+  const ID_STAND_IN_CHARS = 64
+
+  /** The request body Vercel accepts for a function: 4.5 MB. */
+  const VERCEL_REQUEST_BODY_BYTES = 4_500_000
+
+  /**
+   * UTF-8 bytes per UTF-16 unit at most: an astral character is two units
+   * and four bytes, a BMP character one unit and up to three. JSON escapes
+   * of quotes and control characters are left out; the route's own text
+   * holds few of them.
+   */
+  const MAX_UTF8_BYTES_PER_CHAR = 3
+
+  /**
+   * The route sets no `maxDuration`, so Vercel's 300 s default ends a run
+   * and `ms` has at most six digits.
+   */
+  const LONGEST_RUN_MS = 300_000
+
+  /**
+   * Every field a step or a part can carry. `satisfies` fails typecheck
+   * when either type gains or loses one, and a test below checks that the
+   * worst case sets each of them, so a new field cannot grow the replayed
+   * part without failing here.
+   */
+  const STEP_FIELDS = {
+    id: true,
+    title: true,
+    kind: true,
+    topic: true,
+    headings: true,
+  } satisfies Record<keyof ChatProgressStep, true>
+  const PART_FIELDS = {
+    steps: true,
+    phase: true,
+    ms: true,
+  } satisfies Record<keyof ChatProgress, true>
+
+  const longestTopic = PROGRESS_TOPICS.reduce((a, b) =>
+    b.length > a.length ? b : a
+  )
+
+  const readAtCaps = (): ChatProgressStep => ({
+    id: 'i'.repeat(ID_STAND_IN_CHARS),
+    title: 't'.repeat(MAX_TITLE_CHARS),
+    topic: longestTopic,
+    headings: Array.from({ length: MAX_HEADINGS }, () =>
+      'h'.repeat(MAX_HEADING_CHARS)
+    ),
+  })
+
+  const checkAtCaps = (): ChatProgressStep => ({
+    id: 'i'.repeat(ID_STAND_IN_CHARS),
+    title: 't'.repeat(MAX_TITLE_CHARS),
+    kind: 'activity',
+  })
+
+  function partWith(reads: number, checks: number) {
+    const data: ChatProgress = {
+      steps: [
+        ...Array.from({ length: reads }, readAtCaps),
+        ...Array.from({ length: checks }, checkAtCaps),
+      ],
+      phase: 'done',
+      ms: LONGEST_RUN_MS,
+    }
+    return { type: PROGRESS_PART_TYPE, id: PROGRESS_PART_ID, data }
+  }
+
+  /**
+   * A run that finished: the read and activity budgets bound its steps,
+   * because a refused call withdraws its row before `done`.
+   */
+  const finishedRunPart = () =>
+    partWith(KNOWLEDGE_READ_BUDGET.maxDocuments, RECENT_ACTIVITY_MAX_CALLS)
+
+  /**
+   * A run stopped inside a step. The route opens a row when a call starts
+   * and predicts the budgets from outcomes, so one step that asks for more
+   * than the budget shows every distinct id it named until the refusals
+   * arrive, and a visitor who stops the run in that window keeps the part.
+   * Rows are one per distinct id, so the index and the allowlist bound it.
+   */
+  const stoppedRunPart = () =>
+    partWith(loadKnowledgeIndex().entries.length, ASSISTANT_REPOSITORIES.length)
+
+  test('every real id fits the stand-in the worst case uses', () => {
+    const ids = [
+      ...loadKnowledgeIndex().entries.map(entry => entry.id),
+      ...ASSISTANT_REPOSITORIES.map(repository => repository.id),
+    ]
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) {
+      expect({ id, fits: id.length <= ID_STAND_IN_CHARS }).toEqual({
+        id,
+        fits: true,
+      })
+    }
+  })
+
+  test('the worst case sets every field a step or a part can carry', () => {
+    const { data } = finishedRunPart()
+    const stepFields = new Set(data.steps.flatMap(step => Object.keys(step)))
+    expect([...stepFields].sort()).toEqual(Object.keys(STEP_FIELDS).sort())
+    expect(Object.keys(data).sort()).toEqual(Object.keys(PART_FIELDS).sort())
+  })
+
+  test('the largest part a finished run can leave is pinned', () => {
+    // Characters of JSON: three reads and three checks, every field at its
+    // cap.
+    expect(JSON.stringify(finishedRunPart()).length).toBe(6_383)
+  })
+
+  test('a conversation at the input budget, a stopped part on every answer, fits the platform', () => {
+    // The text is filled to exactly the input budget the real index leaves,
+    // which is what bounds a body's text; the part rides outside that
+    // budget by design, so the same body with it still validates.
+    const index = loadKnowledgeIndex()
+    const fixed =
+      index.tokenEstimate +
+      estimateTokens(SYSTEM_PROMPT) +
+      estimateTokens(REPOSITORY_BLOCK)
+    const fullQuestion = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
+    const answers = CHAT_MAX_MESSAGES / 2
+    const answerBudget =
+      CHAT_MAX_INPUT_TOKENS - fixed - answers * estimateTokens(fullQuestion)
+    const answerTokens = Math.floor(answerBudget / answers)
+    const lastAnswerTokens = answerBudget - answerTokens * (answers - 1)
+
+    // Assistant first, so a user turn is last: the longest body the route
+    // accepts, as in "a conversation of full-length answers still fits".
+    const conversation = (extraChars: number) =>
+      body(
+        ...Array.from({ length: CHAT_MAX_MESSAGES }, (_, i) => {
+          if (i % 2 === 1) return said('user', fullQuestion)
+          const last = i === CHAT_MAX_MESSAGES - 2
+          const tokens = last ? lastAnswerTokens : answerTokens
+          const text = 'x'.repeat(tokens * 4 + (last ? extraChars : 0))
+          return {
+            id: `a${i}`,
+            role: 'assistant',
+            parts: [
+              { type: 'step-start' },
+              stoppedRunPart(),
+              { type: 'text', text },
+            ],
+          }
+        })
+      )
+    const run = (request: unknown) =>
+      validateChatRequest({
+        body: request,
+        indexTokenEstimate: index.tokenEstimate,
+        env: {},
+      })
+
+    const atBudget = conversation(0)
+    expect(codeOf(run(atBudget))).toBe(null)
+    expect(codeOf(run(conversation(1)))).toBe('budget_exceeded')
+
+    const worstBytes = JSON.stringify(atBudget).length * MAX_UTF8_BYTES_PER_CHAR
+    expect(worstBytes).toBeLessThan(VERCEL_REQUEST_BODY_BYTES)
   })
 })
 
