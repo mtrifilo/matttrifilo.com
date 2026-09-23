@@ -23,9 +23,9 @@ import { KNOWLEDGE_READ_BUDGET } from './index'
  * The mechanical guard on what the career assistant is allowed to read.
  *
  * content/knowledge is the assistant's only source, and it is written for
- * the public. The corpus has two surfaces now — the index, which is in
- * every prompt, and the documents, which the model fetches one at a time —
- * and a leak in either is a leak. So every content guard below runs over
+ * the public. The corpus has two surfaces now: the index, which is in
+ * every prompt, and the documents, which the model fetches one at a time.
+ * A leak in either is a leak. So every content guard below runs over
  * the same list: the rendered index text, plus each document's body as the
  * build produces it. Asserting against the built output rather than the
  * files means a leak cannot slip in through a summary, the ordering, or
@@ -103,7 +103,7 @@ function prose(text: string): string {
  * Adding an entry is a deliberate, reviewable act: it must be a literal
  * phrase, and the comment must say which published page it comes from and
  * why it is not what the guard is looking for. Never add a bare guard word
- * here — that would disable the guard everywhere.
+ * here: that would disable the guard everywhere.
  */
 const REVIEWED_PUBLIC_PHRASES: readonly string[] = [
   // blog/from-typing-code-to-agent-factories: startup runway, about AI
@@ -255,7 +255,7 @@ describe('knowledge corpus content guards', () => {
 
   test('no surface contains a TODO placeholder', () => {
     // The backstop for the build-time refusal, run over the text as it
-    // actually ships — which is the only place it can catch the faq, whose
+    // actually ships, which is the only place it can catch the faq, whose
     // placeholders are dropped rather than refused.
     //
     // It looks for a placeholder's shape, not the word: findPlaceholder is
@@ -328,7 +328,7 @@ describe('knowledge corpus content guards', () => {
 
   test('drops the unanswered FAQ questions entirely', () => {
     // faq/faq.md ships eight questions with `TODO (Matt)` bodies. Until
-    // Matt answers one, the document must not exist at all — not exist and
+    // Matt answers one, the document must not exist at all: not exist and
     // be empty, and certainly not carry the placeholders into the index.
     const faqSource = fs.readFileSync(
       path.join(KNOWLEDGE_DIR, 'faq', 'faq.md'),
@@ -566,7 +566,7 @@ describe('the section titles the progress view shows (MTC-50)', () => {
 
 /**
  * What to do when a post has no knowledge twin. scripts/new-blog-post.ts
- * writes both files, so this only fires for a post added by hand — and
+ * writes both files, so this only fires for a post added by hand, and
  * then the fix is a copy-paste rather than a hunt through the loader.
  */
 function missingTwinMessage(slug: string): string {
@@ -1076,8 +1076,8 @@ describe('knowledge corpus build', () => {
   })
 
   test('an escaped backtick does not hide a placeholder', () => {
-    // `\`TODO (Matt)\`` is not a code span — the backticks are literal
-    // text — so the placeholder inside it is a real placeholder.
+    // `\`TODO (Matt)\`` is not a code span: the backticks are literal
+    // text, so the placeholder inside it is a real placeholder.
     expect(() =>
       buildFixture([
         { topic: 'career', name: 'a-role.md', body: '\\`TODO (Matt)\\`' },
@@ -1146,7 +1146,7 @@ describe('knowledge corpus build', () => {
   test('the three largest documents fit in one turn', () => {
     // The gate that matters, and the reason it lives here rather than only
     // in `bun run knowledge:check`: CI runs lint, typecheck, `bun test`
-    // and build — not the script. The per-document ceiling cannot promise
+    // and build, not the script. The per-document ceiling cannot promise
     // this on its own (three at the ceiling would be over budget), so the
     // real sum has to be asserted somewhere CI actually looks.
     const sorted = [...corpus.documents].sort(
@@ -1345,7 +1345,7 @@ describe('documents must survive being compiled as MDX', () => {
 
   test('says so when an over-indented fence is the likely cause', () => {
     // A fence indented four or more spaces is valid CommonMark inside a
-    // nested list, and this check does not recognise it — recognising it
+    // nested list, and this check does not recognise it: recognising it
     // means tracking list context, which is a Markdown parser. It is not
     // silent about it: when something does fail, the message names it.
     const body = [
@@ -1387,7 +1387,7 @@ describe('the loaders the site and the chat route use', () => {
     ]) {
       expect(readKnowledgeDocument(id), id).toBeUndefined()
     }
-    // Not a string at all — a malformed tool call, which must not throw.
+    // Not a string at all: a malformed tool call, which must not throw.
     expect(
       readKnowledgeDocument(undefined as unknown as string)
     ).toBeUndefined()

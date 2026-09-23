@@ -37,7 +37,7 @@ import { estimateTokens } from './validate'
  * `document_too_large` is separated from `read_budget_exhausted` because the
  * two mean opposite things to the model: the budget one is "you have spent
  * what this question gets, answer from what you have", while this one is
- * "this particular document will never fit, try a different one" — retrying
+ * "this particular document will never fit, try a different one". Retrying
  * it, or freeing budget by reading less, cannot help. It is also a corpus
  * fault worth seeing in the logs: a document larger than the whole read
  * budget is permanently unreadable, so the per-document ceiling that would
@@ -73,7 +73,7 @@ export interface ReadDocumentSessionDeps {
  * One request's worth of reading: the tool the model is offered, plus the
  * ledger of what it actually read.
  *
- * The budget is per request, so the tool has to be per request too — a
+ * The budget is per request, so the tool has to be per request too: a
  * module-level tool would let one visitor's reads count against another's.
  */
 export interface ReadDocumentSession {

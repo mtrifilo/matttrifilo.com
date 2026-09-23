@@ -11,8 +11,8 @@ import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
  * An earlier version concatenated every file into one block of prompt
  * text, which put a ceiling on how much Matt could write: every new
  * document cost every request. Here the index carries one line per
- * document — id, title, one-sentence summary, tags, size — and the model
- * asks for the one to three documents a question actually needs. The
+ * document, with id, title, one-sentence summary, tags and size, and the
+ * model asks for the one to three documents a question actually needs. The
  * corpus can grow to hundreds of documents without the prompt growing
  * with it.
  *
@@ -33,8 +33,8 @@ import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
  * generally useful first, the long tail of blog posts last.
  *
  * Topics are a closed set on purpose. Adding a *document* must stay a
- * one-file change Matt can make without touching code — that is the whole
- * point of this layout — but adding a whole new *kind* of knowledge is a
+ * one-file change Matt can make without touching code: that is the whole
+ * point of this layout. But adding a whole new *kind* of knowledge is a
  * decision about what the assistant is for, and it should be made here,
  * on purpose, rather than by whatever a directory happens to be called.
  *
@@ -147,12 +147,12 @@ export const KNOWLEDGE_INDEX_TOKEN_CEILING = 8_000
  *
  * 9,000, and the reasoning is worth writing down because the tidy answer
  * is wrong. maxTokens / maxDocuments is 6,666, which would reject the
- * essay in blog/ — ~7,900 tokens, one published piece that should not be
+ * essay in blog/: ~7,900 tokens, one published piece that should not be
  * chopped into three to satisfy a constant. 8,000 accepts it by 74 tokens,
  * which is not a ceiling, it is a tripwire: the next typo fix in that post
  * breaks the build. 9,000 is the value that gives the one genuinely large
  * document real headroom while still leaving a realistic turn well inside
- * budget — one big document plus two career documents at the size Matt's
+ * budget: one big document plus two career documents at the size Matt's
  * actually are (~2,500 tokens) is ~14,000 against 20,000.
  *
  * That means three documents at the ceiling would be 27,000, over budget.
@@ -167,7 +167,7 @@ export const KNOWLEDGE_DIR = path.join(process.cwd(), 'content', 'knowledge')
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/
 const FRONTMATTER_FIELD = /^([A-Za-z]+):[ \t]*(.*)$/
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-/** A `##` heading, and only `##` — `###` and deeper stay inside a block. */
+/** A `##` heading, and only `##`: `###` and deeper stay inside a block. */
 const BLOCK_HEADING = /^## (?!#)/
 /**
  * What a placeholder looks like, as opposed to the word "TODO" appearing
@@ -253,7 +253,7 @@ function unquote(value: string): string {
 }
 
 /**
- * `[a, b, c]` — the only list form the frontmatter accepts.
+ * `[a, b, c]`, the only list form the frontmatter accepts.
  *
  * A YAML block list (`- a` on its own line) is rejected one level up, by
  * FRONTMATTER_FIELD, with a message naming the offending line. One way to
@@ -396,8 +396,8 @@ const trimEnd = (text: string) => text.replace(/\s+$/, '')
  * Removes HTML comments before anything else looks at the body.
  *
  * A knowledge file has two audiences: the model, and whoever is editing
- * the file. Notes for the editor — "replace the TODO line below", "keep
- * this in Matt's voice" — are instructions about the authoring process,
+ * the file. Notes for the editor, "replace the TODO line below", "keep
+ * this in Matt's voice", are instructions about the authoring process,
  * and sending them to the model is both noise and a way for stray `TODO`
  * text to reach the prompt. Anything inside `<!-- -->` is for the editor
  * and never leaves the repo. The denylist check still greps the raw file,
@@ -446,7 +446,7 @@ const CODE_FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/
  * Tracks whether a line is inside a fenced code block.
  *
  * Markdown closes a fence only with the same character, at least as long
- * as the opener, and with no info string — so a ``` inside a ~~~~ block is
+ * as the opener, and with no info string, so a ``` inside a ~~~~ block is
  * content, not a close. Callers feed lines in order and read `inCode`
  * before deciding what a line means.
  */
@@ -622,7 +622,7 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * that reads as a tag. The fix an author wants is almost always a pair of
  * backticks; `&lt;` and `&#123;` work where the character must be literal
  * prose. Fenced blocks and inline code spans are exempt because MDX does
- * not parse their contents — an indented code block is *not* exempt, so
+ * not parse their contents. An indented code block is *not* exempt, so
  * use a fence.
  *
  * The rule is every line of the file, not only the lines that ship: a
@@ -632,7 +632,7 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * Known limitation, deliberate: a fence must be indented at most three
  * spaces to be recognised as code. CommonMark allows a deeper indent
  * inside a nested list item, and honouring that means tracking list
- * context — a Markdown parser, for a case the corpus does not have. The
+ * context: a Markdown parser, for a case the corpus does not have. The
  * cost is a false positive, never a false negative, and the error says so
  * when an over-indented fence is in the document.
  */
@@ -832,7 +832,7 @@ function readDocument(
   assertMdxSafe(lines, label)
 
   // Outside the faq, the body ships exactly as written. That is not only
-  // safer than reassembling it — it is what makes "the résumé document is
+  // safer than reassembling it: it is what makes "the résumé document is
   // the published résumé, verbatim" true by construction rather than by
   // the reassembly happening to round-trip.
   let text: string
@@ -906,7 +906,7 @@ function renderEntry(entry: KnowledgeEntry): string {
  * per document underneath.
  *
  * Nothing here tells the model what to do with it. How to ask for a
- * document, how many to ask for, what to do when none of them fit — that
+ * document, how many to ask for, what to do when none of them fit: that
  * is the chat route's prompt to write, and keeping it out of this module
  * means the corpus and the conversation can change independently.
  */
@@ -975,7 +975,7 @@ function findDocumentFiles(
  * anyway, and holding the parsed corpus is what lets ./index answer
  * readKnowledgeDocument from a Map it builds over these documents, rather
  * than from a path built out of a caller's string. "On demand" is about
- * what reaches the model's context, not about what reaches memory — a few
+ * what reaches the model's context, not about what reaches memory: a few
  * hundred short Markdown files is a few megabytes.
  *
  * `dir` and `ceiling` are here for the guards in knowledge.test.ts; the

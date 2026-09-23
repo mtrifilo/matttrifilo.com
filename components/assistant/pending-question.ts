@@ -14,7 +14,7 @@ const PENDING_QUESTION_TTL_MS = 60_000
  *
  * The question travels in sessionStorage rather than as a `?q=` search param.
  * The site runs Vercel Analytics, which records the URL of every page view, so
- * a question in the query string would be written to an analytics store — the
+ * a question in the query string would be written to an analytics store, the
  * one thing the chat route promises never to happen to a visitor's words. It
  * would also land in the browser's history and in the `Referer` of anything
  * the answer links to.

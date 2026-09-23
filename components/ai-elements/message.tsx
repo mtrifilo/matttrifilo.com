@@ -12,7 +12,7 @@ import { Streamdown } from "streamdown";
  * Gone from the registry component: the branch selector (this assistant never
  * offers alternative replies), the tooltip-wrapped action buttons (the design
  * labels Copy and Regenerate in text), and the `@streamdown/*` plugins. Those
- * plugins add maths, Mermaid, Shiki highlighting and CJK segmentation — four
+ * plugins add maths, Mermaid, Shiki highlighting and CJK segmentation: four
  * packages for content the corpus never contains. The answers are prose and
  * bullets, which core Streamdown renders, and it still sanitises the HTML it
  * is handed.

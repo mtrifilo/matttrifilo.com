@@ -17,7 +17,7 @@ import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
  *    assistant announces its state once through the visually hidden
  *    `role="status"` region in components/assistant instead.
  * 2. The download button and its Markdown serialiser are gone. Nothing offers
- *    a transcript download — conversations are not saved anywhere.
+ *    a transcript download: conversations are not saved anywhere.
  */
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;

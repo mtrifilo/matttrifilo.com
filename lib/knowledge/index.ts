@@ -9,8 +9,8 @@ import type {
  * The career assistant's corpus: the only source it may read.
  *
  * Everything the assistant knows comes from content/knowledge, which is
- * written for the public. Nothing in this module — or anything it imports
- * — reads a private document or makes a network call, at build time or at
+ * written for the public. Nothing in this module, or anything it imports,
+ * reads a private document or makes a network call, at build time or at
  * request time. lib/knowledge/knowledge.test.ts is the mechanical guard on
  * what those files may contain.
  *
@@ -33,7 +33,7 @@ export {
 /**
  * What one turn may spend fetching documents.
  *
- * Nothing in the build enforces this — it is the chat route's policy, and
+ * Nothing in the build enforces this: it is the chat route's policy, and
  * it lives here because here is where the route looks. Three documents is
  * the point where an answer stops being "Matt wrote this" and starts being
  * a survey; 20k tokens is a generous ceiling for three of them that still
@@ -79,7 +79,7 @@ export function loadKnowledgeIndex(): KnowledgeIndex {
  * The id comes from the model, so it is untrusted input: this is a Map
  * lookup over documents already parsed, never a path built from a caller's
  * string, and it returns undefined rather than throwing for anything it
- * does not recognise — including a non-string, which is what a malformed
+ * does not recognise, including a non-string, which is what a malformed
  * tool call produces.
  */
 export function readKnowledgeDocument(

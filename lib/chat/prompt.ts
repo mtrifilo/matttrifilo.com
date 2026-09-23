@@ -42,7 +42,7 @@ export const CURRENT_QUESTION_HEADING = 'CURRENT QUESTION:'
  * It lives here with the rest of the model-facing vocabulary rather than in
  * read-document.ts because the policy prose has to spell it the same way the
  * tool is registered, and because read-document.ts depends on validate.ts,
- * which depends on this file — naming the tool over there would close that
+ * which depends on this file: naming the tool over there would close that
  * loop into an import cycle.
  */
 export const READ_DOCUMENT_TOOL_NAME = 'read_document'
@@ -230,7 +230,7 @@ export const REPOSITORY_LIST_HEADING = 'REPOSITORIES YOU MAY CHECK'
  *
  * The question is neutralised alongside the replayed turns. It is typed by
  * the same untrusted visitor, so a question that contains the headings or
- * speaker labels could otherwise forge a transcript of its own — including on
+ * speaker labels could otherwise forge a transcript of its own, including on
  * a first turn, where there is no real block for it to compete with.
  */
 function visitorMessage(history: ChatTurn[], userMessage: string): string {

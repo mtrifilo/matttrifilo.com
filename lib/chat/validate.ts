@@ -35,7 +35,7 @@ export const CHAT_MAX_MESSAGES = CHAT_MAX_TURNS * 2
 /**
  * Visible answer length, shared with Gemini 3.x thought tokens.
  *
- * Briefings at thinking `medium` were still being cut at 2,048 — thought
+ * Briefings at thinking `medium` were still being cut at 2,048: thought
  * tokens come out of this budget first, then the visible answer. 8,192
  * leaves room for a hiring-manager briefing after a medium think. The
  * input ceiling below is raised with it so a conversation of full-length
@@ -49,14 +49,14 @@ export const CHAT_MAX_OUTPUT_TOKENS = 8_192
  * plus the one that writes the answer.
  *
  * A step is a model call and the tool calls it emitted, so this is not the
- * same bound as the read budget — one step can ask for several documents.
+ * same bound as the read budget: one step can ask for several documents.
  * Both caps are needed: this one stops a model that loops without ever
  * answering, KNOWLEDGE_READ_BUDGET stops one that reads the whole corpus in
  * a single step.
  *
  * `+ 1` and not `+ 2` because `prepareStep` spends the last step on the
  * answer rather than hoping the model volunteers one. That makes a wasted
- * call — a hallucinated id, say — cost a document rather than the answer: the
+ * call, a hallucinated id, say, cost a document rather than the answer: the
  * visitor gets a reply drawn from fewer sources instead of an empty bubble.
  *
  * It did not grow when `recent_activity` was added (MTC-45), and it cannot.
@@ -80,7 +80,7 @@ export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
  * CHAT_MAX_MESSAGE_CHARS.
  *
  * CHAT_MAX_OUTPUT_TOKENS is applied per model call, not per answer, and the
- * text of every step reaches the client — a model may narrate before each
+ * text of every step reaches the client: a model may narrate before each
  * read. The most the route can write in one answer is therefore every step
  * at its cap, about four characters a token. A real answer is one step's
  * worth, so the gap between typical and possible is the headroom. Exceeding
@@ -97,7 +97,7 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
  * 1,800 after the briefing rewrite, CHAT_MAX_TURNS questions at
  * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
- * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500 — about
+ * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500, about
  * 78,300 against this cap. "A conversation of full-length answers still
  * fits" in validate.test.ts pins that, and it is the test that should fail
  * if the policy or the index ceiling grows past the margin.
@@ -180,7 +180,7 @@ export const CHAT_ERROR_STATUS: Record<
 }
 
 /**
- * Copy the UI renders as-is. `rate_limited` is absent on purpose — MTC-34
+ * Copy the UI renders as-is. `rate_limited` is absent on purpose: MTC-34
  * writes that sentence when it writes the limiter.
  */
 export const CHAT_ERROR_MESSAGE: Record<
