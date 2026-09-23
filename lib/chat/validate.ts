@@ -97,8 +97,8 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
  * 1,800 after the briefing rewrite, CHAT_MAX_TURNS questions at
  * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
- * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500, about
- * 78,300 against this cap. "A conversation of full-length answers still
+ * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500: about
+ * 78,300 in all against this cap. "A conversation of full-length answers still
  * fits" in validate.test.ts pins that, and it is the test that should fail
  * if the policy or the index ceiling grows past the margin.
  *

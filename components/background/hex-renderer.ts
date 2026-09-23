@@ -170,8 +170,8 @@ export const IDLE_AFTER_MS = 2000
  * far denser than the eye needs for a gradient that drifts by 0.024 alpha
  * over ten seconds, and 1/15th of the frames a full-rate loop would spend
  * on it. Dropping the loop entirely would be cheaper still, but it freezes
- * the field for anyone who never moves a pointer, touch readers and keyboard
- * readers, which is most of the time the background is on screen.
+ * the field for anyone who never moves a pointer: touch readers and keyboard
+ * readers. That is most of the time the background is on screen.
  */
 export const IDLE_FRAME_INTERVAL_MS = 250
 

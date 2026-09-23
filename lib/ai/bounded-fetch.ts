@@ -2,8 +2,8 @@
  * A fetch wrapper that bounds and retries a stalled Vertex call (MTC-38).
  *
  * The episode this exists for: on one preview, every model call took 80 to
- * 110 s regardless of size, a 1,700-token call that produced 16 tokens took
- * as long as a real answer, while the same call from a laptop through the
+ * 110 s regardless of size: a 1,700-token call that produced 16 tokens took
+ * as long as a real answer. The same call from a laptop through the
  * same identity pool took 1 to 2 s, and the token exchange measured near
  * zero. The connection was opening and then producing nothing. Two requests
  * spent 130 s and 290 s that way, the second hitting Vercel's 300 s function
@@ -383,8 +383,8 @@ export function createBoundedFetch({
     }
   }
   // Widened to the provider's FetchFunction, which is `typeof
-  // globalThis.fetch`. The SDK only ever calls it as a function, see
-  // postToApi in @ai-sdk/provider-utils, so the extra members of that type
+  // globalThis.fetch`. The SDK only ever calls it as a function (see
+  // postToApi in @ai-sdk/provider-utils), so the extra members of that type
   // are never reached.
   return boundedFetch as typeof globalThis.fetch
 }
