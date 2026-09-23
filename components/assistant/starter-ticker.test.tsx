@@ -421,6 +421,11 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     // cancelled the touch or moved the row would swallow the tap. Nothing
     // else here fires a touch and a click on the same pill.
     const picked: string[] = []
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const rect = REAL_BOUNDING_RECT.call(this)
+      if (!this.classList.contains('starter-ticker-copy')) return rect
+      return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
+    }
     const { container } = render(<StarterTicker onPick={q => picked.push(q)} />)
     const { rows } = tickerOf(container)
     for (const { track } of rows)
