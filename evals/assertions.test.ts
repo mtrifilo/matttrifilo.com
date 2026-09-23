@@ -49,9 +49,9 @@ const ctx = (
 
 describe('AssertionContext', () => {
   // Checked by `bun run typecheck`, not at run time: each directive fails the
-  // build if the line under it ever compiles. That is the case the vacuous
-  // chips check lived in, a read of `sourceIds` that returned nothing on every
-  // run because the provider had stopped setting it.
+  // build if the line under it ever compiles. A read of a key the provider
+  // does not set would be undefined on every row, and an assertion built on
+  // it would pass without looking at anything.
   test('a key the provider never sets does not compile', () => {
     const context: AssertionContext = { metadata: { readIds: [] } }
     // @ts-expect-error: sourceIds is not provider metadata
@@ -617,8 +617,8 @@ describe('the citation trio: assertCites, assertCitesOnlyWhatItRead, assertAnswe
   })
 
   test('a decline carrying a trailer of read documents fails', () => {
-    // The case that passed every citation check before: the ids were read,
-    // the trailer was there, and there was no answer for it to cite.
+    // The ids were read and the trailer is there, but there is no answer for
+    // it to cite, so only assertCites can catch it.
     expect(
       verdicts(`${DECLINE_SENTENCE}\n\nSources: resume`, readResume)
     ).toEqual({
@@ -628,7 +628,23 @@ describe('the citation trio: assertCites, assertCitesOnlyWhatItRead, assertAnswe
     })
   })
 
-  test('a cited answer the run did not finish fails on the answer', () => {
+  test('an uncited answer cut off at the output cap passes with a warning', () => {
+    // assertAnswered counts a length-truncated answer as an answer, so the
+    // trio passes it and the provider counts it as a missing trailer: the
+    // cap, not the model, is what took the line off.
+    const capped = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['resume'], incomplete: true, truncated: true }
+    )
+    expect(verdicts('He led the migr', capped)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
+    })
+    expect(assertCites('He led the migr', capped).reason).toContain('warning')
+  })
+
+  test('a cited answer that stopped short, not on the output cap, fails on the answer', () => {
     const cutOff = ctx(
       { expectReadsAny: ['resume'] },
       { readIds: ['resume'], incomplete: true }
@@ -722,6 +738,23 @@ describe('assertCites', () => {
       const result = assertCites(`${DECLINE_SENTENCE}\n\n${trailer}`, read)
       expect(result.pass).toBe(false)
       expect(result.reason).toContain('decline sentence')
+    }
+  })
+
+  test('fails a decline with a line added, or under a trailer the page shows', () => {
+    // Neither is the sentence alone, and neither is an answer: the route
+    // withholds follow-ups from any text that carries the sentence, and so
+    // does this. A bold label is prose on the page, so without this the
+    // missing-trailer tolerance would pass the decline with a warning.
+    for (const output of [
+      `${DECLINE_SENTENCE} Sorry!\n\nSources: resume`,
+      `${DECLINE_SENTENCE}\n\n**Sources:** resume`,
+      `${DECLINE_SENTENCE} Sorry!`,
+    ]) {
+      const result = assertCites(output, read)
+      expect({ output, pass: result.pass }).toEqual({ output, pass: false })
+      expect(result.reason).toContain('decline sentence')
+      expect(isUncitedAnswer(output, ['resume'])).toBe(false)
     }
   })
 

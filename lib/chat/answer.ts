@@ -136,6 +136,10 @@ export function joinTextParts(
  * of a real answer is mistaken for it. A half-written trailer stays on screen
  * for the tokens it takes to finish the word, which is the cost of not
  * guessing at prefixes like "So".
+ *
+ * It reads the final line of the text it is given, so it expects text the
+ * follow-ups block is already off; `stripTrailers` and `findSourcesTrailer`
+ * take the whole answer.
  */
 export function stripSourcesTrailer(text: string): string {
   return citationLineAtEnd(text)?.prose ?? text
@@ -164,7 +168,16 @@ export interface SourcesTrailer {
  * trailer at all.
  */
 export function findSourcesTrailer(text: string): SourcesTrailer | undefined {
-  return citationLineAtEnd(withoutFollowUps(text))
+  const found = citationLineAtEnd(withoutFollowUps(text))
+  if (!found) return undefined
+  return {
+    prose: found.prose,
+    ids: found.line
+      .slice(found.line.indexOf(':') + 1)
+      .split(',')
+      .map(id => id.trim().replace(/[.;]+$/, ''))
+      .filter(id => id.length > 0),
+  }
 }
 
 /**
@@ -208,19 +221,14 @@ function withoutFollowUps(text: string): string {
  * Models routinely end with a newline; without the trim the "final line"
  * would be the empty string after it, and the trailer would stay on screen.
  */
-function citationLineAtEnd(text: string): SourcesTrailer | undefined {
+function citationLineAtEnd(
+  text: string
+): { prose: string; line: string } | undefined {
   const trimmed = text.trimEnd()
   const lastBreak = trimmed.lastIndexOf('\n')
   const line = trimmed.slice(lastBreak + 1)
   if (!TRAILER_LINE.test(line)) return undefined
-  return {
-    prose: trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd(),
-    ids: line
-      .slice(line.indexOf(':') + 1)
-      .split(',')
-      .map(id => id.trim().replace(/[.;]+$/, ''))
-      .filter(id => id.length > 0),
-  }
+  return { prose: trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd(), line }
 }
 
 /**

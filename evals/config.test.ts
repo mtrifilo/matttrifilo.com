@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
+import { DECLINE_SENTENCE } from '@/lib/chat/prompt'
 import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
 import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
@@ -112,26 +113,31 @@ function assertionTypes(tests: SuiteTest[]): string[] {
 }
 
 /**
- * The named assertions that judge what the answer says: each reads the prose
- * and fails when there is none, which the test below proves.
+ * The named assertions that judge what the answer says, each with an answer
+ * it passes: each reads the prose and fails when there is none, which the
+ * `JUDGES_THE_ANSWER` tests below prove by making every entry pass its own
+ * answer and fail an empty one in the same context. The passing answer is
+ * what shows the failure came from the missing prose and not from a context
+ * the assertion could not use.
  *
  * An allowlist, so a new assertion counts for nothing here until it is added
- * and proved. Everything else is left out on purpose: the absence checks on
- * the text (`assertThirdPerson`, `assertNoNarration`, `assertNoEmDash` and
- * the like), which an empty answer passes; the ledger checks
- * (`assertReadsExpected`, `assertReadsAnyOf`, `assertReadsAnySet`,
- * `assertReadsWithinIndex`, `assertCheckedActivity`), which read what the
- * server did rather than what the answer says; the citation checks, which
- * judge the trailer; and `assertFollowUpsAnswerable`, which judges the
- * proposals.
+ * with an answer it passes. Everything else is left out on purpose: the
+ * absence checks on the text (`assertThirdPerson`, `assertNoNarration`,
+ * `assertNoPolicyLeak`, `assertDeclineOrWithholds`, `assertNoHandles`,
+ * `assertNoTicketKeys`, `assertNoScreenshotRelease`, `assertNoEmDash`), which
+ * an empty answer passes; the ledger checks (`assertReadsExpected`,
+ * `assertReadsAnyOf`, `assertReadsAnySet`, `assertReadsWithinIndex`,
+ * `assertCheckedActivity`), which read what the server did rather than what
+ * the answer says; the citation checks, which judge the trailer; and
+ * `assertFollowUpsAnswerable`, which judges the proposals.
  */
-const JUDGES_THE_ANSWER: ReadonlySet<string> = new Set([
-  'assertAnswered',
-  'assertDecline',
-  'assertNoInventedFact',
-  'assertHasRecentDate',
-  'assertDatesFromActivity',
-])
+const JUDGES_THE_ANSWER: Readonly<Record<string, string>> = {
+  assertAnswered: 'Matt led the migration.',
+  assertDecline: DECLINE_SENTENCE,
+  assertNoInventedFact: "Matt's published work does not mention that.",
+  assertHasRecentDate: `He shipped the parser in ${new Date().getUTCFullYear()}.`,
+  assertDatesFromActivity: 'He merged the parser fix on 2026-09-18.',
+}
 
 /** The assertions that carry the citation contract; each is vacuous alone. */
 const CITATION_TRIO = [
@@ -246,9 +252,8 @@ describe('promptfooconfig.yaml', () => {
 
 describe('JUDGES_THE_ANSWER', () => {
   // The guard below trusts this list to name only assertions that fail when
-  // there is nothing to read, so each one is made to prove it. The contexts
-  // give every assertion what it needs to get as far as the prose: a test
-  // that named its metadata, and a run that fetched activity.
+  // there is nothing to read, so each one is made to prove it, in one context
+  // that it must also pass its own answer in.
   const context: AssertionContext = {
     test: { metadata: { forbidden: [] } },
     metadata: {
@@ -267,21 +272,25 @@ describe('JUDGES_THE_ANSWER', () => {
     ) => AssertionResult | Promise<AssertionResult>
   >
 
-  test.each([...JUDGES_THE_ANSWER])(
-    '%s fails an answer with no prose',
-    async name => {
+  test.each(Object.entries(JUDGES_THE_ANSWER))(
+    '%s passes its own answer and fails one with no prose',
+    async (name, answer) => {
+      const verdicts: Record<string, boolean> = {
+        [answer]: (await judges[name](answer, context)).pass,
+      }
       for (const empty of [
         '',
         'Sources: resume',
         'Sources: resume\nFollow-ups:\nWhat does his team own?',
       ]) {
-        const result = await judges[name](empty, context)
-        expect({ name, empty, pass: result.pass }).toEqual({
-          name,
-          empty,
-          pass: false,
-        })
+        verdicts[empty] = (await judges[name](empty, context)).pass
       }
+      expect(verdicts).toEqual({
+        [answer]: true,
+        '': false,
+        'Sources: resume': false,
+        'Sources: resume\nFollow-ups:\nWhat does his team own?': false,
+      })
     }
   )
 })
@@ -444,18 +453,18 @@ for (const name of SUITES) {
       }
     })
 
-    test('a test built only from absence checks also asserts it answered', () => {
+    test('a test with no assertion that judges the answer carries one', () => {
       for (const item of suite) {
         const names = assertionNames([item])
         const types = assertionTypes([item])
         // Anything that judges what the answer SAYS: a named assertion in
         // JUDGES_THE_ANSWER, or a promptfoo assertion that reads the output
         // (the contains family, a rubric). Any one of them already fails on an
-        // empty answer, so the test does not need assertAnswered as well.
-        // A `not-` assertion is an absence check like the named ones and
-        // passes on an empty answer, so it does not count.
+        // empty answer; a test with none of them carries assertAnswered, which
+        // is one. A `not-` assertion is an absence check like the named ones
+        // and passes on an empty answer, so it does not count.
         const judgesContent =
-          names.some(name => JUDGES_THE_ANSWER.has(name)) ||
+          names.some(name => Object.hasOwn(JUDGES_THE_ANSWER, name)) ||
           types.some(
             type =>
               type !== 'javascript' &&

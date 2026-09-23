@@ -15,6 +15,9 @@ import {
 } from '@/lib/chat/prompt'
 import { findPunctuationDashes } from '@/lib/dashes'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
+// Type-only, and it has to stay so: a value imported from the provider would
+// load Vertex into `bun test`, which the dynamic import in
+// assertFollowUpsAnswerable exists to prevent.
 import type { EvalMetadata } from './provider'
 import {
   answerProse,
@@ -954,11 +957,15 @@ function fail(reason: string): AssertionResult {
  * suite whose whole subject is citation.
  *
  * A trailer is not enough on its own either. An answer with no prose, or
- * whose prose is the decline sentence, fails whatever its trailer names:
- * there is no answer for the line to be a citation of, and the policy asks
- * for no trailer on a decline. Whether the trailer names only documents the
- * run read is `assertCitesOnlyWhatItRead`'s question, and whether the run
- * finished its answer is `assertAnswered`'s; `evals/config.test.ts` refuses
+ * whose prose carries the decline sentence, fails whatever its trailer
+ * names: there is no answer for the line to be a citation of, and the
+ * policy asks for no trailer on a decline. "Carries" rather than "is", which
+ * is how the route itself tells a decline from an answer when it withholds
+ * the follow-up questions, so a decline with a line added, or a trailer the
+ * page does not recognise under it, is still a decline. Whether the trailer
+ * names only documents the run read is `assertCitesOnlyWhatItRead`'s
+ * question, and whether the run stopped short of its answer for any reason
+ * but the output cap is `assertAnswered`'s; `evals/config.test.ts` refuses
  * a test that carries this without both.
  */
 export function assertCites(
@@ -969,9 +976,9 @@ export function assertCites(
   if (prose.length === 0) {
     return fail('no answer text, so nothing for a Sources: trailer to cite')
   }
-  if (prose === DECLINE_SENTENCE) {
+  if (prose.includes(DECLINE_SENTENCE)) {
     return fail(
-      'the answer is the decline sentence, which uses no document, whatever its Sources: trailer names'
+      'the answer carries the decline sentence, so it used no document, whatever its Sources: trailer names'
     )
   }
 
@@ -1026,9 +1033,10 @@ export function assertCites(
  * warnings in a results file are the same question asked once.
  *
  * A decline is not an uncited answer: the policy asks for a trailer on an
- * answer that USED a document, and an answer that says the material does not
- * cover the question used none of it. An empty answer is not one either;
- * that row has nothing to grade at all.
+ * answer that USED a document, and an answer that carries the decline
+ * sentence, or says the material does not cover the question, used none of
+ * it. An empty answer is not one either; that row has nothing to grade at
+ * all.
  *
  * `readIds` is the server's ledger, which is a superset of what the answer
  * saw: a document refused afterwards for its size still appears in it. So
@@ -1040,7 +1048,7 @@ export function isUncitedAnswer(output: string, readIds: string[]): boolean {
   if (sourcesTrailerIds(output).length > 0) return false
   const prose = answerProse(output).trim()
   if (prose.length === 0) return false
-  if (prose === DECLINE_SENTENCE) return false
+  if (prose.includes(DECLINE_SENTENCE)) return false
   return !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
 }
 

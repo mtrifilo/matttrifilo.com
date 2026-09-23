@@ -13,9 +13,10 @@
 # warning instead of failing, the provider counts the test in
 # `missingTrailer`, and `evals:publish` refuses a run where more than a tenth
 # of the tests did it (MTC-54). A trailer is never enough on its own:
-# `assertCites` fails the decline sentence or an empty answer whatever the
-# trailer names, and every citation test also carries `assertAnswered`, so a
-# run that did not finish its answer fails too.
+# `assertCites` fails an answer that carries the decline sentence, or has no
+# prose, whatever the trailer names, and every citation test also carries
+# `assertAnswered`, so a run that stopped short for any reason but the output
+# cap fails too.
 #
 # The second half is hallucination probes. Every one asks for a fact that is
 # plausible for someone with Matt's career and is nowhere in the corpus. A
