@@ -448,13 +448,18 @@ export function assertReadsAnyOf(
  * can hold both halves of an answer while each half also has a document of
  * its own. `expectReads` cannot say "that one, or both of the others" (it
  * requires every id it names), and `expectReadsAny` passes on one half.
- * `metadata.expectReadsAnySet` lists the alternatives, each a set the run
- * must have opened in full: `[[a], [b, c]]` passes on a, or on b and c
- * together, and fails on b alone.
+ * `metadata.expectReadsAnySet` lists the alternatives, each a set whose
+ * every id must be in the read ledger: `[[a], [b, c]]` passes on a, or on b
+ * and c together, and fails on b alone.
+ *
+ * The ledger is `metadata.readIds`, which also lists a document the route
+ * refused for its size or the read budget, so "in the ledger" is a superset
+ * of "seen", as it is for the other read assertions.
  *
  * An empty set is ignored rather than treated as satisfied, since every
  * run has read all of nothing; `evals/config.test.ts` refuses one in a
- * suite.
+ * suite, and refuses the set form on a test that carries `assertCites`,
+ * whose missing-trailer tolerance reads only the two flat lists.
  */
 export function assertReadsAnySet(
   _output: string,

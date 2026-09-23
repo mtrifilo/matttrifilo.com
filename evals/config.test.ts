@@ -304,7 +304,14 @@ for (const name of SUITES) {
                   set.length > 0 &&
                   set.every(id => typeof id === 'string')
               ),
-          }).toEqual({ description: item.description, wellFormed: true })
+            // assertCites tolerates a missing trailer only against the flat
+            // lists, so the set form would silently remove that tolerance.
+            withAssertCites: names.includes('assertCites'),
+          }).toEqual({
+            description: item.description,
+            wellFormed: true,
+            withAssertCites: false,
+          })
         }
         if (names.includes('assertCheckedActivity')) {
           expect(Array.isArray(metadata.expectActivity)).toBe(true)

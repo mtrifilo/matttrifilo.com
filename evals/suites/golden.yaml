@@ -1907,9 +1907,10 @@
             deploy freeze in between, hardening the engagement-tracking
             service before Black Friday 2022, the 2023 sending-limit
             hardening, the 2023 load tests across the services in the sending
-            path, or the resilience library built for the 2019 season. It
-            may add
-            that Matt owned readiness four years running from 2022 to 2025
+            path, or the resilience library built for the 2019 season (which
+            the résumé says removed thousands of failed sends; a different
+            figure is wrong). It may add that Matt owned readiness four years
+            running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
             on Cyber Monday 2025. It is written about Matt in the third
             person, and it must not present an inferred characterisation as a
@@ -2007,11 +2008,15 @@
             2019 he helped decompose the Contacts domain out of the Core
             monolith and move Mobile's and Web's contact reads onto the new
             Contacts API (placing that on the Platform team, as the résumé
-            does, is correct but not required), and from 2020 to 2021 he led
+            does, is correct but not required; so is naming the parts the
+            Contacts document credits him with, such as the readiness audit,
+            the parity fixes or the shadow-comparison harness), and from 2020
+            to 2021 he led
             the Merge API decomposition as a tour of duty, moving Liquid
             template rendering into a standalone service, which the résumé
             calls a Java service and the Merge API document a Micronaut one.
-            It does not claim he led the Contacts decomposition. It is written
+            It does not claim he led the Contacts decomposition or was its
+            lead engineer, which no document states. It is written
             about Matt in the third person, and it must not present an
             inferred characterisation as a documented one.
         - type: llm-rubric
@@ -2139,9 +2144,12 @@
             The answer covers both halves of the question from the published
             material: languages and frameworks such as Java, Python, TypeScript
             and Go with Spring Boot, Micronaut, Flask, FastAPI, Vue.js, React
-            or GraphQL, and infrastructure such as Google Cloud, Kubernetes,
-            Terraform, GitHub Actions or CircleCI. It does not add a language
-            or platform the published material does not list. It is written
+            or GraphQL, or Node as the runtime its TypeScript runs on, and
+            infrastructure such as Google Cloud (including BigQuery, Datastore
+            or Vertex AI), Kubernetes, serverless containers, Terraform,
+            GitHub Actions or CircleCI. It does not add a language or platform
+            that neither the résumé nor the technical-expertise document
+            lists. It is written
             about Matt in the third person, and it must not present an
             inferred characterisation as a documented one.
         - type: llm-rubric
