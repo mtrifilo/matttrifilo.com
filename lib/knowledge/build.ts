@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { findEmDashes } from '@/lib/dashes'
 import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
 
 /**
@@ -193,6 +194,23 @@ function isPlaceholder(line: string): boolean {
 /** A summary is a line in the index, so it has to stay one short line. */
 export const SUMMARY_MAX_LENGTH = 160
 
+/**
+ * What stands between a document's title and its summary on its index
+ * line. A middle dot rather than a dash because the model imitates what it
+ * reads, and nothing it reads carries an em dash (lib/dashes.ts).
+ */
+export const INDEX_TITLE_SEPARATOR = ' · '
+
+/**
+ * The separator's dot, and the characters that render as the same dot:
+ * the Greek ano teleia (which Unicode normalises to it), the bullet
+ * operator and the dot operator. A title or summary may carry none of
+ * them, anywhere, because one at either edge joins the separator's spaces
+ * and reads as a second separator ("Title ·" becomes
+ * "Title · · summary").
+ */
+const SEPARATOR_DOTS = /[\u00B7\u0387\u2219\u22C5]/
+
 interface Frontmatter {
   id: string
   title: string
@@ -327,9 +345,10 @@ function parseFrontmatter(
     )
   }
   // The title and summary are rendered into an index line as
-  // `- [id] title — summary (…)`. Refuse the two characters that would
-  // make that line ambiguous rather than escaping them, so a prompt dump
-  // stays something a human can read.
+  // `- [id] title · summary (…)`. Refuse what would make that line
+  // ambiguous rather than escaping it, so a prompt dump stays something a
+  // human can read: a line break, and the separator's dot. The em dash is
+  // refused because the model reads this line and copies what it reads.
   for (const [key, value] of [
     ['title', title],
     ['summary', summary],
@@ -337,9 +356,14 @@ function parseFrontmatter(
     if (/[\r\n]/.test(value)) {
       throw new Error(`${source}: ${key} must be one line (got "${value}")`)
     }
-    if (value.includes('—')) {
+    if (SEPARATOR_DOTS.test(value)) {
       throw new Error(
-        `${source}: ${key} may not contain an em dash; the index uses it to separate the title from the summary (got "${value}")`
+        `${source}: ${key} may not contain a middle dot; the index uses "${INDEX_TITLE_SEPARATOR}" to separate the title from the summary (got "${value}")`
+      )
+    }
+    if (findEmDashes(value).length > 0) {
+      throw new Error(
+        `${source}: ${key} may not contain an em dash; the model reads the index and copies its punctuation, so use a comma, a colon or a full stop (got "${value}")`
       )
     }
   }
@@ -872,9 +896,9 @@ function orderDocuments(documents: KnowledgeDocument[]): KnowledgeDocument[] {
   })
 }
 
-/** `- [id] title — summary (tags: a, b; ~N tokens)` */
+/** `- [id] title · summary (tags: a, b; ~N tokens)` */
 function renderEntry(entry: KnowledgeEntry): string {
-  return `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+  return `- [${entry.id}] ${entry.title}${INDEX_TITLE_SEPARATOR}${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
 }
 
 /**

@@ -228,11 +228,13 @@ Rendered behaviour is testable under `bun test`: no browser, no dev server, no r
 
 ## Copy rules
 
-No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the policy use a comma, a colon, or a full stop instead. `lib/site-copy.test.ts` fails `bun test` on one in the text the source under `app/`, `components/`, `lib/og/` and `lib/seo/` renders, in `lib/chat/prompt.ts` and the chat's notices, in `content/open-source.ts`, in `content/knowledge/` and in `content/resume.md` (the files it reads are listed at its top; `content/blog/` is not among them); the policy tells the model the same, and `assertNoEmDash`, attached to every eval test through `defaultTest` in `evals/promptfooconfig.yaml`, fails an answer that uses one, or an en dash as a sentence dash. An en dash in a range ("Jul 2017 – present") is not a sentence dash. What counts as either is `lib/dashes.ts`, which both checks share.
+No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the policy use a comma, a colon, or a full stop instead. `lib/site-copy.test.ts` fails `bun test` on one in the text the source under `app/`, `components/`, `lib/og/` and `lib/seo/` renders, in `lib/chat/prompt.ts` and the chat's notices, in `content/open-source.ts`, in `content/knowledge/` and in `content/resume.md` (the files it reads are listed at its top; `content/blog/` is not among them), and in the messages a request sends the model as `buildMessages` renders them over the index the route loads, so punctuation the knowledge build adds around the corpus text is covered too; the policy tells the model the same, and `assertNoEmDash`, attached to every eval test through `defaultTest` in `evals/promptfooconfig.yaml`, fails an answer that uses one, or an en dash as a sentence dash. An en dash in a range ("Jul 2017 – present") is not a sentence dash. What counts as either is `lib/dashes.ts`, which both checks share, as does the knowledge build's refusal of an em dash in a title or summary.
 
 ## Updating the knowledge base
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.
+
+Each document is one index line, `- [id] title · summary (tags: …; ~N tokens)`, so a title or summary may not contain a middle dot (`·`, or a character that renders as one), a line break or an em dash: the build refuses the document and names the field. The separator is `INDEX_TITLE_SEPARATOR` in `lib/knowledge/build.ts`.
 
 A placeholder is a `## ` heading, or any line outside a fenced block or inline code, that starts with `TODO` (after an optional list marker) or contains `TODO (Matt)`: in `content/knowledge/faq` a question whose heading or answer is one is dropped and listed by `bun run knowledge:check`, and anywhere else it fails the build.
 

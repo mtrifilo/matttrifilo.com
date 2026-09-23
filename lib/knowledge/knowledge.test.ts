@@ -10,6 +10,7 @@ import {
   documentHeadings,
   estimateTokens,
   findPlaceholder,
+  INDEX_TITLE_SEPARATOR,
   KNOWLEDGE_DIR,
   KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -436,7 +437,7 @@ describe('knowledge corpus structure', () => {
     expect(lines.length).toBe(index.entries.length)
     for (const entry of index.entries) {
       expect(index.text).toContain(
-        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+        `- [${entry.id}] ${entry.title}${INDEX_TITLE_SEPARATOR}${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
       )
     }
     // Topic headings come before the entries they group, and each topic
@@ -557,7 +558,7 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     const lines = index.text.split('\n').filter(line => line.startsWith('- '))
     const catalogue = index.entries.map(
       entry =>
-        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+        `- [${entry.id}] ${entry.title}${INDEX_TITLE_SEPARATOR}${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
     )
     expect(new Set(lines)).toEqual(new Set(catalogue))
   })
@@ -723,6 +724,63 @@ describe('knowledge corpus build', () => {
         },
       ])
     ).toThrow(/keep it to 160/)
+  })
+
+  test('separates title and summary with a middle dot, not a dash', () => {
+    // Pinned because the model imitates the punctuation it reads, and this
+    // is the one mark it sees on every index line. The choice is recorded
+    // on MTC-82; change it there first.
+    expect(INDEX_TITLE_SEPARATOR).toBe(' \u00B7 ')
+    const { index } = buildFixture([
+      {
+        topic: 'career',
+        name: 'shaped.md',
+        title: 'A title',
+        summary: 'A summary.',
+      },
+    ])
+    expect(index.text).toContain('- [shaped] A title \u00B7 A summary. (tags:')
+  })
+
+  test('refuses the separator dot anywhere in a title or summary', () => {
+    // A dot at either edge joins the separator's spaces and reads as a
+    // second separator; the look-alikes render as the same dot.
+    for (const dot of ['\u00B7', '\u0387', '\u2219', '\u22C5']) {
+      for (const field of [
+        { title: `Before ${dot} after` },
+        { title: `Ends on ${dot}` },
+        { title: `Dot${dot}inside` },
+        { summary: `${dot} starts the summary.` },
+        { summary: `Before ${dot} after.` },
+      ]) {
+        expect(
+          () =>
+            buildFixture([{ topic: 'career', name: 'dotted.md', ...field }]),
+          JSON.stringify(field)
+        ).toThrow(/may not contain a middle dot/)
+      }
+    }
+  })
+
+  test('refuses an em dash in a title or summary, as the model would read it', () => {
+    // Built from code points and entities so this file carries no dash.
+    for (const dash of [
+      String.fromCodePoint(0x2014),
+      String.fromCodePoint(0x2015),
+      '&mdash;',
+      '&#8212;',
+    ]) {
+      for (const field of [
+        { title: `Before ${dash} after` },
+        { summary: `Before ${dash} after.` },
+      ]) {
+        expect(
+          () =>
+            buildFixture([{ topic: 'career', name: 'dashed.md', ...field }]),
+          JSON.stringify(field)
+        ).toThrow(/may not contain an em dash/)
+      }
+    }
   })
 
   test('refuses a document with no tags', () => {
@@ -1347,6 +1405,7 @@ interface Fixture {
   topic: string
   name: string
   id?: string
+  title?: string
   summary?: string
   tags?: string
   canonical?: string
@@ -1368,7 +1427,7 @@ function buildFixture(files: Fixture[]) {
       const frontmatter = [
         '---',
         `id: '${id}'`,
-        `title: 'Fixture'`,
+        `title: '${file.title ?? 'Fixture'}'`,
         `summary: '${file.summary ?? 'What a reader would learn from it.'}'`,
         `tags: ${file.tags ?? '[fixture]'}`,
         `updated: '2026-09-14'`,

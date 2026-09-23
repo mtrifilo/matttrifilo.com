@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
-import { SYSTEM_PROMPT } from '@/lib/chat/prompt'
+import { buildMessages, SYSTEM_PROMPT } from '@/lib/chat/prompt'
+import { loadKnowledgeIndex } from '@/lib/knowledge'
 import { findEmDashes, findPunctuationDashes } from './dashes'
 
 /**
@@ -18,6 +19,11 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  * - lib/chat/prompt.ts, the same way, and SYSTEM_PROMPT as the model
  *   receives it, so a constant the policy interpolates from another file is
  *   covered too.
+ * - the messages a request sends the model, rendered by buildMessages over
+ *   the index the route loads: the policy, the document index with the
+ *   frame and repository list around it, and the visitor's turn. The index
+ *   joins corpus text with punctuation the build adds, so no one file holds
+ *   it whole.
  * - lib/chat/answer.ts and lib/chat/validate.ts (the notices and fallbacks
  *   the chat shows as sent) and content/open-source.ts (the repository
  *   summaries), the same way.
@@ -179,6 +185,25 @@ describe('no em dash anywhere a visitor reads', () => {
     // Stricter than the files: a spaced en dash in the policy is a sentence
     // dash the model would copy, and the policy has no ranges to excuse.
     expect(findPunctuationDashes(SYSTEM_PROMPT)).toEqual([])
+  })
+
+  test('the messages a request sends the model', () => {
+    // A prior turn is included so the transcript frame is rendered too.
+    const index = loadKnowledgeIndex()
+    const context = buildMessages({
+      index,
+      history: [
+        { role: 'user', text: 'Who is Matt?' },
+        { role: 'assistant', text: 'An engineering manager.' },
+      ],
+      userMessage: 'What did he ship?',
+    })
+      .map(message => message.content)
+      .join('\n\n')
+    // A context that lost the index would pass the scan below for nothing.
+    expect(context).toContain(SYSTEM_PROMPT)
+    expect(context).toContain(index.text)
+    expect(findEmDashes(context)).toEqual([])
   })
 })
 
