@@ -415,6 +415,27 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     expect(leadOf(rows[0].track)).toBeGreaterThan(0)
   })
 
+  test('a tap on a moving row still asks its question after the hand-over', () => {
+    // The touch hands the row over before the click lands, and the pill
+    // stays under the finger while the track freezes; a hand-over that
+    // cancelled the touch or moved the row would swallow the tap. Nothing
+    // else here fires a touch and a click on the same pill.
+    const picked: string[] = []
+    const { container } = render(<StarterTicker onPick={q => picked.push(q)} />)
+    const { rows } = tickerOf(container)
+    for (const { track } of rows)
+      track.getAnimations = () => [runningLoop(0.25)]
+    const [first] = rows
+    const pill = announcedPills(first.viewport)[0]
+
+    const notCancelled = fireEvent.touchStart(pill)
+    fireEvent.click(pill)
+
+    expect(notCancelled).toBe(true)
+    expect(isHandedOver(first.viewport)).toBe(true)
+    expect(picked).toEqual([FIRST_ROW[0]])
+  })
+
   test('a touch stops the touched row where it was, as a scroll strip', () => {
     const progress = 0.27
     const { rows, copyWidth } = renderLaidOutRows(progress)
