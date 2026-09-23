@@ -41,8 +41,7 @@ production), ran a formal production-readiness audit that he split into
 "stable and reliable" and "observable" sections and wrote up himself, and
 interviewed the product managers and engineers on the consuming teams,
 recording the notes in a shared findings document. He repeated that
-interview-and-write-up pattern at every major decision point in the
-project.
+interview-and-write-up pattern at the decision points he worked on.
 
 ## Parity work before any traffic switch
 
@@ -101,9 +100,10 @@ pagination flow using page tokens instead of offsets, then a circuit
 breaker modelled on the web backend's own implementation and scoped to trip
 only on server errors so client errors would not false-positive it, plus an
 end-to-end test for the whole path. Two mobile engineers did substantial
-implementation alongside him; this was a genuine team effort. The seventeen
-mobile-app pull requests are the first production consumer of the new API,
-and they are absent from every earlier career document.
+implementation alongside him; this was a genuine team effort. The mobile
+app's pull requests (seventeen across its epic, fourteen of them in the
+ticket-linked total above) are the first production consumer of the new
+API, and they are absent from every earlier career document.
 
 **Web in parallel.** The web backend-for-frontend and web app moved their
 contact-load actions off the legacy servlet one call at a time: a new
