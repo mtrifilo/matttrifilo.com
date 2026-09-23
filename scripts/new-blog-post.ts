@@ -9,7 +9,7 @@
  * content/knowledge/blog so the career assistant can answer from it. The
  * twin is the same body with the post's frontmatter replaced by the
  * knowledge contract's, and lib/knowledge/knowledge.test.ts fails the
- * suite if a post ever has no twin — so the two are written together
+ * suite if a post ever has no twin, so the two are written together
  * rather than left to be remembered.
  */
 
@@ -19,7 +19,7 @@ import readline from 'readline'
 // Imported, not restated: a second copy of the limit is a copy that can be
 // wrong, and the whole job of this scaffold is to emit a file the loader
 // accepts.
-import { SUMMARY_MAX_LENGTH } from '../lib/knowledge/build'
+import { indexFieldProblem, SUMMARY_MAX_LENGTH } from '../lib/knowledge/build'
 
 const BLOG_DIR = path.join(process.cwd(), 'content', 'blog')
 const KNOWLEDGE_BLOG_DIR = path.join(
@@ -101,23 +101,18 @@ function quoted(value: string): string {
  * Refuses an answer the knowledge loader would reject, at the prompt,
  * where it costs one retype.
  *
- * The index renders `- [id] title — summary (…)`, so an em dash in a
- * title or description would make that line ambiguous and the loader
- * throws on it. Without this the scaffold happily writes a twin that
- * turns the whole suite red the moment it lands — the exact failure this
- * scaffold exists to prevent.
+ * The title and description become the twin's index line, and the loader
+ * throws on a value that line cannot carry. Without this the scaffold
+ * happily writes a twin that turns the whole suite red the moment it
+ * lands, the exact failure this scaffold exists to prevent. The rule is the
+ * loader's own, so the two cannot drift apart.
  */
 export function frontmatterProblem(
   label: string,
   value: string
 ): string | null {
-  if (value.includes('—')) {
-    return `The ${label} may not contain an em dash (—): the knowledge index uses it to separate a title from its summary. Use a colon, a comma, or two hyphens.`
-  }
-  if (/[\r\n]/.test(value)) {
-    return `The ${label} must be a single line.`
-  }
-  return null
+  const problem = indexFieldProblem(value)
+  return problem === null ? null : `The ${label} ${problem}.`
 }
 
 /**
@@ -125,8 +120,8 @@ export function frontmatterProblem(
  *
  * The description Matt typed is the closest thing to "what a reader would
  * learn" the scaffold has; the title is the honest fallback when he skips
- * it. Either way it is a placeholder worth rewriting once the post exists
- * — which is why the scaffold says so on the way out.
+ * it. Either way it is a placeholder worth rewriting once the post exists,
+ * which is why the scaffold says so on the way out.
  */
 export function draftSummary(draft: PostDraft): string {
   const summary = draft.description?.trim() || draft.title

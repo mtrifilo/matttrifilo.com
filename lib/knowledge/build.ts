@@ -202,14 +202,40 @@ export const SUMMARY_MAX_LENGTH = 160
 export const INDEX_TITLE_SEPARATOR = ' · '
 
 /**
- * The separator's dot, and the characters that render as the same dot:
- * the Greek ano teleia (which Unicode normalises to it), the bullet
- * operator and the dot operator. A title or summary may carry none of
- * them, anywhere, because one at either edge joins the separator's spaces
- * and reads as a second separator ("Title ·" becomes
- * "Title · · summary").
+ * The separator's mark, and the common characters that render as the same
+ * dot: the Greek ano teleia (which Unicode normalises to it), the bullet
+ * and dot operators, and the word-separator and katakana middle dots. A
+ * title or summary may carry none of them, anywhere: inside one, " · "
+ * leaves no way to tell where the title ends, and at either edge the dot
+ * joins the separator's spaces ("Title ·" becomes "Title · · summary").
+ * Entities such as `&middot;` are not decoded: the index shows them as
+ * written, so they do not read as a dot.
  */
-const SEPARATOR_DOTS = /[\u00B7\u0387\u2219\u22C5]/
+const SEPARATOR_MARKS = [
+  INDEX_TITLE_SEPARATOR.trim(),
+  '\u0387',
+  '\u2219',
+  '\u22C5',
+  '\u2E31',
+  '\u30FB',
+  '\uFF65',
+]
+
+/**
+ * Why a title or summary cannot go on its index line, or null when it
+ * can. The build throws with it; scripts/new-blog-post.ts asks with it at
+ * the prompt, so the scaffold and the loader refuse the same values.
+ */
+export function indexFieldProblem(value: string): string | null {
+  if (/[\r\n]/.test(value)) return 'must be one line'
+  if (SEPARATOR_MARKS.some(mark => value.includes(mark))) {
+    return `may not contain "${INDEX_TITLE_SEPARATOR.trim()}" or a character that looks like it; the index uses "${INDEX_TITLE_SEPARATOR}" to separate the title from the summary`
+  }
+  if (findEmDashes(value).length > 0) {
+    return 'may not contain an em dash; the model reads the index and copies its punctuation, so use a comma, a colon or a full stop'
+  }
+  return null
+}
 
 interface Frontmatter {
   id: string
@@ -345,26 +371,16 @@ function parseFrontmatter(
     )
   }
   // The title and summary are rendered into an index line as
-  // `- [id] title · summary (…)`. Refuse what would make that line
-  // ambiguous rather than escaping it, so a prompt dump stays something a
-  // human can read: a line break, and the separator's dot. The em dash is
-  // refused because the model reads this line and copies what it reads.
+  // `- [id] title · summary (…)`. What would make that line ambiguous is
+  // refused rather than escaped, so a prompt dump stays something a human
+  // can read.
   for (const [key, value] of [
     ['title', title],
     ['summary', summary],
   ] as const) {
-    if (/[\r\n]/.test(value)) {
-      throw new Error(`${source}: ${key} must be one line (got "${value}")`)
-    }
-    if (SEPARATOR_DOTS.test(value)) {
-      throw new Error(
-        `${source}: ${key} may not contain a middle dot; the index uses "${INDEX_TITLE_SEPARATOR}" to separate the title from the summary (got "${value}")`
-      )
-    }
-    if (findEmDashes(value).length > 0) {
-      throw new Error(
-        `${source}: ${key} may not contain an em dash; the model reads the index and copies its punctuation, so use a comma, a colon or a full stop (got "${value}")`
-      )
+    const problem = indexFieldProblem(value)
+    if (problem !== null) {
+      throw new Error(`${source}: ${key} ${problem} (got "${value}")`)
     }
   }
   if (canonical !== undefined && !CANONICAL_HOST.test(canonical)) {

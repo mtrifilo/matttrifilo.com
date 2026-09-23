@@ -1,11 +1,12 @@
 /**
  * The dashes that nothing a visitor reads may use as punctuation.
  *
- * The rule is Matt's: the site carries no em dash. Three places enforce it
- * and all read this one definition, so they cannot disagree about what a
- * dash is: the source guard in lib/site-copy.test.ts, the eval assertion
- * `assertNoEmDash` that reads the assistant's answers, and the knowledge
- * build, which refuses one in a document's title or summary.
+ * The rule is Matt's: the site carries no em dash. Every check of it reads
+ * this one definition, so none can disagree about what a dash is: the
+ * source guard in lib/site-copy.test.ts, the eval assertion `assertNoEmDash`
+ * that reads the assistant's answers, and indexFieldProblem in
+ * lib/knowledge/build.ts, which the knowledge build and the blog scaffold
+ * both run on a document's title and summary.
  *
  * "Em dash" means the characters that render as one, not only U+2014: the
  * horizontal bar, the two- and three-em dashes, and the small and vertical

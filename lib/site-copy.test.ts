@@ -37,7 +37,7 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  *
  * What an em dash is, entities and look-alike characters included, is
  * lib/dashes.ts, shared with the eval assertion that checks the assistant's
- * answers. The en dash is allowed here: the résumé's date ranges use it.
+ * answers and with the knowledge build. The en dash is allowed here: the résumé's date ranges use it.
  */
 
 const ROOT = join(import.meta.dir, '..')
@@ -203,7 +203,9 @@ describe('no em dash anywhere a visitor reads', () => {
     // A context that lost the index would pass the scan below for nothing.
     expect(context).toContain(SYSTEM_PROMPT)
     expect(context).toContain(index.text)
-    expect(findEmDashes(context)).toEqual([])
+    // Punctuation dashes, as for the policy: a spaced en dash here is a
+    // sentence dash the model would copy, and a range in a summary passes.
+    expect(findPunctuationDashes(context)).toEqual([])
   })
 })
 
