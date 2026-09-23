@@ -8,8 +8,8 @@ updated: 2026-09-21
 
 # The Contacts API program and the shadow-comparison harness, 2019
 
-The first decomposition Matt worked end to end, two years before the merge
-service. Contacts lived entirely inside the core monolith and were read
+The first decomposition Matt worked end to end as a contributing engineer,
+not as its lead, two years before the merge service. Contacts lived entirely inside the core monolith and were read
 through two different legacy paths: a servlet API used by the web front end
 and a front-facing controller used by the mobile app. A newer internal
 Contacts API had been partly built the year before but was not
