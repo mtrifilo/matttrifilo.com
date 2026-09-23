@@ -50,6 +50,7 @@ interface SuiteTest {
   description?: unknown
   vars?: { question?: unknown; history?: unknown }
   metadata?: Record<string, unknown>
+  options?: { disableDefaultAsserts?: unknown }
   assert?: SuiteAssertion[]
 }
 
@@ -62,7 +63,10 @@ function readYaml<T>(relativePath: string): T {
 const config = readYaml<{
   providers: { id: string; label?: string }[]
   prompts: string[]
-  defaultTest: { options: { provider: { id: string } } }
+  defaultTest: {
+    options: { provider: { id: string } }
+    assert?: SuiteAssertion[]
+  }
   tests: string[]
 }>('promptfooconfig.yaml')
 
@@ -122,6 +126,9 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   // names no ticket key and no screenshot tag either.
   'assertNoTicketKeys',
   'assertNoScreenshotRelease',
+  // Attached to every test through `defaultTest`, and an absence check on
+  // the text: an empty answer uses no dash.
+  'assertNoEmDash',
 ])
 
 function toArray(value: unknown): string[] {
@@ -203,6 +210,22 @@ describe('promptfooconfig.yaml', () => {
       expect(threshold).toBeLessThan(2 / 3)
       expect(threshold).toBeGreaterThan(1 / 3)
     }
+  })
+
+  test('runs assertNoEmDash on every test of every suite', () => {
+    // It is attached here and nowhere else, so deleting or misspelling this
+    // entry, or a test opting out of the defaults, would silently drop the
+    // check from the whole run.
+    const defaults = assertionNames([{ assert: config.defaultTest.assert }])
+    expect(defaults).toContain('assertNoEmDash')
+    const exported = assertions as unknown as Record<string, unknown>
+    for (const name of defaults) expect(typeof exported[name]).toBe('function')
+    const optedOut = SUITES.flatMap(name =>
+      suites[name]
+        .filter(item => item.options?.disableDefaultAsserts === true)
+        .map(item => item.description)
+    )
+    expect(optedOut).toEqual([])
   })
 
   test('lists every suite file, and only those', () => {

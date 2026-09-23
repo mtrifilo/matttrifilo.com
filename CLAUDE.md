@@ -20,6 +20,7 @@ Matt Trifilo's site: Next.js 16 app router, React 19, Bun, Tailwind v4, deployed
 - Linear project "Ask Matt AI chat" (team MTC) is the source of truth for progress. Every piece of work has a ticket; decisions are recorded there as dated comments.
 - Adversarial review before every pull request; fixes in their own commits; findings in the PR body. On Matt's machine a user-level hook refuses `gh pr create` without a review marker; the rule holds where the hook does not.
 - Sub-agents run on Opus.
+- No em dashes anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the prompt use a comma, a colon, or a full stop. `lib/site-copy.test.ts` enforces it on the source and `assertNoEmDash` on the answers; see "Copy rules" in `docs/career-assistant-operations.md`.
 - Production is protected: `CHAT_DISABLED=1` was set on Vercel Production on 2026-09-15 and stays until MTC-35 is done; `vercel env ls production` is the source of truth. Do not change Vercel environment variables or deploy to production for chat work.
 
 ## Where things are

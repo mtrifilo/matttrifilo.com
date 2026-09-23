@@ -23,7 +23,7 @@ export const ASSISTANT_NAME = "Matt's Career Assistant"
 export const ASSISTANT_LABEL = 'AI assistant · answers about Matt Trifilo'
 
 export const ASSISTANT_INTRO =
-  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work — email him if you want to talk."
+  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work. Email him if you want to talk."
 
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 

@@ -226,6 +226,10 @@ Rendered behaviour is testable under `bun test`: no browser, no dev server, no r
 
 **Running them.** `bun test components/assistant/starter-ticker.test.tsx` for one file, `bun test -t 'folds the steps away'` for one test. Cost of the whole setup, measured 2026-09-22 with runs interleaved on a quiet machine, with and without `TZ=America/Phoenix`: about 0.2 seconds, 1.7 to 1.9 seconds for the suite before it and 1.9 to 2.2 seconds after (1,108 tests before, 1,131 after).
 
+## Copy rules
+
+No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the policy use a comma, a colon, or a full stop instead. `lib/site-copy.test.ts` fails `bun test` on one in the text the source under `app/`, `components/`, `lib/og/` and `lib/seo/` renders, in `lib/chat/prompt.ts` and the chat's notices, in `content/open-source.ts`, in `content/knowledge/` and in `content/resume.md` (the files it reads are listed at its top; `content/blog/` is not among them); the policy tells the model the same, and `assertNoEmDash`, attached to every eval test through `defaultTest` in `evals/promptfooconfig.yaml`, fails an answer that uses one, or an en dash as a sentence dash. An en dash in a range ("Jul 2017 – present") is not a sentence dash. What counts as either is `lib/dashes.ts`, which both checks share.
+
 ## Updating the knowledge base
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.

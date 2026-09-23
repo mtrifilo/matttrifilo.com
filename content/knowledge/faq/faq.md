@@ -13,12 +13,12 @@ hiring managers and engineering leaders ask him most often.
 
 <!--
 Notes for whoever edits this file. lib/knowledge/build.ts strips HTML
-comments, so nothing in here reaches the model — keep authoring process
+comments, so nothing in here reaches the model. Keep authoring process
 talk inside these fences and out of the prose above.
 
 Every question below is a placeholder. The build drops any question whose
 body still reads TODO, and drops this whole document while none of them are
-answered, so a placeholder never reaches the model — and while it is
+answered, so a placeholder never reaches the model. While it is
 dropped, /knowledge/faq does not exist either. To publish an answer,
 replace the "TODO (Matt)" line under a question with the answer itself.
 
