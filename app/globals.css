@@ -358,14 +358,14 @@
 }
 
 /*
- * A pill that is being read, or reached for, holds still, and so does the
- * other row: a row still drifting beside the one being read is the
- * distraction the pause exists to remove. That is why all three conditions
- * are read off the group rather than off a single row.
+ * A pill that is being read, or reached for with a mouse or the keyboard,
+ * holds still, and so does the other row: a row still drifting beside the
+ * one being read is the distraction the pause exists to remove. That is why
+ * both conditions are read off the group rather than off a single row. A
+ * touch is not a pause: it hands the touched row over for good (below).
  */
 .starter-ticker:hover .starter-ticker-track,
-.starter-ticker:focus-within .starter-ticker-track,
-.starter-ticker[data-touched='true'] .starter-ticker-track {
+.starter-ticker:focus-within .starter-ticker-track {
   animation-play-state: paused;
 }
 
@@ -391,6 +391,27 @@
   /* The lead that lets a row's first pill be scrolled clear of the fade.
      The component adds the same width to scrollLeft as it freezes. */
   padding-inline-start: var(--edge-fade);
+}
+
+/*
+ * A row the visitor has touched, or pushed sideways with a wheel or a
+ * trackpad, is theirs for the rest of the visit. starter-ticker.tsx freezes
+ * it at the point its loop had reached, as focus does, and this makes it a
+ * strip they scroll: the same window with the same fades, now moved by hand
+ * and never again by the loop.
+ *
+ * `overscroll-behavior-x` keeps a drag that reaches the start of the row
+ * from becoming the browser's back gesture, which on a phone would leave the
+ * page. The trailing space lets the last pill be scrolled clear of the right
+ * fade; the lead the freeze adds does the same for the first.
+ */
+.starter-ticker-row[data-handed-over='true'] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+.starter-ticker-row[data-handed-over='true'] .starter-ticker-track {
+  padding-inline-end: var(--edge-fade);
 }
 
 @media (prefers-reduced-motion: reduce) {

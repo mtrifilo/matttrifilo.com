@@ -4,7 +4,8 @@
  * The pool is split across two rows. Each row is one track holding its own
  * half of the pool twice, moved by a CSS `transform` keyframe that travels
  * exactly one copy's width. Two coordinate systems therefore describe the
- * same row, and the component swaps between them whenever a pill takes focus:
+ * same row, and the component swaps between them whenever a pill takes focus
+ * or the visitor takes a row over by touch or wheel:
  *
  * - **animation progress**, a fraction of one loop, which is what the CSS
  *   animation and its negative `animation-delay` speak;
@@ -27,9 +28,6 @@
  * deciding: a pill crosses a 640px row in about eighteen seconds.
  */
 export const TICKER_SPEED_PX_PER_SECOND = 35
-
-/** How long a touch holds the rows still before they drift again. */
-export const TOUCH_PAUSE_MS = 4000
 
 /**
  * How many times a row's half of the pool is laid down in its track.

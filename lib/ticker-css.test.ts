@@ -9,7 +9,8 @@ import {
 } from '@/components/assistant/ticker-geometry'
 
 /**
- * The contract between app/globals.css and the starter ticker (MTC-39).
+ * The contract between app/globals.css and the starter ticker (MTC-39,
+ * MTC-75).
  *
  * The rows' behaviour is split across two languages: a keyframe in the
  * stylesheet, and the copy count and conversions in ticker-geometry.ts that
@@ -110,6 +111,46 @@ describe('the rows the component scrolls', () => {
   })
 })
 
+describe('a row the visitor has taken over', () => {
+  const HANDED_OVER = ".starter-ticker-row[data-handed-over='true']"
+  const strip = ruleFor(`${HANDED_OVER} {`)
+
+  test('scrolls sideways by hand, and only sideways', () => {
+    expect(strip).toContain('overflow-x: auto')
+    // Left open vertically, a 46px row would scroll up and down under a
+    // thumb that meant to scroll the page.
+    expect(strip).toContain('overflow-y: hidden')
+  })
+
+  test('keeps a drag at either end from becoming the back gesture', () => {
+    expect(strip).toContain('overscroll-behavior-x: contain')
+  })
+
+  test('keeps the fades it had while it moved', () => {
+    // The gradient is the shared rule's, on the same element. A handed-over
+    // rule that set its own mask, or cleared it, would change what the frame
+    // draws the moment a visitor touches the row.
+    expect(strip).not.toContain('mask')
+    expect(ruleFor('.edge-faded-row {')).toContain('mask-image:')
+  })
+
+  test('can scroll its last pill clear of the right fade', () => {
+    // The freeze gives the start a lead as wide as the fade; the end needs
+    // the same, or the last pill of the strip stays under the gradient.
+    expect(ruleFor(`${HANDED_OVER} .starter-ticker-track {`)).toContain(
+      `padding-inline-end: var(${EDGE_FADE_PROPERTY})`
+    )
+  })
+
+  test('is not scoped to reduced motion, where the rows already scroll', () => {
+    // The hand-over is for rows that move. Written inside the reduced-motion
+    // block it would never apply to one.
+    const reduced = blockAround(".starter-ticker-copy[aria-hidden='true']")
+    expect(reduced).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(reduced).not.toContain(HANDED_OVER)
+  })
+})
+
 describe('the shared edge fade', () => {
   const faded = ruleFor('.edge-faded-row {')
 
@@ -202,16 +243,16 @@ describe('the state flags the component writes', () => {
   test('the stylesheet reads the attributes the component sets', () => {
     // These are strings on both sides of the boundary. A rename in one file
     // leaves the other writing an attribute nothing styles, and the rows
-    // simply never pause or never freeze. A touch is recorded on the group
-    // and a freeze on one track, because a touch stops both rows while only
-    // the row holding the focused pill hands its position to scrollLeft.
-    expect(css).toContain(".starter-ticker[data-touched='true']")
+    // simply never freeze, never appear, or never become scrollable. A
+    // freeze is recorded on the track, which is what stops moving; a
+    // hand-over on the row, which is what the visitor scrolls.
     expect(css).toContain(".starter-ticker-track[data-frozen='true']")
     expect(css).toContain(".starter-ticker-track:not([data-placed='true'])")
+    expect(css).toContain(".starter-ticker-row[data-handed-over='true']")
     const source = componentSource('starter-ticker.tsx')
-    expect(source).toContain("dataset.touched = 'true'")
     expect(source).toContain("dataset.frozen = 'true'")
     expect(source).toContain("dataset.placed = 'true'")
+    expect(source).toContain("dataset.handedOver = 'true'")
   })
 
   test('a moving row stays invisible, not absent, until it is placed', () => {
@@ -236,15 +277,20 @@ describe('the state flags the component writes', () => {
     expect(reduced).toContain(`padding-inline: var(${EDGE_FADE_PROPERTY})`)
   })
 
-  test('hover, focus and touch stop both rows, not just the one under the pointer', () => {
+  test('hover and focus stop both rows, not just the one under the pointer', () => {
     const pause = ruleFor('.starter-ticker:hover .starter-ticker-track')
     expect(pause).toContain(
       '.starter-ticker:focus-within .starter-ticker-track'
     )
-    expect(pause).toContain(
-      ".starter-ticker[data-touched='true'] .starter-ticker-track"
-    )
     expect(pause).toContain('animation-play-state: paused')
+  })
+
+  test('a touch is not a pause of both rows', () => {
+    // A touch hands the touched row over for good and leaves the other one
+    // moving until it is touched itself. A group-wide touch pause would stop
+    // the other row too, and then start it again under the reader.
+    expect(css).not.toContain('data-touched')
+    expect(componentSource('starter-ticker.tsx')).not.toContain('setTimeout')
   })
 
   test('reduced motion turns both rows into plain scroll strips', () => {
