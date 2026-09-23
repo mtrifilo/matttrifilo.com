@@ -38,12 +38,32 @@ import {
   assertThirdPerson,
   followUpToAsk,
   type AssertionContext,
+  type SuiteTestMetadata,
 } from './assertions'
+import type { EvalMetadata } from './provider'
 
 const ctx = (
-  test?: Record<string, unknown>,
-  provider?: Record<string, unknown>
+  test?: SuiteTestMetadata,
+  provider?: Partial<EvalMetadata>
 ): AssertionContext => ({ test: { metadata: test }, metadata: provider })
+
+describe('AssertionContext', () => {
+  // Checked by `bun run typecheck`, not at run time: each directive fails the
+  // build if the line under it ever compiles. A read of a key the provider
+  // does not set would be undefined on every row, and an assertion built on
+  // it would pass without looking at anything.
+  test('a key the provider never sets does not compile', () => {
+    const context: AssertionContext = { metadata: { readIds: [] } }
+    // @ts-expect-error: sourceIds is not provider metadata
+    expect(context.metadata?.sourceIds).toBeUndefined()
+  })
+
+  test('a key no suite sets does not compile either', () => {
+    const context: AssertionContext = { test: { metadata: {} } }
+    // @ts-expect-error: expectRead is a misspelling of expectReads
+    expect(context.test?.metadata?.expectRead).toBeUndefined()
+  })
+})
 
 describe('POLICY_PHRASES', () => {
   test('every phrase is still in the policy it is meant to catch', () => {
@@ -505,18 +525,6 @@ describe('assertCitesOnlyWhatItRead', () => {
     ).toBe(true)
   })
 
-  test('judges the trailer against the reads, whatever else the metadata says', () => {
-    // The verdict rests on the answer's trailer and the server's reads
-    // alone: an empty list under any other key, a source list included,
-    // cannot stand in for either.
-    const result = assertCitesOnlyWhatItRead(
-      'He led it.\n\nSources: resume, faq',
-      ctx(undefined, { sourceIds: [], readIds: ['resume'] })
-    )
-    expect(result.pass).toBe(false)
-    expect(result.reason).toContain('faq')
-  })
-
   test('a trailer on a run that read nothing fails', () => {
     const result = assertCitesOnlyWhatItRead(
       'He led it.\n\nSources: resume',
@@ -527,13 +535,14 @@ describe('assertCitesOnlyWhatItRead', () => {
   })
 })
 
-describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => {
-  // Every test that carries one carries the other (evals/config.test.ts), so
-  // a row's citation verdict is the pair's. Each case names both halves, so
-  // a red one says which half moved.
+describe('the citation trio: assertCites, assertCitesOnlyWhatItRead, assertAnswered', () => {
+  // Every test that carries one carries all three (evals/config.test.ts), so
+  // a row's citation verdict is the trio's. Each case names every member, so
+  // a red one says which moved.
   const verdicts = (output: string, context: AssertionContext) => ({
     assertCites: assertCites(output, context).pass,
     assertCitesOnlyWhatItRead: assertCitesOnlyWhatItRead(output, context).pass,
+    assertAnswered: assertAnswered(output, context).pass,
   })
   const answer = 'He led the migration in 2024.'
   const readResume = ctx(
@@ -541,25 +550,31 @@ describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => 
     { readIds: ['resume', 'faq'] }
   )
 
-  test('a trailer drawn from the reads passes both', () => {
+  test('a trailer drawn from the reads passes all three', () => {
     expect(verdicts(`${answer}\n\nSources: resume`, readResume)).toEqual({
       assertCites: true,
       assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
     })
   })
 
-  test('a trailer naming an unread document fails the subset half', () => {
+  test('a trailer naming an unread document fails the subset check', () => {
     expect(
       verdicts(`${answer}\n\nSources: resume, open-source`, readResume)
-    ).toEqual({ assertCites: true, assertCitesOnlyWhatItRead: false })
+    ).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: false,
+      assertAnswered: true,
+    })
   })
 
   test('no trailer, on a run that read the named document, passes with a warning', () => {
-    // The tolerance `missingTrailer` counts: the subset half has nothing to
+    // The tolerance `missingTrailer` counts: the subset check has nothing to
     // disagree with, and assertCites passes on the ledger's evidence.
     expect(verdicts(answer, readResume)).toEqual({
       assertCites: true,
       assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
     })
     expect(assertCites(answer, readResume).reason).toContain('warning')
   })
@@ -572,6 +587,7 @@ describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => 
     expect(verdicts(answer, readOther)).toEqual({
       assertCites: false,
       assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
     })
   })
 
@@ -580,6 +596,7 @@ describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => 
     expect(verdicts(answer, readNothing)).toEqual({
       assertCites: false,
       assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
     })
   })
 
@@ -587,7 +604,69 @@ describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => 
     expect(verdicts('', readResume)).toEqual({
       assertCites: false,
       assertCitesOnlyWhatItRead: true,
+      assertAnswered: false,
     })
+  })
+
+  test('a trailer with no answer above it fails', () => {
+    expect(verdicts('Sources: resume', readResume)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: false,
+    })
+  })
+
+  test('a decline carrying a trailer of read documents fails', () => {
+    // The ids were read and the trailer is there, but there is no answer for
+    // it to cite, so only assertCites can catch it.
+    expect(
+      verdicts(`${DECLINE_SENTENCE}\n\nSources: resume`, readResume)
+    ).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
+    })
+  })
+
+  test('an uncited answer cut off at the output cap passes with a warning', () => {
+    // assertAnswered counts a length-truncated answer as an answer, so the
+    // trio passes it and the provider counts it as a missing trailer: the
+    // cap, not the model, is what took the line off.
+    const capped = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['resume'], incomplete: true, truncated: true }
+    )
+    expect(verdicts('He led the migr', capped)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
+    })
+    expect(assertCites('He led the migr', capped).reason).toContain('warning')
+  })
+
+  test('a cited answer that stopped short, not on the output cap, fails on the answer', () => {
+    const cutOff = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['resume'], incomplete: true }
+    )
+    expect(verdicts('He led the\nSources: resume', cutOff)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: false,
+    })
+  })
+
+  test('a bold trailer is no trailer, as it is on the page', () => {
+    // The page leaves this line on screen, raw ids and all, so it is not a
+    // citation line; tolerated only on the ledger's evidence, and counted.
+    const bold = `${answer}\n\n**Sources:** resume`
+    expect(verdicts(bold, readResume)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+      assertAnswered: true,
+    })
+    expect(assertCites(bold, readResume).reason).toContain('warning')
+    expect(isUncitedAnswer(bold, ['resume'])).toBe(true)
   })
 })
 
@@ -652,6 +731,69 @@ describe('assertCites', () => {
     expect(
       assertCites("Matt's published work does not mention that.", read).pass
     ).toBe(false)
+  })
+
+  test('fails a decline even when it carries a trailer', () => {
+    for (const trailer of ['Sources: resume', 'Sources: resume, faq']) {
+      const result = assertCites(`${DECLINE_SENTENCE}\n\n${trailer}`, read)
+      expect(result.pass).toBe(false)
+      expect(result.reason).toContain('decline sentence')
+    }
+  })
+
+  test('fails a decline with a line added, or under a trailer the page shows', () => {
+    // Neither is the sentence alone, and neither is an answer: the route
+    // withholds follow-ups from any text that carries the sentence, and so
+    // does this. A bold label is prose on the page, so without this the
+    // missing-trailer tolerance would pass the decline with a warning.
+    for (const output of [
+      `${DECLINE_SENTENCE} Sorry!\n\nSources: resume`,
+      `${DECLINE_SENTENCE}\n\n**Sources:** resume`,
+      `${DECLINE_SENTENCE} Sorry!`,
+    ]) {
+      const result = assertCites(output, read)
+      expect({ output, pass: result.pass }).toEqual({ output, pass: false })
+      expect(result.reason).toContain('decline sentence')
+      expect(isUncitedAnswer(output, ['resume'])).toBe(false)
+    }
+  })
+
+  test('fails a trailer with no answer above it', () => {
+    for (const output of ['Sources: resume', '\n\nSources: resume\n']) {
+      const result = assertCites(output, read)
+      expect(result.pass).toBe(false)
+      expect(result.reason).toContain('no answer text')
+    }
+  })
+
+  test('fails a trailer under nothing but follow-up questions', () => {
+    // The block comes off before the prose is judged, so proposals are not
+    // an answer for the line to cite.
+    expect(
+      assertCites('Sources: resume\nFollow-ups:\nWhat does his team own?', read)
+        .pass
+    ).toBe(false)
+  })
+
+  test('passes a cited answer that says one detail is not covered', () => {
+    // Only the decline sentence is a decline once a trailer is there: an
+    // answer that cites the document and names the one thing it leaves out
+    // is a sourced answer, and the phrases that read as a disclaimer on an
+    // uncited answer are ordinary in one.
+    expect(
+      assertCites(
+        "He led it in 2024. The résumé doesn't say how large the team was.\n\nSources: resume",
+        read
+      ).pass
+    ).toBe(true)
+  })
+
+  test('a disclaimer with no trailer names what it said in its reason', () => {
+    const result = assertCites(
+      "Matt's published work does not mention that.",
+      read
+    )
+    expect(result.reason).toContain('does not cover the question')
   })
 })
 
