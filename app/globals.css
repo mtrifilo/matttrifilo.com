@@ -191,8 +191,8 @@
  * one copy, so both rows drift at one speed whatever they carry; the value
  * declared here is any positive duration, replaced before the row is ever
  * shown. --ticker-offset is where in the loop a row opens, as a fraction,
- * which is how a row lands on a whole pill and how the homepage and /ask
- * avoid showing the same questions at the same moment.
+ * which is how a row lands on a whole pill; which pill each surface opens
+ * on is chosen in ticker-geometry.ts.
  *
  * The distance here, TICKER_COPIES in ticker-geometry.ts (the number of
  * copies starter-ticker.tsx renders) and the conversions beside it are one

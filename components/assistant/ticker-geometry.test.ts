@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { STARTER_QUESTIONS } from './copy'
 import {
   ASK_START_AT,
@@ -100,6 +101,21 @@ describe('which pill a row opens on', () => {
       STARTER_QUESTIONS[0],
       STARTER_QUESTIONS[1],
     ])
+  })
+
+  test('each surface opens where its own constant says', () => {
+    // The constants above are only the opening if the surfaces pass them;
+    // the ticker's pill placement needs a layout, so the wiring is read
+    // from the source.
+    const surfaces = [
+      ['./assistant-empty-state.tsx', 'startAt={ASK_START_AT}'],
+      ['./home-assistant-panel.tsx', 'startAt={HOME_START_AT}'],
+    ] as const
+    for (const [file, wiring] of surfaces) {
+      const source = readFileSync(new URL(file, import.meta.url), 'utf8')
+      expect(source.match(/startAt=/g) ?? [], file).toHaveLength(1)
+      expect(source, file).toContain(wiring)
+    }
   })
 
   test('an index past the end of a row wraps into it', () => {

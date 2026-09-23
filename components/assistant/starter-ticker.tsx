@@ -88,7 +88,7 @@ export interface StarterTickerProps {
   /**
    * Which pill each row opens on, as an index into the row. Each surface
    * passes its own, from ticker-geometry.ts, so where a surface opens is
-   * decided there rather than here.
+   * decided there rather than here; left out, a row opens on its first pill.
    */
   startAt?: number
   className?: string
