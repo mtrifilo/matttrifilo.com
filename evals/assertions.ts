@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat/prompt'
 import { findPunctuationDashes } from '@/lib/dashes'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
+import type { EvalMetadata } from './provider'
 import {
   answerProse,
   sourcesTrailerIds,
@@ -41,11 +42,35 @@ export interface AssertionResult {
   reason: string
 }
 
+/**
+ * The keys a suite file sets on a test's `metadata`.
+ *
+ * Every value is `unknown` because the suites are YAML, which nothing
+ * type-checks: an assertion validates the value it reads (`stringList`), and
+ * `evals/config.test.ts` checks the shapes. Naming the keys still matters,
+ * because a misspelt key is then a type error in the assertion that reads it
+ * rather than an expectation that is missing on every run.
+ */
+export interface SuiteTestMetadata {
+  suite?: unknown
+  smoke?: unknown
+  expectReads?: unknown
+  expectReadsAny?: unknown
+  expectReadsAnySet?: unknown
+  expectActivity?: unknown
+  forbidden?: unknown
+}
+
 /** What promptfoo hands an assertion function. */
 export interface AssertionContext {
-  test?: { metadata?: Record<string, unknown> }
-  /** Shortcut to the provider response's metadata. */
-  metadata?: Record<string, unknown>
+  test?: { metadata?: SuiteTestMetadata }
+  /**
+   * Shortcut to the provider response's metadata: the provider's own type,
+   * so reading a key it never sets does not compile. Partial because a unit
+   * test hands an assertion only the keys it reads; the provider sets every
+   * required key on every row.
+   */
+  metadata?: Partial<EvalMetadata>
   /** The test's own variables, including the question that was asked. */
   vars?: Record<string, unknown>
 }
@@ -276,7 +301,7 @@ export function assertThirdPerson(
       reason: `speaks as Matt: ${String(unquoted.match(hit)?.[0])}`,
     }
   }
-  const followUps = stringList(context.metadata?.followUps)
+  const followUps = context.metadata?.followUps ?? []
   // A proposal is the visitor's next question, so it names its subject. Second
   // person means the pill is addressed to Matt, which is a persona break the
   // visitor would be made to send back.
@@ -359,7 +384,7 @@ export function assertReadsWithinIndex(
   _output: string,
   context: AssertionContext
 ): AssertionResult {
-  const readIds = stringList(context.metadata?.readIds)
+  const readIds = context.metadata?.readIds ?? []
   const known = new Set(loadKnowledgeIndex().entries.map(entry => entry.id))
   const unknown = readIds.filter(id => !known.has(id))
   const distinct = new Set(readIds)
@@ -389,7 +414,7 @@ export function assertReadsExpected(
   context: AssertionContext
 ): AssertionResult {
   const expected = stringList(context.test?.metadata?.expectReads)
-  const readIds = new Set(stringList(context.metadata?.readIds))
+  const readIds = new Set(context.metadata?.readIds ?? [])
   if (expected.length === 0) {
     return {
       pass: false,
@@ -423,7 +448,7 @@ export function assertReadsAnyOf(
   context: AssertionContext
 ): AssertionResult {
   const acceptable = stringList(context.test?.metadata?.expectReadsAny)
-  const readIds = stringList(context.metadata?.readIds)
+  const readIds = context.metadata?.readIds ?? []
   if (acceptable.length === 0) {
     return {
       pass: false,
@@ -467,7 +492,7 @@ export function assertReadsAnySet(
   context: AssertionContext
 ): AssertionResult {
   const sets = documentSets(context.test?.metadata?.expectReadsAnySet)
-  const readIds = new Set(stringList(context.metadata?.readIds))
+  const readIds = new Set(context.metadata?.readIds ?? [])
   if (sets.length === 0) {
     return fail('the test named no metadata.expectReadsAnySet')
   }
@@ -503,7 +528,7 @@ export function assertCheckedActivity(
   context: AssertionContext
 ): AssertionResult {
   const expected = stringList(context.test?.metadata?.expectActivity)
-  const checked = new Set(stringList(context.metadata?.activityRepos))
+  const checked = new Set(context.metadata?.activityRepos ?? [])
   if (expected.length === 0) {
     return {
       pass: false,
@@ -583,7 +608,7 @@ export function assertDatesFromActivity(
   context: AssertionContext
 ): AssertionResult {
   const delivered = new Set(
-    stringList(context.metadata?.activityDates).map(date => date.slice(0, 7))
+    (context.metadata?.activityDates ?? []).map(date => date.slice(0, 7))
   )
   if (delivered.size === 0) {
     return {
@@ -782,7 +807,7 @@ export function assertCitesOnlyWhatItRead(
   context: AssertionContext
 ): AssertionResult {
   const cited = sourcesTrailerIds(output)
-  const readIds = new Set(stringList(context.metadata?.readIds))
+  const readIds = new Set(context.metadata?.readIds ?? [])
   const invented = cited.filter(id => !readIds.has(id))
   return {
     pass: invented.length === 0,
@@ -815,7 +840,7 @@ export async function assertFollowUpsAnswerable(
   output: string,
   context: AssertionContext
 ): Promise<AssertionResult> {
-  const followUps = stringList(context.metadata?.followUps)
+  const followUps = context.metadata?.followUps ?? []
   if (followUps.length === 0) {
     return fail('the answer proposed no follow-up questions')
   }
@@ -855,8 +880,8 @@ export async function assertFollowUpsAnswerable(
   // "Returns a sourced answer" is the acceptance criterion, and the server's
   // own ledger is the only honest way to check it: the model's citation line
   // is a claim, while these are the reads and checks the route performed.
-  const read = stringList(second.metadata?.readIds)
-  const checked = stringList(second.metadata?.activityRepos)
+  const read = second.metadata?.readIds ?? []
+  const checked = second.metadata?.activityRepos ?? []
   if (read.length === 0 && checked.length === 0) {
     return fail(`the follow-up was answered from nothing: ${which}`)
   }
@@ -927,25 +952,40 @@ function fail(reason: string): AssertionResult {
  * or an answer that says the material does not cover the question is not a
  * run that used a document, and a warning there would let a decline pass a
  * suite whose whole subject is citation.
+ *
+ * A trailer is not enough on its own either. An answer with no prose, or
+ * whose prose is the decline sentence, fails whatever its trailer names:
+ * there is no answer for the line to be a citation of, and the policy asks
+ * for no trailer on a decline. Whether the trailer names only documents the
+ * run read is `assertCitesOnlyWhatItRead`'s question, and whether the run
+ * finished its answer is `assertAnswered`'s; `evals/config.test.ts` refuses
+ * a test that carries this without both.
  */
 export function assertCites(
   output: string,
   context: AssertionContext
 ): AssertionResult {
+  const prose = answerProse(output).trim()
+  if (prose.length === 0) {
+    return fail('no answer text, so nothing for a Sources: trailer to cite')
+  }
+  if (prose === DECLINE_SENTENCE) {
+    return fail(
+      'the answer is the decline sentence, which uses no document, whatever its Sources: trailer names'
+    )
+  }
+
   const cited = sourcesTrailerIds(output)
   if (cited.length > 0)
     return { pass: true, score: 1, reason: `cited ${cited.join(', ')}` }
 
-  const readIds = stringList(context.metadata?.readIds)
+  const readIds = context.metadata?.readIds ?? []
   if (!isUncitedAnswer(output, readIds)) {
-    return {
-      pass: false,
-      score: 0,
-      reason:
-        readIds.length === 0
-          ? 'no Sources: trailer, and the run opened no document'
-          : 'no Sources: trailer, and the answer is a decline or no answer at all',
-    }
+    return fail(
+      readIds.length === 0
+        ? 'no Sources: trailer, and the run opened no document'
+        : 'no Sources: trailer, and the answer says the material does not cover the question'
+    )
   }
 
   // Tolerance rests on the run having opened the document the test names,
