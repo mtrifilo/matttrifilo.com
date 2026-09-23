@@ -106,10 +106,12 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * FEATURED_THEMES, with the untagged head questions after them (Matt,
  * 2026-09-23, MTC-76). By convention the two heads are also read one pill
  * from each row in turn, and in that reading too the themes never go
- * backwards; all four appear in the head, and a theme may carry more than
- * one question. copy.test.ts derives the heads from the ticker's own split
- * and holds all of this, so changing the order means moving questions in
- * STARTER_QUESTIONS or retagging them here, not editing the test.
+ * backwards; every featured theme appears in the head, and a theme may carry
+ * more than one question. copy.test.ts derives the heads from the ticker's
+ * own split and holds all of this. Reordering the themed questions means
+ * moving them in STARTER_QUESTIONS or retagging them here; changing which
+ * untagged questions sit in the head, or their order, also changes
+ * APPROVED_UNTAGGED_HEAD_ORDER in copy.test.ts.
  *
  * Only clear matches are tagged. Whether the other head questions (Matt's
  * use of AI coding agents, quality with agents, the code he ships himself,
@@ -133,9 +135,8 @@ export const STARTER_HEAD_THEMES: Partial<
  * The starter question about the table-stakes practice in
  * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
  * sits outside the homepage's head, and it stays the tenth question of the
- * pool (Matt, 2026-09-22, MTC-41). copy.test.ts holds both. /ask opens each
- * row further in (ASK_START_AT), where this question is the second row's
- * first whole pill; nothing here holds that opening.
+ * pool (Matt, 2026-09-22, MTC-41). copy.test.ts holds both. Neither pin
+ * governs /ask, which opens each row at ASK_START_AT.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"

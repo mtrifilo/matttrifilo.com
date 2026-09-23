@@ -30,8 +30,9 @@ import { HOME_START_AT, pillIndexFor, tickerRows } from './ticker-geometry'
 /**
  * The starter-question pool (MTC-39).
  *
- * Matt approved twenty-seven questions and the order they ship in, so these
- * hold the shape he approved rather than the wording: a duplicate would give
+ * Matt approved the twenty-seven questions (MTC-39), and their order follows
+ * the featured themes (MTC-76), so these hold the shape rather than the
+ * wording: a duplicate would give
  * the ticker two identical pills, and an over-long one would widen the row
  * past what a 390px screen can read. The evidence that each question is
  * answerable is the golden suite, not a unit test.
@@ -70,10 +71,12 @@ describe('the starter questions', () => {
   })
 
   /**
-   * The untagged head questions, in the relative order Matt approved with the
-   * pool (MTC-39, 2026-09-21). Tagging one with a theme takes it out of the
-   * check below rather than breaking it; a new question in the head is a
-   * change to this list.
+   * The untagged questions the head holds, in the relative order they keep
+   * after the themed ones: the pool's approved order (MTC-39), kept by the
+   * orchestrator's default on MTC-76 (2026-09-23, Matt may override).
+   * Tagging one with a theme takes it out of the check below rather than
+   * breaking it; a question joining or leaving the head, or a change to their
+   * order, is a change to this list.
    */
   const APPROVED_UNTAGGED_HEAD_ORDER = [
     'How does Matt use AI coding agents?',
@@ -89,9 +92,9 @@ describe('the starter questions', () => {
    */
   const TABLE_STAKES_INDEX = 9
 
-  // No test pins the pool's first question: each row's head opens on the
-  // featured themes (Matt, 2026-09-23, MTC-76), which takes precedence over
-  // the opening question approved with the pool (MTC-39, 2026-09-21).
+  // The pool's first question is not pinned: each row's head opens on the
+  // featured themes (Matt, 2026-09-23, MTC-76), so index 0 holds whichever
+  // themed question leads.
 
   const themes: Partial<Record<string, FeaturedThemeKey>> = STARTER_HEAD_THEMES
   const isTagged = (question: string) => themes[question] !== undefined
@@ -106,7 +109,7 @@ describe('the starter questions', () => {
     )
   )
 
-  // Both heads read one pill from each row in turn, first row first. This is
+  // The head is read one pill from each row in turn, first row first. This is
   // a chosen convention for the order a visitor meets the themes, not a
   // measured reading pattern: the rows scroll on their own and their pills
   // differ in width. Under the ticker's odd and even split it is pool order.
@@ -117,9 +120,10 @@ describe('the starter questions', () => {
   // A failure lists the questions with their themes, so it shows which
   // question sits where rather than only which theme is out of place.
   const byTheme = (run: readonly string[]) =>
-    run
-      .map(question => `${themes[question] ?? 'untagged'}: ${question}`)
-      .join('\n')
+    [
+      `featuring order: ${FEATURED_THEMES.map(theme => theme.key).join(', ')}`,
+      ...run.map(question => `${themes[question] ?? 'untagged'}: ${question}`),
+    ].join('\n')
 
   // More than one question may carry a theme, so order means the themes
   // never go backwards, not one question per theme.
@@ -171,11 +175,14 @@ describe('the starter questions', () => {
     expect(themesNeverGoBackwards(head), byTheme(head)).toBe(true)
   })
 
-  test('the untagged head questions keep their approved relative order', () => {
+  test('the untagged head is the approved set, in the approved order', () => {
     const untaggedInPoolOrder = questions.filter(
       question => head.includes(question) && !isTagged(question)
     )
-    expect(untaggedInPoolOrder).toEqual(
+    expect(
+      untaggedInPoolOrder,
+      `the untagged head against APPROVED_UNTAGGED_HEAD_ORDER:\n${byTheme(head)}`
+    ).toEqual(
       APPROVED_UNTAGGED_HEAD_ORDER.filter(question => !isTagged(question))
     )
   })
