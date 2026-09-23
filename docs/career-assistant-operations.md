@@ -417,7 +417,7 @@ Goldens are hand-written from the corpus. They are never mined from traffic, bec
 
 ### Adding a starter question (MTC-51)
 
-1. Add the question to `STARTER_QUESTIONS` in `components/assistant/copy.ts`.
+1. Add the question to `STARTER_QUESTIONS` in `components/assistant/copy.ts`. Its position decides when a visitor sees it: the homepage panel and `/ask` both open each ticker row on its first pill (`HOME_START_AT` and `ASK_START_AT` in `components/assistant/ticker-geometry.ts`), so the pool's leading positions are the first view on both surfaces.
 2. Add a `golden` test whose `vars.question` is that string **byte for byte**. A golden on the same subject in other words does not satisfy the correspondence test, and is not meant to: what is being measured is the wording in the pill.
 3. Find the sentence in `content/knowledge/**` that answers it, cite the document and that sentence in a comment above the test, and write the rubric to those facts. A rubric must never reward an inferred characterisation presented as documented.
 4. If the facts the rubric names live in different documents, say in the rubric that any one of them is enough. `assertReadsAnyOf` only requires the run to have opened one, so a conjunctive rubric over several documents is a flaky test, not a strict one.
