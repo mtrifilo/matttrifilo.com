@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { setTouchDevice } from '@/test/touch-device'
 import { hasCoarsePointer, isTouchPick, usePickPointer } from './pointer'
 
 /**
@@ -7,20 +8,9 @@ import { hasCoarsePointer, isTouchPick, usePickPointer } from './pointer'
  * focused after it (a focused composer raises a phone's keyboard over the
  * answer).
  *
- * Happy DOM answers `(pointer: coarse)` from `navigator.maxTouchPoints` in its
- * browser settings, so a touch device is stated there rather than by
- * replacing `matchMedia`.
+ * A touch device is stated through Happy DOM's settings (test/touch-device.ts);
+ * `matchMedia` is removed only to test the fallback when it is missing.
  */
-
-const settings = (
-  window as unknown as {
-    happyDOM: { settings: { navigator: { maxTouchPoints: number } } }
-  }
-).happyDOM.settings
-
-function setTouchDevice(touch: boolean): void {
-  settings.navigator.maxTouchPoints = touch ? 5 : 0
-}
 
 afterEach(() => {
   setTouchDevice(false)
@@ -121,6 +111,16 @@ describe('the press a pick came from', () => {
     fireEvent.keyDown(pill, { key: 'Enter' })
     fireEvent.click(pill)
     expect(picks).toEqual([false])
+  })
+
+  test('is not a touch when a click with no press follows an earlier tap', () => {
+    // A screen reader or voice control sends a click with no press. The tap
+    // before it produced its own click and is forgotten.
+    const { pill, picks } = renderRegion()
+    fireEvent.pointerDown(pill, { pointerType: 'touch' })
+    fireEvent.click(pill)
+    fireEvent.click(pill)
+    expect(picks).toEqual([true, false])
   })
 
   test('is not a touch when nothing pressed it', () => {

@@ -16,7 +16,7 @@ import { HOME_START_AT } from './ticker-geometry'
  *
  * It looks like the real thing and behaves like one input: a question typed
  * here, or a starter question tapped here, opens /ask with the answer already
- * arriving. What it deliberately is not is a second chat — one transcript, one
+ * arriving. What it deliberately is not is a second chat: one transcript, one
  * place, so a visitor never has half a conversation behind them on a page
  * about something else.
  */

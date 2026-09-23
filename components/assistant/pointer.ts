@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
 } from 'react'
 
@@ -52,6 +53,7 @@ export interface PickPointer {
   pressHandlers: {
     onPointerDownCapture: (event: PointerEvent) => void
     onKeyDownCapture: (event: KeyboardEvent) => void
+    onClick: (event: MouseEvent) => void
   }
   /** Read inside a pick handler: whether that pick was a touch. */
   pickedByTouch: () => boolean
@@ -63,8 +65,11 @@ export interface PickPointer {
  * key.
  *
  * The capture phase sees the press before the pill's own handlers can stop
- * it. A key press clears what a pointer left behind, so a question picked
- * with Enter after an earlier tap is not taken for a touch.
+ * it. A press counts only for the click it produced: the click's bubble,
+ * which reaches the region after the pill has read it, forgets it, and so
+ * does a key press. So a pick made with Enter after an earlier tap, or a
+ * click a screen reader or voice control sends with no press at all, is not
+ * taken for a touch because of a finger that landed somewhere else first.
  */
 export function usePickPointer(): PickPointer {
   const pressType = useRef<string | null>(null)
@@ -73,7 +78,7 @@ export function usePickPointer(): PickPointer {
     pressType.current = event.pointerType || null
   }, [])
 
-  const onKeyDownCapture = useCallback(() => {
+  const forgetPress = useCallback(() => {
     pressType.current = null
   }, [])
 
@@ -81,9 +86,13 @@ export function usePickPointer(): PickPointer {
 
   return useMemo(
     () => ({
-      pressHandlers: { onPointerDownCapture, onKeyDownCapture },
+      pressHandlers: {
+        onPointerDownCapture,
+        onKeyDownCapture: forgetPress,
+        onClick: forgetPress,
+      },
       pickedByTouch,
     }),
-    [onKeyDownCapture, onPointerDownCapture, pickedByTouch]
+    [forgetPress, onPointerDownCapture, pickedByTouch]
   )
 }

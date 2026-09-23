@@ -196,15 +196,29 @@ export function AssistantChat() {
   // composer raises the on-screen keyboard over the answer as it streams.
   // Focus goes to the status region instead, which is also where a screen
   // reader hears the answer begin.
+  //
+  // It moves there once the run has started, not in the click: a screen
+  // reader reads a region as it takes focus, and until the SDK reports the
+  // send (a few microtasks later, still before the browser paints) this one
+  // still holds the last run's "Response complete". A run that fails before
+  // it starts reports that too, and "Error" is worth hearing.
   const { pressHandlers, pickedByTouch } = usePickPointer()
+  const focusStatusOnceRunning = useRef(false)
   const askPicked = useCallback(
     (question: string) => {
       ask(question)
-      if (pickedByTouch()) statusRef.current?.focus()
+      if (pickedByTouch()) focusStatusOnceRunning.current = true
       else textareaRef.current?.focus()
     },
     [ask, pickedByTouch]
   )
+  useLayoutEffect(() => {
+    if (!focusStatusOnceRunning.current || status === 'ready') return
+    focusStatusOnceRunning.current = false
+    // Visually hidden, so there is nothing to bring into view, and a browser
+    // that tried would jump the transcript.
+    statusRef.current?.focus({ preventScroll: true })
+  })
 
   // Empties the transcript, not the composer: what is typed there is the
   // next question (or the refused one, just handed back), and "new
@@ -244,7 +258,7 @@ export function AssistantChat() {
       askedRef.current = pending.question
       void sendMessage({ text: pending.question })
     }
-    if (pending?.pickedByTouch) statusRef.current?.focus()
+    if (pending?.pickedByTouch) focusStatusOnceRunning.current = true
     else if (!hasCoarsePointer()) textareaRef.current?.focus()
   }, [sendMessage])
 

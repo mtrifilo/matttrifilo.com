@@ -4,6 +4,7 @@ import {
   AppRouterContext,
   type AppRouterInstance,
 } from 'next/dist/shared/lib/app-router-context.shared-runtime'
+import { setTouchDevice } from '@/test/touch-device'
 import { STARTER_QUESTIONS } from './copy'
 import { HomeAssistantPanel } from './home-assistant-panel'
 import { takePendingQuestion } from './pending-question'
@@ -14,19 +15,8 @@ import { takePendingQuestion } from './pending-question'
  * so /ask can only keep a phone's keyboard down on arrival if it is told the
  * pick was a touch. /ask's half is in assistant-chat.test.tsx.
  *
- * Happy DOM answers `(pointer: coarse)` from `navigator.maxTouchPoints` in its
- * browser settings, so a touch device is stated there.
+ * A touch device is stated through Happy DOM's settings (test/touch-device.ts).
  */
-
-const settings = (
-  window as unknown as {
-    happyDOM: { settings: { navigator: { maxTouchPoints: number } } }
-  }
-).happyDOM.settings
-
-function setTouchDevice(touch: boolean): void {
-  settings.navigator.maxTouchPoints = touch ? 5 : 0
-}
 
 let pushed: string[] = []
 
@@ -89,6 +79,14 @@ describe('a question handed over from the homepage', () => {
       question: STARTER_QUESTIONS[0],
       pickedByTouch: false,
     })
+  })
+
+  test('says it was not picked by touch after a keyboard pick that follows a tap', () => {
+    renderPanel()
+    fireEvent.pointerDown(starterPill(), { pointerType: 'touch' })
+    fireEvent.keyDown(starterPill(), { key: 'Enter' })
+    fireEvent.click(starterPill())
+    expect(takePendingQuestion()?.pickedByTouch).toBe(false)
   })
 
   test('says it was not picked by touch when it was typed, even on a phone', () => {

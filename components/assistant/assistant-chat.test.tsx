@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { setTouchDevice } from '@/test/touch-device'
 import { AssistantChat } from './assistant-chat'
 import { STARTER_QUESTIONS } from './copy'
 import { handOffQuestion } from './pending-question'
@@ -13,20 +14,10 @@ import { handOffQuestion } from './pending-question'
  * (the keyboard staying down, the answer visible while it streams) is a
  * preview check; what is asserted here is which element holds focus.
  *
- * Happy DOM answers `(pointer: coarse)` from `navigator.maxTouchPoints` in its
- * browser settings, so a touch device is stated there.
+ * A touch device is stated through Happy DOM's settings (test/touch-device.ts).
  */
 
-const settings = (
-  window as unknown as {
-    happyDOM: { settings: { navigator: { maxTouchPoints: number } } }
-  }
-).happyDOM.settings
-
-function setTouchDevice(touch: boolean): void {
-  settings.navigator.maxTouchPoints = touch ? 5 : 0
-}
-
+const ANSWER = 'Matt led the platform team.'
 const FOLLOW_UP = 'What did the platform team ship next?'
 
 /** Each request's question, in order, as the route would have received it. */
@@ -46,7 +37,7 @@ function answeringFetch(input: RequestInfo | URL, init?: RequestInit) {
   const chunks = [
     { type: 'start', messageMetadata: { followUps: [FOLLOW_UP] } },
     { type: 'text-start', id: 't' },
-    { type: 'text-delta', id: 't', delta: 'Matt led the platform team.' },
+    { type: 'text-delta', id: 't', delta: ANSWER },
     { type: 'text-end', id: 't' },
     { type: 'finish' },
   ]
@@ -96,14 +87,28 @@ function focused(): string {
   return `another element (${active.tagName.toLowerCase()})`
 }
 
+/**
+ * Resolves once the status region holds focus. A touch pick focuses it when
+ * the run has started, which the SDK reports a few microtasks after the
+ * click, so this waits rather than reading focus straight after it.
+ */
+async function statusFocused(): Promise<void> {
+  await waitFor(() => expect(focused()).toBe('status region'))
+}
+
 /** The announced copy of a starter pill; the decorative copies are hidden. */
 function starterPill(): HTMLElement {
   return screen.getByRole('button', { name: STARTER_QUESTIONS[0] })
 }
 
-/** Resolves once the run in flight has ended and the page is ready again. */
+/**
+ * Resolves once the run in flight has ended and the page is ready again,
+ * which is when the last answer's follow-up row is drawn.
+ */
 async function answered(): Promise<void> {
-  await waitFor(() => expect(screen.queryByText(FOLLOW_UP)).not.toBeNull())
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: FOLLOW_UP })).not.toBeNull()
+  )
 }
 
 describe('on load', () => {
@@ -142,17 +147,26 @@ describe('a starter question picked on /ask', () => {
     render(<AssistantChat />)
     fireEvent.pointerDown(starterPill(), { pointerType: 'touch' })
     fireEvent.click(starterPill())
-    expect(focused()).toBe('status region')
+    await statusFocused()
     await answered()
-    expect(focused()).toBe('status region')
+    await statusFocused()
     expect(asked).toEqual([STARTER_QUESTIONS[0]])
+  })
+
+  test('moves focus to the status region on a touch device when a click comes with no press', async () => {
+    // A screen reader's activation can be a bare click; the device decides.
+    setTouchDevice(true)
+    render(<AssistantChat />)
+    fireEvent.click(starterPill())
+    await statusFocused()
+    await answered()
   })
 
   test('treats a tap on a fine-pointer touchscreen as a touch', async () => {
     render(<AssistantChat />)
     fireEvent.pointerDown(starterPill(), { pointerType: 'touch' })
     fireEvent.click(starterPill())
-    expect(focused()).toBe('status region')
+    await statusFocused()
     await answered()
   })
 
@@ -164,7 +178,7 @@ describe('a starter question picked on /ask', () => {
     act(() => composer().focus())
     fireEvent.pointerDown(starterPill(), { pointerType: 'touch' })
     fireEvent.click(starterPill())
-    expect(focused()).toBe('status region')
+    await statusFocused()
     await answered()
   })
 })
@@ -188,12 +202,19 @@ describe('a follow-up picked under an answer', () => {
     return screen.getByRole('button', { name: FOLLOW_UP })
   }
 
+  /** Resolves once the second answer has been drawn and its run has ended. */
+  async function answeredAgain(): Promise<void> {
+    await waitFor(() => expect(screen.getAllByText(ANSWER)).toHaveLength(2))
+    await answered()
+  }
+
   test('returns focus to the composer after a mouse pick', async () => {
     await renderAnswered()
     fireEvent.pointerDown(followUpPill(), { pointerType: 'mouse' })
     fireEvent.click(followUpPill())
     expect(focused()).toBe('composer')
-    await waitFor(() => expect(asked).toHaveLength(2))
+    await answeredAgain()
+    expect(asked).toEqual(['What did Matt ship?', FOLLOW_UP])
   })
 
   test('moves focus to the status region after a touch pick', async () => {
@@ -201,10 +222,26 @@ describe('a follow-up picked under an answer', () => {
     await renderAnswered()
     fireEvent.pointerDown(followUpPill(), { pointerType: 'touch' })
     fireEvent.click(followUpPill())
-    expect(focused()).toBe('status region')
-    await waitFor(() =>
-      expect(asked).toEqual(['What did Matt ship?', FOLLOW_UP])
-    )
+    await statusFocused()
+    await answeredAgain()
+    expect(asked).toEqual(['What did Matt ship?', FOLLOW_UP])
+  })
+
+  test('gives the status region focus only once it no longer reports the last run', async () => {
+    // A screen reader reads a region as it takes focus. Taking it while the
+    // region still held the previous run's announcement would report the
+    // new question as already answered.
+    setTouchDevice(true)
+    await renderAnswered()
+    expect(statusRegion().textContent).toBe('Response complete')
+    let readOnFocus: string | null = null
+    statusRegion().addEventListener('focus', () => {
+      readOnFocus = statusRegion().textContent
+    })
+    fireEvent.pointerDown(followUpPill(), { pointerType: 'touch' })
+    fireEvent.click(followUpPill())
+    await waitFor(() => expect(readOnFocus).toBe('Responding'))
+    await answeredAgain()
   })
 })
 
@@ -227,7 +264,7 @@ describe('a question handed over from the homepage', () => {
     setTouchDevice(true)
     handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
     render(<AssistantChat />)
-    expect(focused()).toBe('status region')
+    await statusFocused()
     await answered()
     expect(asked).toEqual([STARTER_QUESTIONS[0]])
   })
@@ -235,7 +272,7 @@ describe('a question handed over from the homepage', () => {
   test('lands on the status region after a tap on a fine-pointer touchscreen', async () => {
     handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
     render(<AssistantChat />)
-    expect(focused()).toBe('status region')
+    await statusFocused()
     await answered()
   })
 

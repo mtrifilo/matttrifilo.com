@@ -200,7 +200,7 @@ A byte budget in validation was rejected because a wrong one would refuse a real
 
 ## Focus on /ask (MTC-74, MTC-67)
 
-A suggested question picked by touch (a starter or a follow-up, on /ask or on the homepage before the hand-off) moves focus to the transcript's visually hidden status region rather than the composer, so a phone's keyboard stays down while the answer streams; a mouse or keyboard pick returns focus to the composer, and /ask focuses the composer on load only when the device's primary pointer is not coarse (`components/assistant/pointer.ts`).
+A suggested question picked on a device whose primary pointer is coarse, or picked by a finger on any device (a starter or a follow-up, on /ask or on the homepage before the hand-off), moves focus to the transcript's visually hidden status region rather than the composer, so a phone's keyboard stays down while the answer streams; any other pick returns focus to the composer, and /ask focuses the composer on load only when the primary pointer is not coarse (`components/assistant/pointer.ts`; tests state a touch device with `test/touch-device.ts`).
 
 ## The Turbopack build cache (MTC-62)
 
