@@ -110,13 +110,19 @@ describe('the rows the component scrolls', () => {
     expect(coarse).toContain('.starter-ticker-row {')
     expect(coarse).toContain('overflow-x: auto')
     expect(coarse).toContain('overscroll-behavior-x: contain')
+    // Upright it stays hidden, which the base rule's shorthand provides,
+    // and the base rule must come first or that shorthand undoes this.
+    expect(coarse).not.toContain('overflow-y')
+    expect(css.indexOf('@media (pointer: coarse)')).toBeGreaterThan(
+      css.indexOf('.starter-ticker-row {')
+    )
     // Only there: a fine pointer would draw a classic scrollbar under every
     // moving row.
     expect(row).not.toContain('overflow-x: auto')
   })
 })
 
-describe('a row the visitor has taken over', () => {
+describe('a row handed over to the visitor', () => {
   const HANDED_OVER = ".starter-ticker-row[data-handed-over='true']"
   const strip = ruleFor(`${HANDED_OVER} {`)
 

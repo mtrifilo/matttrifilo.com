@@ -480,7 +480,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     )
   })
 
-  test('the rest of that gesture scrolls the strip too, then the browser takes over', () => {
+  test('the rest of that gesture scrolls the strip too, then the browser scrolls it', () => {
     const { rows } = renderLaidOutRows()
     const [first] = rows
     wheelAt(first.viewport, 1000, { deltaX: 40, deltaY: 0 })
@@ -499,6 +499,41 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       true
     )
     expect(first.viewport.scrollLeft).toBeCloseTo(handedOverAt + 35)
+  })
+
+  test('an upright stretch inside that gesture does not end it', () => {
+    // Each event is closer to the last than the gap, but the sideways ones
+    // are further apart than it: only the upright ones between them keep
+    // the gesture the row's.
+    const { rows } = renderLaidOutRows()
+    const [first] = rows
+    const step = WHEEL_GESTURE_GAP_MS - 1
+    wheelAt(first.viewport, 1000, { deltaX: 40, deltaY: 0 })
+    wheelAt(first.viewport, 1000 + step, { deltaX: 0, deltaY: 30 })
+    wheelAt(first.viewport, 1000 + 2 * step, { deltaX: 0, deltaY: 30 })
+
+    expect(
+      wheelAt(first.viewport, 1000 + 3 * step, { deltaX: 20, deltaY: 0 })
+    ).toBe(false)
+  })
+
+  test('an event the browser will not let go of is left to the browser', () => {
+    // It is scrolling that one itself, so moving the strip too would move it
+    // twice. The row is still handed over at the loop's position.
+    const progress = 0.4
+    const { rows, copyWidth } = renderLaidOutRows(progress)
+    const [first] = rows
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: false,
+      deltaX: 40,
+    })
+    first.viewport.dispatchEvent(event)
+
+    expect(isHandedOver(first.viewport)).toBe(true)
+    expect(first.viewport.scrollLeft).toBeCloseTo(
+      progress * copyWidth + leadOf(first.track)
+    )
   })
 
   test('shift with an upright wheel counts as sideways', () => {
@@ -548,7 +583,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
 
   describe('never resumes', () => {
     test('losing focus leaves a handed-over row frozen', () => {
-      // The focus path thaws a row on blur; a row the visitor has taken over
+      // The focus path thaws a row on blur; a row handed over to the visitor
       // must not come back to life because a pill in it lost focus.
       const { rows } = renderLaidOutRows()
       const [first] = rows

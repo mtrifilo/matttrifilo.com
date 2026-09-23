@@ -184,6 +184,10 @@ function TickerRow({
           fadeWidth(viewport),
           copyWidthRef.current
         )
+    // The opening is computed for a row at scroll zero. Under a finger a
+    // moving row is already a scroll container, and a drag that landed
+    // before the page's script ran would otherwise offset the opening.
+    if (!placedRef.current) viewport.scrollLeft = 0
     placedRef.current = true
     track.dataset.restarting = 'true'
     // Read to flush the style change, so removing it below starts a new
@@ -332,6 +336,10 @@ function TickerRow({
         viewport.removeEventListener('wheel', handleWheel)
         return
       }
+      // Every event of the steered gesture keeps it alive, upright ones
+      // included, so a pause in its sideways part does not hand the rest of
+      // it back to a browser that may still have it latched to the page.
+      if (handedOver) steeredAt = event.timeStamp
       const pixels = sidewaysWheelPixels(
         event,
         rootFontSize(),
@@ -340,6 +348,9 @@ function TickerRow({
       if (pixels === 0) return
       if (!handedOver && !handOver()) return
       steeredAt = event.timeStamp
+      // An event the browser will not let go of is one it is scrolling
+      // itself; moving the strip as well would scroll it twice.
+      if (!event.cancelable) return
       event.preventDefault()
       viewport.scrollLeft += pixels
     }

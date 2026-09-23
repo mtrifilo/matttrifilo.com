@@ -264,13 +264,15 @@
 /*
  * Where the primary pointer is a finger, a moving row is a scroll container
  * from the first paint, still at scroll zero while the loop runs. A touch
- * browser picks the box a drag will scroll when the finger lands, before
- * any handler has run, so a row that only became scrollable in its
- * touchstart handler would stop under the first drag without moving. The
+ * browser can choose the box a drag will scroll when the finger lands,
+ * before any handler has run, so a row that only became scrollable in its
+ * touchstart handler could stop under the first drag without moving. The
  * hand-over then only has to swap the transform for scrollLeft.
- * Scrollbars there are overlays, so nothing is drawn until the row scrolls.
- * A fine pointer keeps `hidden`, where a classic scrollbar would be drawn
- * under every moving row; it becomes scrollable when it is handed over.
+ * Phone and tablet browsers draw overlay scrollbars, so nothing shows until
+ * the row scrolls. A fine pointer keeps `hidden`, where a classic scrollbar
+ * would be drawn under every moving row; it becomes scrollable when it is
+ * handed over. This block has to follow the rule above, whose `overflow`
+ * shorthand would otherwise undo it.
  */
 @media (pointer: coarse) {
   .starter-ticker-row {
