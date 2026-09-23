@@ -22,12 +22,15 @@ export interface FeaturedTheme {
    */
   promptLabel: string
   /**
-   * The words the skill uses for the theme. The skill and the prompt phrase
-   * the same four themes differently, and this is the phrase the test looks
-   * for in the skill's featuring paragraph.
+   * The skill's words for the theme, exactly as its featuring paragraph lists
+   * it. The skill and the prompt phrase the same themes differently, and
+   * `featuring.test.ts` compares the skill's list against these item by item.
    */
   skillPhrase: string
-  /** What the theme covers, in the examples Matt gave when he set the order. */
+  /**
+   * What the theme covers, in the examples Matt gave when he set the order.
+   * For a reader of this file only: the model never sees it.
+   */
   description: string
 }
 
@@ -37,7 +40,8 @@ export const FEATURED_THEMES = [
     key: 'measuredDelivery',
     promptLabel:
       "the measured delivery change from Matt's adoption of AI coding agents, with the confounders",
-    skillPhrase: 'the measured delivery change from AI adoption',
+    skillPhrase:
+      'the measured delivery change from AI adoption (with the confounders)',
     description:
       'Lead time, pull requests per week, defect backlog, and review volume after adopting AI coding agents, with the confounders.',
   },
@@ -75,6 +79,7 @@ export const TABLE_STAKES_PRACTICE = {
   key: 'independentDeploys',
   promptLabel: 'independent deployment',
   skillPhrase: 'independent deployment',
+  /** For a reader of this file only: the model never sees it. */
   reason:
     'Most companies already deploy services independently, so it supports a story and never leads one.',
 } as const

@@ -88,29 +88,30 @@ export const STARTER_QUESTIONS = [
 ] as const
 
 /**
- * How many pool positions count as the head of the ticker: the first four
- * pills of each row, since the rows take the even and odd positions.
+ * How many pills of each ticker row count as the head of the pool: what the
+ * homepage shows first, since it opens each row on its first pill.
  */
-export const STARTER_QUESTIONS_HEAD = 8
+export const STARTER_HEAD_PILLS_PER_ROW = 4
+
+type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
 
 /**
- * The starter questions in the head that clearly belong to one of the
- * featured themes in lib/chat/featuring.ts, keyed by the question so a
- * reorder carries its theme with it. copy.test.ts fails unless every theme
- * is tagged somewhere in the head.
+ * The head questions that clearly belong to one of the featured themes in
+ * lib/chat/featuring.ts, keyed by the question so a reorder carries its
+ * theme with it. copy.test.ts fails unless every theme is tagged, and every
+ * tagged question sits in the head.
  *
  * Only clear matches are tagged. Whether the other head questions (Matt's
  * use of AI coding agents, quality with agents, the code he ships himself,
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
  *
- * The pool's order is not the featuring order: in the head the themes
- * arrive fourth, first, third, second. The pool order is the one Matt
- * approved, and whether to reorder it is his decision in MTC-76, so the
- * test checks that the head covers the themes, not their order.
+ * The pool's order does not follow the featuring order. It is the order Matt
+ * approved, and whether to reorder it is his decision in MTC-76, so the test
+ * checks that the head covers the themes, not their order.
  */
-export const STARTER_QUESTION_THEMES: Partial<
-  Record<(typeof STARTER_QUESTIONS)[number], FeaturedThemeKey>
+export const STARTER_HEAD_THEMES: Partial<
+  Record<StarterQuestion, FeaturedThemeKey>
 > = {
   "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
     'orgAiAdoption',
@@ -121,6 +122,14 @@ export const STARTER_QUESTION_THEMES: Partial<
   'What is the AI Email Engagement Summary feature Matt built?':
     'productOutcomes',
 }
+
+/**
+ * The starter question about the table-stakes practice in
+ * lib/chat/featuring.ts. It is supporting detail, never a headline, so
+ * copy.test.ts holds it outside the head.
+ */
+export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
+  "How did Matt's team move to independent deploys, and how long did it take?"
 
 /**
  * The control that empties the transcript. Two of the route's refusals tell
