@@ -234,7 +234,7 @@ No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the po
 
 See `lib/knowledge/knowledge.test.ts` for the guards and `scripts/knowledge-check.ts` for the report. `bun run knowledge:check` prints the index and every dropped document.
 
-Each document is one index line, `- [id] title · summary (tags: …; ~N tokens)`, so a title or summary may not contain a middle dot (`·`, or a character that renders as one), a line break or an em dash: the build refuses the document and names the field. The separator is `INDEX_TITLE_SEPARATOR` in `lib/knowledge/build.ts`.
+Each document is one index line, `- [id] title · summary (tags: …; ~N tokens)`, so a title or summary may not contain a line break or the separator's middle dot (`·`, or a common look-alike). Nor may it contain an em dash, because the model reads the index and copies its punctuation (see "Copy rules"). Either fails the build, naming the file and the field; `bun run scripts/new-blog-post.ts` refuses the same values at its prompt. The separator is `INDEX_TITLE_SEPARATOR`, and the rule is `indexFieldProblem`, both in `lib/knowledge/build.ts`.
 
 A placeholder is a `## ` heading, or any line outside a fenced block or inline code, that starts with `TODO` (after an optional list marker) or contains `TODO (Matt)`: in `content/knowledge/faq` a question whose heading or answer is one is dropped and listed by `bun run knowledge:check`, and anywhere else it fails the build.
 

@@ -727,9 +727,8 @@ describe('knowledge corpus build', () => {
   })
 
   test('separates title and summary with a middle dot, not a dash', () => {
-    // Pinned because the model imitates the punctuation it reads, and this
-    // is the one mark it sees on every index line. The choice is recorded
-    // on MTC-82; change it there first.
+    // Pinned so a change is deliberate: the model imitates the punctuation
+    // it reads, and this is the one mark it sees on every index line.
     expect(INDEX_TITLE_SEPARATOR).toBe(' \u00B7 ')
     const { index } = buildFixture([
       {
@@ -742,10 +741,21 @@ describe('knowledge corpus build', () => {
     expect(index.text).toContain('- [shaped] A title \u00B7 A summary. (tags:')
   })
 
-  test('refuses the separator dot anywhere in a title or summary', () => {
-    // A dot at either edge joins the separator's spaces and reads as a
-    // second separator; the look-alikes render as the same dot.
-    for (const dot of ['\u00B7', '\u0387', '\u2219', '\u22C5']) {
+  test('refuses the separator mark anywhere in a title or summary', () => {
+    // Read from the constant first, so a new separator is refused inside
+    // titles and summaries the moment it is chosen. A dot at either edge
+    // joins the separator's spaces and reads as a second separator; the
+    // look-alikes render as the same dot.
+    for (const dot of [
+      INDEX_TITLE_SEPARATOR.trim(),
+      '\u00B7',
+      '\u0387',
+      '\u2219',
+      '\u22C5',
+      '\u2E31',
+      '\u30FB',
+      '\uFF65',
+    ]) {
       for (const field of [
         { title: `Before ${dot} after` },
         { title: `Ends on ${dot}` },
@@ -757,7 +767,7 @@ describe('knowledge corpus build', () => {
           () =>
             buildFixture([{ topic: 'career', name: 'dotted.md', ...field }]),
           JSON.stringify(field)
-        ).toThrow(/may not contain a middle dot/)
+        ).toThrow(/or a character that looks like it/)
       }
     }
   })
