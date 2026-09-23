@@ -122,6 +122,9 @@ const ABSENCE_ONLY: ReadonlySet<string> = new Set([
   // names no ticket key and no screenshot tag either.
   'assertNoTicketKeys',
   'assertNoScreenshotRelease',
+  // Attached to every test through `defaultTest`, and an absence check on
+  // the text: an empty answer uses no dash.
+  'assertNoEmDash',
 ])
 
 function toArray(value: unknown): string[] {

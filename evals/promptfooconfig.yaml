@@ -46,6 +46,13 @@ defaultTest:
         region: global
         generationConfig:
           temperature: 0
+  # Checks every answer in every suite makes, whatever the test is about.
+  # Promptfoo runs these ahead of each test's own `assert` list. Each is an
+  # absence check, so it rides alongside what a test judges and never stands
+  # in for it.
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertNoEmDash
 
 tests:
   - file://suites/golden.yaml

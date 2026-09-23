@@ -22,6 +22,7 @@ import {
   assertCheckedActivity,
   assertDatesFromActivity,
   assertHasRecentDate,
+  assertNoEmDash,
   assertNoHandles,
   assertNoInventedFact,
   assertNoNarration,
@@ -868,5 +869,81 @@ describe('assertNoScreenshotRelease', () => {
     ]) {
       expect(assertNoScreenshotRelease(answer).pass).toBe(false)
     }
+  })
+})
+
+describe('assertNoEmDash', () => {
+  // Built from code points so this file carries no dash of its own.
+  const EM_DASH = String.fromCodePoint(0x2014)
+  const EN_DASH = String.fromCodePoint(0x2013)
+
+  test('an answer with no dash passes', () => {
+    const answer =
+      'Matt led the migration in 2024: his team cut lead time by half.\nSources: resume'
+    expect(assertNoEmDash(answer).pass).toBe(true)
+  })
+
+  test('an em dash anywhere fails, and the reason quotes it', () => {
+    for (const answer of [
+      `Matt led the migration ${EM_DASH} and shipped it in 2024.`,
+      `Matt led the migration${EM_DASH}and shipped it in 2024.`,
+      `Matt led the migration.\n\nWhat did the migration measure ${EM_DASH} and when?`,
+    ]) {
+      const result = assertNoEmDash(answer)
+      expect(result.pass).toBe(false)
+      expect(result.reason).toContain('migration')
+    }
+  })
+
+  test('the characters and entities that render as an em dash fail too', () => {
+    for (const dash of [
+      String.fromCodePoint(0x2015),
+      String.fromCodePoint(0x2e3a),
+      String.fromCodePoint(0xfe58),
+      '&mdash;',
+      '&#8212;',
+      '&#x2014;',
+    ]) {
+      expect(assertNoEmDash(`He led it ${dash} and shipped it.`).pass).toBe(
+        false
+      )
+    }
+  })
+
+  test('an en dash between spaces is a sentence dash and fails', () => {
+    const result = assertNoEmDash(
+      `Matt led the migration ${EN_DASH} and shipped it.`
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('a dash')
+  })
+
+  test('an en dash in a range passes, spaced or not', () => {
+    for (const answer of [
+      `He was a Software Engineer I from Jul 2017 ${EN_DASH} Jul 2018.`,
+      `He has managed the team since May 2025 ${EN_DASH} present.`,
+      `The programme ran 2019${EN_DASH}2021.`,
+      `It covered pages 10 ${EN_DASH} 12.`,
+    ]) {
+      expect(assertNoEmDash(answer).pass).toBe(true)
+    }
+  })
+
+  test('a number before a spaced en dash does not excuse a sentence dash', () => {
+    expect(
+      assertNoEmDash(`He joined in 2017 ${EN_DASH} and he led the team.`).pass
+    ).toBe(false)
+  })
+
+  test('a hyphen is not a dash', () => {
+    expect(
+      assertNoEmDash('He led a player-coach team.\n- one\n- two').pass
+    ).toBe(true)
+  })
+
+  test('counts every dash it finds', () => {
+    const result = assertNoEmDash(`One ${EM_DASH} two ${EN_DASH} three.`)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('2 dashes')
   })
 })

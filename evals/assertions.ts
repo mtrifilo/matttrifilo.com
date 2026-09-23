@@ -13,6 +13,7 @@ import {
   REPOSITORY_LIST_HEADING,
   TRANSCRIPT_HEADING,
 } from '@/lib/chat/prompt'
+import { findPunctuationDashes } from '@/lib/dashes'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   answerProse,
@@ -971,4 +972,32 @@ function stringList(value: unknown): string[] {
 function preview(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim()
   return flat.length > 120 ? `${flat.slice(0, 120)}...` : flat
+}
+
+/**
+ * The answer uses no dash as punctuation: no em dash anywhere, and no en dash
+ * standing between spaces as a sentence dash. The site carries none and the
+ * policy tells the model so; this is how a run shows whether it listened.
+ *
+ * Read on the whole output, follow-up questions included, because the
+ * visitor sees those too. What counts as a dash is lib/dashes.ts, the one
+ * definition the site's own source guard also uses, so an en dash between
+ * the two ends of a range (the résumé writes its dates that way) is not a
+ * sentence dash here either.
+ *
+ * An absence check, so it passes an empty answer. It is attached to every
+ * test through `defaultTest` in promptfooconfig.yaml, next to what each test
+ * judges, never in place of it.
+ */
+export function assertNoEmDash(output: string): AssertionResult {
+  const hits = findPunctuationDashes(output)
+  const excerpts = hits.map(hit => `"${hit.excerpt}"`).join(', ')
+  return {
+    pass: hits.length === 0,
+    score: hits.length === 0 ? 1 : 0,
+    reason:
+      hits.length === 0
+        ? 'uses no dash as punctuation'
+        : `uses ${hits.length === 1 ? 'a dash' : `${hits.length} dashes`} as punctuation: ${excerpts}`,
+  }
 }
