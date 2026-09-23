@@ -19,7 +19,7 @@ are deliberately omitted.
 | July 2018 | Promoted to Software Engineer II |
 | August 2020 | Promoted to Software Engineer III, announced in the engineering channel as part of a cohort. The merge-service decomposition is what the career record has always named as the driver. No written justification document for this promotion was found. |
 | July 2022 | Took on the player-coach role, splitting time roughly half coding and half management. No public announcement was found in a later sweep; July 2022 remains the working start month, and the first peak season under his watch was that November. |
-| May 2025 | Became Technical Manager, Software and Product Engineering, for the Email Reliability team. Announced publicly on June 2, 2025. |
+| May 2025 | Became Technical Manager, Software and Product Engineering, for the Email Reliability team (his working title; the HR title is Manager, Product Engineering, as the résumé states). Announced publicly on June 2, 2025. |
 
 Internal ladder note: Technical Manager is the only rung on the company's
 management track that formally requires and protects more than half
