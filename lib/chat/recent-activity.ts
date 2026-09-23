@@ -116,10 +116,11 @@ export interface RecentActivitySession {
  * the repository list in the prompt is wrong. `duplicate` means it is
  * looping, and counts every repeated check, the ones answered from the
  * in-flight call as well as the ones refused: what an operator reads it for
- * is the looping, which is the same either way. `budget` means a GitHub call
- * was spent and its digest then discarded for want of tokens, which is the
- * one failure here that costs a request and yields nothing, and the only way
- * an operator can see it.
+ * is the looping, which is the same either way. `budget` counts two things
+ * the same guard turns away: a check refused at the call cap, which makes no
+ * network call, and a digest fetched and then discarded for want of tokens,
+ * which costs a request and yields nothing. The handler's log line says
+ * which happened; this counter only says how often.
  *
  * `activity_unavailable` is deliberately absent: it has its own log line,
  * with the repository and the status, which is more use than a count.

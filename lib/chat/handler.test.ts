@@ -1061,7 +1061,7 @@ describe('checking GitHub', () => {
       // Three fetches, and the repeat still visible to an operator.
       expect(completionLogged()).toMatchObject({
         activityCalls: 3,
-        activityRefusedDuplicate: 1,
+        activityRepeated: 1,
       })
     })
 
@@ -1082,7 +1082,7 @@ describe('checking GitHub', () => {
       expect(totalsOf(progress)).toMatchObject({ documents: 0, activity: 2 })
       expect(completionLogged()).toMatchObject({
         activityCalls: 2,
-        activityRefusedDuplicate: 1,
+        activityRepeated: 1,
       })
     })
 
