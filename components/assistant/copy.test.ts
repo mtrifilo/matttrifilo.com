@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor } from '@/lib/chat/answer'
-import { FEATURED_THEMES } from '@/lib/chat/featuring'
+import { FEATURED_THEMES, type FeaturedThemeKey } from '@/lib/chat/featuring'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import { PROGRESS_TOPICS, type ProgressView } from '@/lib/chat/progress'
 import {
@@ -19,7 +19,7 @@ import {
   progressSummary,
   progressTopic,
 } from './copy'
-import { HOME_START_AT, tickerRows } from './ticker-geometry'
+import { HOME_START_AT, pillIndexFor, tickerRows } from './ticker-geometry'
 
 /**
  * The copy is Matt's, so these tests pin the shape rather than the voice:
@@ -69,33 +69,63 @@ describe('the starter questions', () => {
     }
   })
 
-  // The head is what the homepage shows first: each ticker row from the
-  // pill it opens on, for the pills counted as the head.
-  const head = tickerRows(STARTER_QUESTIONS).flatMap(row =>
-    row.slice(HOME_START_AT, HOME_START_AT + STARTER_HEAD_PILLS_PER_ROW)
-  )
+  /**
+   * The question both rows open behind: the first pill of the first row.
+   * Where the pool opens is the product decision, so it is pinned here.
+   */
+  const OPENING_QUESTION = 'How does Matt use AI coding agents?'
 
-  test('the head of the pool covers every featured theme', () => {
-    // Coverage, not order: the pool order is Matt's approved order, and
-    // whether it should follow the featuring order is his call (MTC-76).
-    const tagged = Object.entries(STARTER_HEAD_THEMES)
-    for (const [question] of tagged) {
+  /**
+   * Where Matt pinned the table-stakes question: the tenth question of the
+   * pool, which is where it stood when he pinned it.
+   */
+  const TABLE_STAKES_INDEX = 9
+
+  // The head is what the homepage shows first, in the order a visitor reads
+  // two rows: the pill each row opens on, first row then second, then the
+  // next pill of each, for the pills counted as the head.
+  const rows = tickerRows(STARTER_QUESTIONS)
+  const head = Array.from({ length: STARTER_HEAD_PILLS_PER_ROW }, (_, pill) =>
+    rows.map(row => row[pillIndexFor(HOME_START_AT + pill, row.length)])
+  ).flat()
+
+  const themes: Partial<Record<string, FeaturedThemeKey>> = STARTER_HEAD_THEMES
+  const themed = head.filter(question => themes[question] !== undefined)
+
+  test('every tagged question sits in the head', () => {
+    for (const question of Object.keys(themes)) {
       expect(head, 'a tagged question sits in the head').toContain(question)
-    }
-    const covered = new Set(tagged.map(([, theme]) => theme))
-    for (const theme of FEATURED_THEMES) {
-      expect(covered.has(theme.key), `${theme.key} in the head`).toBe(true)
     }
   })
 
-  test('keeps the table-stakes question out of the head', () => {
-    expect(questions).toContain(STARTER_TABLE_STAKES_QUESTION)
+  test('the head meets the featured themes in the featuring order', () => {
+    expect(themed.map(question => themes[question])).toEqual(
+      FEATURED_THEMES.map(theme => theme.key)
+    )
+  })
+
+  test('only the opening question comes before the featured themes', () => {
+    // The themed questions lead each row's head; the untagged ones follow
+    // them. The opening question is the one exception, because it is pinned.
+    const lastThemed = Math.max(
+      ...themed.map(question => head.indexOf(question))
+    )
+    const untaggedAhead = head
+      .slice(0, lastThemed + 1)
+      .filter(question => themes[question] === undefined)
+      .filter(question => question !== OPENING_QUESTION)
+    expect(untaggedAhead).toEqual([])
+  })
+
+  test('keeps the table-stakes question out of the head, where Matt pinned it', () => {
+    expect(questions.indexOf(STARTER_TABLE_STAKES_QUESTION)).toBe(
+      TABLE_STAKES_INDEX
+    )
     expect(head).not.toContain(STARTER_TABLE_STAKES_QUESTION)
   })
 
   test('opens on what a hiring manager screens for first', () => {
-    // The order is the product decision, so the head of it is pinned.
-    expect(questions[0]).toBe('How does Matt use AI coding agents?')
+    expect(questions[0]).toBe(OPENING_QUESTION)
   })
 
   test('leans on no pronoun, because a pill arrives on its own', () => {

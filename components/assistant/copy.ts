@@ -58,13 +58,13 @@ export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
  */
 export const STARTER_QUESTIONS = [
   'How does Matt use AI coding agents?',
-  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
   "What measurable results did Matt's team get from adopting AI coding agents?",
+  'What is the AI Email Engagement Summary feature Matt built?',
+  "What does Matt's Email Reliability team own at Thryv?",
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
   'How does Matt keep quality high when AI agents write most of the code?',
   'How much code does Matt ship himself as an engineering manager?',
-  "What does Matt's Email Reliability team own at Thryv?",
   'What did Matt ship recently?',
-  'What is the AI Email Engagement Summary feature Matt built?',
   // Symphony is OpenAI's open-source project; Matt adapted it (MTC-66).
   'What is Symphony, and what did Matt do with it?',
   "How did Matt's team move to independent deploys, and how long did it take?",
@@ -98,35 +98,40 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
 /**
  * The head questions that clearly belong to one of the featured themes in
  * lib/chat/featuring.ts, keyed by the question so a reorder carries its
- * theme with it. copy.test.ts fails unless every theme is tagged, and every
- * tagged question sits in the head.
+ * theme with it.
+ *
+ * The pool is ordered so a visitor meets these in the featuring order:
+ * reading the homepage's two rows a column at a time (first row, then second
+ * row, then the next pill of each), the tagged questions come up in the order
+ * of FEATURED_THEMES, straight after the opening question, and before any
+ * other question. copy.test.ts derives that reading order from the ticker's
+ * own split and fails when the pool, this mapping and the theme list
+ * disagree, so changing the order means moving the questions in
+ * STARTER_QUESTIONS, not editing the test.
  *
  * Only clear matches are tagged. Whether the other head questions (Matt's
  * use of AI coding agents, quality with agents, the code he ships himself,
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
- *
- * The pool's order does not follow the featuring order. It is the order Matt
- * approved, and whether to reorder it is his decision in MTC-76, so the test
- * checks that the head covers the themes, not their order.
  */
 export const STARTER_HEAD_THEMES: Partial<
   Record<StarterQuestion, FeaturedThemeKey>
 > = {
-  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
-    'orgAiAdoption',
   "What measurable results did Matt's team get from adopting AI coding agents?":
     'measuredDelivery',
-  "What does Matt's Email Reliability team own at Thryv?":
-    'operationalOwnership',
   'What is the AI Email Engagement Summary feature Matt built?':
     'productOutcomes',
+  "What does Matt's Email Reliability team own at Thryv?":
+    'operationalOwnership',
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
+    'orgAiAdoption',
 }
 
 /**
  * The starter question about the table-stakes practice in
- * lib/chat/featuring.ts. It is supporting detail, never a headline, so
- * copy.test.ts holds it outside the head.
+ * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
+ * sits outside the head, and it is the tenth question of the pool (index 9)
+ * because Matt pinned it where it is. copy.test.ts holds both.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"
