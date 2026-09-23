@@ -17,6 +17,8 @@ import {
 import {
   PROGRESS_PART_ID,
   PROGRESS_PART_TYPE,
+  progressTotals,
+  toProgressView,
   type ChatProgress,
 } from './progress'
 import type { ActivityFetchResult } from './github-activity'
@@ -241,6 +243,29 @@ function checksTwice(repository: string): Step {
     chunks([
       { type: 'stream-start', warnings: [] },
       ...[1, 2].map(n => ({
+        type: 'tool-call',
+        toolCallId: `call-activity-${n}-${repository}`,
+        toolName: RECENT_ACTIVITY_TOOL_NAME,
+        input: JSON.stringify({ repository }),
+      })),
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
+/**
+ * A step that calls recent_activity once per argument, repeats included, in
+ * one model call.
+ */
+function checksAll(...repositories: string[]): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      ...repositories.map((repository, n) => ({
         type: 'tool-call',
         toolCallId: `call-activity-${n}-${repository}`,
         toolName: RECENT_ACTIVITY_TOOL_NAME,
@@ -938,30 +963,188 @@ describe('checking GitHub', () => {
     expect(payloads.at(-1)?.steps).toEqual([])
   })
 
-  test('a duplicate call in one step does not withdraw the row it shares', async () => {
-    // The SDK runs a step's tool calls concurrently. The refusal resolves
-    // first, having waited on nothing, so withdrawing the row on it would
-    // take the row away from the check that did happen.
-    const model = modelOf(checksTwice(REPOSITORY), answers())
-    const handler = createChatHandler({
-      loadKnowledgeIndex: () => index,
-      readKnowledgeDocument,
-      model: () => model,
-      verifyVisitor: () => Promise.resolve(HUMAN),
-      fetchActivity: async () => {
-        await new Promise(resolve => setTimeout(resolve, 20))
-        return { kind: 'ok' as const, raw: ACTIVITY_RAW }
-      },
-      env: {},
-      now: () => 1_000,
-    })
-    const body = await (
-      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
-    ).text()
+  describe('a repository asked for twice at once is one check', () => {
+    const [first, second, third] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
 
-    expect(progressFrom(body).at(-1)?.steps).toEqual([
-      { id: REPOSITORY, title: REPOSITORY, kind: 'activity' },
-    ])
+    /** A fetch slow enough that the repeat call finds the first in flight. */
+    const handlerWithSlowFetch = (model: MockLanguageModelV4) =>
+      createChatHandler({
+        loadKnowledgeIndex: () => index,
+        readKnowledgeDocument,
+        model: () => model,
+        verifyVisitor: () => Promise.resolve(HUMAN),
+        fetchActivity: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20))
+          return { kind: 'ok' as const, raw: ACTIVITY_RAW }
+        },
+        env: {},
+        now: () => 1_000,
+      })
+
+    const lastProgress = (body: string) => progressFrom(body).at(-1)
+
+    /** The collapsed summary line's numbers, as the browser counts them. */
+    const totalsOf = (progress: ChatProgress | undefined) =>
+      progressTotals({
+        text: ANSWER,
+        followUps: [],
+        truncated: false,
+        incomplete: false,
+        progress: toProgressView([
+          { type: PROGRESS_PART_TYPE, data: progress } as { type: string },
+        ]),
+      })
+
+    const completionLogged = () =>
+      logged
+        .map(args => args[1])
+        .filter(
+          (entry): entry is Record<string, unknown> =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            'activityCalls' in entry
+        )
+        .at(-1)
+
+    /**
+     * Whether any call in the first step was refused as a repeat. The tests
+     * below are about calls that share a fetch, and they would pass for the
+     * wrong reason if the session refused the repeat instead.
+     */
+    const repeatRefused = (model: MockLanguageModelV4) =>
+      JSON.stringify(
+        model.doStreamCalls[1].prompt.filter(message => message.role === 'tool')
+      ).includes('repository_already_checked')
+
+    test('a duplicate call in one step shares the row of the check it repeats', async () => {
+      // The SDK runs a step's tool calls concurrently, and the session
+      // answers the second call from the first one's fetch, which is still
+      // running: two outputs, one check, and one row for the repository.
+      const model = modelOf(checksTwice(first), answers())
+      const body = await (
+        await handlerWithSlowFetch(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+
+      expect(repeatRefused(model)).toBe(false)
+      expect(lastProgress(body)?.steps).toEqual([
+        { id: first, title: first, kind: 'activity' },
+      ])
+    })
+
+    test('a repository checked in a later step still earns its row', async () => {
+      // The repeat in the first step is answered from the fetch already
+      // running, so that step ends with two digests for one repository and
+      // one for another: two checks of RECENT_ACTIVITY_MAX_CALLS. The session
+      // fetches the third repository in the next step, so its row must go up
+      // too.
+      const model = modelOf(
+        checksAll(first, first, second),
+        checks(third),
+        answers()
+      )
+      const body = await (
+        await handlerWithSlowFetch(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+
+      expect(repeatRefused(model)).toBe(false)
+      const progress = lastProgress(body)
+      expect(progress?.steps).toEqual([
+        { id: first, title: first, kind: 'activity' },
+        { id: second, title: second, kind: 'activity' },
+        { id: third, title: third, kind: 'activity' },
+      ])
+      expect(totalsOf(progress)).toMatchObject({ documents: 0, activity: 3 })
+      // Three fetches, and the repeat still visible to an operator.
+      expect(completionLogged()).toMatchObject({
+        activityCalls: 3,
+        activityRefusedDuplicate: 1,
+      })
+    })
+
+    test('two calls for one repository and one for another earn a row each', async () => {
+      const model = modelOf(checksAll(first, first, second), answers())
+      const body = await (
+        await handlerWithSlowFetch(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+
+      expect(repeatRefused(model)).toBe(false)
+      const progress = lastProgress(body)
+      expect(progress?.steps).toEqual([
+        { id: first, title: first, kind: 'activity' },
+        { id: second, title: second, kind: 'activity' },
+      ])
+      expect(totalsOf(progress)).toMatchObject({ documents: 0, activity: 2 })
+      expect(completionLogged()).toMatchObject({
+        activityCalls: 2,
+        activityRefusedDuplicate: 1,
+      })
+    })
+
+    test('all three repositories and a repeat in one step earn three rows', async () => {
+      // The SDK runs a step's tools only once the model has finished that
+      // step, so every call in it is seen before any outcome is.
+      const model = modelOf(checksAll(first, first, second, third), answers())
+      const body = await (
+        await handlerWithSlowFetch(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+
+      const progress = lastProgress(body)
+      expect(progress?.steps).toEqual([
+        { id: first, title: first, kind: 'activity' },
+        { id: second, title: second, kind: 'activity' },
+        { id: third, title: third, kind: 'activity' },
+      ])
+      expect(totalsOf(progress)).toMatchObject({ documents: 0, activity: 3 })
+    })
+  })
+
+  test('a replayed progress part is accepted whatever rows it holds', async () => {
+    // Replay treats the part as narration and never reconciles its rows with
+    // the checks behind the answer, so a part listing fewer repositories than
+    // were checked is accepted on the way in and read unchanged in the
+    // browser. A browser holding such a part sends it with the next question.
+    const [first, second] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
+    const shortPart = {
+      type: PROGRESS_PART_TYPE,
+      id: PROGRESS_PART_ID,
+      data: {
+        phase: 'done',
+        ms: 4_000,
+        steps: [
+          { id: first, title: first, kind: 'activity' as const },
+          { id: second, title: second, kind: 'activity' as const },
+        ],
+      },
+    }
+    const model = readingModel()
+    const response = await handlerWith(model)(
+      post({
+        messages: [
+          uiMessage('user', QUESTION),
+          {
+            id: 'assistant-replayed',
+            role: 'assistant',
+            parts: [shortPart, { type: 'text', text: 'first answer' }],
+          },
+          uiMessage('user', 'And since then?'),
+        ],
+      })
+    )
+    await response.text()
+
+    expect(response.status).toBe(200)
+    expect(JSON.stringify(model.doStreamCalls[0].prompt)).toContain(
+      'first answer'
+    )
+    expect(toProgressView([shortPart])?.steps).toEqual(shortPart.data.steps)
   })
 
   test('a document and a check are counted apart on the log line', async () => {
