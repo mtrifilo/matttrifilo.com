@@ -57,11 +57,11 @@ export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
  * row past what a 390px screen can read.
  */
 export const STARTER_QUESTIONS = [
-  'How does Matt use AI coding agents?',
   "What measurable results did Matt's team get from adopting AI coding agents?",
   'What is the AI Email Engagement Summary feature Matt built?',
   "What does Matt's Email Reliability team own at Thryv?",
   "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
+  'How does Matt use AI coding agents?',
   'How does Matt keep quality high when AI agents write most of the code?',
   'How much code does Matt ship himself as an engineering manager?',
   'What did Matt ship recently?',

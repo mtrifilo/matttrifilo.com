@@ -124,9 +124,9 @@ describe('the starter questions', () => {
     expect(head).not.toContain(STARTER_TABLE_STAKES_QUESTION)
   })
 
-  test('opens on what a hiring manager screens for first', () => {
-    expect(questions[0]).toBe(OPENING_QUESTION)
-  })
+  // The pool no longer pins its first question: each row's head opens on
+  // the featured themes (Matt, 2026-09-23, MTC-76), which supersedes the
+  // opening question pinned with the pool (MTC-39, 2026-09-21).
 
   test('leans on no pronoun, because a pill arrives on its own', () => {
     // A pill drifts past with no question before it to carry a "he", and a
