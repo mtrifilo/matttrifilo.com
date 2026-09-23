@@ -929,10 +929,25 @@ describe('assertNoEmDash', () => {
     }
   })
 
+  test('a range wrapped in markdown is still a range', () => {
+    for (const answer of [
+      `He has managed the team since **May 2025** ${EN_DASH} **present**.`,
+      `He was there from Jul 2017 ${EN_DASH} _present_.`,
+      `See [Jul 2017](https://example.com) ${EN_DASH} present.`,
+      `The work ran Q4 2024 ${EN_DASH} Q1 2025.`,
+    ]) {
+      expect(assertNoEmDash(answer).pass).toBe(true)
+    }
+  })
+
   test('a number before a spaced en dash does not excuse a sentence dash', () => {
-    expect(
-      assertNoEmDash(`He joined in 2017 ${EN_DASH} and he led the team.`).pass
-    ).toBe(false)
+    for (const answer of [
+      `He joined in 2017 ${EN_DASH} and he led the team.`,
+      `He shipped it in May ${EN_DASH} may I add, on time.`,
+      `He joined in 2017 ${EN_DASH} now he leads the platform.`,
+    ]) {
+      expect(assertNoEmDash(answer).pass).toBe(false)
+    }
   })
 
   test('a hyphen is not a dash', () => {

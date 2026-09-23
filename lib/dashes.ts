@@ -15,7 +15,12 @@
  * The en dash is narrower. It is the correct mark in a range, and the
  * résumé's dates ("Jul 2017 – present") are written with one, so it is a
  * punctuation dash only when it stands between spaces and the words on
- * either side are not the two ends of a range.
+ * either side are not the two ends of a range. The range check is a
+ * heuristic with known edges: a sentence dash whose next word is a number
+ * ("in 2017 – 3 teams later") reads as a range and passes, and a range of
+ * names ("Black Friday – Cyber Monday") reads as a sentence dash and fails.
+ * Unspaced en dashes always pass, since "2019–2021" and "work–life" are
+ * both correct.
  */
 
 /** U+2014, U+2015, U+2E3A, U+2E3B, U+FE31, U+FE58. */
@@ -45,17 +50,36 @@ const NAMED_DASH_ENTITIES: Record<string, string> = {
 const DASH_ENTITY =
   /&(?:(mdash|horbar|ndash)|#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6}));/g
 
+/**
+ * Month names as a range writes them. Capitalised on purpose: "in May, may
+ * I add" is a sentence, and only the first of those is a month.
+ */
 const MONTH =
-  '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\b\\.?'
+  '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\b\\.?'
 
-/** The left end of a range: a number or a month, then the space before the dash. */
-const RANGE_START = new RegExp(`(?:\\d|\\b${MONTH})\\s+$`, 'i')
+/**
+ * Markdown that can wrap the end of a range in an answer: emphasis, inline
+ * code, a link. "**May 2025** – present" is still a range.
+ */
+const CLOSING_MARKUP = '(?:[*_`)]|\\]\\([^()\\s]*\\)|\\])*'
+const OPENING_MARKUP = '[*_`\\[(]*'
 
-/** The right end of a range: the space after the dash, then a number, a month, or an open end. */
+/**
+ * The left end of a range, read from the text just before the dash: a
+ * number (which covers "Q4" and "2024") or a month, then the space.
+ */
+const RANGE_START = new RegExp(`(?:\\d|\\b${MONTH})${CLOSING_MARKUP}\\s+$`)
+
+/**
+ * The right end, read from the text just after the dash: the space, then a
+ * number, a month, a quarter or half, or an open end.
+ */
 const RANGE_END = new RegExp(
-  `^\\s+(?:\\d|(?:present|now|today)\\b|${MONTH})`,
-  'i'
+  `^\\s+${OPENING_MARKUP}(?:\\d|${MONTH}|(?:[QH][1-4]|[Pp]resent|[Tt]oday)(?![A-Za-z0-9]))`
 )
+
+/** How much text either side of a dash the range check reads. */
+const RANGE_WINDOW = 40
 
 /** One dash found in a text, with a little of the text around it. */
 export interface DashHit {
@@ -109,8 +133,8 @@ export function findPunctuationDashes(text: string): DashHit[] {
 
 function isRange(text: string, index: number): boolean {
   return (
-    RANGE_START.test(text.slice(0, index)) &&
-    RANGE_END.test(text.slice(index + 1))
+    RANGE_START.test(text.slice(Math.max(0, index - RANGE_WINDOW), index)) &&
+    RANGE_END.test(text.slice(index + 1, index + 1 + RANGE_WINDOW))
   )
 }
 
