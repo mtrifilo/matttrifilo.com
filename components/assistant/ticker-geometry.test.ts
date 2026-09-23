@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { STARTER_QUESTIONS } from './copy'
 import {
   ASK_START_AT,
@@ -82,16 +83,38 @@ describe('splitting the pool across the rows', () => {
 })
 
 describe('which pill a row opens on', () => {
-  test('the surfaces open every row on different, whole pills', () => {
+  test('both surfaces open every row on its first whole pill', () => {
     // Indices, not fractions: a fraction of a track lands wherever the pill
     // widths put it, which is how a row opens on half a question. And /ask
-    // must not open on what the homepage just showed, in either row.
+    // opens on the same pills as the homepage, the pool's leading questions,
+    // because Matt chose one opening for both (MTC-83, 2026-09-23).
     expect(Number.isInteger(HOME_START_AT)).toBe(true)
     expect(Number.isInteger(ASK_START_AT)).toBe(true)
-    for (const row of tickerRows(STARTER_QUESTIONS)) {
-      expect(pillIndexFor(ASK_START_AT, row.length)).not.toBe(
-        pillIndexFor(HOME_START_AT, row.length)
-      )
+    const rows = tickerRows(STARTER_QUESTIONS)
+    for (const row of rows) {
+      expect(row.length).toBeGreaterThan(0)
+      expect(pillIndexFor(HOME_START_AT, row.length)).toBe(0)
+      expect(pillIndexFor(ASK_START_AT, row.length)).toBe(0)
+    }
+    // Pill 0 of each row is the pool's first and second question.
+    expect(rows.map(row => row[0])).toEqual([
+      STARTER_QUESTIONS[0],
+      STARTER_QUESTIONS[1],
+    ])
+  })
+
+  test('each surface opens where its own constant says', () => {
+    // The constants above are only the opening if the surfaces pass them;
+    // the ticker's pill placement needs a layout, so the wiring is read
+    // from the source.
+    const surfaces = [
+      ['./assistant-empty-state.tsx', 'startAt={ASK_START_AT}'],
+      ['./home-assistant-panel.tsx', 'startAt={HOME_START_AT}'],
+    ] as const
+    for (const [file, wiring] of surfaces) {
+      const source = readFileSync(new URL(file, import.meta.url), 'utf8')
+      expect(source.match(/startAt=/g) ?? [], file).toHaveLength(1)
+      expect(source, file).toContain(wiring)
     }
   })
 

@@ -86,9 +86,9 @@ const ROWS = tickerRows(STARTER_QUESTIONS)
 export interface StarterTickerProps {
   onPick: (question: string) => void
   /**
-   * Which pill each row opens on, as an index into the row. Two surfaces show
-   * the same pool in the same order, and this is what stops them showing the
-   * same questions at the same moment.
+   * Which pill each row opens on, as an index into the row. Each surface
+   * passes its own, from ticker-geometry.ts, so where a surface opens is
+   * decided there rather than here; left out, a row opens on its first pill.
    */
   startAt?: number
   className?: string
