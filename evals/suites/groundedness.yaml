@@ -40,8 +40,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -62,8 +60,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -90,8 +86,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -111,8 +105,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -134,8 +126,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -155,8 +145,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -178,8 +166,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -199,8 +185,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -222,8 +206,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -243,8 +225,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -266,8 +246,6 @@
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
     - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
-    - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -287,8 +265,6 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
-    - type: javascript
-      value: file://assertions.ts:assertChipsMatchReads
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript

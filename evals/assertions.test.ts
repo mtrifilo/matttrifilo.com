@@ -13,7 +13,6 @@ import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
   assertAnswered,
-  assertChipsMatchReads,
   assertCites,
   isUncitedAnswer,
   assertCitesOnlyWhatItRead,
@@ -322,33 +321,6 @@ describe('assertReadsAnyOf', () => {
   })
 })
 
-describe('assertChipsMatchReads', () => {
-  test('a source list drawn from the reads passes', () => {
-    expect(
-      assertChipsMatchReads(
-        '',
-        ctx(undefined, { sourceIds: ['resume'], readIds: ['resume', 'faq'] })
-      ).pass
-    ).toBe(true)
-  })
-
-  test('no chips at all passes: a decline shows none', () => {
-    expect(
-      assertChipsMatchReads('', ctx(undefined, { sourceIds: [], readIds: [] }))
-        .pass
-    ).toBe(true)
-  })
-
-  test('a chip for a document the run never read fails and names it', () => {
-    const result = assertChipsMatchReads(
-      '',
-      ctx(undefined, { sourceIds: ['resume', 'faq'], readIds: ['resume'] })
-    )
-    expect(result.pass).toBe(false)
-    expect(result.reason).toContain('faq')
-  })
-})
-
 describe('assertFollowUpsAnswerable', () => {
   // Only the branches that decide before a second model call are exercised
   // here; the call itself is what an eval run is for, and `bun test` makes
@@ -397,6 +369,91 @@ describe('assertCitesOnlyWhatItRead', () => {
         ctx(undefined, { readIds: [] })
       ).pass
     ).toBe(true)
+  })
+
+  test('judges the trailer against the reads, whatever else the metadata says', () => {
+    // The verdict rests on the answer's trailer and the server's reads
+    // alone: an empty list under any other key, a source list included,
+    // cannot stand in for either.
+    const result = assertCitesOnlyWhatItRead(
+      'He led it.\n\nSources: resume, faq',
+      ctx(undefined, { sourceIds: [], readIds: ['resume'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('faq')
+  })
+
+  test('a trailer on a run that read nothing fails', () => {
+    const result = assertCitesOnlyWhatItRead(
+      'He led it.\n\nSources: resume',
+      ctx(undefined, { readIds: [] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('resume')
+  })
+})
+
+describe('the citation pair: assertCites with assertCitesOnlyWhatItRead', () => {
+  // Every test that carries one carries the other (evals/config.test.ts), so
+  // a row's citation verdict is the pair's. Each case names both halves, so
+  // a red one says which half moved.
+  const verdicts = (output: string, context: AssertionContext) => ({
+    assertCites: assertCites(output, context).pass,
+    assertCitesOnlyWhatItRead: assertCitesOnlyWhatItRead(output, context).pass,
+  })
+  const answer = 'He led the migration in 2024.'
+  const readResume = ctx(
+    { expectReadsAny: ['resume'] },
+    { readIds: ['resume', 'faq'] }
+  )
+
+  test('a trailer drawn from the reads passes both', () => {
+    expect(verdicts(`${answer}\n\nSources: resume`, readResume)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+    })
+  })
+
+  test('a trailer naming an unread document fails the subset half', () => {
+    expect(
+      verdicts(`${answer}\n\nSources: resume, open-source`, readResume)
+    ).toEqual({ assertCites: true, assertCitesOnlyWhatItRead: false })
+  })
+
+  test('no trailer, on a run that read the named document, passes with a warning', () => {
+    // The tolerance `missingTrailer` counts: the subset half has nothing to
+    // disagree with, and assertCites passes on the ledger's evidence.
+    expect(verdicts(answer, readResume)).toEqual({
+      assertCites: true,
+      assertCitesOnlyWhatItRead: true,
+    })
+    expect(assertCites(answer, readResume).reason).toContain('warning')
+  })
+
+  test('no trailer, on a run that did not read the named document, fails', () => {
+    const readOther = ctx(
+      { expectReadsAny: ['resume'] },
+      { readIds: ['owned-systems-and-operations'] }
+    )
+    expect(verdicts(answer, readOther)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
+  })
+
+  test('no trailer, on a run that read nothing, fails', () => {
+    const readNothing = ctx({ expectReadsAny: ['resume'] }, { readIds: [] })
+    expect(verdicts(answer, readNothing)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
+  })
+
+  test('an empty answer fails, whatever the run read', () => {
+    expect(verdicts('', readResume)).toEqual({
+      assertCites: false,
+      assertCitesOnlyWhatItRead: true,
+    })
   })
 })
 

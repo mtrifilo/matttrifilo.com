@@ -2,6 +2,7 @@ import {
   SOURCES_TRAILER_PREFIX,
   stripFollowUpsTrailer,
 } from '@/lib/chat/answer'
+import type { ChatMessageMetadata } from '@/lib/chat/handler'
 
 /**
  * Reading the chat route's response the way the browser reads it (MTC-32).
@@ -18,14 +19,15 @@ import {
  * (a progress part, say) cannot break the suites.
  */
 
-/** The message metadata the handler puts on the `finish` chunk. */
-export interface StreamedMetadata {
-  sources?: { id: string; title: string; url: string }[]
-  truncated?: true
-  incomplete?: true
-  /** The validated follow-up questions, when the run proposed any (MTC-41). */
-  followUps?: string[]
-}
+/**
+ * The message metadata the handler puts on the `finish` chunk.
+ *
+ * The handler's own type rather than a copy of it, so a field the route stops
+ * sending stops compiling here instead of reading as an empty value forever.
+ * The parser does not validate the stream against it: a run's metadata is
+ * the route's, and this module only reads it back.
+ */
+export type StreamedMetadata = ChatMessageMetadata
 
 export interface StreamedAnswer {
   /**

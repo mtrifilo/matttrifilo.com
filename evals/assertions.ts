@@ -722,8 +722,14 @@ export function assertNoScreenshotRelease(output: string): AssertionResult {
  *
  * The trailer is the model's own claim and the reads are the server's record,
  * so a trailer id that was never read is a citation of something the model
- * did not see. An answer that cites nothing passes: a decline is allowed to,
- * and the chips come from the server's list either way.
+ * did not see.
+ *
+ * An answer that cites nothing passes here, because a decline is entitled
+ * to. Whether an answer that used a document had to cite it is
+ * `assertCites`'s question, and `evals/config.test.ts` refuses a test that
+ * carries one of the two without the other: alone, this passes an answer
+ * with no trailer at all, including an empty one, and `assertCites` alone
+ * passes a trailer naming a document the run never opened.
  */
 export function assertCitesOnlyWhatItRead(
   output: string,
@@ -739,35 +745,6 @@ export function assertCitesOnlyWhatItRead(
       invented.length === 0
         ? `cited ${cited.join(', ') || 'nothing'}, all of it read`
         : `cited documents it never read: ${invented.join(', ')}`,
-  }
-}
-
-/**
- * The chips the visitor will see name documents this run actually read.
- *
- * `sourceIds` is the server's own list, the one the handler puts on the
- * stream and MTC-33 renders as source chips. It is built from the reads that
- * succeeded, so it should always be a subset of the ledger; asserting it is
- * how the one contract a visitor can see stays covered, rather than only the
- * `Sources:` line the model writes for itself.
- *
- * An answer that cites nothing passes. A decline is entitled to, and the
- * handler withholds the list from a run that produced no answer.
- */
-export function assertChipsMatchReads(
-  _output: string,
-  context: AssertionContext
-): AssertionResult {
-  const sourceIds = stringList(context.metadata?.sourceIds)
-  const readIds = new Set(stringList(context.metadata?.readIds))
-  const unread = sourceIds.filter(id => !readIds.has(id))
-  return {
-    pass: unread.length === 0,
-    score: unread.length === 0 ? 1 : 0,
-    reason:
-      unread.length === 0
-        ? `chips name ${sourceIds.join(', ') || 'nothing'}, all of it read`
-        : `chips name documents the run never read: ${unread.join(', ')}`,
   }
 }
 
