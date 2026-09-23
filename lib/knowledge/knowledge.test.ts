@@ -828,6 +828,149 @@ describe('knowledge corpus build', () => {
     expect(built.unanswered.map(q => q.heading)).toEqual(['One?', 'Two?'])
   })
 
+  test('an faq question is judged by its heading as well as its answer', () => {
+    // A heading is prose the visitor can be shown (the progress view lists
+    // it), so an editor's note written as one is a placeholder even over a
+    // finished answer. The faq drop and findPlaceholder share one rule, so
+    // what the drop keeps is exactly what the shipped-text backstop passes.
+    const built = buildFixture([
+      {
+        topic: 'faq',
+        name: 'faq.md',
+        body: [
+          '# FAQ',
+          '',
+          'Matt writes these answers himself.',
+          '',
+          '## TODO (Matt): confirm the wording',
+          '',
+          'An answer under a heading that is still a note.',
+          '',
+          "## What does Matt's team own?",
+          '',
+          'Email sending end to end for all Keap products.',
+          '',
+          '## How does he use AI coding agents?',
+          '',
+          'TODO (Matt)',
+          '',
+          '## How does he run on-call?',
+          '',
+          'A first paragraph that reads as finished.',
+          '',
+          '- TODO: add the rotation',
+          '',
+          '## What TODO comments cost',
+          '',
+          'A heading that mentions the word is not a placeholder.',
+        ].join('\n'),
+      },
+    ])
+
+    const faq = built.documents.find(d => d.id === 'faq')
+    expect(faq).toBeDefined()
+    expect(faq!.text).toBe(
+      [
+        '# FAQ',
+        '',
+        'Matt writes these answers himself.',
+        '',
+        "## What does Matt's team own?",
+        '',
+        'Email sending end to end for all Keap products.',
+        '',
+        '## What TODO comments cost',
+        '',
+        'A heading that mentions the word is not a placeholder.',
+      ].join('\n')
+    )
+    expect(findPlaceholder(sourceLines(faq!.text))).toBeNull()
+    expect(faq!.headings).toEqual([
+      "What does Matt's team own?",
+      'What TODO comments cost',
+    ])
+    // Every drop is reported, whichever half of the block made it one.
+    expect(built.unanswered).toEqual(
+      [
+        'TODO (Matt): confirm the wording',
+        'How does he use AI coding agents?',
+        'How does he run on-call?',
+      ].map(heading => ({
+        file: path.join('content', 'knowledge', 'faq', 'faq.md'),
+        heading,
+      }))
+    )
+  })
+
+  test('every placeholder shape drops an faq question when it is the heading', () => {
+    // The shapes findPlaceholder recognises, each written as a heading over
+    // a finished answer. With nothing else in the file, the whole document
+    // goes, and the drop is still reported.
+    for (const heading of [
+      'TODO (Matt)',
+      'TODO: pick the question',
+      'TODO',
+      '- TODO a list marker',
+      '1. TODO a numbered marker',
+      'Is this the question? TODO (Matt)',
+      '\\`TODO (Matt)\\`',
+    ]) {
+      const built = buildFixture([
+        { topic: 'career', name: 'a-role.md' },
+        {
+          topic: 'faq',
+          name: 'faq.md',
+          body: [`## ${heading}`, '', 'A finished answer.'].join('\n'),
+        },
+      ])
+      expect(built.documents.map(d => d.id)).toEqual(['a-role'])
+      expect(built.droppedDocuments).toEqual([
+        path.join('content', 'knowledge', 'faq', 'faq.md'),
+      ])
+      expect(built.unanswered.map(q => q.heading)).toEqual([heading])
+    }
+  })
+
+  test('the faq reads code in an answer the way findPlaceholder does', () => {
+    // A fenced block may hold a `##` line and a TODO comment; neither is a
+    // section boundary or a placeholder, so the answer ships whole.
+    const answer = [
+      '## How does he review agent output?',
+      '',
+      'He reads the diff, then runs:',
+      '',
+      '```sh',
+      '## TODO (Matt): not a heading, a shell comment',
+      'rg TODO',
+      '```',
+      '',
+      'We grep for `TODO (Matt)` before every release.',
+    ].join('\n')
+    const built = buildFixture([{ topic: 'faq', name: 'faq.md', body: answer }])
+    expect(built.documents[0].text).toBe(answer)
+    expect(built.unanswered).toEqual([])
+  })
+
+  test('a placeholder heading outside the faq is a build error at its line', () => {
+    expect(() =>
+      buildFixture([
+        {
+          topic: 'career',
+          name: 'a-role.md',
+          body: [
+            '# A role',
+            '',
+            '## TODO (Matt): confirm the date',
+            '',
+            'Written.',
+          ].join('\n'),
+        },
+      ])
+    ).toThrow(
+      /a-role\.md:11: a TODO placeholder under "TODO \(Matt\): confirm the date"/
+    )
+  })
+
   test('a TODO outside the faq is a build error, naming file and heading', () => {
     // The dangerous case: Matt pastes in an approved career document with a
     // stray placeholder, and the old rule would delete that section from
