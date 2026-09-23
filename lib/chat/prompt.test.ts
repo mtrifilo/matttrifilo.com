@@ -5,6 +5,7 @@ import {
   FOLLOW_UP_MAX_CHARS,
   FOLLOW_UP_MIN_CHARS,
 } from './answer'
+import { FEATURED_THEMES } from './featuring'
 import {
   CURRENT_QUESTION_HEADING,
   DECLINE_SENTENCE,
@@ -90,16 +91,10 @@ describe('SYSTEM_PROMPT', () => {
     })
 
     test('leads with the outcomes Matt features first', () => {
-      // The featuring order is a product decision (Matt, 2026-09-22); this
-      // pins that the policy still carries it in that order.
-      const order = [
-        'measured delivery change',
-        'product and platform outcomes',
-        'operational ownership',
-        'led AI adoption across an organisation',
-      ]
+      // The order itself lives in lib/chat/featuring.ts; this pins that the
+      // policy carries it in that order.
       let cursor = -1
-      for (const phrase of order) {
+      for (const phrase of FEATURED_THEMES.map(theme => theme.promptLabel)) {
         const at = SYSTEM_PROMPT.indexOf(phrase)
         expect(at).toBeGreaterThan(cursor)
         cursor = at

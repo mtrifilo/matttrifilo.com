@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor } from '@/lib/chat/answer'
+import { FEATURED_THEMES } from '@/lib/chat/featuring'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import { PROGRESS_TOPICS, type ProgressView } from '@/lib/chat/progress'
 import {
@@ -9,12 +10,16 @@ import {
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   STARTER_QUESTIONS,
+  STARTER_HEAD_PILLS_PER_ROW,
+  STARTER_HEAD_THEMES,
+  STARTER_TABLE_STAKES_QUESTION,
   progressChecking,
   progressHeadings,
   progressReading,
   progressSummary,
   progressTopic,
 } from './copy'
+import { HOME_START_AT, tickerRows } from './ticker-geometry'
 
 /**
  * The copy is Matt's, so these tests pin the shape rather than the voice:
@@ -62,6 +67,30 @@ describe('the starter questions', () => {
       expect(question).toBe(question.trim())
       expect(question.length).toBeLessThanOrEqual(LENGTH_CAP)
     }
+  })
+
+  // The head is what the homepage shows first: each ticker row from the
+  // pill it opens on, for the pills counted as the head.
+  const head = tickerRows(STARTER_QUESTIONS).flatMap(row =>
+    row.slice(HOME_START_AT, HOME_START_AT + STARTER_HEAD_PILLS_PER_ROW)
+  )
+
+  test('the head of the pool covers every featured theme', () => {
+    // Coverage, not order: the pool order is Matt's approved order, and
+    // whether it should follow the featuring order is his call (MTC-76).
+    const tagged = Object.entries(STARTER_HEAD_THEMES)
+    for (const [question] of tagged) {
+      expect(head, 'a tagged question sits in the head').toContain(question)
+    }
+    const covered = new Set(tagged.map(([, theme]) => theme))
+    for (const theme of FEATURED_THEMES) {
+      expect(covered.has(theme.key), `${theme.key} in the head`).toBe(true)
+    }
+  })
+
+  test('keeps the table-stakes question out of the head', () => {
+    expect(questions).toContain(STARTER_TABLE_STAKES_QUESTION)
+    expect(head).not.toContain(STARTER_TABLE_STAKES_QUESTION)
   })
 
   test('opens on what a hiring manager screens for first', () => {
