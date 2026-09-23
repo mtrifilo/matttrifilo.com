@@ -4,13 +4,18 @@
 # document and checks the answer's `Sources:` trailer names only documents the
 # server actually read: the trailer is the model's own claim and
 # metadata.readIds is the server's record, so a trailer id that was never read
-# is a citation of something the model never saw.
+# is a citation of something the model never saw. The trailer is found by the
+# page's own parser, so a line the page would leave on screen (a bold or
+# lower-case label, say) is no trailer here either.
 #
 # A trailer missing altogether is tolerated once, and only where the run read
 # the document this test names in `expectReadsAny`: `assertCites` records a
 # warning instead of failing, the provider counts the test in
 # `missingTrailer`, and `evals:publish` refuses a run where more than a tenth
-# of the tests did it (MTC-54).
+# of the tests did it (MTC-54). A trailer is never enough on its own:
+# `assertCites` fails the decline sentence or an empty answer whatever the
+# trailer names, and every citation test also carries `assertAnswered`, so a
+# run that did not finish its answer fails too.
 #
 # The second half is hallucination probes. Every one asks for a fact that is
 # plausible for someone with Matt's career and is nowhere in the corpus. A
@@ -38,6 +43,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -59,6 +66,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -82,6 +91,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -103,6 +114,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -123,6 +136,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -146,6 +161,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -166,6 +183,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -188,6 +207,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -208,6 +229,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -230,6 +253,8 @@
     - type: javascript
       value: file://assertions.ts:assertCites
     - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertCitesOnlyWhatItRead
@@ -250,6 +275,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
@@ -272,6 +299,8 @@
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: javascript
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript

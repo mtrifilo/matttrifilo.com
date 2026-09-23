@@ -6,6 +6,11 @@ import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
 import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
 import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
+import type {
+  AssertionContext,
+  AssertionResult,
+  SuiteTestMetadata,
+} from './assertions'
 import { historyFrom } from './route-request'
 
 /**
@@ -49,7 +54,7 @@ interface SuiteAssertion {
 interface SuiteTest {
   description?: unknown
   vars?: { question?: unknown; history?: unknown }
-  metadata?: Record<string, unknown>
+  metadata?: SuiteTestMetadata
   options?: { disableDefaultAsserts?: unknown }
   assert?: SuiteAssertion[]
 }
@@ -107,29 +112,33 @@ function assertionTypes(tests: SuiteTest[]): string[] {
 }
 
 /**
- * Assertions that check for the absence of something, and therefore pass on
- * an empty answer.
+ * The named assertions that judge what the answer says: each reads the prose
+ * and fails when there is none, which the test below proves.
+ *
+ * An allowlist, so a new assertion counts for nothing here until it is added
+ * and proved. Everything else is left out on purpose: the absence checks on
+ * the text (`assertThirdPerson`, `assertNoNarration`, `assertNoEmDash` and
+ * the like), which an empty answer passes; the ledger checks
+ * (`assertReadsExpected`, `assertReadsAnyOf`, `assertReadsAnySet`,
+ * `assertReadsWithinIndex`, `assertCheckedActivity`), which read what the
+ * server did rather than what the answer says; the citation checks, which
+ * judge the trailer; and `assertFollowUpsAnswerable`, which judges the
+ * proposals.
  */
-const ABSENCE_ONLY: ReadonlySet<string> = new Set([
-  'assertThirdPerson',
-  'assertNoNarration',
-  'assertNoPolicyLeak',
-  'assertReadsWithinIndex',
-  'assertDeclineOrWithholds',
-  'assertCitesOnlyWhatItRead',
-  // Reads the provider's ledger, not the answer, so an empty answer clears
-  // it; `assertNoHandles` is an absence check on the text for the same
-  // reason. Neither can stand alone as the thing a test judges.
-  'assertCheckedActivity',
-  'assertNoHandles',
-  // Absence checks on the text, like `assertNoHandles`: an empty answer
-  // names no ticket key and no screenshot tag either.
-  'assertNoTicketKeys',
-  'assertNoScreenshotRelease',
-  // Attached to every test through `defaultTest`, and an absence check on
-  // the text: an empty answer uses no dash.
-  'assertNoEmDash',
+const JUDGES_THE_ANSWER: ReadonlySet<string> = new Set([
+  'assertAnswered',
+  'assertDecline',
+  'assertNoInventedFact',
+  'assertHasRecentDate',
+  'assertDatesFromActivity',
 ])
+
+/** The assertions that carry the citation contract; each is vacuous alone. */
+const CITATION_TRIO = [
+  'assertCites',
+  'assertCitesOnlyWhatItRead',
+  'assertAnswered',
+] as const
 
 function toArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -233,6 +242,48 @@ describe('promptfooconfig.yaml', () => {
       SUITES.map(name => `file://suites/${name}.yaml`)
     )
   })
+})
+
+describe('JUDGES_THE_ANSWER', () => {
+  // The guard below trusts this list to name only assertions that fail when
+  // there is nothing to read, so each one is made to prove it. The contexts
+  // give every assertion what it needs to get as far as the prose: a test
+  // that named its metadata, and a run that fetched activity.
+  const context: AssertionContext = {
+    test: { metadata: { forbidden: [] } },
+    metadata: {
+      readIds: ['resume'],
+      activityRepos: ['decant'],
+      activityDates: ['2026-09-18'],
+      followUps: [],
+    },
+    vars: { question: 'What did Matt ship?' },
+  }
+  const judges = assertions as unknown as Record<
+    string,
+    (
+      output: string,
+      context: AssertionContext
+    ) => AssertionResult | Promise<AssertionResult>
+  >
+
+  test.each([...JUDGES_THE_ANSWER])(
+    '%s fails an answer with no prose',
+    async name => {
+      for (const empty of [
+        '',
+        'Sources: resume',
+        'Sources: resume\nFollow-ups:\nWhat does his team own?',
+      ]) {
+        const result = await judges[name](empty, context)
+        expect({ name, empty, pass: result.pass }).toEqual({
+          name,
+          empty,
+          pass: false,
+        })
+      }
+    }
+  )
 })
 
 describe('starter questions', () => {
@@ -371,19 +422,24 @@ for (const name of SUITES) {
       }
     })
 
-    test('assertCites and assertCitesOnlyWhatItRead appear together or not at all', () => {
-      // Each is vacuous on half the question without the other.
+    test('a test that checks citations carries all three citation assertions', () => {
+      // Each is vacuous on part of the question without the others.
       // assertCitesOnlyWhatItRead passes an answer with no trailer at all;
-      // assertCites passes any trailer, including one naming a document the
-      // run never opened.
+      // assertCites passes any trailer on a real answer, including one naming
+      // a document the run never opened; and neither fails a run that
+      // stopped before its answer was finished, which assertAnswered does.
       for (const item of suite) {
         const names = assertionNames([item])
+        const citation = names.some(
+          name => name === 'assertCites' || name === 'assertCitesOnlyWhatItRead'
+        )
+        if (!citation) continue
         expect({
           description: item.description,
-          assertCites: names.includes('assertCites'),
+          carries: CITATION_TRIO.filter(name => names.includes(name)),
         }).toEqual({
           description: item.description,
-          assertCites: names.includes('assertCitesOnlyWhatItRead'),
+          carries: [...CITATION_TRIO],
         })
       }
     })
@@ -392,14 +448,14 @@ for (const name of SUITES) {
       for (const item of suite) {
         const names = assertionNames([item])
         const types = assertionTypes([item])
-        // Anything that judges what the answer SAYS: a named assertion that is
-        // not an absence check, or a promptfoo assertion that reads the output
+        // Anything that judges what the answer SAYS: a named assertion in
+        // JUDGES_THE_ANSWER, or a promptfoo assertion that reads the output
         // (the contains family, a rubric). Any one of them already fails on an
         // empty answer, so the test does not need assertAnswered as well.
         // A `not-` assertion is an absence check like the named ones and
         // passes on an empty answer, so it does not count.
         const judgesContent =
-          names.some(name => !ABSENCE_ONLY.has(name)) ||
+          names.some(name => JUDGES_THE_ANSWER.has(name)) ||
           types.some(
             type =>
               type !== 'javascript' &&
