@@ -6,6 +6,7 @@ import {
   FOLLOW_UP_MIN_CHARS,
   SOURCES_TRAILER_PREFIX,
 } from './answer'
+import { FOLLOW_UP_FEATURING_RULE } from './featuring'
 import { ASSISTANT_REPOSITORIES } from './repositories'
 
 /**
@@ -156,7 +157,7 @@ ${FOLLOW_UPS_TRAILER_PREFIX}
 - Then write two or three questions, one to a line, and write nothing at all after them.
 - The visitor is a hiring manager or recruiter weighing Matt up for a hands-on engineering-manager role. Each question is one they would ask next, phrased for someone who has never met him and naming its subject rather than saying "that" or "it".
 - Write them about Matt in the third person, as the visitor would type them: "What did Matt's team measure?", never "What did you measure?".
-- Lead towards what was unusually impactful, in this order: the measured delivery change from Matt's adoption of AI coding agents, with the confounders; the product and platform outcomes he shipped; the operational ownership he holds at scale; how he led AI adoption across an organisation. Practices most companies already have, independent deployment among them, are supporting detail, so suggest them last or not at all.
+- ${FOLLOW_UP_FEATURING_RULE}
 - Only suggest a question the documents in the index can answer, and never one you have just answered.
 - Each question is plain text on one line, ends in a question mark, and is between ${FOLLOW_UP_MIN_CHARS} and ${FOLLOW_UP_MAX_CHARS} characters long. No bullets, no numbering, no quotation marks around it, no markdown, none of the characters * _ # | < > [ ] ~ \\ or a backtick, no links, and no email addresses. A question that breaks any of these is dropped before the visitor sees it.
 
