@@ -174,32 +174,37 @@
 }
 
 /*
- * Starter-question ticker (MTC-39).
+ * Starter-question ticker (MTC-39, MTC-55).
  *
- * The row is one track carrying the question pool twice: the announced,
- * tabbable buttons, then a silent copy of them. The keyframe moves the track
- * by exactly one copy, so the frame that finishes the loop is the frame that
- * starts it and the seam is never visible.
+ * The pool is split across two rows. Each row is one track carrying its own
+ * questions twice: the announced, tabbable buttons, then a silent copy of
+ * them. The keyframe moves a track by exactly one copy, so the frame that
+ * finishes the loop is the frame that starts it and the seam is never
+ * visible.
+ *
+ * It travels leftwards, which is what sends the questions past the viewport
+ * right to left: a pill enters at the right edge with its first word and is
+ * legible as it arrives.
  *
  * Two custom properties carry what the stylesheet cannot know.
  * --ticker-duration is set by starter-ticker.tsx from the measured width of
- * one copy, so the row drifts at one speed whatever the pool says; the value
- * declared here is that width for the pool as it stands, divided by the
- * speed in ticker-geometry.ts, so the first frames are not wrong while the
- * measurement lands. --ticker-offset is where in the loop an instance opens,
- * as a fraction, which is how the homepage and /ask avoid showing the same
- * pills at the same moment.
+ * one copy, so both rows drift at one speed whatever they carry; the value
+ * declared here is any positive duration, replaced before the row is ever
+ * shown. --ticker-offset is where in the loop a row opens, as a fraction,
+ * which is how a row lands on a whole pill and how the homepage and /ask
+ * avoid showing the same questions at the same moment.
  *
- * The distance here, the copy count in starter-ticker.tsx and the
- * conversions in ticker-geometry.ts are one decision written in three
- * languages. lib/ticker-css.test.ts is what keeps them the same decision.
+ * The distance here, TICKER_COPIES in ticker-geometry.ts (the number of
+ * copies starter-ticker.tsx renders) and the conversions beside it are one
+ * decision written in two languages. lib/ticker-css.test.ts is what keeps
+ * them the same decision.
  */
 @keyframes starter-ticker {
   from {
-    transform: translateX(-50%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(0);
+    transform: translateX(-50%);
   }
 }
 
@@ -222,10 +227,11 @@
    * It is scroll-padding and NOT padding. Padding here would give the row a
    * blank strip at each end, and the ticker's track has nothing to put in
    * the left one for the last few seconds of every loop: the strip would
-   * fade in as an empty sliver and then snap full at the wrap. The cost of
-   * leaving it out is that a row's first pill, which starts at scroll zero
-   * and has nothing to its left, cannot be brought fully clear of the left
-   * gradient by any scroll. Every other pill can.
+   * fade in as an empty sliver and then snap full at the wrap. A row's first
+   * pill starts at scroll zero with nothing to its left, so the ticker gives
+   * its track a lead of its own whenever the track is not looping (held
+   * still for focus, or under reduced motion); the follow-up row has no left
+   * gradient to clear.
    */
   scroll-padding-inline: var(--edge-fade);
   /* Unprefixed only; the optimiser adds -webkit-mask-image. The nav
@@ -246,7 +252,7 @@
   }
 }
 
-.starter-ticker {
+.starter-ticker-row {
   /*
    * `hidden`, never `clip`. Both hide the overflow, but only `hidden` leaves
    * a box that can still be scrolled programmatically, and scrollLeft is how
@@ -328,18 +334,49 @@
   position: relative;
   display: flex;
   width: max-content;
-  /* Stated once; the component overrides it inline from the measurement. */
-  --ticker-duration: 340s;
+  /* Stated once; the component overrides both inline from the measurement,
+     in the same step that makes the row visible. The duration only has to
+     be a valid one until then. */
+  --ticker-duration: 170s;
   --ticker-offset: 0;
   animation: starter-ticker var(--ticker-duration) linear infinite;
   animation-delay: calc(var(--ticker-offset) * var(--ticker-duration) * -1);
 }
 
-/* A pill that is being read, or reached for, holds still. */
+/*
+ * A moving row is invisible until starter-ticker.tsx has placed it on its
+ * opening pill. The server cannot know where that pill sits, so without this
+ * the first frames would show the row at the start of its loop, with a
+ * question cut by the fade, and then jump. It keeps its height meanwhile, so
+ * nothing below it moves when it appears. The cost is that the rows need the
+ * page's JavaScript to appear at all, which their buttons need anyway.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .starter-ticker-track:not([data-placed='true']) {
+    visibility: hidden;
+  }
+}
+
+/*
+ * A pill that is being read, or reached for, holds still, and so does the
+ * other row: a row still drifting beside the one being read is the
+ * distraction the pause exists to remove. That is why all three conditions
+ * are read off the group rather than off a single row.
+ */
 .starter-ticker:hover .starter-ticker-track,
 .starter-ticker:focus-within .starter-ticker-track,
-.starter-ticker-track[data-touched='true'] {
+.starter-ticker[data-touched='true'] .starter-ticker-track {
   animation-play-state: paused;
+}
+
+/*
+ * A restart, for the length of one forced layout: the component drops the
+ * animation and puts it straight back with a new duration and offset, which
+ * starts it afresh instead of amending the running one. Separate from the
+ * freeze below, which also moves the pills.
+ */
+.starter-ticker-track[data-restarting='true'] {
+  animation: none;
 }
 
 /*
@@ -351,17 +388,24 @@
  */
 .starter-ticker-track[data-frozen='true'] {
   animation: none;
+  /* The lead that lets a row's first pill be scrolled clear of the fade.
+     The component adds the same width to scrollLeft as it freezes. */
+  padding-inline-start: var(--edge-fade);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .starter-ticker {
+  /* Both rows become plain strips the visitor scrolls, fades and all. */
+  .starter-ticker-row {
     overflow-x: auto;
     overflow-y: hidden;
   }
   .starter-ticker-track {
     animation: none;
+    /* A strip at rest opens on a whole first pill, and scrolls far enough
+       that its last pill clears the right fade too. */
+    padding-inline: var(--edge-fade);
   }
-  /* Nothing loops, so the second copy would just be the pool said twice. */
+  /* Nothing loops, so a second copy would just be the row said twice. */
   .starter-ticker-copy[aria-hidden='true'] {
     display: none;
   }

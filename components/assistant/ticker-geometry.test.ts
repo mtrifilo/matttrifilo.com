@@ -1,21 +1,25 @@
 import { describe, expect, test } from 'bun:test'
+import { STARTER_QUESTIONS } from './copy'
 import {
   ASK_START_AT,
+  HOME_START_AT,
   loopSeconds,
-  offsetForStartAt,
+  openingProgress,
+  pillIndexFor,
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  tickerRows,
   TICKER_SPEED_PX_PER_SECOND,
 } from './ticker-geometry'
 
 /**
- * The ticker's arithmetic, without a browser (MTC-39).
+ * The ticker's arithmetic, without a browser (MTC-39, MTC-55).
  *
- * There is no component-test infrastructure in this repo, so the row's own
- * behaviour is proven on the preview. What can be proven here is the part
- * that is easy to get wrong and invisible when it is: the two coordinate
- * systems have to agree, or a pill taking focus makes the row jump.
+ * The rows' own behaviour is proven on the preview. What can be proven here
+ * is the part that is easy to get wrong and invisible when it is: the pool
+ * has to reach both rows intact, and the two coordinate systems have to
+ * agree, or a pill taking focus makes its row jump.
  */
 
 const COPY_WIDTH = 12_000
@@ -23,7 +27,7 @@ const VIEWPORT = 704
 const FADE = 72
 
 describe('the loop duration', () => {
-  test('holds one speed whatever the pool costs', () => {
+  test('holds one speed whatever a row costs', () => {
     expect(loopSeconds(3500)).toBe(100)
     expect(loopSeconds(COPY_WIDTH)).toBe(
       COPY_WIDTH / TICKER_SPEED_PX_PER_SECOND
@@ -37,26 +41,94 @@ describe('the loop duration', () => {
   })
 })
 
-describe('where a row opens', () => {
-  test('the top of the pool is the start of the loop', () => {
-    expect(offsetForStartAt(0)).toBe(0)
+describe('splitting the pool across the rows', () => {
+  const [first, second] = tickerRows(STARTER_QUESTIONS)
+
+  test('row one takes the odd positions and row two the even ones, so the leading questions lead both rows', () => {
+    // The pool is ordered by what the reader most wants answered, so a
+    // first-half/second-half split would bury the lead questions at the back
+    // of the second row. Positions count from one.
+    expect(first[0]).toBe(STARTER_QUESTIONS[0])
+    expect(first[1]).toBe(STARTER_QUESTIONS[2])
+    expect(second[0]).toBe(STARTER_QUESTIONS[1])
+    expect(second[1]).toBe(STARTER_QUESTIONS[3])
   })
 
-  test('/ask opens further in than the homepage', () => {
-    expect(offsetForStartAt(ASK_START_AT)).not.toBe(offsetForStartAt(0))
+  test('every question is in exactly one row, once', () => {
+    const shown = [...first, ...second]
+    expect(shown).toHaveLength(STARTER_QUESTIONS.length)
+    expect(new Set(shown).size).toBe(STARTER_QUESTIONS.length)
+    for (const question of STARTER_QUESTIONS) expect(shown).toContain(question)
   })
 
-  test('opening a third of the way in shows the pool from a third in', () => {
-    const offset = offsetForStartAt(1 / 3)
-    expect(scrollLeftForProgress(offset, COPY_WIDTH)).toBeCloseTo(
-      COPY_WIDTH / 3,
+  test('each row keeps the pool order it inherited', () => {
+    const pool: readonly string[] = STARTER_QUESTIONS
+    for (const row of [first, second]) {
+      const positions = row.map(question => pool.indexOf(question))
+      expect(positions).toEqual([...positions].sort((a, b) => a - b))
+    }
+  })
+
+  test('an odd pool leaves the rows one question apart', () => {
+    const [odd, even] = tickerRows(['a', 'b', 'c', 'd', 'e'])
+    expect(odd).toEqual(['a', 'c', 'e'])
+    expect(even).toEqual(['b', 'd'])
+  })
+
+  test('an empty pool makes two empty rows rather than throwing', () => {
+    expect(tickerRows([])).toEqual([[], []])
+  })
+})
+
+describe('which pill a row opens on', () => {
+  test('the surfaces open every row on different, whole pills', () => {
+    // Indices, not fractions: a fraction of a track lands wherever the pill
+    // widths put it, which is how a row opens on half a question. And /ask
+    // must not open on what the homepage just showed, in either row.
+    expect(Number.isInteger(HOME_START_AT)).toBe(true)
+    expect(Number.isInteger(ASK_START_AT)).toBe(true)
+    for (const row of tickerRows(STARTER_QUESTIONS)) {
+      expect(pillIndexFor(ASK_START_AT, row.length)).not.toBe(
+        pillIndexFor(HOME_START_AT, row.length)
+      )
+    }
+  })
+
+  test('an index past the end of a row wraps into it', () => {
+    expect(pillIndexFor(14, 14)).toBe(0)
+    expect(pillIndexFor(15, 14)).toBe(1)
+    expect(pillIndexFor(-1, 14)).toBe(13)
+  })
+
+  test('a row with nothing in it has no pill to open on', () => {
+    expect(pillIndexFor(4, 0)).toBe(0)
+  })
+})
+
+describe('opening on a whole pill', () => {
+  test('the pill it opens on starts at the inner edge of the left fade', () => {
+    // The row shows its questions from `progress` of a copy in, so the pixel
+    // the opening pill is parked at is exactly the fade.
+    const pillStart = 3400
+    const progress = openingProgress(pillStart, FADE, COPY_WIDTH)
+    expect(scrollLeftForProgress(progress, COPY_WIDTH)).toBeCloseTo(
+      pillStart - FADE,
       6
     )
   })
 
-  test('a fraction past the end of the pool wraps into it', () => {
-    expect(offsetForStartAt(1)).toBe(0)
-    expect(offsetForStartAt(1.25)).toBeCloseTo(offsetForStartAt(0.25), 6)
+  test('a row opening on its first pill opens just before the loop wraps', () => {
+    // Its first pill starts at zero with nothing to its left, so the fade is
+    // covered by the tail of the copy before it. That is the frame the design
+    // draws, and it is why there is a second copy at all.
+    const progress = openingProgress(0, FADE, COPY_WIDTH)
+    expect(progress).toBeCloseTo(1 - FADE / COPY_WIDTH, 6)
+    expect(progress).toBeLessThan(1)
+  })
+
+  test('a row that has not been laid out opens at the start', () => {
+    expect(openingProgress(0, FADE, 0)).toBe(0)
+    expect(openingProgress(100, FADE, Number.NaN)).toBe(0)
   })
 })
 
@@ -71,10 +143,22 @@ describe('the two coordinate systems', () => {
     }
   })
 
+  test('progress and scroll offset grow together', () => {
+    // The keyframe travels leftwards, so later in the loop is further into
+    // the questions. Reverse it and this pair inverts, which is what
+    // lib/ticker-css.test.ts guards.
+    expect(scrollLeftForProgress(0.25, COPY_WIDTH)).toBe(COPY_WIDTH * 0.25)
+    expect(progressForScrollLeft(COPY_WIDTH * 0.25, COPY_WIDTH)).toBeCloseTo(
+      0.25,
+      6
+    )
+  })
+
   test('the start of the loop is a scroll of zero, not of one whole copy', () => {
     // Both show the same pixels, because the second copy is the first one
     // repeated. Zero is the one that keeps the real buttons reachable.
     expect(scrollLeftForProgress(0, COPY_WIDTH)).toBe(0)
+    expect(scrollLeftForProgress(1, COPY_WIDTH)).toBe(0)
   })
 
   test('a scroll of one whole copy is the start of the loop again', () => {
@@ -85,11 +169,34 @@ describe('the two coordinate systems', () => {
     const progress = progressForScrollLeft(COPY_WIDTH * 1.25, COPY_WIDTH)
     expect(progress).toBeGreaterThanOrEqual(0)
     expect(progress).toBeLessThan(1)
-    expect(progress).toBeCloseTo(0.75, 6)
+    expect(progress).toBeCloseTo(0.25, 6)
+  })
+
+  test('the lead a held track is given shifts the scroll and nothing else', () => {
+    // Freezing adds the lead to the track and the same width to scrollLeft,
+    // and the thaw takes it back off, so the row does not move either way.
+    for (const progress of [0, 0.1, 0.5, 0.99]) {
+      const scrollLeft = scrollLeftForProgress(progress, COPY_WIDTH, FADE)
+      expect(scrollLeft).toBeCloseTo(progress * COPY_WIDTH + FADE, 6)
+      expect(progressForScrollLeft(scrollLeft, COPY_WIDTH, FADE)).toBeCloseTo(
+        progress,
+        6
+      )
+    }
+  })
+
+  test('a held row scrolled back onto its lead resumes on its first pill', () => {
+    // The first pill revealed at a scroll of zero sits at the fade, which is
+    // the frame the row opens on when it opens on that pill.
+    expect(progressForScrollLeft(0, COPY_WIDTH, FADE)).toBeCloseTo(
+      openingProgress(0, FADE, COPY_WIDTH),
+      6
+    )
   })
 
   test('an unmeasured row resumes at the start rather than at infinity', () => {
     expect(progressForScrollLeft(400, 0)).toBe(0)
+    expect(scrollLeftForProgress(0.5, 0)).toBe(0)
   })
 })
 
@@ -166,23 +273,26 @@ describe('bringing a focused pill into view', () => {
     expect(next).toBe(900 - 56)
   })
 
-  test('the pool\u2019s first question is the one pill the fade still covers', () => {
-    // It starts at zero with nothing to its left, so clearing the gradient
-    // would need a negative scroll. Pinned rather than fixed: giving the row
-    // a blank strip to scroll into would make the loop show that strip
-    // empty for the last seconds of every pass. Every other pill can be
-    // brought fully clear, which the cases above are.
-    expect(
-      revealScrollLeft({ ...row, scrollLeft: 0, pillStart: 0, pillWidth: 275 })
-    ).toBe(0)
-    expect(
-      revealScrollLeft({
-        ...row,
-        scrollLeft: 4000,
-        pillStart: 0,
-        pillWidth: 275,
-      })
-    ).toBe(0)
+  test('a row’s first question clears the fade once the track has its lead', () => {
+    // It starts at zero with nothing to its left, so without the lead a held
+    // track is given, clearing the gradient would need a negative scroll.
+    // With the lead the pill starts at the fade, and a scroll of zero shows
+    // it whole.
+    const withoutLead = revealScrollLeft({
+      ...row,
+      scrollLeft: 0,
+      pillStart: 0,
+      pillWidth: 275,
+    })
+    // On screen a pill starts at pillStart - scrollLeft.
+    expect(0 - withoutLead).toBeLessThan(FADE)
+    const withLead = revealScrollLeft({
+      ...row,
+      scrollLeft: 4000,
+      pillStart: FADE,
+      pillWidth: 275,
+    })
+    expect(FADE - withLead).toBeGreaterThanOrEqual(FADE)
   })
 
   test('never scrolls past either end of the track', () => {
