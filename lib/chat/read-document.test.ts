@@ -108,8 +108,8 @@ describe('reading a document', () => {
   })
 
   test('an id the index never listed is refused even though the store has it', async () => {
-    // The index is the allow-list. A model that learns an id some other way —
-    // a visitor naming one, a stale answer — still cannot reach the document.
+    // The index is the allow-list. A model that learns an id some other way,
+    // such as a visitor naming one or a stale answer, still cannot reach the document.
     const hidden = document('private', 'Not in the index.')
     const { tool } = session({
       entries: entries.filter(entry => entry.id !== 'private'),

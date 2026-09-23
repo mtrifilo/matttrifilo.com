@@ -1,5 +1,5 @@
 // Pure rendering engine for the hexagonal background effect.
-// No React, no window, no globals — only the Canvas2D context it is handed,
+// No React, no window, no globals: only the Canvas2D context it is handed,
 // maths, and the frame-scheduling policy below. Everything environmental
 // (device pixel ratio, media queries, event wiring) is the component's job
 // and arrives as an argument.
@@ -39,7 +39,7 @@ export interface HexRgb {
  * parsed to numbers, fills left as strings because they are handed to the
  * canvas verbatim. Producing one of these is the only place a colour string
  * is ever parsed, which is why the render loop cannot regress into
- * per-cell regex work — it has no strings left to parse.
+ * per-cell regex work: it has no strings left to parse.
  */
 export interface HexRenderPalette {
   base: HexRgb
@@ -113,7 +113,7 @@ const WAVE_SPEED = 350 // px per second
  * Radius at which the wave's contribution has faded to exactly zero for
  * every cell. Past this point the wave is invisible, so it is also the
  * point at which it stops counting as "active" and stops holding the loop
- * awake — worth ~4s of 60 fps per page load, with no pixel changed.
+ * awake, worth ~4s of 60 fps per page load, with no pixel changed.
  */
 const WAVE_FADE_DISTANCE = 1500
 const SHIMMER_PERIOD = 10000 // ms
@@ -163,15 +163,15 @@ export const BRIGHTNESS = {
 export const IDLE_AFTER_MS = 2000
 
 /**
- * Frame interval used while the field is idle — about 4 fps.
+ * Frame interval used while the field is idle: about 4 fps.
  *
  * The only thing still moving when idle is the ambient shimmer, a sine with
  * a SHIMMER_PERIOD (10s) cycle, so 250ms gives it 40 samples per period:
  * far denser than the eye needs for a gradient that drifts by 0.024 alpha
  * over ten seconds, and 1/15th of the frames a full-rate loop would spend
  * on it. Dropping the loop entirely would be cheaper still, but it freezes
- * the field for anyone who never moves a pointer — touch readers, keyboard
- * readers — which is most of the time the background is on screen.
+ * the field for anyone who never moves a pointer, touch readers and keyboard
+ * readers, which is most of the time the background is on screen.
  */
 export const IDLE_FRAME_INTERVAL_MS = 250
 
@@ -189,7 +189,7 @@ export interface IdleInput {
  * Whether the field is idle: nothing the reader is driving is animating, so
  * only the ambient shimmer is left to draw.
  *
- * This is not "stop" — see nextFrameMode, which turns idle into a slow
+ * This is not "stop": see nextFrameMode, which turns idle into a slow
  * cadence rather than a halt. Reduced motion is checked first and on its
  * own because it disables the shimmer, the pointer glow and the wave alike,
  * making the frame genuinely static whatever the pointer or a still-flagged
@@ -206,9 +206,9 @@ export type FrameMode = 'raf' | 'slow' | 'parked'
 /**
  * How the loop should keep going after the frame it just drew.
  *
- *   raf    — something the reader is driving is moving; draw every frame.
- *   slow   — only the shimmer is moving; draw every IDLE_FRAME_INTERVAL_MS.
- *   parked — nothing can move at all; draw nothing until woken.
+ *   raf:    something the reader is driving is moving; draw every frame.
+ *   slow:   only the shimmer is moving; draw every IDLE_FRAME_INTERVAL_MS.
+ *   parked: nothing can move at all; draw nothing until woken.
  *
  * Only reduced motion parks, and it parks unconditionally: with the
  * shimmer, glow and wave all suppressed, every further frame would be a
@@ -351,7 +351,7 @@ function lerp(a: number, b: number, t: number): number {
  *
  * Computing it straight from numbers replaces what used to be two regex
  * parses, a string build, a write to ctx.strokeStyle, a read back of the
- * canvas' serialised form, a third regex over that, and a second write —
+ * canvas' serialised form, a third regex over that, and a second write,
  * per cell, per frame.
  */
 export function strokeColor(
@@ -431,7 +431,7 @@ export interface HexFrameInput {
   /**
    * The device pixel ratio the caller baked into ctx's transform when it
    * sized the bitmap. Passed in rather than re-read from the window so that
-   * clearRect below cannot disagree with the transform actually in force —
+   * clearRect below cannot disagree with the transform actually in force:
    * a window dragged to a display with a different ratio changes
    * devicePixelRatio long before the canvas is resized to match.
    */
@@ -465,7 +465,7 @@ export function renderFrame(frame: HexFrameInput): void {
   for (let i = 0; i < grid.length; i++) {
     const hex = grid[i]
 
-    // Ambient shimmer — slow diagonal sine wave
+    // Ambient shimmer: slow diagonal sine wave
     let shimmer = 0
     if (!reducedMotion) {
       shimmer =

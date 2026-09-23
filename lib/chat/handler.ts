@@ -114,8 +114,8 @@ export interface ChatHandlerDeps {
   readKnowledgeDocument: (id: string) => KnowledgeDocument | undefined
   /**
    * A factory, not a model. Building the Vertex client reads required env, so
-   * it must not run at import time — a missing variable would otherwise break
-   * the build rather than one request — and the client is per request because
+   * it must not run at import time: a missing variable would otherwise break
+   * the build rather than one request. The client is per request because
    * the retry sink above is.
    */
   model: (request: ChatModelRequest) => LanguageModel
@@ -170,7 +170,7 @@ export { CHAT_MAX_STEPS }
  *
  * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
  *   answer is partial and still worth showing under a "cut short" notice.
- * - `incomplete`: the run ended without a clean answer — no text at all, or a
+ * - `incomplete`: the run ended without a clean answer: no text at all, or a
  *   finish reason other than 'stop'. Show a "couldn't finish, try again"
  *   notice. `truncated` implies this, so a UI that handles only `incomplete`
  *   still degrades correctly.
@@ -1076,7 +1076,7 @@ function logCompletion({
     finishReason,
     aborted: false,
     // Zero on a healthy request. Anything above it means a model call stalled
-    // and was reopened, so this request's `ms` — and its bill — contain a
+    // and was reopened, so this request's `ms`, and its bill, contain a
     // generation the visitor never saw: abandoning a connection does not
     // cancel the generation behind it.
     vertexRetries,

@@ -22,7 +22,7 @@ import { ASSISTANT_PLACEHOLDER } from './copy'
  *
  * This is a plain textarea rather than AI Elements' `prompt-input`. That
  * component is built around file attachments, screen capture, a model picker
- * and a command palette — none of which this assistant has, all of which would
+ * and a command palette, none of which this assistant has, all of which would
  * ship to every visitor of the homepage. What is left after removing them is
  * the hundred lines below.
  *

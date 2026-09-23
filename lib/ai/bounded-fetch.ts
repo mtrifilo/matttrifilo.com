@@ -2,8 +2,8 @@
  * A fetch wrapper that bounds and retries a stalled Vertex call (MTC-38).
  *
  * The episode this exists for: on one preview, every model call took 80 to
- * 110 s regardless of size — a 1,700-token call that produced 16 tokens took
- * as long as a real answer — while the same call from a laptop through the
+ * 110 s regardless of size, a 1,700-token call that produced 16 tokens took
+ * as long as a real answer, while the same call from a laptop through the
  * same identity pool took 1 to 2 s, and the token exchange measured near
  * zero. The connection was opening and then producing nothing. Two requests
  * spent 130 s and 290 s that way, the second hitting Vercel's 300 s function
@@ -20,7 +20,7 @@
  * What it bounds is time to the first response *byte*, not the whole call.
  * Response headers are not enough: the chat route streams, and an SSE
  * response can send 200 and its headers promptly and then emit nothing for
- * the rest of the function's life — which is the shape of the stall this
+ * the rest of the function's life, which is the shape of the stall this
  * wrapper was written for. So the deadline covers headers *and* the first
  * body chunk, and only the arrival of that chunk clears it. After it, the
  * body passes through untouched and nothing here ever cuts it: a long answer
@@ -31,7 +31,7 @@
  * connection is invisible *to them*. It is not invisible to Vertex and not
  * free. Abandoning a connection does not cancel the generation behind it, so
  * a retry can re-run a generation that is still executing and be billed for
- * both — visitor visibility is not idempotency. That is the price of the
+ * both: visitor visibility is not idempotency. That is the price of the
  * bound, it is why the attempt count is small, and it is why every retry is
  * counted into the request's own log line (`vertexRetries` on `[chat]`,
  * `retries` on the health route) rather than hidden.
@@ -39,7 +39,7 @@
  * One bound this cannot enforce: the SDK's own `retryWithExponentialBackoff`
  * (maxRetries = 2 by default) wraps this wrapper. Our stall error is
  * abort-named, so that loop rethrows it untouched and never multiplies the
- * stall path — but a *retryable API error* (a 429, a 5xx) is retried up to
+ * stall path, but a *retryable API error* (a 429, a 5xx) is retried up to
  * twice above us, and each of those attempts gets this wrapper's full
  * per-call budget again. A call that both stalls and then fails with a
  * retryable error can therefore cost up to three times the per-call
@@ -48,7 +48,7 @@
  * the multiplication, 0 removes it. The trade-off is that those are the same
  * retries that recover a genuine 429 or 5xx, so spending them buys a bounded
  * worst case at the cost of resilience to a rate limit. It is left at the
- * default here on purpose — which way that trade goes is the owner's call to
+ * default here on purpose: which way that trade goes is the owner's call to
  * make against preview numbers, not this wrapper's to make on their behalf,
  * and this comment is the record of the decision being open rather than
  * settled.
@@ -164,13 +164,13 @@ export const VERCEL_FUNCTION_LIMIT_MS = 300_000
  *
  * The remaining 30 s is for everything the wrapper does not bound: the token
  * exchange, the generation time after the first byte (unbounded here by
- * design — a long answer is the model working), and the platform's own
+ * design: a long answer is the model working), and the platform's own
  * overhead.
  */
 export const VERTEX_REQUEST_WAIT_BUDGET_MS = 270_000
 
 /**
- * Attempts per model call, this wrapper's own — the SDK adds none on top of
+ * Attempts per model call, this wrapper's own: the SDK adds none on top of
  * the stall path, because the error thrown when these run out is abort-named
  * and its retry loop rethrows those untouched.
  *
@@ -224,13 +224,13 @@ export const VERTEX_MAX_ATTEMPTS = 2
  * outside the waiting budget. All three are choices about the shape of a
  * request rather than about this constant.
  *
- * The worst case that arithmetic reaches — every step stalling once, then its
- * last attempt running to the ceiling — is 4 x (30 + 0.5 + 37) = 270 s. Read
+ * The worst case that arithmetic reaches, every step stalling once, then its
+ * last attempt running to the ceiling, is 4 x (30 + 0.5 + 37) = 270 s. Read
  * it for what it is: 270 s of *waiting for first bytes*, containing not one
  * generated token. What the reserve outside the waiting budget has to cover
- * is everything that happens after each first byte — the streaming of up to
+ * is everything that happens after each first byte: the streaming of up to
  * CHAT_MAX_STEPS answers, the tool execution between the steps, and the token
- * exchange at the front — none of which this wrapper bounds. So 270 s is a
+ * exchange at the front, none of which this wrapper bounds. So 270 s is a
  * ceiling on the wrapper's own waiting, not on the request; a request that
  * spends it and then streams is over the limit, which is the real reason the
  * attempt count is small. bounded-fetch.test.ts pins the waiting figure
@@ -244,7 +244,7 @@ export const VERTEX_LAST_ATTEMPT_TIMEOUT_MS = 37_000
 
 /**
  * Backoff between attempts. Short on purpose: the answer's budget is being
- * spent while we wait, and a stalled connection is not a rate limit — there
+ * spent while we wait, and a stalled connection is not a rate limit: there
  * is nothing to back off *from*. Long enough only to let a transient network
  * or load-balancer condition pass rather than re-hitting it instantly. One
  * entry because there is one retry; the last entry repeats if the attempt
@@ -320,7 +320,7 @@ export function createBoundedFetch({
     const callStarted = now()
     // A body that can only be read once cannot be sent twice. The SDK sends
     // JSON strings here, so this is a guard against a future caller rather
-    // than a case seen today — but a silently half-sent retry would be worse
+    // than a case seen today, but a silently half-sent retry would be worse
     // than no retry at all.
     const attempts = isReplayable(init?.body) ? maxAttempts : 1
 
@@ -332,7 +332,7 @@ export function createBoundedFetch({
       const timer = setTimeout(() => stall.abort(), timeoutMs)
       // The stall signal is merged with the caller's rather than replacing
       // it, so a visitor who closes the tab still cancels the upstream call
-      // immediately — including during the streamed body, which is why the
+      // immediately, including during the streamed body, which is why the
       // merged signal (not the timer) is what the response holds on to.
       const signal = callerSignal
         ? AbortSignal.any([callerSignal, stall.signal])
@@ -383,8 +383,8 @@ export function createBoundedFetch({
     }
   }
   // Widened to the provider's FetchFunction, which is `typeof
-  // globalThis.fetch`. The SDK only ever calls it as a function — see
-  // postToApi in @ai-sdk/provider-utils — so the extra members of that type
+  // globalThis.fetch`. The SDK only ever calls it as a function, see
+  // postToApi in @ai-sdk/provider-utils, so the extra members of that type
   // are never reached.
   return boundedFetch as typeof globalThis.fetch
 }
@@ -453,7 +453,7 @@ function fetchUnderSignal(
  * Nor is a non-2xx one held back. The SDK reads `response.ok` only after it
  * has the response (postToApi in @ai-sdk/provider-utils), so a 429 or a 503
  * whose error body is slow to arrive would otherwise be abandoned and
- * *retried here as a stall* — hiding a rate limit the SDK is equipped to
+ * *retried here as a stall*, hiding a rate limit the SDK is equipped to
  * classify and back off from, and spending a second connection to do it. The
  * cost of passing it straight through is that the wait for that error body is
  * unbounded by this wrapper, which is the right trade: an error body is bytes
@@ -487,7 +487,7 @@ type ChunkRead = Awaited<
  *
  * Reads until a non-empty chunk or the end of the body, under the one
  * deadline: a zero-length chunk is not a first byte. A transport that opens
- * a stream with an empty frame — a keep-alive, a flushed-but-empty write —
+ * a stream with an empty frame, a keep-alive or a flushed-but-empty write,
  * would otherwise clear the deadline while the connection has still said
  * nothing, which is precisely the stall this file exists to catch.
  */
@@ -552,7 +552,7 @@ function replay(
 /**
  * Named for the abort family on purpose. `isAbortError` in the SDK matches
  * 'TimeoutError', and its retry loop rethrows those without a further
- * attempt — which is what we want, having already made our own. It does not
+ * attempt, which is what we want, having already made our own. It does not
  * masquerade as a visitor disconnect either: `streamText` decides that from
  * the caller's signal being aborted, not from the error's name.
  */
@@ -600,7 +600,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
  * One numeric line per retry, in the chat handler's aggregate-only style: a
  * retry line is written on the same request that carries a visitor's
  * question, so it records counts and durations and nothing that could echo
- * the prompt — not the URL, not the body, not the error message.
+ * the prompt: not the URL, not the body, not the error message.
  */
 function logRetry(retry: BoundedFetchRetry): void {
   console.warn('[vertex] retry', retry)
