@@ -89,7 +89,8 @@ export const STARTER_QUESTIONS = [
 
 /**
  * How many pills of each ticker row count as the head of the pool: what the
- * homepage shows first, since it opens each row on its first pill.
+ * homepage shows first, counting from the pill HOME_START_AT opens each row
+ * on.
  */
 export const STARTER_HEAD_PILLS_PER_ROW = 4
 
@@ -100,14 +101,15 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * lib/chat/featuring.ts, keyed by the question so a reorder carries its
  * theme with it.
  *
- * The pool is ordered so a visitor meets these in the featuring order:
- * reading the homepage's two rows a column at a time (first row, then second
- * row, then the next pill of each), the tagged questions come up in the order
- * of FEATURED_THEMES, straight after the opening question, and before any
- * other question. copy.test.ts derives that reading order from the ticker's
- * own split and fails when the pool, this mapping and the theme list
- * disagree, so changing the order means moving the questions in
- * STARTER_QUESTIONS, not editing the test.
+ * The pool is ordered so each ticker row's head opens on its tagged
+ * questions, the themes never going backwards in the order of
+ * FEATURED_THEMES, with the untagged head questions after them (Matt,
+ * 2026-09-23, MTC-76). By convention the two heads are also read one pill
+ * from each row in turn, and in that reading too the themes never go
+ * backwards; all four appear in the head, and a theme may carry more than
+ * one question. copy.test.ts derives the heads from the ticker's own split
+ * and holds all of this, so changing the order means moving questions in
+ * STARTER_QUESTIONS or retagging them here, not editing the test.
  *
  * Only clear matches are tagged. Whether the other head questions (Matt's
  * use of AI coding agents, quality with agents, the code he ships himself,
@@ -130,8 +132,10 @@ export const STARTER_HEAD_THEMES: Partial<
 /**
  * The starter question about the table-stakes practice in
  * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
- * sits outside the head, and it is the tenth question of the pool (index 9)
- * because Matt pinned it where it is. copy.test.ts holds both.
+ * sits outside the homepage's head, and it stays the tenth question of the
+ * pool (Matt, 2026-09-22, MTC-41). copy.test.ts holds both. /ask opens each
+ * row further in (ASK_START_AT), where this question is the second row's
+ * first whole pill; nothing here holds that opening.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"
