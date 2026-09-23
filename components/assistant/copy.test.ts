@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor } from '@/lib/chat/answer'
-import { FEATURED_THEMES } from '@/lib/chat/featuring'
+import { FEATURED_THEMES, type FeaturedThemeKey } from '@/lib/chat/featuring'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import { PROGRESS_TOPICS, type ProgressView } from '@/lib/chat/progress'
 import {
@@ -19,7 +19,7 @@ import {
   progressSummary,
   progressTopic,
 } from './copy'
-import { HOME_START_AT, tickerRows } from './ticker-geometry'
+import { HOME_START_AT, pillIndexFor, tickerRows } from './ticker-geometry'
 
 /**
  * The copy is Matt's, so these tests pin the shape rather than the voice:
@@ -30,8 +30,9 @@ import { HOME_START_AT, tickerRows } from './ticker-geometry'
 /**
  * The starter-question pool (MTC-39).
  *
- * Matt approved twenty-seven questions and the order they ship in, so these
- * hold the shape he approved rather than the wording: a duplicate would give
+ * Matt approved the twenty-seven questions (MTC-39), and their order follows
+ * the featured themes (MTC-76), so these hold the shape rather than the
+ * wording: a duplicate would give
  * the ticker two identical pills, and an over-long one would widen the row
  * past what a 390px screen can read. The evidence that each question is
  * answerable is the golden suite, not a unit test.
@@ -69,23 +70,121 @@ describe('the starter questions', () => {
     }
   })
 
-  // The head is what the homepage shows first: each ticker row from the
-  // pill it opens on, for the pills counted as the head.
-  const head = tickerRows(STARTER_QUESTIONS).flatMap(row =>
-    row.slice(HOME_START_AT, HOME_START_AT + STARTER_HEAD_PILLS_PER_ROW)
+  /**
+   * The untagged questions the head holds, in the relative order they keep
+   * after the themed ones: the pool's approved order (MTC-39), kept by the
+   * orchestrator's default on MTC-76 (2026-09-23, Matt may override).
+   * Tagging one with a theme takes it out of the check below rather than
+   * breaking it; a question joining or leaving the head, or a change to their
+   * order, is a change to this list.
+   */
+  const APPROVED_UNTAGGED_HEAD_ORDER = [
+    'How does Matt use AI coding agents?',
+    'How does Matt keep quality high when AI agents write most of the code?',
+    'How much code does Matt ship himself as an engineering manager?',
+    'What did Matt ship recently?',
+  ]
+
+  /**
+   * Where the table-stakes question stays: Matt's "stays where it is
+   * (position 10)" (MTC-41, 2026-09-22) counts from one, so it is the tenth
+   * question of the pool.
+   */
+  const TABLE_STAKES_INDEX = 9
+
+  // The pool's first question is not pinned: each row's head opens on the
+  // featured themes (Matt, 2026-09-23, MTC-76), so index 0 holds whichever
+  // themed question leads.
+
+  const themes: Partial<Record<string, FeaturedThemeKey>> = STARTER_HEAD_THEMES
+  const isTagged = (question: string) => themes[question] !== undefined
+  const themeRank = (question: string) =>
+    FEATURED_THEMES.findIndex(theme => theme.key === themes[question])
+
+  // Each row's head: what the homepage shows first, from the pill it opens on.
+  const rowHeads = tickerRows(STARTER_QUESTIONS).map(row =>
+    Array.from(
+      { length: STARTER_HEAD_PILLS_PER_ROW },
+      (_, pill) => row[pillIndexFor(HOME_START_AT + pill, row.length)]
+    )
   )
 
-  test('the head of the pool covers every featured theme', () => {
-    // Coverage, not order: the pool order is Matt's approved order, and
-    // whether it should follow the featuring order is his call (MTC-76).
-    const tagged = Object.entries(STARTER_HEAD_THEMES)
-    for (const [question] of tagged) {
+  // The head is read one pill from each row in turn, first row first. This is
+  // a chosen convention for the order a visitor meets the themes, not a
+  // measured reading pattern: the rows scroll on their own and their pills
+  // differ in width. Under the ticker's odd and even split it is pool order.
+  const head = Array.from({ length: STARTER_HEAD_PILLS_PER_ROW }, (_, pill) =>
+    rowHeads.map(rowHead => rowHead[pill])
+  ).flat()
+
+  // A failure lists the questions with their themes, so it shows which
+  // question sits where rather than only which theme is out of place.
+  const byTheme = (run: readonly string[]) =>
+    [
+      `featuring order: ${FEATURED_THEMES.map(theme => theme.key).join(', ')}`,
+      ...run.map(question => `${themes[question] ?? 'untagged'}: ${question}`),
+    ].join('\n')
+
+  // More than one question may carry a theme, so order means the themes
+  // never go backwards, not one question per theme.
+  const themesNeverGoBackwards = (run: readonly string[]) =>
+    run
+      .filter(isTagged)
+      .map(themeRank)
+      .every((rank, index, ranks) => index === 0 || rank >= ranks[index - 1])
+
+  test('every tagged question sits in the head', () => {
+    for (const question of Object.keys(themes)) {
       expect(head, 'a tagged question sits in the head').toContain(question)
     }
-    const covered = new Set(tagged.map(([, theme]) => theme))
+  })
+
+  test('the head carries every featured theme', () => {
+    const covered = new Set(
+      head.filter(isTagged).map(question => themes[question])
+    )
     for (const theme of FEATURED_THEMES) {
-      expect(covered.has(theme.key), `${theme.key} in the head`).toBe(true)
+      expect(covered.has(theme.key), `${theme.key} in:\n${byTheme(head)}`).toBe(
+        true
+      )
     }
+  })
+
+  test("each row's head opens on its themed questions, in the featuring order", () => {
+    // Matt, 2026-09-23, MTC-76: each row's head opens with the featured
+    // themes in order, and the untagged questions follow the tagged ones.
+    for (const rowHead of rowHeads) {
+      const tagged = rowHead.filter(isTagged)
+      expect(
+        tagged.length,
+        `a theme opens:\n${byTheme(rowHead)}`
+      ).toBeGreaterThan(0)
+      expect(
+        rowHead.slice(0, tagged.length),
+        `themed questions first:\n${byTheme(rowHead)}`
+      ).toEqual(tagged)
+      expect(
+        themesNeverGoBackwards(rowHead),
+        `themes in order:\n${byTheme(rowHead)}`
+      ).toBe(true)
+    }
+  })
+
+  test('reading across the rows, the themes never go backwards', () => {
+    expect(head.some(isTagged), 'the head carries a theme').toBe(true)
+    expect(themesNeverGoBackwards(head), byTheme(head)).toBe(true)
+  })
+
+  test('the untagged head is the approved set, in the approved order', () => {
+    const untaggedInPoolOrder = questions.filter(
+      question => head.includes(question) && !isTagged(question)
+    )
+    expect(
+      untaggedInPoolOrder,
+      `the untagged head against APPROVED_UNTAGGED_HEAD_ORDER:\n${byTheme(head)}`
+    ).toEqual(
+      APPROVED_UNTAGGED_HEAD_ORDER.filter(question => !isTagged(question))
+    )
   })
 
   test('keeps the table-stakes question out of the head', () => {
@@ -93,9 +192,10 @@ describe('the starter questions', () => {
     expect(head).not.toContain(STARTER_TABLE_STAKES_QUESTION)
   })
 
-  test('opens on what a hiring manager screens for first', () => {
-    // The order is the product decision, so the head of it is pinned.
-    expect(questions[0]).toBe('How does Matt use AI coding agents?')
+  test('keeps the table-stakes question where Matt pinned it', () => {
+    expect(questions.indexOf(STARTER_TABLE_STAKES_QUESTION)).toBe(
+      TABLE_STAKES_INDEX
+    )
   })
 
   test('leans on no pronoun, because a pill arrives on its own', () => {

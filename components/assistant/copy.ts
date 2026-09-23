@@ -57,14 +57,14 @@ export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
  * row past what a 390px screen can read.
  */
 export const STARTER_QUESTIONS = [
-  'How does Matt use AI coding agents?',
-  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
   "What measurable results did Matt's team get from adopting AI coding agents?",
+  'What is the AI Email Engagement Summary feature Matt built?',
+  "What does Matt's Email Reliability team own at Thryv?",
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
+  'How does Matt use AI coding agents?',
   'How does Matt keep quality high when AI agents write most of the code?',
   'How much code does Matt ship himself as an engineering manager?',
-  "What does Matt's Email Reliability team own at Thryv?",
   'What did Matt ship recently?',
-  'What is the AI Email Engagement Summary feature Matt built?',
   // Symphony is OpenAI's open-source project; Matt adapted it (MTC-66).
   'What is Symphony, and what did Matt do with it?',
   "How did Matt's team move to independent deploys, and how long did it take?",
@@ -89,7 +89,8 @@ export const STARTER_QUESTIONS = [
 
 /**
  * How many pills of each ticker row count as the head of the pool: what the
- * homepage shows first, since it opens each row on its first pill.
+ * homepage shows first, counting from the pill HOME_START_AT opens each row
+ * on.
  */
 export const STARTER_HEAD_PILLS_PER_ROW = 4
 
@@ -98,35 +99,44 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
 /**
  * The head questions that clearly belong to one of the featured themes in
  * lib/chat/featuring.ts, keyed by the question so a reorder carries its
- * theme with it. copy.test.ts fails unless every theme is tagged, and every
- * tagged question sits in the head.
+ * theme with it.
+ *
+ * The pool is ordered so each ticker row's head opens on its tagged
+ * questions, the themes never going backwards in the order of
+ * FEATURED_THEMES, with the untagged head questions after them (Matt,
+ * 2026-09-23, MTC-76). By convention the two heads are also read one pill
+ * from each row in turn, and in that reading too the themes never go
+ * backwards; every featured theme appears in the head, and a theme may carry
+ * more than one question. copy.test.ts derives the heads from the ticker's
+ * own split and holds all of this. Reordering the themed questions means
+ * moving them in STARTER_QUESTIONS or retagging them here; changing which
+ * untagged questions sit in the head, or their order, also changes
+ * APPROVED_UNTAGGED_HEAD_ORDER in copy.test.ts.
  *
  * Only clear matches are tagged. Whether the other head questions (Matt's
  * use of AI coding agents, quality with agents, the code he ships himself,
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
- *
- * The pool's order does not follow the featuring order. It is the order Matt
- * approved, and whether to reorder it is his decision in MTC-76, so the test
- * checks that the head covers the themes, not their order.
  */
 export const STARTER_HEAD_THEMES: Partial<
   Record<StarterQuestion, FeaturedThemeKey>
 > = {
-  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
-    'orgAiAdoption',
   "What measurable results did Matt's team get from adopting AI coding agents?":
     'measuredDelivery',
-  "What does Matt's Email Reliability team own at Thryv?":
-    'operationalOwnership',
   'What is the AI Email Engagement Summary feature Matt built?':
     'productOutcomes',
+  "What does Matt's Email Reliability team own at Thryv?":
+    'operationalOwnership',
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
+    'orgAiAdoption',
 }
 
 /**
  * The starter question about the table-stakes practice in
- * lib/chat/featuring.ts. It is supporting detail, never a headline, so
- * copy.test.ts holds it outside the head.
+ * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
+ * sits outside the homepage's head, and it stays the tenth question of the
+ * pool (Matt, 2026-09-22, MTC-41). copy.test.ts holds both. Neither pin
+ * governs /ask, which opens each row at ASK_START_AT.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"

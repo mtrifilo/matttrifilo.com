@@ -6,7 +6,9 @@
  * the prose. The follow-up policy in `prompt.ts` renders its ordered sentence
  * from this module, and `featuring.test.ts` fails when the skill names the
  * themes in a different order, so the order is changed here and in the skill
- * together, never in the prompt's text.
+ * together, never in the prompt's text. The starter-question pool in
+ * `components/assistant/copy.ts` is ordered by it too: `copy.test.ts` fails
+ * when the head of the pool meets the themes out of this order.
  *
  * Pure data with no imports: anything that orders or ranks Matt's work may
  * read it, including modules that cannot import the prompt, which reads the
