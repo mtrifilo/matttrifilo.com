@@ -46,10 +46,11 @@ defaultTest:
         region: global
         generationConfig:
           temperature: 0
-  # Checks every answer in every suite makes, whatever the test is about.
-  # Promptfoo runs these ahead of each test's own `assert` list. Each is an
-  # absence check, so it rides alongside what a test judges and never stands
-  # in for it.
+  # Checks that run on every answer in every suite, whatever the test is
+  # about. Promptfoo runs these ahead of each test's own `assert` list, and
+  # evals/config.test.ts fails if an entry goes missing or a test opts out.
+  # Each is an absence check, so it rides alongside what a test judges and
+  # never stands in for it.
   assert:
     - type: javascript
       value: file://assertions.ts:assertNoEmDash

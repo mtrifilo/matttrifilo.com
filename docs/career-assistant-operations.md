@@ -224,7 +224,7 @@ Rendered behaviour is testable under `bun test`: no browser, no dev server, no r
 
 ## Copy rules
 
-No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the policy use a comma, a colon, or a full stop instead. `lib/site-copy.test.ts` fails `bun test` on one in the text the source under `app/` and `components/` renders, in `lib/chat/prompt.ts`, in `content/knowledge/` and in `content/resume.md` (the files it reads are listed at its top); the policy tells the model the same, and `assertNoEmDash`, attached to every eval test through `defaultTest` in `evals/promptfooconfig.yaml`, fails an answer that uses one, or an en dash as a sentence dash. An en dash in a range ("Jul 2017 – present") is not a sentence dash. What counts as either is `lib/dashes.ts`, which both checks share.
+No em dash anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the policy use a comma, a colon, or a full stop instead. `lib/site-copy.test.ts` fails `bun test` on one in the text the source under `app/`, `components/`, `lib/og/` and `lib/seo/` renders, in `lib/chat/prompt.ts` and the chat's notices, in `content/open-source.ts`, in `content/knowledge/` and in `content/resume.md` (the files it reads are listed at its top; `content/blog/` is not among them); the policy tells the model the same, and `assertNoEmDash`, attached to every eval test through `defaultTest` in `evals/promptfooconfig.yaml`, fails an answer that uses one, or an en dash as a sentence dash. An en dash in a range ("Jul 2017 – present") is not a sentence dash. What counts as either is `lib/dashes.ts`, which both checks share.
 
 ## Updating the knowledge base
 

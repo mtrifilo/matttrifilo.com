@@ -9,17 +9,25 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  * No em dash in anything the site shows a visitor, or tells the model.
  *
  * The files this reads:
- * - every .ts and .tsx file under app/ and components/, test files excepted,
- *   which includes components/assistant/copy.ts. Only the text those files
- *   can render is read: string literals, template literals and JSX text,
- *   with escapes and HTML entities resolved. Comments are never read.
+ * - every script file (.ts, .tsx, .js, .jsx and their .mjs/.cjs kin) under
+ *   app/, components/, lib/og/ (the social card) and lib/seo/ (page
+ *   metadata), test files excepted; components/assistant/copy.ts is one.
+ *   Only the text those files can render is read: string literals, template
+ *   literals and JSX text, with escapes and HTML entities resolved.
+ *   Comments are never read.
  * - lib/chat/prompt.ts, the same way, and SYSTEM_PROMPT as the model
  *   receives it, so a constant the policy interpolates from another file is
  *   covered too.
+ * - lib/chat/answer.ts and lib/chat/validate.ts (the notices and fallbacks
+ *   the chat shows as sent) and content/open-source.ts (the repository
+ *   summaries), the same way.
  * - every file under content/knowledge/, whole. HTML comments count there:
  *   the build strips them before the model reads a document, but the
  *   repository is public.
- * - content/resume.md, whole.
+ * - content/resume.md, and any .md or .mdx file under the script
+ *   directories above, whole.
+ *
+ * Not read: content/blog/, which is Matt's own writing and his to police.
  *
  * What an em dash is, entities and look-alike characters included, is
  * lib/dashes.ts, shared with the eval assertion that checks the assistant's
@@ -28,8 +36,13 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
 
 const ROOT = join(import.meta.dir, '..')
 
-const SOURCE_DIRECTORIES = ['app', 'components']
-const SOURCE_FILES = ['lib/chat/prompt.ts']
+const SOURCE_DIRECTORIES = ['app', 'components', 'lib/og', 'lib/seo']
+const SOURCE_FILES = [
+  'lib/chat/prompt.ts',
+  'lib/chat/answer.ts',
+  'lib/chat/validate.ts',
+  'content/open-source.ts',
+]
 const CONTENT_DIRECTORIES = ['content/knowledge']
 const CONTENT_FILES = ['content/resume.md']
 
@@ -50,8 +63,12 @@ function filesUnder(directory: string): string[] {
     .sort()
 }
 
+const SCRIPT = /\.[cm]?[jt]sx?$/
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/
+const MARKDOWN = /\.mdx?$/
+
 function isScannedSource(path: string): boolean {
-  return /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path)
+  return SCRIPT.test(path) && !TEST_FILE.test(path)
 }
 
 /**
@@ -69,7 +86,8 @@ function renderableText(
     source,
     ts.ScriptTarget.Latest,
     true,
-    fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+    // JSX parses only in the x variants; plain TS reads .js as well.
+    /x$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   )
   const pieces: { line: number; text: string }[] = []
   const visit = (node: ts.Node) => {
@@ -128,6 +146,7 @@ const sourcePaths = [
 ]
 const contentPaths = [
   ...CONTENT_DIRECTORIES.flatMap(filesUnder),
+  ...SOURCE_DIRECTORIES.flatMap(filesUnder).filter(path => MARKDOWN.test(path)),
   ...CONTENT_FILES,
 ]
 
@@ -138,15 +157,17 @@ describe('no em dash anywhere a visitor reads', () => {
     expect(sourcePaths).toContain('components/assistant/copy.ts')
     expect(sourcePaths).toContain('components/assistant/assistant-composer.tsx')
     expect(sourcePaths).toContain('lib/chat/prompt.ts')
+    expect(sourcePaths).toContain('lib/og/card.tsx')
+    expect(sourcePaths).toContain('lib/seo/jsonld.ts')
     expect(sourcePaths.some(path => path.startsWith('app/'))).toBe(true)
     expect(contentPaths).toContain('content/resume.md')
     expect(
       contentPaths.filter(path => path.startsWith('content/knowledge/')).length
     ).toBeGreaterThan(1)
-    expect(sourcePaths.some(path => /\.test\.tsx?$/.test(path))).toBe(false)
+    expect(sourcePaths.some(path => TEST_FILE.test(path))).toBe(false)
   })
 
-  test('the source under app/ and components/, and the policy file', () => {
+  test('the text the scanned source files render', () => {
     expect(sourcePaths.flatMap(sourceFindings)).toEqual([])
   })
 
