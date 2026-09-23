@@ -320,12 +320,14 @@
         - type: llm-rubric
           value: *r9
 
+# Reads any of: owned-systems-and-operations, resume or black-friday-sending-record; each states his part and that no send was lost.
 - description: 'golden: the 2024 cloud outage'
   vars:
     question: What did Matt do during the 2024 cloud-provider outage?
   metadata:
     suite: golden
-    expectReadsAny: [owned-systems-and-operations, resume]
+    expectReadsAny:
+      [owned-systems-and-operations, resume, black-friday-sending-record]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -348,8 +350,9 @@
           value: &r10 >-
             The answer says Matt led or coordinated the response to a February
             2024 cloud-provider outage and that no messages were lost, because
-            sends were queued and retried. It does not invent a customer impact
-            figure.
+            sends were queued and retried; saying instead that every send was
+            retried and none was dead-lettered states the same fact. It does
+            not invent a customer impact figure.
         - type: llm-rubric
           value: *r10
         - type: llm-rubric
@@ -894,12 +897,14 @@
         - type: llm-rubric
           value: *r26
 
+# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; each states the move to gated, independent deploys and names the tests that gate them.
 - description: 'golden: independent deployment'
   vars:
     question: How does Matt's team ship to production?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny:
+      [resume, owned-systems-and-operations, independent-deployment-program]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1770,12 +1775,17 @@
 # resume: "Moved all 9 team microservices (Java/Micronaut, Python, Go) off
 # the weekly release train onto independent, gated production deploys,
 # finishing in 9 weeks, 4 months ahead of schedule."
+# independent-deployment-program: "first independent production deploy on
+# July 9"; "The scheduling service completed the set on August 21"; "with a
+# December 31 target".
+# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give the nine weeks, the programme document the dates.
 - description: 'golden: the independent-deploy programme and its duration'
   vars:
     question: How did Matt's team move to independent deploys, and how long did it take?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny:
+      [resume, owned-systems-and-operations, independent-deployment-program]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1797,11 +1807,14 @@
           value: &r47 >-
             The answer says the team moved its nine microservices off a weekly
             release train onto independent, gated production deploys, and
-            gives the duration as nine weeks, four months ahead of schedule.
-            It may add that any engineer can now ship once end-to-end,
-            contract, load and manual readiness tests pass. It is written
-            about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            says how long it took: nine weeks, four months ahead of schedule,
+            as the résumé and the operations document put it, or the
+            programme document's dates, the first independent production
+            deploy on July 9 and the last service on August 21 against a
+            December 31 target. It may add that any engineer can now ship
+            once end-to-end, contract, load and manual readiness tests pass.
+            It is written about Matt in the third person, and it must not
+            present an inferred characterisation as a documented one.
         - type: llm-rubric
           value: *r47
         - type: llm-rubric
@@ -1856,13 +1869,18 @@
 # resume: "Owned Black Friday / Cyber Monday readiness four years running
 # (2022-2025) with zero major incidents; 27.7M emails sent on Cyber Monday
 # 2025."; owned-systems-and-operations: "Scaled up ahead of peak season and
-# back down after it, with a deploy freeze in between."
+# back down after it, with a deploy freeze in between.";
+# black-friday-sending-record: "scale up by early November, freeze deploys
+# for a window around the peak, scale down in early December", and the 2023
+# load tests across ten services in the sending path.
+# Reads any of: resume, owned-systems-and-operations or black-friday-sending-record; each names a preparation.
 - description: 'golden: peak-season readiness'
   vars:
     question: How does Matt prepare email sending for Black Friday and Cyber Monday?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny:
+      [resume, owned-systems-and-operations, black-friday-sending-record]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1883,12 +1901,14 @@
         - type: llm-rubric
           value: &r49 >-
             The answer names at least one documented preparation. One is
-            enough because they are split across two documents and the run is
-            only required to have opened one of them: scaling up ahead of peak
-            season and back down after it with a deploy freeze in between,
-            hardening the engagement-tracking service before Black Friday
-            2022, the 2023 sending-limit hardening, or the resilience library
-            that removed thousands of failed sends in 2019. It may add
+            enough because they are split across the documents this test
+            accepts and the run is only required to have opened one of them:
+            scaling up ahead of peak season and back down after it with a
+            deploy freeze in between, hardening the engagement-tracking
+            service before Black Friday 2022, the 2023 sending-limit
+            hardening, the 2023 load tests across the services in the sending
+            path, or the resilience library built for the 2019 season. It
+            may add
             that Matt owned readiness four years running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
             on Cyber Monday 2025. It is written about Matt in the third
@@ -1902,13 +1922,16 @@
 # owned-systems-and-operations: "Matt was the team's point of contact,
 # fielded the escalations, wrote the initial status-page comms, checked the
 # scope against warehouse logs, and coordinated the post-outage analysis.";
-# resume: "every send retried, none dead-lettered".
+# resume: "every send retried, none dead-lettered"; black-friday-sending-record
+# names the same four actions and "zero dead-lettered messages".
+# Reads any of: owned-systems-and-operations, resume or black-friday-sending-record; each states his part and that no send was lost.
 - description: 'golden: his role in the February 2024 outage'
   vars:
     question: How did Matt handle the February 2024 cloud-provider outage?
   metadata:
     suite: golden
-    expectReadsAny: [owned-systems-and-operations, resume]
+    expectReadsAny:
+      [owned-systems-and-operations, resume, black-friday-sending-record]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1950,21 +1973,24 @@
 # rendering out of the monolith into a standalone Java service"; "On the
 # Platform team (2019): helped decompose the Contacts domain out of the Core
 # monolith, moving Mobile's and Web's contact reads onto the new Contacts
-# API (75 PRs)."
-# Reads: resume only; it alone holds both halves, which two other documents split.
+# API (75 PRs)."; merge-api-decomposition: "Matt led the effort for the
+# Platform Services team as a 2020 to 2021 tour of duty"; contacts-api-and-
+# shadow-comparison: the 2019 Contacts API work for the mobile app and the web.
+# Reads any set of: resume, or merge-api-decomposition with contacts-api-and-shadow-comparison; the résumé holds both halves, and each other document one.
 - description: 'golden: his share of the monolith decomposition'
   vars:
     question: What was Matt's part in breaking the Keap monolith into services?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAnySet:
+      [[resume], [merge-api-decomposition, contacts-api-and-shadow-comparison]]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnySet
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -1978,14 +2004,16 @@
         - type: llm-rubric
           value: &r51 >-
             The answer distinguishes the two documented pieces of work: in
-            2019 on the Platform team he helped decompose the Contacts domain
-            out of the Core monolith and move Mobile's and Web's contact reads
-            onto the new Contacts API, and from 2020 to 2021 he led the Merge
-            API decomposition as a tour of duty, moving Liquid template
-            rendering into a standalone Java service. It does not claim he led
-            the Contacts decomposition. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
-            documented one.
+            2019 he helped decompose the Contacts domain out of the Core
+            monolith and move Mobile's and Web's contact reads onto the new
+            Contacts API (placing that on the Platform team, as the résumé
+            does, is correct but not required), and from 2020 to 2021 he led
+            the Merge API decomposition as a tour of duty, moving Liquid
+            template rendering into a standalone service, which the résumé
+            calls a Java service and the Merge API document a Micronaut one.
+            It does not claim he led the Contacts decomposition. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
         - type: llm-rubric
           value: *r51
         - type: llm-rubric
@@ -2078,13 +2106,16 @@
 # resume, Skills: "Java, Python, TypeScript, Go · Spring Boot, Micronaut,
 # Flask, FastAPI · Vue.js, React, GraphQL" and "Google Cloud (GKE, Cloud
 # Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions,
-# CircleCI, Google Cloud Operations, OpsGenie".
+# CircleCI, Google Cloud Operations, OpsGenie"; technical-expertise: Java,
+# TypeScript and Node, Vue, Python and Go, Spring Boot and Micronaut,
+# Kubernetes, Google Cloud Platform, GitHub Actions, CircleCI, Terraform.
+# Reads any of: resume, owned-systems-and-operations or technical-expertise; technical-expertise is the document about the stack.
 - description: 'golden: the team stack, languages through infrastructure'
   vars:
     question: What languages, frameworks, and infrastructure do Matt and his team use?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny: [resume, owned-systems-and-operations, technical-expertise]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2106,7 +2137,7 @@
         - type: llm-rubric
           value: &r54 >-
             The answer covers both halves of the question from the published
-            list: languages and frameworks such as Java, Python, TypeScript
+            material: languages and frameworks such as Java, Python, TypeScript
             and Go with Spring Boot, Micronaut, Flask, FastAPI, Vue.js, React
             or GraphQL, and infrastructure such as Google Cloud, Kubernetes,
             Terraform, GitHub Actions or CircleCI. It does not add a language

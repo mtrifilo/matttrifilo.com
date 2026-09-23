@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   ACTIVITY_BLOCK_NOTICE,
   ACTIVITY_BLOCK_START,
@@ -29,9 +31,11 @@ import {
   assertNoScreenshotRelease,
   assertNoTicketKeys,
   assertReadsAnyOf,
+  assertReadsAnySet,
   assertReadsExpected,
   assertReadsWithinIndex,
   assertThirdPerson,
+  followUpToAsk,
   type AssertionContext,
 } from './assertions'
 
@@ -318,6 +322,135 @@ describe('assertReadsAnyOf', () => {
     expect(assertReadsAnyOf('', ctx(undefined, { readIds: [] })).pass).toBe(
       false
     )
+  })
+})
+
+describe('assertReadsAnySet', () => {
+  const sets = [['resume'], ['merge-api-decomposition', 'contacts-api']]
+
+  test('reading the one-document set passes', () => {
+    const result = assertReadsAnySet(
+      '',
+      ctx({ expectReadsAnySet: sets }, { readIds: ['faq', 'resume'] })
+    )
+    expect(result.pass).toBe(true)
+    expect(result.reason).toBe('read all of resume')
+  })
+
+  test('reading every document of the other set passes', () => {
+    const result = assertReadsAnySet(
+      '',
+      ctx(
+        { expectReadsAnySet: sets },
+        { readIds: ['contacts-api', 'merge-api-decomposition'] }
+      )
+    )
+    expect(result.pass).toBe(true)
+    expect(result.reason).toBe(
+      'read all of merge-api-decomposition, contacts-api'
+    )
+  })
+
+  test('reading half of a set fails and names every alternative', () => {
+    const result = assertReadsAnySet(
+      '',
+      ctx({ expectReadsAnySet: sets }, { readIds: ['merge-api-decomposition'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toBe(
+      'read no complete set of resume or merge-api-decomposition + contacts-api; read merge-api-decomposition'
+    )
+  })
+
+  test('an empty set is not satisfied by reading nothing', () => {
+    expect(
+      assertReadsAnySet(
+        '',
+        ctx({ expectReadsAnySet: [[], ['resume']] }, { readIds: [] })
+      ).pass
+    ).toBe(false)
+    expect(
+      assertReadsAnySet('', ctx({ expectReadsAnySet: [[]] }, { readIds: [] }))
+        .reason
+    ).toContain('named no')
+  })
+
+  test('a test that named no expectation fails rather than passing vacuously', () => {
+    expect(assertReadsAnySet('', ctx(undefined, { readIds: [] })).pass).toBe(
+      false
+    )
+    expect(
+      assertReadsAnySet(
+        '',
+        ctx({ expectReadsAnySet: ['resume'] }, { readIds: ['resume'] })
+      ).pass
+    ).toBe(false)
+  })
+})
+
+describe('followUpToAsk', () => {
+  const question =
+    'How did Matt handle the February 2024 cloud-provider outage?'
+
+  test('the same question on the same day asks the same position', () => {
+    expect(followUpToAsk(3, question, 20_719)).toBe(
+      followUpToAsk(3, question, 20_719)
+    )
+  })
+
+  test('consecutive days rotate one question through every position', () => {
+    for (const count of [1, 2, 3]) {
+      const positions = Array.from({ length: count }, (_, offset) =>
+        followUpToAsk(count, question, 20_719 + offset)
+      )
+      expect([...positions].sort()).toEqual(
+        Array.from({ length: count }, (_, i) => i)
+      )
+    }
+  })
+
+  test('the next day moves to the next position, wrapping at the end', () => {
+    const today = followUpToAsk(3, question, 20_719)
+    expect(followUpToAsk(3, question, 20_720)).toBe((today + 1) % 3)
+  })
+
+  test('always an index into the proposals, whatever the day', () => {
+    for (const day of [-5, 0, 1, 20_719, 2 ** 40]) {
+      for (const count of [1, 2, 3]) {
+        const position = followUpToAsk(count, question, day)
+        expect(Number.isInteger(position)).toBe(true)
+        expect(position).toBeGreaterThanOrEqual(0)
+        expect(position).toBeLessThan(count)
+      }
+    }
+  })
+
+  test('the goldens that carry the check do not all ask the same position in one run', () => {
+    // Within a run the day is shared, so this depends only on the questions'
+    // hashes: it holds on every day if it holds on one.
+    const golden = Bun.YAML.parse(
+      readFileSync(join(import.meta.dir, 'suites/golden.yaml'), 'utf8')
+    ) as { vars?: { question?: string }; assert?: { value?: unknown }[] }[]
+    const questions = golden
+      .filter(item =>
+        (item.assert ?? []).some(
+          entry =>
+            entry.value === 'file://assertions.ts:assertFollowUpsAnswerable'
+        )
+      )
+      .map(item => String(item.vars?.question))
+    expect(questions.length).toBeGreaterThan(1)
+    for (const count of [2, 3]) {
+      const positions = new Set(
+        questions.map(q => followUpToAsk(count, q, 20_719))
+      )
+      expect(positions.size).toBeGreaterThan(1)
+    }
+  })
+
+  test('refuses a count with nothing to choose from', () => {
+    expect(() => followUpToAsk(0, question, 20_719)).toThrow(RangeError)
+    expect(() => followUpToAsk(1.5, question, 20_719)).toThrow(RangeError)
   })
 })
 

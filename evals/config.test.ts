@@ -170,6 +170,12 @@ const corpusText = new Map<string, string>(
   ])
 )
 
+/** A test's `expectReadsAnySet` alternatives, each as a list of ids. */
+function readSets(item: SuiteTest): string[][] {
+  const sets = item.metadata?.expectReadsAnySet
+  return Array.isArray(sets) ? sets.map(toArray) : []
+}
+
 describe('promptfooconfig.yaml', () => {
   test('targets the route provider and nothing else', () => {
     expect(config.providers).toHaveLength(1)
@@ -283,6 +289,23 @@ for (const name of SUITES) {
         if (names.includes('assertReadsAnyOf')) {
           expect(Array.isArray(metadata.expectReadsAny)).toBe(true)
         }
+        if (names.includes('assertReadsAnySet')) {
+          // Each alternative a non-empty list of ids: the assertion skips an
+          // empty one, so a typo there would quietly drop an alternative.
+          const sets: unknown = metadata.expectReadsAnySet
+          expect({
+            description: item.description,
+            wellFormed:
+              Array.isArray(sets) &&
+              sets.length > 0 &&
+              sets.every(
+                set =>
+                  Array.isArray(set) &&
+                  set.length > 0 &&
+                  set.every(id => typeof id === 'string')
+              ),
+          }).toEqual({ description: item.description, wellFormed: true })
+        }
         if (names.includes('assertCheckedActivity')) {
           expect(Array.isArray(metadata.expectActivity)).toBe(true)
         }
@@ -312,6 +335,7 @@ for (const name of SUITES) {
         const ids = [
           ...toArray(item.metadata?.expectReads),
           ...toArray(item.metadata?.expectReadsAny),
+          ...readSets(item).flat(),
         ]
         for (const id of ids) expect([...known]).toContain(id)
       }
@@ -381,6 +405,16 @@ for (const name of SUITES) {
           )
           if (!reachable)
             unreachable.push({ description: item.description, id })
+        }
+        // An `expectReadsAnySet` alternative is read whole, so the phrase
+        // may sit in any document of it.
+        for (const set of readSets(item)) {
+          const reachable = set.some(id => {
+            const text = corpusText.get(id) ?? ''
+            return needles.some(needle => text.includes(needle.toLowerCase()))
+          })
+          if (!reachable)
+            unreachable.push({ description: item.description, set })
         }
       }
       expect(unreachable).toEqual([])

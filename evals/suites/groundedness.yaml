@@ -25,13 +25,15 @@
 # an invention phrased around it, and an answer that disclaims in one sentence
 # and invents in another would otherwise read as honest.
 
+# Reads any of: owned-systems-and-operations, resume or black-friday-sending-record; no document is about the outage alone, and each states his part in it.
 - description: 'groundedness: cites the outage account'
   vars:
     question: What did Matt do during the February 2024 outage?
   metadata:
     suite: groundedness
     smoke: true
-    expectReadsAny: [owned-systems-and-operations, resume]
+    expectReadsAny:
+      [owned-systems-and-operations, resume, black-friday-sending-record]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
@@ -46,6 +48,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads any of: team-throughput-study-2025-2026 or resume; both give the 2026 weekly figure.
 - description: 'groundedness: cites the throughput figures'
   vars:
     question: How many merged pull requests a week did the team reach in 2026?
@@ -67,17 +70,14 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: plugin-marketplaces-and-sme-knowledge-bases; only it lists the steps, which owned-systems-and-operations only names the skill for.
 - description: 'groundedness: cites the alert-triage description'
   vars:
     question: What does the alert-triage skill do, step by step?
   metadata:
     suite: groundedness
     smoke: true
-    expectReadsAny:
-      [
-        plugin-marketplaces-and-sme-knowledge-bases,
-        owned-systems-and-operations,
-      ]
+    expectReadsAny: [plugin-marketplaces-and-sme-knowledge-bases]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
@@ -92,6 +92,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: talks-and-teaching; only it describes the research behind the talk.
 - description: 'groundedness: cites the May 2026 talk material'
   vars:
     question: What research sat behind his talk on context management?
@@ -112,12 +113,13 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: ai-email-engagement-summary, the document about this feature, as the golden 'the engagement summary feature in detail' does; the résumé gives it one line.
 - description: 'groundedness: cites the AI product feature'
   vars:
     question: What is the AI Email Engagement Summary and how quickly did it ship?
   metadata:
     suite: groundedness
-    expectReadsAny: [resume]
+    expectReadsAny: [ai-email-engagement-summary]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
@@ -132,12 +134,14 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give nine services in nine weeks, the programme document the nine and their dates.
 - description: 'groundedness: cites the deployment programme'
   vars:
     question: How many services did the team move onto independent deploys, and how long did it take?
   metadata:
     suite: groundedness
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny:
+      [resume, owned-systems-and-operations, independent-deployment-program]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
@@ -152,6 +156,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: open-source, the document about the curated repositories and where each one lives.
 - description: 'groundedness: cites the open-source list'
   vars:
     question: Where does the decant repository live?
@@ -172,12 +177,13 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads any of: recognition-and-programs or resume; both date the award March 2026, as the golden 'recognition' accepts either.
 - description: 'groundedness: cites the awards'
   vars:
     question: When did Matt receive the Thryv Accelerator Award?
   metadata:
     suite: groundedness
-    expectReadsAny: [resume]
+    expectReadsAny: [recognition-and-programs, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
@@ -192,6 +198,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: post-acquisition-integration, the document about the migration; technical-expertise names the authentication method only as a skill.
 - description: 'groundedness: cites the integration work'
   vars:
     question: What authentication change did the compliance migration require?
@@ -212,6 +219,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads: engineering-philosophy, the document that states the rule.
 - description: 'groundedness: cites the rule for building agent context'
   vars:
     question: What is Matt's rule for building context for an agent?
@@ -232,6 +240,7 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads any of: team-throughput-study-2025-2026 or ai-tooling-leadership; both describe the measurement and say its usage figures are a floor.
 - description: 'groundedness: cites the limits of usage telemetry'
   vars:
     question: How does Matt measure AI adoption on his team, and what are the limits?
@@ -252,12 +261,14 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
+# Reads any of: black-friday-sending-record, resume or owned-systems-and-operations; each says he owned peak-season readiness, as the golden 'peak-season readiness' accepts any of them.
 - description: 'groundedness: cites the peak-season record'
   vars:
     question: What has Matt owned for Black Friday and Cyber Monday?
   metadata:
     suite: groundedness
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny:
+      [black-friday-sending-record, resume, owned-systems-and-operations]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites
