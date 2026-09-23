@@ -11,6 +11,7 @@
  * fallback in lib/chat/answer.ts, decided alongside the parsing it covers.
  */
 
+import type { FeaturedThemeKey } from '@/lib/chat/featuring'
 import type { ChatProgressTopic } from '@/lib/chat/progress'
 
 export const MATT_EMAIL = 'matt.trifilo@gmail.com'
@@ -85,6 +86,41 @@ export const STARTER_QUESTIONS = [
   'What does Matt think good engineering leadership looks like?',
   'How does Matt build a team that keeps running without him?',
 ] as const
+
+/**
+ * How many pool positions count as the head of the ticker: the first four
+ * pills of each row, since the rows take the even and odd positions.
+ */
+export const STARTER_QUESTIONS_HEAD = 8
+
+/**
+ * The starter questions in the head that clearly belong to one of the
+ * featured themes in lib/chat/featuring.ts, keyed by the question so a
+ * reorder carries its theme with it. copy.test.ts fails unless every theme
+ * is tagged somewhere in the head.
+ *
+ * Only clear matches are tagged. Whether the other head questions (Matt's
+ * use of AI coding agents, quality with agents, the code he ships himself,
+ * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
+ * so they are left out rather than guessed.
+ *
+ * The pool's order is not the featuring order: in the head the themes
+ * arrive fourth, first, third, second. The pool order is the one Matt
+ * approved, and whether to reorder it is his decision in MTC-76, so the
+ * test checks that the head covers the themes, not their order.
+ */
+export const STARTER_QUESTION_THEMES: Partial<
+  Record<(typeof STARTER_QUESTIONS)[number], FeaturedThemeKey>
+> = {
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
+    'orgAiAdoption',
+  "What measurable results did Matt's team get from adopting AI coding agents?":
+    'measuredDelivery',
+  "What does Matt's Email Reliability team own at Thryv?":
+    'operationalOwnership',
+  'What is the AI Email Engagement Summary feature Matt built?':
+    'productOutcomes',
+}
 
 /**
  * The control that empties the transcript. Two of the route's refusals tell

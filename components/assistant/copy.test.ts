@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { announcementFor } from '@/lib/chat/answer'
+import { FEATURED_THEMES } from '@/lib/chat/featuring'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import { PROGRESS_TOPICS, type ProgressView } from '@/lib/chat/progress'
 import {
@@ -9,6 +10,8 @@ import {
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
   STARTER_QUESTIONS,
+  STARTER_QUESTIONS_HEAD,
+  STARTER_QUESTION_THEMES,
   progressChecking,
   progressHeadings,
   progressReading,
@@ -61,6 +64,20 @@ describe('the starter questions', () => {
       expect(question.trim()).not.toBe('')
       expect(question).toBe(question.trim())
       expect(question.length).toBeLessThanOrEqual(LENGTH_CAP)
+    }
+  })
+
+  test('the head of the pool covers every featured theme', () => {
+    // Coverage, not order: the pool order is Matt's approved order, and
+    // whether it should follow the featuring order is his call (MTC-76).
+    const head = questions.slice(0, STARTER_QUESTIONS_HEAD)
+    const tagged = Object.entries(STARTER_QUESTION_THEMES)
+    for (const [question] of tagged) {
+      expect(head, 'a tagged question sits in the head').toContain(question)
+    }
+    const covered = new Set(tagged.map(([, theme]) => theme))
+    for (const theme of FEATURED_THEMES) {
+      expect(covered.has(theme.key), `${theme.key} in the head`).toBe(true)
     }
   })
 
