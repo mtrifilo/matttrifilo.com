@@ -442,6 +442,51 @@ export function assertReadsAnyOf(
 }
 
 /**
+ * The run opened every document of at least one acceptable set.
+ *
+ * Some facts sit together in one document and apart in others: one document
+ * can hold both halves of an answer while each half also has a document of
+ * its own. `expectReads` cannot say "that one, or both of the others" (it
+ * requires every id it names), and `expectReadsAny` passes on one half.
+ * `metadata.expectReadsAnySet` lists the alternatives, each a set whose
+ * every id must be in the read ledger: `[[a], [b, c]]` passes on a, or on b
+ * and c together, and fails on b alone.
+ *
+ * The ledger is `metadata.readIds`, which also lists a document the route
+ * refused for its size or the read budget, so "in the ledger" is a superset
+ * of "seen", as it is for the other read assertions.
+ *
+ * An empty set is ignored rather than treated as satisfied, since every
+ * run has read all of nothing; `evals/config.test.ts` refuses one in a
+ * suite, and refuses the set form on a test that carries `assertCites`,
+ * whose missing-trailer tolerance reads only the two flat lists.
+ */
+export function assertReadsAnySet(
+  _output: string,
+  context: AssertionContext
+): AssertionResult {
+  const sets = documentSets(context.test?.metadata?.expectReadsAnySet)
+  const readIds = new Set(stringList(context.metadata?.readIds))
+  if (sets.length === 0) {
+    return fail('the test named no metadata.expectReadsAnySet')
+  }
+  const met = sets.find(set => set.every(id => readIds.has(id)))
+  if (met === undefined) {
+    const alternatives = sets.map(set => set.join(' + ')).join(' or ')
+    return fail(
+      `read no complete set of ${alternatives}; read ${[...readIds].join(', ') || 'nothing'}`
+    )
+  }
+  return { pass: true, score: 1, reason: `read all of ${met.join(', ')}` }
+}
+
+/** The non-empty id lists of an `expectReadsAnySet` value. */
+function documentSets(value: unknown): string[][] {
+  if (!Array.isArray(value)) return []
+  return value.map(stringList).filter(set => set.length > 0)
+}
+
+/**
  * The run fetched activity for the repositories the question is about.
  *
  * `metadata.expectActivity` names them, and this is a subset test for the
@@ -755,13 +800,15 @@ export function assertCitesOnlyWhatItRead(
  * The row of pills is a promise: a visitor who taps one expects a briefing,
  * not the decline sentence. The only way to know is to ask, so this is a
  * two-turn test. The first turn is the golden's own question and answer; the
- * second replays both as `history` and asks the first proposal, exactly as
- * the browser would, through the same provider and therefore the same route.
+ * second replays both as `history` and asks one proposal, exactly as the
+ * browser would, through the same provider and therefore the same route.
  *
- * Only the first proposal is asked. Three would triple what a golden costs
- * for a third of the evidence each; one is enough to catch a policy that
- * invites questions the corpus cannot answer, which is the failure this
- * exists for. A red row here is a finding about the policy or the corpus.
+ * One proposal is asked, not all of them. Three would triple what a golden
+ * costs for a third of the evidence each; one is enough to catch a policy
+ * that invites questions the corpus cannot answer, which is the failure this
+ * exists for. Which one is `followUpToAsk`'s choice, so every position gets
+ * asked over a run of days rather than the first alone. A red row here is a
+ * finding about the policy or the corpus.
  */
 export async function assertFollowUpsAnswerable(
   output: string,
@@ -780,7 +827,9 @@ export async function assertFollowUpsAnswerable(
   // Vertex and the knowledge corpus, and `bun test` loads this module for
   // the pure assertions around it.
   const { default: ChatRouteProvider } = await import('./provider')
-  const asked = followUps[0]
+  const position = followUpToAsk(followUps.length, question, RUN_DAY)
+  const asked = followUps[position]
+  const which = `proposal ${position + 1} of ${followUps.length}, "${asked}"`
   const second = await new ChatRouteProvider().callApi(asked, {
     vars: {
       history: [
@@ -792,13 +841,15 @@ export async function assertFollowUpsAnswerable(
     },
   })
 
-  if (second.error) return fail(`the follow-up run failed: ${second.error}`)
+  if (second.error) {
+    return fail(`the follow-up run failed on ${which}: ${second.error}`)
+  }
   const prose = answerProse(second.output).trim()
   if (prose === DECLINE_SENTENCE) {
-    return fail(`the assistant declined its own follow-up: ${asked}`)
+    return fail(`the assistant declined its own follow-up, ${which}`)
   }
   if (prose.length === 0) {
-    return fail(`the follow-up produced no answer: ${asked}`)
+    return fail(`the follow-up produced no answer to ${which}`)
   }
   // "Returns a sourced answer" is the acceptance criterion, and the server's
   // own ledger is the only honest way to check it: the model's citation line
@@ -806,13 +857,57 @@ export async function assertFollowUpsAnswerable(
   const read = stringList(second.metadata?.readIds)
   const checked = stringList(second.metadata?.activityRepos)
   if (read.length === 0 && checked.length === 0) {
-    return fail(`the follow-up was answered from nothing: ${asked}`)
+    return fail(`the follow-up was answered from nothing: ${which}`)
   }
   return {
     pass: true,
     score: 1,
-    reason: `proposed ${followUps.length}; "${asked}" answered from ${[...read, ...checked].join(', ')}`,
+    reason: `asked ${which}; answered from ${[...read, ...checked].join(', ')}`,
   }
+}
+
+const MS_PER_DAY = 86_400_000
+
+/**
+ * The UTC day this module was loaded on, which is the day the run started:
+ * promptfoo loads an assertion file with a plain `import()`, once per
+ * process.
+ *
+ * Taken once so every follow-up in a run rotates on the same day number,
+ * including a run that crosses midnight, and in UTC so the choice does not
+ * depend on the machine's timezone.
+ */
+const RUN_DAY = Math.floor(Date.now() / MS_PER_DAY)
+
+/**
+ * Which of `count` proposals the follow-up check asks: a zero-based index.
+ *
+ * The run's day number plus a hash of the golden's question, modulo the
+ * count. The day term rotates each golden through every position on
+ * consecutive days while its proposal count holds; the question term spreads
+ * the goldens across positions within one run, so a single run already asks
+ * more than the first proposal. Nothing random goes in, so a re-run on the
+ * same day asks the same position and a red row can be reproduced.
+ */
+export function followUpToAsk(
+  count: number,
+  question: string,
+  day: number
+): number {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new RangeError(`no proposal to choose from: ${count}`)
+  }
+  return (((day + fnv1a(question)) % count) + count) % count
+}
+
+/** FNV-1a over UTF-16 code units: a stable 32-bit hash, not a secure one. */
+function fnv1a(text: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash
 }
 
 function fail(reason: string): AssertionResult {
