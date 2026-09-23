@@ -53,20 +53,21 @@
         - type: llm-rubric
           value: *r1
 
+# Reads any of: resume or owned-systems-and-operations; both state five direct reports.
 - description: 'golden: size of the team he manages'
   vars:
     question: How many people report to Matt?
   metadata:
     suite: golden
     smoke: true
-    expectReads: [resume]
+    expectReadsAny: [resume, owned-systems-and-operations]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -81,7 +82,9 @@
           value: &r2 >-
             The answer says Matt manages five direct reports, and does not
             invent a different number. Naming the mix (engineers, a postmaster,
-            a compliance analyst) is correct but not required.
+            a compliance analyst) is correct but not required, and so is adding
+            that the wider team is seven people counted as contributors to its
+            repositories, as long as five stays the number of direct reports.
         - type: llm-rubric
           value: *r2
         - type: llm-rubric
@@ -250,6 +253,7 @@
         - type: llm-rubric
           value: *r7
 
+# Reads: resume only; recognition-and-programs titles the role Technical Manager, Software and Product Engineering.
 - description: 'golden: current role'
   vars:
     question: What is Matt's current title?
@@ -283,6 +287,7 @@
         - type: llm-rubric
           value: *r8
 
+# Reads: resume only; it alone dates the join and the acquisition together.
 - description: 'golden: tenure'
   vars:
     question: How long has Matt been at the same company?
@@ -781,6 +786,7 @@
         - type: llm-rubric
           value: *r23
 
+# Reads: resume only; the essay has the certificate but calls the degree Liberal Arts and names no college.
 - description: 'golden: education'
   vars:
     question: What is Matt's educational background?
@@ -814,19 +820,20 @@
         - type: llm-rubric
           value: *r24
 
+# Reads any of: resume or recognition-and-programs; each names at least two of the awards.
 - description: 'golden: recognition'
   vars:
     question: What recognition has Matt received at work?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAny: [resume, recognition-and-programs]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -841,25 +848,29 @@
           value: &r25 >-
             The answer names at least two of the Thryv Accelerator Award, the
             Thryv Emerging Leaders Program, and the Keap Better Together Award,
-            and does not invent an award.
+            and does not invent an award. Calling them the company's award and
+            programme without naming Thryv is correct, and so is adding the
+            documented promotions or the peer recognition posted in company
+            channels; those are recorded, not invented.
         - type: llm-rubric
           value: *r25
         - type: llm-rubric
           value: *r25
 
+# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go.
 - description: 'golden: languages and stacks'
   vars:
     question: Which languages and frameworks does Matt work in?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAny: [resume, technical-expertise]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -875,8 +886,9 @@
           value: &r26 >-
             The answer names languages from the published list (Java, Python,
             TypeScript, Go) and may add frameworks from it such as Spring Boot,
-            Micronaut, Vue.js or React. It does not add a language the résumé
-            does not list.
+            Micronaut, Vue.js or React, or Node as the runtime its TypeScript
+            runs on. It does not add a language that neither the résumé nor
+            the technical-expertise document lists.
         - type: llm-rubric
           value: *r26
         - type: llm-rubric
@@ -915,12 +927,13 @@
         - type: llm-rubric
           value: *r27
 
+# Reads: merge-api-decomposition, the document about this work; the résumé gives it one line.
 - description: 'golden: the merge API decomposition'
   vars:
     question: What was the Merge API decomposition work?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReads: [merge-api-decomposition]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -940,27 +953,30 @@
       assert:
         - type: llm-rubric
           value: &r28 >-
-            The answer says Matt led moving Liquid template rendering out of
-            the monolith into a standalone Java service, as a tour of duty with
-            the Platform Services team around 2020 to 2021.
+            The answer says Matt led moving Liquid template merging out of the
+            core monolith into a standalone Java or Micronaut service, as a
+            tour of duty with the Platform Services team from 2020 to 2021.
+            Naming the merge contexts, or the order in which consumers moved
+            onto it, is correct but not required.
         - type: llm-rubric
           value: *r28
         - type: llm-rubric
           value: *r28
 
+# Reads any of: resume or ai-email-engagement-summary; either answers whether and which in full.
 - description: 'golden: the LLM feature he shipped'
   vars:
     question: Has Matt shipped an LLM feature in a product?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAny: [resume, ai-email-engagement-summary]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -972,10 +988,14 @@
       assert:
         - type: llm-rubric
           value: &r29 >-
-            The answer says Matt proposed, designed and built the AI Email
-            Engagement Summary on Gemini and Vertex AI with retrieval over
-            help content, and that it explains how recent sending practice
-            affects deliverability.
+            The answer says Matt proposed and built the AI Email Engagement
+            Summary on Gemini on Vertex AI with retrieval over help content,
+            and that it explains a sender's email-engagement results and what
+            to do about them. Either document's framing of that is correct:
+            how recent sending practice affects deliverability, as the résumé
+            puts it, or what the bounce, complaint and engagement figures mean
+            and what to do next, as the feature's own document puts it. Saying
+            he also designed it is correct but not required.
         - type: llm-rubric
           value: *r29
         - type: llm-rubric
@@ -1635,18 +1655,23 @@
         - type: llm-rubric
           value: *r44
 
-# resume: "Proposed, designed, and built the AI Email Engagement Summary,
-# one of the product's first LLM features (Gemini on Vertex AI, RAG over
-# Postmaster-written help content). It explains how a user's last 30 days of
-# sending practices are helping or hurting deliverability ... Proof of
-# concept in 1 week, beta in 5, 100% rollout 2 months after formal
-# development began."
+# ai-email-engagement-summary: "The product already showed small-business
+# senders their bounce rate, complaint rate, average engagement age, and a
+# distribution of contacts by how recently they had engaged. What it did not
+# do was explain what those numbers meant or what to do next." Stack:
+# "Gemini Flash Lite on Vertex AI, a Cloud Run service, and Vector Search";
+# production retrieval runs over "an automated daily sync of help-centre
+# articles". The résumé's one-line version words it differently (the last 30
+# days of sending practice, deliverability); a run that read both may use
+# that wording, so the rubric accepts it. Vertex is in both, and the rubric
+# requires it.
+# Reads: ai-email-engagement-summary, the document about this feature; the résumé gives it one line.
 - description: 'golden: the engagement summary feature in detail'
   vars:
     question: What is the AI Email Engagement Summary feature Matt built?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReads: [ai-email-engagement-summary]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1668,15 +1693,20 @@
       assert:
         - type: llm-rubric
           value: &r45 >-
-            The answer says Matt proposed, designed and built it as one of the
-            product's first LLM features, that it runs on Gemini on Vertex AI
-            with retrieval over Postmaster-written help content, and that it
-            explains how a user's last 30 days of sending practices help or
-            hurt deliverability and recommends fixes. Naming the proof of
-            concept in one week, beta in five, and full rollout two months
-            after formal development, or the Promptfoo eval suite gating every
-            model change, is correct but not required. It is written about
-            Matt in the third person, and it must not present an inferred
+            The answer says Matt proposed and built it as an LLM feature
+            (saying he also designed it, or that it was one of the product's
+            first LLM features, is correct but not required), that it runs on
+            Gemini on Vertex AI with retrieval over the product's help-centre
+            content, and that it explains a sender's engagement figures, such
+            as bounce rate, complaint rate and how recently contacts engaged,
+            and recommends what to do next. Describing that instead as how the
+            last 30 days of sending practice help or hurt deliverability, as
+            the résumé does, is equally correct. Naming the proof of concept in
+            one week, the production beta about five weeks after build kickoff,
+            and every user two months after kickoff, or the Promptfoo evals
+            behind its model changes, is correct but not required; a different
+            duration for any of those three milestones is wrong. It is written
+            about Matt in the third person, and it must not present an inferred
             characterisation as a documented one.
         - type: llm-rubric
           value: *r45
@@ -1921,6 +1951,7 @@
 # Platform team (2019): helped decompose the Contacts domain out of the Core
 # monolith, moving Mobile's and Web's contact reads onto the new Contacts
 # API (75 PRs)."
+# Reads: resume only; it alone holds both halves, which two other documents split.
 - description: 'golden: his share of the monolith decomposition'
   vars:
     question: What was Matt's part in breaking the Keap monolith into services?
@@ -2172,20 +2203,23 @@
 
 # resume, Recognition: the Thryv Accelerator Award (March 2026), the Thryv
 # Emerging Leaders Program (2025), and the Keap Better Together Award
-# (December 2019). The only awards in the corpus.
+# (December 2019). recognition-and-programs has the first two, with what each
+# is evidence of, plus promotions and peer recognition; the Better Together
+# Award is only in the résumé.
+# Reads any of: resume or recognition-and-programs; each names at least two of the awards.
 - description: 'golden: the awards list, in the pool wording'
   vars:
     question: What awards and recognition has Matt received?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAny: [resume, recognition-and-programs]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -2201,10 +2235,13 @@
             The answer names at least two of the three published items: the
             Thryv Accelerator Award of March 2026, the Thryv Emerging Leaders
             Program of 2025, and the Keap Better Together Award of December
-            2019. It does not invent an award or a year. It may add that an
-            award-winning branded film for Intel sits in his earlier sound
-            work. It is written about Matt in the third person, and it must not
-            present an inferred characterisation as a documented one.
+            2019. It does not invent an award or a year. Calling them the
+            company's award and programme without naming Thryv is correct. It
+            may add that an award-winning branded film for Intel sits in his
+            earlier sound work, or the documented promotions and peer
+            recognition posted in company channels, which are recorded rather
+            than invented. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
         - type: llm-rubric
           value: *r57
         - type: llm-rubric
@@ -2212,6 +2249,7 @@
 
 # resume, header line: "Phoenix, AZ · Open to relocation (Chicago
 # preferred) · In-office, hybrid, or remote (US)".
+# Reads: resume only; the location and work preferences are in no other document.
 - description: 'golden: location and relocation'
   vars:
     question: Where is Matt based, and is he open to relocating?
@@ -2342,6 +2380,7 @@
 # resume: "Software Engineer III / Tech Lead (player-coach), Email
 # Reliability · Jul 2022 - May 2025 - Half coding, half management for a
 # team of 5 through the Keap-to-Thryv acquisition."
+# Reads: resume only; recognition-and-programs lacks the Tech Lead title, team of five and acquisition graded here.
 - description: 'golden: the player-coach years'
   vars:
     question: Has Matt worked as a player-coach, and how did he split his time?
@@ -2601,6 +2640,7 @@
 # in the Engineering Manager rotation, back up the org's Incident Commander
 # on P0/P1s."; "Incident lead for a 30-minute cloud-provider outage (Feb
 # 2024)". He backs the Incident Commander up; he is not the org's IC.
+# Reads: resume only; it alone states the three roles together.
 - description: 'golden: his incident command responsibilities, stated exactly'
   vars:
     question: What incident command responsibilities has Matt held?
@@ -2647,14 +2687,16 @@
 # license renewal (quoted at +48%); matched the vendor's own reporting
 # within ~1% and closed at my recommended tier, roughly flat year over
 # year." The published material states no dollar amount anywhere.
+# Reads: resume only; the quoted increase and the flat outcome are in no other document.
 - description: 'golden: vendor negotiation and licence cost'
   vars:
     question: Has Matt owned a vendor negotiation or a licensing budget?
   metadata:
     suite: golden
-    # The negotiation itself is résumé-only. The AI tooling document carries
-    # only the ownership sentence, which the rubric treats as an addition,
-    # so it cannot stand in for the read.
+    # The +48 percent quote and the flat outcome are résumé-only; two career
+    # documents describe the renewal analysis without them. The AI tooling
+    # document carries only the ownership sentence, which the rubric treats
+    # as an addition, so none of them can stand in for the read.
     expectReads: [resume]
   assert:
     - type: javascript
@@ -2692,21 +2734,25 @@
           value: *r68
 
 # resume: "Hired 2 in 2025 who became high performers within months; zero
-# voluntary attrition as manager." That outcome is the whole of what the
-# corpus says; the interview and growth process is not published.
+# voluntary attrition as manager." recognition-and-programs: "100 percent
+# team retention in his first year as Technical Manager, May 2025 to May
+# 2026. Two hires in 2025, both of whom became high performers quickly."
+# Those outcomes are the whole of what the corpus says; the interview and
+# growth process is not published.
+# Reads any of: resume or recognition-and-programs; each states both outcomes in its own words.
 - description: 'golden: hiring and retention outcomes, without the process'
   vars:
     question: What is Matt's track record hiring and keeping engineers?
   metadata:
     suite: golden
-    expectReads: [resume]
+    expectReadsAny: [resume, recognition-and-programs]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -2719,11 +2765,13 @@
       assert:
         - type: llm-rubric
           value: &r69 >-
-            The answer gives the two documented outcomes: Matt hired two
-            engineers in 2025 who became high performers within months, and
-            there has been zero voluntary attrition under him as manager. It
-            may add that he lists hiring and performance management among his
-            leadership skills, that he believes growing people compounds, or
+            The answer gives the two documented outcomes: Matt made two hires
+            in 2025 who became high performers within months, or quickly, and
+            he has kept his team, stated either as zero voluntary attrition
+            under him as manager or as 100 percent team retention in his first
+            year as manager, May 2025 to May 2026. It may add that he lists
+            hiring and performance management among his leadership skills,
+            that he believes growing people compounds, or
             the essay's point that he has hosted many candidate interviews,
             has rarely seen shipped projects from candidates and does not
             treat them as mandatory, and expects demonstrable
@@ -2890,6 +2938,7 @@
 # engineers", the population the tooling rollout reached, so an answer that
 # offers 400 or 3,000 as the size of the engineering organisation is
 # substituting one denominator for another.
+# Reads: resume only; the company headcounts are in no other document.
 - description: 'golden: the size and kind of organisation he has worked in'
   vars:
     question: What size of engineering organisation has Matt worked in?
