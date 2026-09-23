@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   handOffQuestion,
   hasPendingQuestion,
@@ -47,13 +47,20 @@ describe('the pending question', () => {
   })
 
   test('is not waiting when storage is blocked', () => {
-    const blocked = spyOn(sessionStorage, 'getItem').mockImplementation(() => {
-      throw new Error('blocked')
+    // A blocked browser throws on reaching sessionStorage at all. A spy on
+    // the test DOM's storage would not take: its methods are not writable.
+    const real = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage')
+    if (!real) throw new Error('the test DOM has no sessionStorage')
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('blocked', 'SecurityError')
+      },
     })
     try {
       expect(hasPendingQuestion()).toBe(false)
     } finally {
-      blocked.mockRestore()
+      Object.defineProperty(globalThis, 'sessionStorage', real)
     }
   })
 })

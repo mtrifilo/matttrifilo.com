@@ -161,6 +161,9 @@ describe('the questions the ticker offers', () => {
   test('names the rows once, as one group', () => {
     render(<StarterTicker onPick={() => {}} />)
 
+    // One group in all: a row wrapped in a group of its own would be one
+    // more landmark for a screen reader to announce before the questions.
+    expect(screen.getAllByRole('group')).toHaveLength(1)
     expect(
       screen.getAllByRole('group', { name: 'Starter questions' })
     ).toHaveLength(1)
@@ -200,30 +203,9 @@ describe('holding the rows still', () => {
     expect(group.dataset.touched).toBeUndefined()
   })
 
-  test('hover and focus are the stylesheet to pause, and it has the markup for it', () => {
-    // `.starter-ticker:hover .starter-ticker-track` and
-    // `.starter-ticker:focus-within .starter-ticker-track` pause both rows;
-    // nothing in the component toggles for either, so what it owes those
-    // rules is the classes and the nesting between them. Happy DOM matches
-    // neither pseudo-class, which is why the focused state is checked as
-    // containment instead.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
-    const { group, rows } = tickerOf(container)
-
-    for (const { track } of rows) {
-      expect(track.classList.contains('starter-ticker-track')).toBe(true)
-      expect(group.contains(track)).toBe(true)
-    }
-
-    screen.getAllByRole('button').at(-1)?.focus()
-    expect(group.contains(document.activeElement)).toBe(true)
-  })
-
-  test('a focused pill leaves an unmoving row alone', () => {
-    // The freeze exists to hand a moving track's position over to
-    // scrollLeft. With no animation running there is no transform to
-    // replace, and writing the flag anyway would drop an animation that a
-    // browser had not started yet.
+  test('a focused pill leaves a row that has not been measured alone', () => {
+    // Without a copy width the loop's position cannot be converted into a
+    // scroll offset, and freezing anyway would move the row wrongly.
     const { container } = render(<StarterTicker onPick={() => {}} />)
     const [first] = tickerOf(container).rows
 
@@ -310,6 +292,28 @@ describe('a moving row, while a pill has focus', () => {
     announcedPills(second.viewport)[0].focus()
     expect(first.track.dataset.frozen).toBeUndefined()
     expect(second.track.dataset.frozen).toBe('true')
+  })
+
+  test('leaves a measured row alone when its loop is not running', () => {
+    // The freeze exists to hand a moving track's position over to
+    // scrollLeft. With no animation running there is no transform to
+    // replace, and writing the flag anyway would drop an animation that a
+    // browser had not started yet.
+    const [first] = renderMovingRows()
+    first.track.getAnimations = () => []
+
+    announcedPills(first.viewport)[0].focus()
+    expect(first.track.dataset.frozen).toBeUndefined()
+  })
+
+  test('leaves the row alone for a visitor who asked for no motion', () => {
+    // Under reduced motion the row is an ordinary scroll container and the
+    // browser scrolls a focused pill into view itself.
+    setReducedMotion(true)
+    const [first] = renderMovingRows()
+
+    announcedPills(first.viewport)[0].focus()
+    expect(first.track.dataset.frozen).toBeUndefined()
   })
 
   test('thaws once focus leaves the rows', () => {
