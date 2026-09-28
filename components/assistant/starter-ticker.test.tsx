@@ -1468,7 +1468,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   }
 
   test.each([2, 3] as const)(
-    'each theme is labelled by a real heading, at the level the surface passes (%i)',
+    'each theme is labeled by a real heading, at the level the surface passes (%i)',
     level => {
       // MTC-97: a screen-reader visitor jumps between themes by heading.
       // The level is one below the surface's own heading for the
@@ -1506,13 +1506,18 @@ describe('every question at once, as a list (MTC-85)', () => {
         ])
       )
       expect(classes).not.toContain('uppercase')
+      expect(classes).not.toContain('capitalize')
       expect(classes).not.toContain('text-muted-foreground')
       expect(classes.some(name => name.startsWith('tracking-'))).toBe(false)
       expect(classes.some(name => name.startsWith('text-['))).toBe(false)
-      // Sentence case comes from the strings themselves.
-      const text = heading.textContent ?? ''
-      expect(text.charAt(0)).toBe(text.charAt(0).toUpperCase())
-      expect(text).not.toBe(text.toUpperCase())
+      // Sentence case comes from the strings themselves: a capital first
+      // word, then lowercase words, with acronyms ("AI") left whole.
+      const [first = '', ...rest] = (heading.textContent ?? '').split(' ')
+      expect(first.charAt(0)).toBe(first.charAt(0).toUpperCase())
+      expect(first.slice(1)).toBe(first.slice(1).toLowerCase())
+      for (const word of rest) {
+        expect([word.toLowerCase(), word.toUpperCase()]).toContain(word)
+      }
     }
   })
 
