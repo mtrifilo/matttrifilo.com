@@ -1566,6 +1566,171 @@ describe('the loaders the site and the chat route use', () => {
   })
 })
 
+describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
+  // One reading (./markdown) decides what is code, what is a heading and
+  // what is prose, for the placeholder rule, the section split and the
+  // MDX-safety check alike. lib/knowledge/markdown.test.ts holds the rules
+  // line by line; these hold what the build does with them.
+  const placeholder = (body: string) =>
+    findPlaceholder(sourceLines(body)) !== null
+  const career = (body: string) =>
+    buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+  const faq = (body: string) =>
+    buildFixture([
+      { topic: 'career', name: 'a-role.md' },
+      { topic: 'faq', name: 'faq.md', body },
+    ])
+
+  test('a backslash escapes punctuation only, so `\\TODO (Matt)` is a placeholder', () => {
+    // `\T` is not an escape: the backslash is text, and the marker is
+    // still in the line a reader sees.
+    expect(placeholder('\\TODO (Matt)')).toBe(true)
+    expect(() => career('\\TODO (Matt)')).toThrow(/a TODO placeholder/)
+    const dropped = faq(['## A question?', '', '\\TODO (Matt)'].join('\n'))
+    expect(dropped.unanswered.map(q => q.heading)).toEqual(['A question?'])
+    // An escaped parenthesis is the parenthesis.
+    expect(placeholder('TODO \\(Matt\\)')).toBe(true)
+    // And `\TODO` at the start of a line is text that starts with a
+    // backslash, not a line that starts with TODO.
+    expect(placeholder('\\TODO is how the word is written unescaped')).toBe(
+      false
+    )
+  })
+
+  test('a backtick run with no closer of its own length is text, not code', () => {
+    expect(placeholder('```TODO (Matt)`')).toBe(true)
+    expect(() => career('A run of three: ```a <Thing>`')).toThrow(
+      /"<" outside code/
+    )
+    // Inside a code span a backslash is a character, so this span ends
+    // at `C:\` and the tag after it is prose to MDX.
+    expect(() => career('The path `C:\\` and <Thing> and `x`.')).toThrow(
+      /"<" outside code/
+    )
+  })
+
+  test('a fence closes only at a run as long as its opener, with nothing after it', () => {
+    // ```` holds a ``` and a `##` line; neither ends it, and the prose
+    // after the real closer is read again.
+    const nested = [
+      '## Real',
+      '',
+      '````md',
+      '```',
+      '## Not a heading',
+      '```js',
+      '````',
+      '',
+      'TODO (Matt)',
+    ].join('\n')
+    expect(documentHeadings(nested)).toEqual(['Real'])
+    expect(placeholder(nested)).toBe(true)
+    // A ``` inside a ~~~ block is content too.
+    expect(documentHeadings('~~~\n```\n## Not\n~~~\n\n## Real\nx')).toEqual([
+      'Real',
+    ])
+  })
+
+  test('a fence indented up to three spaces is code', () => {
+    const body = [
+      'Setup:',
+      '',
+      '   ```tsx',
+      'const x = <Thing />',
+      '   ```',
+      '',
+      '## TODO (Matt)',
+    ].join('\n')
+    // The fence is code, so the tag passes; and it closed, so the heading
+    // after it is read as one.
+    expect(() => career(body)).toThrow(
+      /a TODO placeholder under "TODO \(Matt\)"/
+    )
+    const fenced = body.replace('## TODO (Matt)', 'Done.')
+    expect(career(fenced).documents[0].text).toBe(fenced)
+  })
+
+  test('a fence indented with a tab is not code at the top level', () => {
+    // CommonMark reads the tab as four columns: an indented code block
+    // holding the ```, then prose. So the line under it is checked.
+    expect(placeholder('\t```\nTODO (Matt)\n\t```')).toBe(true)
+    expect(() => career('\t```\nconst x = <Thing />\n\t```')).toThrow(
+      /"<" outside code.*a tab counts as four/
+    )
+  })
+
+  test('a backtick fence whose info string holds a backtick is prose', () => {
+    expect(placeholder('```a`b\nTODO (Matt)')).toBe(true)
+    // Its line is prose to MDX too, and it opens nothing, so the check
+    // reports the tag rather than an unclosed fence.
+    expect(() => career('```a`b <Thing>\nDone.')).toThrow(/"<" outside code/)
+  })
+
+  test('every ATX heading form is checked as a heading', () => {
+    // `###` and deeper, and `#`, are read by their title, as `##` is.
+    expect(placeholder('### TODO: confirm the date')).toBe(true)
+    expect(placeholder('# TODO')).toBe(true)
+    expect(placeholder('#### What TODO comments cost')).toBe(false)
+    expect(() =>
+      career(['## What I owned', '', '### TODO: the numbers'].join('\n'))
+    ).toThrow(/a TODO placeholder under "What I owned"/)
+    const dropped = faq(
+      ['## A question?', '', 'An answer.', '', '### TODO add more'].join('\n')
+    )
+    expect(dropped.unanswered.map(q => q.heading)).toEqual(['A question?'])
+
+    // A section starts at `##` with up to three spaces before it or a tab
+    // after it; four columns in is indented code, not a section.
+    expect(
+      documentHeadings(
+        [
+          'Intro.',
+          '',
+          '   ## Indented',
+          'Body.',
+          '',
+          '##\tTabbed',
+          'Body.',
+          '',
+          '    ## Four in',
+          '',
+          '##Glued',
+          '',
+          '## Closed ##',
+        ].join('\n')
+      )
+    ).toEqual(['Indented', 'Tabbed', 'Closed'])
+    const indented = faq(
+      ['   ## TODO (Matt)', '', 'A finished answer.'].join('\n')
+    )
+    expect(indented.unanswered.map(q => q.heading)).toEqual(['TODO (Matt)'])
+  })
+
+  test('accepted gap (Matt, 2026-09-23, MTC-71): a TODO inside inline code or a fence ships', () => {
+    // One placeholder rule, and it reads prose. A `TODO (Matt)` written
+    // inside a code span or a fenced block is code to that rule, so it
+    // ships, in the faq as everywhere else. Matt accepted that gap rather
+    // than add a second, faq-only rule; do not close it without his word.
+    const answer = [
+      '## How does he review agent output?',
+      '',
+      'We grep for `TODO (Matt)` before every release.',
+      '',
+      '```',
+      'TODO (Matt)',
+      '```',
+      '',
+      '## `TODO (Matt)` in a heading',
+      '',
+      'Also ships.',
+    ].join('\n')
+    const built = faq(answer)
+    expect(built.documents.find(d => d.id === 'faq')?.text).toBe(answer)
+    expect(built.unanswered).toEqual([])
+    expect(career(answer).documents[0].text).toBe(answer)
+  })
+})
+
 interface Fixture {
   topic: string
   name: string

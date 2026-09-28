@@ -2,6 +2,13 @@ import fs from 'fs'
 import path from 'path'
 import { findPunctuationDashes } from '@/lib/dashes'
 import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
+import {
+  atxHeading,
+  FenceTracker,
+  isOverIndentedFence,
+  mdxSyntaxText,
+  proseText,
+} from './markdown'
 
 /**
  * Builds the career assistant's corpus: a small index the model always
@@ -167,8 +174,6 @@ export const KNOWLEDGE_DIR = path.join(process.cwd(), 'content', 'knowledge')
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/
 const FRONTMATTER_FIELD = /^([A-Za-z]+):[ \t]*(.*)$/
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-/** A `##` heading, and only `##`: `###` and deeper stay inside a block. */
-const BLOCK_HEADING = /^## (?!#)/
 /**
  * What a placeholder looks like, as opposed to the word "TODO" appearing
  * in something Matt wrote.
@@ -462,50 +467,30 @@ interface Section extends Block {
   heading: SourceLine
 }
 
-/** A heading's title: the line without its `## `. */
+/**
+ * A line outside a fence that starts a section: a level-two ATX heading in
+ * any form CommonMark accepts ("## Title", "   ## Title", "##\tTitle").
+ * `#` and `###` and deeper stay inside a block.
+ */
+function isSectionHeading(line: string): boolean {
+  return atxHeading(line)?.level === 2
+}
+
+/** A section heading's title: without its hashes, trimmed. */
 function headingTitle(heading: SourceLine): string {
-  return heading.text.replace(BLOCK_HEADING, '').trim()
+  const parsed = atxHeading(heading.text)
+  // splitBlocks only makes a section at a line isSectionHeading accepts.
+  if (!parsed) {
+    throw new Error(
+      `knowledge: a section heading that is not one: ${heading.text}`
+    )
+  }
+  return parsed.title
 }
 
 /** A block's lines under its heading, joined back into text. */
 function blockBody(block: Block): string {
   return block.lines.map(line => line.text).join('\n')
-}
-
-/** An opening or closing ``` / ~~~ fence, with any indent and info string. */
-const CODE_FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/
-
-/**
- * Tracks whether a line is inside a fenced code block.
- *
- * Markdown closes a fence only with the same character, at least as long
- * as the opener, and with no info string, so a ``` inside a ~~~~ block is
- * content, not a close. Callers feed lines in order and read `inCode`
- * before deciding what a line means.
- */
-class FenceTracker {
-  private fence: string | null = null
-
-  /** True when this line is inside a fence (the fence lines themselves count). */
-  consume(line: string): boolean {
-    const match = CODE_FENCE.exec(line)
-    if (!match) return this.fence !== null
-    const [, marker, info] = match
-    if (this.fence === null) {
-      this.fence = marker
-      return true
-    }
-    const closes =
-      marker[0] === this.fence[0] &&
-      marker.length >= this.fence.length &&
-      info.trim() === ''
-    if (closes) this.fence = null
-    return true
-  }
-
-  get open(): boolean {
-    return this.fence !== null
-  }
 }
 
 /**
@@ -528,7 +513,7 @@ function splitBlocks(lines: readonly SourceLine[]): {
 
   for (const line of lines) {
     const inCode = fence.consume(line.text)
-    if (!inCode && BLOCK_HEADING.test(line.text)) {
+    if (!inCode && isSectionHeading(line.text)) {
       const section: Section = { heading: line, lines: [] }
       sections.push(section)
       current = section
@@ -574,35 +559,6 @@ export function documentHeadings(text: string): string[] {
     .filter(heading => heading.length <= MAX_HEADING_CHARS)
     .slice(0, MAX_HEADINGS)
 }
-
-/** An inline code span: one or more backticks, matching run to close. */
-const INLINE_CODE = /(`+)(?:(?!\1)[\s\S])*?\1/g
-
-/**
- * A Markdown backslash escape. Blanked before anything else looks at a
- * line, for two reasons that point the same way: an escaped backtick does
- * not open a code span (so `` \`a <Thing> b\` `` is prose, and the tag in
- * it is real), and an escaped `\<` is already the correct way to write a
- * literal angle bracket in MDX (so it is not an offence).
- */
-const MD_ESCAPE = /\\[\s\S]/g
-
-/**
- * The part of a line MDX will parse as content: escapes and inline code
- * removed. Both checks below read a line through this, so they agree on
- * what counts as code.
- */
-function visibleProse(line: string): string {
-  return line.replace(MD_ESCAPE, '').replace(INLINE_CODE, '')
-}
-
-/**
- * A fence CommonMark would accept inside a nested list item but this
- * check's 3-space rule does not. Tracked only so an error can say so:
- * recognising it properly means tracking list context, which is a Markdown
- * parser, and the corpus has no nested code blocks to justify one.
- */
-const OVER_INDENTED_FENCE = /^[ \t]{4,}(?:`{3,}|~{3,})/
 
 /** A line of a document, numbered as it is numbered in the file itself. */
 export interface SourceLine {
@@ -672,20 +628,25 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * document has to be safe to render whichever of its sections survive,
  * and one rule is easier to hold than two.
  *
- * Known limitation, deliberate: a fence must be indented at most three
- * spaces to be recognised as code. CommonMark allows a deeper indent
- * inside a nested list item, and honouring that means tracking list
- * context: a Markdown parser, for a case the corpus does not have. The
- * cost is a false positive, never a false negative, and the error says so
- * when an over-indented fence is in the document.
+ * Lines are read by ./markdown, the same reading the placeholder rule and
+ * the section split use. Known limitation, deliberate: that reading is
+ * CommonMark's at the top level, so a fence indented four or more columns
+ * (a tab counts as four) is not code. CommonMark accepts one inside a
+ * nested list item, and MDX, which turns off indented code, accepts one
+ * anywhere; honouring that means tracking list context, which is a
+ * Markdown parser, for a case the corpus does not have. Such a fence can
+ * be misread both ways: its contents checked as prose (a false positive),
+ * or a later ``` taken for an opener so the prose after it goes unchecked
+ * (a false negative, which the site build still catches for a blog twin).
+ * The error names such a fence when one is in the document.
  */
 function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
   const fence = new FenceTracker()
   let sawOverIndentedFence = false
   for (const line of lines) {
     if (fence.consume(line.text)) continue
-    if (OVER_INDENTED_FENCE.test(line.text)) sawOverIndentedFence = true
-    const offence = /[<{]/.exec(visibleProse(line.text))
+    if (isOverIndentedFence(line.text)) sawOverIndentedFence = true
+    const offence = /[<{]/.exec(mdxSyntaxText(line.text))
     if (!offence) continue
     const char = offence[0]
     const advice =
@@ -695,7 +656,7 @@ function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
     // Only mentioned when something actually failed: a deeply indented
     // fence is legal and common, and most of the time it is not the cause.
     const indentNote = sawOverIndentedFence
-      ? ' (this document also has a ``` fence indented four or more spaces, which this check does not recognise as code — outdent it to three spaces or fewer)'
+      ? ' (this document also has a ``` fence indented four or more spaces, which this check does not recognise as code; a tab counts as four. Outdent it to three spaces or fewer)'
       : ''
     throw new Error(
       `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${indentNote}. Line: ${line.text.trim()}`
@@ -747,22 +708,29 @@ export interface FoundPlaceholder {
  * editor's note written as a heading is a placeholder even when the
  * section under it is finished.
  *
- * Reads each line the way MDX will (fenced blocks skipped, escapes and
- * inline code removed), so `// TODO` inside a ```` ``` ```` block and a
- * `` `TODO` `` written about in prose are both left alone. What it looks
- * for is a placeholder's *shape* (isPlaceholder), not the word. A block
- * always starts outside a fence (splitBlocks), so reading one alone sees
- * the same fences as reading the whole document.
+ * Reads each line the way CommonMark does (./markdown: fenced blocks
+ * skipped, escapes resolved, code spans removed), so `// TODO` inside a
+ * ```` ``` ```` block and a `` `TODO` `` written about in prose are both
+ * left alone. That is the accepted gap, by Matt's decision on MTC-71
+ * (2026-09-23): a placeholder written inside code ships, because there is
+ * one placeholder rule and it reads prose. What it looks for is a
+ * placeholder's *shape* (isPlaceholder), not the word; a heading of any
+ * level is read by its title, so `### TODO` is one as `## TODO` is. A
+ * block always starts outside a fence (splitBlocks), so reading one alone
+ * sees the same fences as reading the whole document.
  */
 function findBlockPlaceholder(block: Block): SourceLine | null {
   if (block.heading) {
     const title = headingTitle(block.heading)
-    if (isPlaceholder(visibleProse(title))) return block.heading
+    if (isPlaceholder(proseText(title))) return block.heading
   }
   const fence = new FenceTracker()
   for (const line of block.lines) {
     if (fence.consume(line.text)) continue
-    if (isPlaceholder(visibleProse(line.text))) return line
+    const heading = atxHeading(line.text)
+    if (isPlaceholder(proseText(heading ? heading.title : line.text))) {
+      return line
+    }
   }
   return null
 }
