@@ -1,0 +1,96 @@
+name: Accessibility and performance
+
+# axe-core and Lighthouse against a production build of the site with the
+# Career Assistant on (MTC-88). Its own workflow, so it runs beside CI and
+# neither has to change for the other.
+#
+# The build leaves CHAT_DISABLED unset, which is what renders /ask and the
+# homepage panel. Nothing here asks a question: the pages are loaded and
+# scanned, so the chat route is never called and the model never is.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Lighthouse CI, run with npx at this exact version rather than added
+      # to package.json: it brings its own Lighthouse and a few hundred
+      # packages that every install of the site, Vercel's included, would
+      # otherwise download.
+      LHCI: npx --yes @lhci/cli@0.15.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.3
+      - run: bun install --frozen-lockfile
+      - name: Build with the assistant on
+        run: bun run build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Start the production server
+        id: server
+        run: |
+          bun run start > "$RUNNER_TEMP/next.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/ask; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/next.log"
+          exit 1
+      - name: Install Chromium for Playwright
+        run: bunx playwright install --with-deps chromium
+      - name: axe-core, the homepage and /ask at 390 and 1440, both themes
+        run: bunx playwright test -c a11y/playwright.config.ts
+      # Both Lighthouse runs go ahead when axe fails, so one red run still
+      # reports every score.
+      - name: Lighthouse, mobile
+        if: ${{ !cancelled() && steps.server.outcome == 'success' }}
+        run: |
+          $LHCI collect --config=a11y/lighthouserc.mobile.json
+          $LHCI upload --config=a11y/lighthouserc.mobile.json
+          rm -rf .lighthouseci
+      - name: Lighthouse, desktop
+        if: ${{ !cancelled() && steps.server.outcome == 'success' }}
+        run: |
+          $LHCI collect --config=a11y/lighthouserc.desktop.json
+          $LHCI upload --config=a11y/lighthouserc.desktop.json
+          rm -rf .lighthouseci
+      - name: Lighthouse scores
+        if: always()
+        run: |
+          {
+            echo '| Device | Page | Performance | Accessibility | Best practices | SEO |'
+            echo '| --- | --- | --- | --- | --- | --- |'
+            for device in mobile desktop; do
+              manifest="a11y/lighthouse-reports/$device/manifest.json"
+              [ -f "$manifest" ] || continue
+              jq -r --arg device "$device" '.[] | select(.isRepresentativeRun)
+                | "| \($device) | \(.url | sub("^http://127.0.0.1:3000"; "")) | \(.summary.performance * 100 | round) | \(.summary.accessibility * 100 | round) | \(.summary["best-practices"] * 100 | round) | \(.summary.seo * 100 | round) |"' "$manifest"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: accessibility-and-performance
+          path: |
+            a11y/report
+            a11y/results
+            a11y/lighthouse-reports
+          retention-days: 14
+          if-no-files-found: ignore

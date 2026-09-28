@@ -1,0 +1,16 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["http://127.0.0.1:3000/", "http://127.0.0.1:3000/ask"],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "chromeFlags": "--headless=new"
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": "a11y/lighthouse-reports/desktop"
+    }
+  }
+}
