@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { STARTER_QUESTIONS } from './copy'
 import {
   ASK_START_AT,
+  followPosition,
   HOME_START_AT,
   loopSeconds,
   openingProgress,
@@ -10,9 +11,11 @@ import {
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  sharedWindow,
   sidewaysWheelPixels,
-  tickerRows,
   TICKER_SPEED_PX_PER_SECOND,
+  tickerRows,
+  widestPlacement,
 } from './ticker-geometry'
 
 /**
@@ -368,5 +371,116 @@ describe('how far a wheel event moves a handed-over row', () => {
     expect(
       sidewaysWheelPixels(motion(1, 0, { deltaMode: 2 }), LINE, PAGE)
     ).toBe(PAGE)
+  })
+})
+
+describe('the window both handed-over rows share', () => {
+  // Two rows stopped at different points of their loops, the second one
+  // shorter: it has 300 behind it and 600 ahead, the first 1_200 and 1_900.
+  const first = { position: 1_200, period: 1_600, maxScrollLeft: 3_100 }
+  const second = { position: 300, period: 1_200, maxScrollLeft: 900 }
+
+  test('reaches back and on as far as the row with least room each way', () => {
+    const window = sharedWindow([first, second])
+    expect(window.scrollLeft).toBe(300)
+    expect(window.maxScrollLeft).toBe(300 + 600)
+  })
+
+  test('cuts each row so both sit at the shared scrollLeft', () => {
+    const window = sharedWindow([first, second])
+    expect(window.cuts).toEqual([900, 0])
+    // Trimmed, each row is back where it stopped: nothing on screen moves.
+    ;[first, second].forEach((strip, index) => {
+      expect(window.scrollLeft + window.cuts[index]).toBe(strip.position)
+    })
+  })
+
+  test('the row that runs out first is found, not assumed', () => {
+    const tight = { position: 2_900, period: 1_600, maxScrollLeft: 3_100 }
+    const window = sharedWindow([second, tight])
+    expect(window.scrollLeft).toBe(300)
+    expect(window.maxScrollLeft).toBe(300 + 200)
+  })
+
+  test('a row outside its own range is taken to its nearest end first', () => {
+    // A layout that has not caught up with the freeze must not produce a
+    // negative cut or a window that runs backwards.
+    const window = sharedWindow([
+      { position: -40, period: 500, maxScrollLeft: 800 },
+      { position: 950, period: 500, maxScrollLeft: 900 },
+    ])
+    expect(window.cuts.every(cut => cut >= 0)).toBe(true)
+    expect(window.maxScrollLeft).toBeGreaterThanOrEqual(window.scrollLeft)
+  })
+})
+
+describe('placing rows at hand-over', () => {
+  test('a row near the start of its loop is placed a copy on, where the same pills have a copy behind them', () => {
+    const nearStart = { position: 40, period: 3_000, maxScrollLeft: 5_700 }
+    const nearEnd = { position: 2_750, period: 2_800, maxScrollLeft: 5_300 }
+    const positions = widestPlacement([
+      { ...nearStart, canMove: true },
+      { ...nearEnd, canMove: true },
+    ])
+    // The same pixels: a whole period on.
+    expect(positions).toEqual([3_040, 2_750])
+    const as = (placed: number[]) =>
+      sharedWindow([
+        { ...nearStart, position: placed[0] },
+        { ...nearEnd, position: placed[1] },
+      ]).maxScrollLeft
+    expect(as(positions)).toBeGreaterThan(as([40, 2_750]))
+  })
+
+  test('rows are left where they stopped when that is already the widest', () => {
+    const a = { position: 1_500, period: 3_000, maxScrollLeft: 5_700 }
+    const b = { position: 1_400, period: 2_800, maxScrollLeft: 5_300 }
+    expect(
+      widestPlacement([
+        { ...a, canMove: true },
+        { ...b, canMove: true },
+      ])
+    ).toEqual([1_500, 1_400])
+  })
+
+  test('a row that cannot move keeps its position', () => {
+    const pinned = { position: 40, period: 3_000, maxScrollLeft: 5_700 }
+    const joining = { position: 2_750, period: 2_800, maxScrollLeft: 5_300 }
+    expect(
+      widestPlacement([
+        { ...pinned, canMove: false },
+        { ...joining, canMove: true },
+      ])[0]
+    ).toBe(40)
+  })
+
+  test('a copy on is only offered where the row can scroll to it', () => {
+    const late = { position: 2_900, period: 3_000, maxScrollLeft: 5_700 }
+    const other = { position: 100, period: 2_800, maxScrollLeft: 5_300 }
+    const positions = widestPlacement([
+      { ...late, canMove: true },
+      { ...other, canMove: true },
+    ])
+    expect(positions[0]).toBe(2_900)
+  })
+})
+
+describe('a row following a focused pill in the other row', () => {
+  const strip = { position: 1_000, period: 1_500, maxScrollLeft: 3_200 }
+
+  test('moves the same distance when it can', () => {
+    expect(followPosition(strip, 400)).toBe(1_400)
+    expect(followPosition(strip, -900)).toBe(100)
+  })
+
+  test('takes the same pixels a copy away rather than stop at an end', () => {
+    expect(followPosition(strip, -1_200)).toBe(1_000 - 1_200 + 1_500)
+    expect(followPosition(strip, 2_500)).toBe(1_000 + 2_500 - 1_500)
+  })
+
+  test('stops at its end only when no copy fits either', () => {
+    const short = { position: 100, period: 0, maxScrollLeft: 300 }
+    expect(followPosition(short, -500)).toBe(0)
+    expect(followPosition(short, 500)).toBe(300)
   })
 })

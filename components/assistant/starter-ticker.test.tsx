@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { cssBlock } from '@/test/css-block'
 import { STARTER_QUESTIONS } from './copy'
 import { StarterTicker } from './starter-ticker'
 import {
   EDGE_FADE_PROPERTY,
-  revealScrollLeft,
+  SHARED_CUT_PROPERTY,
+  SHARED_WIDTH_PROPERTY,
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   tickerRows,
@@ -211,23 +212,31 @@ function runningLoop(progress: number): Animation {
  *
  * Each row measures one copy of its questions when it mounts, and only a
  * row with a measured width and a running loop has a position to hand
- * over, so both are stated: the copy's width before the render, and the
- * browser's animation on each track after it.
+ * over, so both are stated: the copy's width before the render (one number
+ * for every copy, or one worked out from the copy itself), and the
+ * browser's animation on each track after it (one progress for both rows,
+ * or one per row).
  */
 function renderMovingRows({
   copyWidth = COPY_WIDTH_MEASURED,
   progress = 0.25,
-}: { copyWidth?: number; progress?: number } = {}) {
+}: {
+  copyWidth?: number | ((copy: Element) => number)
+  progress?: number | readonly [number, number]
+} = {}) {
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const rect = REAL_BOUNDING_RECT.call(this)
     if (!this.classList.contains('starter-ticker-copy')) return rect
-    return { ...rect.toJSON(), width: copyWidth } as DOMRect
+    const width = typeof copyWidth === 'number' ? copyWidth : copyWidth(this)
+    return { ...rect.toJSON(), width } as DOMRect
   }
   const { container } = render(<StarterTicker onPick={() => {}} />)
   const { rows } = tickerOf(container)
-  for (const { track } of rows) {
-    track.getAnimations = () => [runningLoop(progress)]
-  }
+  rows.forEach(({ track }, index) => {
+    const rowProgress =
+      typeof progress === 'number' ? progress : progress[index]
+    track.getAnimations = () => [runningLoop(rowProgress)]
+  })
   return rows
 }
 
@@ -343,10 +352,14 @@ describe('a row handed over to the visitor by touch or wheel', () => {
   const PILL_PITCH = 208
   const PILL_WIDTH = 200
   const VIEWPORT_WIDTH = 358
+  // What the rows' clientWidth reports; a test that rotates the phone
+  // changes it.
+  let viewportWidth = VIEWPORT_WIDTH
 
   let stylesheet: HTMLStyleElement | undefined
 
   afterEach(() => {
+    viewportWidth = VIEWPORT_WIDTH
     stylesheet?.remove()
     stylesheet = undefined
   })
@@ -356,8 +369,14 @@ describe('a row handed over to the visitor by touch or wheel', () => {
    * the same pitch, both copies end to end, and the freeze's lead pushing
    * every pill right while the track is frozen. Happy DOM lays nothing out,
    * so these offsets are what give "the pill at the left edge" a meaning.
+   * Each row's copy is as wide as its own pills, so the second row, one
+   * question shorter, is the shorter strip, as it is in a browser.
+   *
+   * The returned `copyWidth` is the first row's.
    */
-  function renderLaidOutRows(progress = 0.25) {
+  function renderLaidOutRows(
+    progress: number | readonly [number, number] = 0.25
+  ) {
     stylesheet = document.createElement('style')
     stylesheet.textContent = TICKER_RULES.map(rule =>
       cssBlock(GLOBALS_CSS, rule)
@@ -365,7 +384,10 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     document.head.append(stylesheet)
 
     const copyWidth = FIRST_ROW.length * PILL_PITCH
-    const rows = renderMovingRows({ copyWidth, progress })
+    const rows = renderMovingRows({
+      copyWidth: copy => copy.children.length * PILL_PITCH,
+      progress,
+    })
     for (const { viewport, track } of rows) {
       const pills = [...track.querySelectorAll<HTMLElement>('button')]
       pills.forEach((pill, index) => {
@@ -375,7 +397,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
         Object.defineProperty(pill, 'offsetWidth', { get: () => PILL_WIDTH })
       })
       Object.defineProperty(viewport, 'clientWidth', {
-        get: () => VIEWPORT_WIDTH,
+        get: () => viewportWidth,
       })
       Object.defineProperty(viewport, 'scrollWidth', {
         get: () => pills.length * PILL_PITCH + leadOf(track),
@@ -405,6 +427,79 @@ describe('a row handed over to the visitor by touch or wheel', () => {
 
   function isHandedOver(viewport: HTMLElement): boolean {
     return viewport.dataset.handedOver === 'true'
+  }
+
+  /** How much of a handed-over row's start its trim cuts away. */
+  function cutOf(track: HTMLElement): number {
+    return (
+      Number.parseFloat(track.style.getPropertyValue(SHARED_CUT_PROPERTY)) || 0
+    )
+  }
+
+  /**
+   * Where a row is in its own pixels, the ones its pills' offsets and its
+   * freeze are measured in: its scrollLeft plus whatever its trim cut away.
+   */
+  function positionOf({
+    viewport,
+    track,
+  }: {
+    viewport: HTMLElement
+    track: HTMLElement
+  }): number {
+    return viewport.scrollLeft + cutOf(track)
+  }
+
+  /** The furthest a handed-over row scrolls once trimmed, as a browser would lay it out. */
+  function trimmedMaxOf({
+    viewport,
+    track,
+  }: {
+    viewport: HTMLElement
+    track: HTMLElement
+  }): number {
+    const width = Number.parseFloat(
+      track.style.getPropertyValue(SHARED_WIDTH_PROPERTY)
+    )
+    return width - cutOf(track) - viewport.clientWidth
+  }
+
+  /** One copy of a row, as the test lays it out. */
+  function copyWidthOf(track: HTMLElement): number {
+    const copy = track.querySelector('.starter-ticker-copy')
+    return (copy?.children.length ?? 0) * PILL_PITCH
+  }
+
+  /** Where a row's freeze puts it: its own loop, in its own pixels. */
+  function frozenAt(track: HTMLElement, progress: number): number {
+    return progress * copyWidthOf(track) + leadOf(track)
+  }
+
+  /**
+   * Whether two positions of a row show the same pixels: equal, or a whole
+   * copy apart, which is the same pills in the other copy.
+   */
+  function samePixels(track: HTMLElement, a: number, b: number): boolean {
+    const copy = copyWidthOf(track)
+    const apart = Math.abs(a - b)
+    return apart < 0.5 || Math.abs(apart - copy) < 0.5
+  }
+
+  /** The fade width the row reads off the stylesheet. */
+  function fadeOf(viewport: HTMLElement): number {
+    return Number.parseFloat(
+      getComputedStyle(viewport).getPropertyValue(EDGE_FADE_PROPERTY)
+    )
+  }
+
+  /** Whether a pill is fully inside the row and clear of both fades. */
+  function isClearOfFades(
+    row: { viewport: HTMLElement; track: HTMLElement },
+    pill: HTMLElement
+  ): boolean {
+    const start = pill.offsetLeft - positionOf(row)
+    const fade = fadeOf(row.viewport)
+    return start >= fade && start + PILL_WIDTH <= viewportWidth - fade
   }
 
   test('reads the lead off the stylesheet it is about to rely on', () => {
@@ -455,10 +550,8 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     // through the pool, so a hand-over that dropped the position (or the
     // lead) would land on a different one.
     expect(before).toBeGreaterThan(0)
-    expect(pillAtLeftEdge(first.track, first.viewport.scrollLeft)).toBe(before)
-    expect(first.viewport.scrollLeft).toBe(
-      progress * copyWidth + leadOf(first.track)
-    )
+    expect(pillAtLeftEdge(first.track, positionOf(first))).toBe(before)
+    expect(positionOf(first)).toBe(progress * copyWidth + leadOf(first.track))
   })
 
   /**
@@ -497,13 +590,11 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     // Cancelled, and applied here instead: the browser may already have
     // given the gesture to the page.
     expect(notCancelled).toBe(false)
-    expect(first.viewport.scrollLeft).toBeCloseTo(
+    expect(positionOf(first)).toBeCloseTo(
       progress * copyWidth + leadOf(first.track) + 40
     )
     // The hand-over itself kept the pill at the edge where it was.
-    expect(pillAtLeftEdge(first.track, first.viewport.scrollLeft - 40)).toBe(
-      before
-    )
+    expect(pillAtLeftEdge(first.track, positionOf(first) - 40)).toBe(before)
   })
 
   test('the rest of that gesture scrolls the strip too, then the browser scrolls it', () => {
@@ -557,7 +648,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     first.viewport.dispatchEvent(event)
 
     expect(isHandedOver(first.viewport)).toBe(true)
-    expect(first.viewport.scrollLeft).toBeCloseTo(
+    expect(positionOf(first)).toBeCloseTo(
       progress * copyWidth + leadOf(first.track)
     )
   })
@@ -580,54 +671,439 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     })
 
     expect(scrolledNatively).toBe(true)
-    expect(isHandedOver(first.viewport)).toBe(false)
-    expect(first.track.dataset.frozen).toBeUndefined()
+    for (const { viewport, track } of rows) {
+      expect(isHandedOver(viewport)).toBe(false)
+      expect(track.dataset.frozen).toBeUndefined()
+    }
   })
 
-  test('the other row keeps moving until it is touched itself', () => {
-    const { rows } = renderLaidOutRows()
-    const [first, second] = rows
+  describe('both rows, as one strip', () => {
+    /**
+     * Scroll a row the way a drag or a native wheel would: the position
+     * changes, then the browser reports it. Happy DOM sends no scroll event
+     * when scrollLeft is set, so the report is sent here.
+     */
+    function scrollBy(viewport: HTMLElement, pixels: number): void {
+      viewport.scrollLeft += pixels
+      fireEvent.scroll(viewport)
+    }
 
-    fireEvent.touchStart(first.viewport)
-    expect(isHandedOver(second.viewport)).toBe(false)
-    expect(second.track.dataset.frozen).toBeUndefined()
+    /**
+     * Counts every write to a row's scrollLeft from here on, and by default
+     * keeps the position to whole pixels as some browsers do, so that what a
+     * row reads back is not always what was written to it.
+     */
+    function countWrites(
+      viewport: HTMLElement,
+      { round = true } = {}
+    ): { count: number } {
+      let owner: object | null = viewport
+      let property: PropertyDescriptor | undefined
+      while (owner && !property) {
+        property = Object.getOwnPropertyDescriptor(owner, 'scrollLeft')
+        owner = Object.getPrototypeOf(owner)
+      }
+      const { get, set } = property ?? {}
+      if (!get || !set) throw new Error('scrollLeft has no accessor to spy on')
+      const writes = { count: 0 }
+      Object.defineProperty(viewport, 'scrollLeft', {
+        configurable: true,
+        get: () => get.call(viewport),
+        set: (value: number) => {
+          writes.count += 1
+          set.call(viewport, round ? Math.round(value) : value)
+        },
+      })
+      return writes
+    }
 
-    fireEvent.touchStart(second.viewport)
-    expect(isHandedOver(second.viewport)).toBe(true)
+    /** The furthest a row could scroll untrimmed, as the test laid it out. */
+    function naturalMaxOf(viewport: HTMLElement): number {
+      return viewport.scrollWidth - viewport.clientWidth
+    }
+
+    test('a touch on the second row hands both over, each showing what its own loop showed', () => {
+      // Different points in their loops, so a hand-over that gave one row
+      // the other's position, or skipped the untouched row, lands wrong.
+      // These two are also a pairing where each row is best placed on its
+      // second copy, which shows the same pills.
+      const progress = [0.27, 0.61] as const
+      const { rows } = renderLaidOutRows(progress)
+      const edges = rows.map(({ track }, index) =>
+        pillAtLeftEdge(track, frozenAt(track, progress[index]))
+      )
+
+      fireEvent.touchStart(announcedPills(rows[1].viewport)[0])
+
+      rows.forEach((row, index) => {
+        const { viewport, track } = row
+        expect(isHandedOver(viewport)).toBe(true)
+        expect(track.dataset.frozen).toBe('true')
+        expect(
+          samePixels(track, positionOf(row), frozenAt(track, progress[index]))
+        ).toBe(true)
+        const count = announcedPills(viewport).length
+        expect(edges[index]).toBeGreaterThan(0)
+        expect(pillAtLeftEdge(track, positionOf(row)) % count).toBe(
+          edges[index] % count
+        )
+      })
+      // One position for both.
+      expect(rows[0].viewport.scrollLeft).toBe(rows[1].viewport.scrollLeft)
+    })
+
+    test('a sideways wheel on the first row moves both rows by its delta', () => {
+      const progress = [0.25, 0.4] as const
+      const { rows } = renderLaidOutRows(progress)
+
+      wheelAt(rows[0].viewport, 1000, { deltaX: 40, deltaY: 0 })
+      wheelAt(rows[0].viewport, 1016, { deltaX: 25, deltaY: 0 })
+
+      rows.forEach((row, index) => {
+        expect(
+          samePixels(
+            row.track,
+            positionOf(row),
+            frozenAt(row.track, progress[index]) + 65
+          )
+        ).toBe(true)
+      })
+      expect(rows[0].viewport.scrollLeft).toBe(rows[1].viewport.scrollLeft)
+    })
+
+    test('a scroll on the second row carries the first, the dragged row is never written, and the echo carries nothing back', () => {
+      // Fractional loop positions, so the rows' offsets are not whole pixels
+      // and a row rounds what it is given.
+      const { rows } = renderLaidOutRows([0.3013, 0.5071])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
+      const firstAt = first.viewport.scrollLeft
+      // The dragged row sits at a fraction of a pixel, the followed one at
+      // whole pixels, so the echo reads back a position the drag never had.
+      const firstWrites = countWrites(first.viewport)
+      const secondWrites = countWrites(second.viewport, { round: false })
+
+      scrollBy(second.viewport, 120.4)
+      expect(
+        Math.abs(first.viewport.scrollLeft - (firstAt + 120.4))
+      ).toBeLessThan(1)
+      expect(first.viewport.scrollLeft).not.toBe(second.viewport.scrollLeft)
+      expect(firstWrites.count).toBe(1)
+      // The drag's own write, nothing from the component: a write to the
+      // row under a finger is what makes it stutter.
+      expect(secondWrites.count).toBe(1)
+
+      // The write to the first row makes a browser report a scroll on it
+      // too. That report is the rows' own doing, not the visitor's, and
+      // answering it would bounce the position between the rows.
+      fireEvent.scroll(first.viewport)
+      fireEvent.scroll(second.viewport)
+      expect(firstWrites.count).toBe(1)
+      expect(secondWrites.count).toBe(1)
+    })
+
+    test('both rows are trimmed to the reach the shorter one allows, at either end', () => {
+      // The second row holds one question fewer, so from the same point in
+      // both loops it has less ahead of it and less behind it; the shared
+      // window is that much each way, and both rows scroll through exactly
+      // it, so the browser stops them together.
+      const progress = 0.25
+      const { rows } = renderLaidOutRows(progress)
+
+      fireEvent.touchStart(rows[0].viewport)
+
+      // Read once frozen, when each track carries its lead.
+      const at = rows.map(({ track }) => frozenAt(track, progress))
+      const behind = Math.min(...at)
+      const ahead = Math.min(
+        ...rows.map(({ viewport }, index) => naturalMaxOf(viewport) - at[index])
+      )
+      for (const row of rows) {
+        expect(row.viewport.scrollLeft).toBeCloseTo(behind)
+        expect(trimmedMaxOf(row)).toBeCloseTo(behind + ahead)
+        // Never beyond what the row itself holds, at either end.
+        expect(cutOf(row.track)).toBeGreaterThanOrEqual(0)
+        expect(cutOf(row.track) + trimmedMaxOf(row)).toBeLessThanOrEqual(
+          naturalMaxOf(row.viewport) + 0.5
+        )
+      }
+      // The second row is the one that runs out, both ways: nothing of it
+      // is cut, and its trimmed end is its own end.
+      expect(cutOf(rows[1].track)).toBe(0)
+      expect(trimmedMaxOf(rows[1])).toBeCloseTo(naturalMaxOf(rows[1].viewport))
+    })
+
+    test('every question stays reachable by dragging, wherever the loops stopped', () => {
+      // A row stopped near the start of its loop has little behind it. Each
+      // row may be placed on either copy, so the window both share still
+      // brings every question of each row clear of the fades somewhere,
+      // in one copy or the other.
+      const stops = [0.01, 0.2, 0.45, 0.7, 0.99]
+      for (const a of stops) {
+        for (const b of stops) {
+          const { rows } = renderLaidOutRows([a, b])
+          fireEvent.touchStart(rows[0].viewport)
+          for (const row of rows) {
+            const max = trimmedMaxOf(row)
+            const cut = cutOf(row.track)
+            const fade = fadeOf(row.viewport)
+            const count = announcedPills(row.viewport).length
+            const pills = [...row.track.querySelectorAll<HTMLElement>('button')]
+            for (let index = 0; index < count; index += 1) {
+              const reachable = [pills[index], pills[index + count]].some(
+                pill => {
+                  // The scrollLeft range that shows the pill clear of both
+                  // fades, against the range the window allows.
+                  const start = pill.offsetLeft - cut
+                  const low = start + PILL_WIDTH - viewportWidth + fade
+                  const high = start - fade
+                  return Math.max(low, 0) <= Math.min(high, max)
+                }
+              )
+              expect(reachable, `${a}, ${b}: pill ${index}`).toBe(true)
+            }
+          }
+          cleanup()
+          stylesheet?.remove()
+        }
+      }
+    })
+
+    test('a row that could not be handed over yet is left alone, then joins', () => {
+      // Its loop has not started, so there is no position to freeze it at.
+      // Writing its scrollLeft while it still moves would add to its
+      // transform; it joins on the next touch, from where it then is.
+      const { rows } = renderLaidOutRows(0.3)
+      const [first, second] = rows
+      second.track.getAnimations = () => []
+      fireEvent.touchStart(first.viewport)
+      expect(isHandedOver(second.viewport)).toBe(false)
+
+      const secondWrites = countWrites(second.viewport)
+      scrollBy(first.viewport, 80)
+      expect(secondWrites.count).toBe(0)
+
+      second.track.getAnimations = () => [runningLoop(0.6)]
+      const firstBefore = positionOf(first)
+      fireEvent.touchStart(first.viewport)
+      expect(isHandedOver(second.viewport)).toBe(true)
+      // Joining trims the first row again; it does not move it.
+      expect(positionOf(first)).toBeCloseTo(firstBefore)
+      expect(
+        samePixels(
+          second.track,
+          positionOf(second),
+          frozenAt(second.track, 0.6)
+        )
+      ).toBe(true)
+      const joinedAt = positionOf(second)
+      scrollBy(first.viewport, 50)
+      expect(positionOf(second)).toBeCloseTo(joinedAt + 50)
+    })
+
+    test('a row holding keyboard focus when the other is touched keeps its focused pill in view', () => {
+      // A pairing where moving the first row a copy on would widen the
+      // window; with focus in it, it stays where the reveal put it.
+      const { rows } = renderLaidOutRows([0.05, 0.9])
+      const [first, second] = rows
+      const pill = announcedPills(first.viewport)[2]
+      pill.focus()
+      expect(isClearOfFades(first, pill)).toBe(true)
+
+      fireEvent.touchStart(second.viewport)
+
+      expect(isHandedOver(first.viewport)).toBe(true)
+      expect(document.activeElement).toBe(pill)
+      expect(isClearOfFades(first, pill)).toBe(true)
+    })
+
+    test('a sideways wheel on a row that cannot be handed over yet hands over the other and leaves itself alone', () => {
+      // Scrolling a row whose track is still transformed would add one
+      // offset to the other, and cancelling the event would stop the page.
+      const progress = 0.35
+      const { rows } = renderLaidOutRows(progress)
+      const [first, second] = rows
+      first.track.getAnimations = () => []
+
+      const notCancelled = wheelAt(first.viewport, 1000, {
+        deltaX: 40,
+        deltaY: 0,
+      })
+
+      expect(notCancelled).toBe(true)
+      expect(isHandedOver(first.viewport)).toBe(false)
+      expect(first.track.dataset.frozen).toBeUndefined()
+      expect(first.viewport.scrollLeft).toBe(0)
+      expect(isHandedOver(second.viewport)).toBe(true)
+      // Frozen where its loop was, with no share of the wheel's delta.
+      expect(positionOf(second)).toBeCloseTo(frozenAt(second.track, progress))
+    })
+
+    test('a focused pill is revealed on its own row, and the other row follows the same distance', () => {
+      // The first row stopped near the start of its loop and is placed on
+      // its second copy, which shows the same pills. Tab reaches its second
+      // pill in the first copy, a copy back, where the row shows almost
+      // exactly what it showed; the second row moves only that little, and
+      // the two share one position again from there.
+      const { rows } = renderLaidOutRows([0.05, 0.9])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
+      const firstFrom = positionOf(first)
+      const secondFrom = positionOf(second)
+      const pill = announcedPills(first.viewport)[1]
+
+      pill.focus()
+
+      expect(isClearOfFades(first, pill)).toBe(true)
+      // The first row was showing its second copy, so the pill's own copy
+      // is most of a copy back, but on screen the row moves only a little.
+      const period = copyWidthOf(first.track)
+      const moved = positionOf(first) - firstFrom
+      expect(moved).toBeLessThan(-period / 2)
+      const seen = [moved, moved + period, moved - period].reduce((a, b) =>
+        Math.abs(b) < Math.abs(a) ? b : a
+      )
+      expect(Math.abs(seen)).toBeLessThan(PILL_PITCH)
+      // The other row moves what the first row was seen to move, not the
+      // copy it jumped: a copy of one row is not a copy of the other.
+      expect(
+        samePixels(second.track, positionOf(second), secondFrom + seen)
+      ).toBe(true)
+      expect(first.viewport.scrollLeft).toBe(second.viewport.scrollLeft)
+
+      const revealed = positionOf(first)
+      scrollBy(second.viewport, 40)
+      expect(positionOf(first)).toBeCloseTo(revealed + 40)
+    })
+
+    test('a finger resting on one row holds it while the other row still coasts', () => {
+      // On iOS a touch stops only the scroller it lands on. A row still
+      // coasting from an earlier flick must not carry the touched row, and
+      // the question under the finger, along with it.
+      const { rows } = renderLaidOutRows([0.3, 0.6])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
+      scrollBy(first.viewport, 200)
+
+      fireEvent.touchStart(second.viewport)
+      const resting = second.viewport.scrollLeft
+      scrollBy(first.viewport, 90)
+      expect(second.viewport.scrollLeft).toBe(resting)
+      // Held to the touched row instead of running on without it.
+      expect(first.viewport.scrollLeft).toBe(resting)
+
+      fireEvent.touchEnd(second.viewport)
+      scrollBy(first.viewport, 50)
+      expect(second.viewport.scrollLeft).toBe(resting + 50)
+    })
+
+    test("a rotation that changes both rows' width keeps them in step", () => {
+      // Both rows are the same width, so a rotation moves both trimmed ends
+      // by the same amount, and the browser's clamp to the new end lands
+      // both on the same position; the next drag moves both from there.
+      const { rows } = renderLaidOutRows([0.2, 0.7])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      scrollBy(first.viewport, trimmedMaxOf(first) - first.viewport.scrollLeft)
+
+      viewportWidth = VIEWPORT_WIDTH + 400
+      // What a browser does to each row on its own, then reports.
+      for (const row of rows) {
+        row.viewport.scrollLeft = Math.min(
+          row.viewport.scrollLeft,
+          trimmedMaxOf(row)
+        )
+      }
+      expect(trimmedMaxOf(first)).toBeCloseTo(trimmedMaxOf(second))
+      const writes = rows.map(({ viewport }) =>
+        countWrites(viewport, { round: false })
+      )
+      fireEvent.scroll(first.viewport)
+      fireEvent.scroll(second.viewport)
+      expect(first.viewport.scrollLeft).toBe(second.viewport.scrollLeft)
+      // Already together, so neither report writes to the other.
+      expect(writes.map(({ count }) => count)).toEqual([0, 0])
+
+      const before = second.viewport.scrollLeft
+      scrollBy(first.viewport, -10)
+      expect(second.viewport.scrollLeft).toBe(before - 10)
+      expect(first.viewport.scrollLeft).toBe(before - 10)
+    })
+
+    test('a static strip scrolls on its own', () => {
+      // Reduced motion is unchanged: nothing is handed over, so nothing is
+      // shared, and each strip stays where its visitor puts it.
+      setReducedMotion(true)
+      const { rows } = renderLaidOutRows()
+      const [first, second] = rows
+
+      scrollBy(second.viewport, 90)
+      expect(second.viewport.scrollLeft).toBe(90)
+      expect(first.viewport.scrollLeft).toBe(0)
+    })
+
+    test('a keyboard focus before any hand-over moves only its own row', () => {
+      // Focus freezes a row without handing it over; the rows share a
+      // position only once the visitor has reached for them.
+      const { rows } = renderLaidOutRows([0.3, 0.6])
+      const [first, second] = rows
+      announcedPills(first.viewport)[3].focus()
+      expect(first.track.dataset.frozen).toBe('true')
+
+      scrollBy(first.viewport, 50)
+      expect(isHandedOver(first.viewport)).toBe(false)
+      expect(isHandedOver(second.viewport)).toBe(false)
+      expect(second.track.dataset.frozen).toBeUndefined()
+      expect(second.viewport.scrollLeft).toBe(0)
+    })
   })
 
   /**
-   * Scroll a row before its first placement, then place it. A row measures
-   * zero wide until its copy has a width, so the scroll lands first, and
-   * a new `startAt` is what makes it measure again.
+   * Scroll the rows before their first placement, then place them. A row
+   * measures zero wide until its copy has a width, so the scroll lands
+   * first, and a new `startAt` is what makes it measure again.
    */
-  function scrollThenPlace(scrolledTo: number) {
+  function scrollThenPlace(scrolledTo: number, secondScrolledTo = 0) {
     const { container, rerender } = render(
       <StarterTicker onPick={() => {}} startAt={0} />
     )
-    const [first] = tickerOf(container).rows
+    const [first, second] = tickerOf(container).rows
     first.viewport.scrollLeft = scrolledTo
+    second.viewport.scrollLeft = secondScrolledTo
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const rect = REAL_BOUNDING_RECT.call(this)
       if (!this.classList.contains('starter-ticker-copy')) return rect
       return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
     }
     rerender(<StarterTicker onPick={() => {}} startAt={1} />)
-    return first
+    return [first, second] as const
   }
 
   test('a moving row opens at scroll zero even if a finger scrolled it first', () => {
     // Under a coarse pointer a moving row is a scroll container from the
     // first paint, so a drag before the script runs can leave it scrolled;
     // the opening is computed for scroll zero.
-    const first = scrollThenPlace(300)
+    const [first] = scrollThenPlace(300)
     expect(first.track.dataset.placed).toBe('true')
     expect(first.viewport.scrollLeft).toBe(0)
   })
 
+  test('a drag on one row before the script ran leaves the rows in step', () => {
+    // Each row's first placement resets its own scroll, so neither carries
+    // an offset the other lacks into the one position they later share.
+    const rows = scrollThenPlace(0, 300)
+    for (const { viewport, track } of rows) {
+      expect(track.dataset.placed).toBe('true')
+      expect(viewport.scrollLeft).toBe(0)
+    }
+  })
+
   test('a static strip keeps the scroll its visitor gave it', () => {
     setReducedMotion(true)
-    const first = scrollThenPlace(300)
+    const [first] = scrollThenPlace(300)
     expect(first.viewport.scrollLeft).toBe(300)
   })
 
@@ -643,28 +1119,39 @@ describe('a row handed over to the visitor by touch or wheel', () => {
   })
 
   describe('never resumes', () => {
-    test('losing focus leaves a handed-over row frozen', () => {
+    test('losing focus leaves a handed-over row frozen, touched or not', () => {
       // The focus path thaws a row on blur; a row handed over to the visitor
-      // must not come back to life because a pill in it lost focus.
+      // must not come back to life because a pill in it lost focus, and
+      // that includes the row the touch was not on.
       const { rows } = renderLaidOutRows()
       const [first] = rows
       fireEvent.touchStart(first.viewport)
-      announcedPills(first.viewport)[0].focus()
-      ;(document.activeElement as HTMLElement).blur()
+      for (const { viewport } of rows) {
+        announcedPills(viewport)[0].focus()
+        ;(document.activeElement as HTMLElement).blur()
+      }
 
-      expect(first.track.dataset.frozen).toBe('true')
-      expect(isHandedOver(first.viewport)).toBe(true)
+      for (const { viewport, track } of rows) {
+        expect(track.dataset.frozen).toBe('true')
+        expect(isHandedOver(viewport)).toBe(true)
+      }
     })
 
-    test('a later touch or wheel does not move a row the visitor has scrolled', () => {
+    test('a later touch or wheel on either row does not move a row the visitor has scrolled', () => {
       const { rows } = renderLaidOutRows()
-      const [first] = rows
-      fireEvent.touchStart(first.viewport)
-      first.viewport.scrollLeft = 1234
+      fireEvent.touchStart(rows[0].viewport)
+      const scrolled = rows.map(({ viewport }, index) => {
+        viewport.scrollLeft = 1234 + index
+        return viewport.scrollLeft
+      })
 
-      fireEvent.touchStart(first.viewport)
-      fireEvent.wheel(first.viewport, { deltaX: 30, deltaY: 0 })
-      expect(first.viewport.scrollLeft).toBe(1234)
+      for (const { viewport } of rows) {
+        fireEvent.touchStart(viewport)
+        fireEvent.wheel(viewport, { deltaX: 30, deltaY: 0 })
+      }
+      rows.forEach(({ viewport }, index) => {
+        expect(viewport.scrollLeft).toBe(scrolled[index])
+      })
     })
 
     test('no timer is set that could start the row again', () => {
@@ -686,26 +1173,16 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     const { rows } = renderLaidOutRows()
     const [first] = rows
     fireEvent.touchStart(first.viewport)
-    const dragged = 20 * PILL_PITCH
-    first.viewport.scrollLeft = dragged
+    first.viewport.scrollLeft = 20 * PILL_PITCH - cutOf(first.track)
 
     const pill = announcedPills(first.viewport)[1]
+    expect(isClearOfFades(first, pill)).toBe(false)
     pill.focus()
 
-    const fade = Number.parseFloat(
-      getComputedStyle(first.viewport).getPropertyValue(EDGE_FADE_PROPERTY)
-    )
-    expect(fade).toBeGreaterThan(0)
-    expect(first.viewport.scrollLeft).toBe(
-      revealScrollLeft({
-        scrollLeft: dragged,
-        viewportWidth: VIEWPORT_WIDTH,
-        pillStart: pill.offsetLeft,
-        pillWidth: PILL_WIDTH,
-        fade,
-        maxScrollLeft: first.viewport.scrollWidth - VIEWPORT_WIDTH,
-      })
-    )
+    expect(fadeOf(first.viewport)).toBeGreaterThan(0)
+    expect(isClearOfFades(first, pill)).toBe(true)
+    // As little as that takes: its start is at the left fade.
+    expect(pill.offsetLeft - positionOf(first)).toBe(fadeOf(first.viewport))
 
     // Tabbing out leaves the strip where the reveal put it, rather than
     // thawing it back into a loop.

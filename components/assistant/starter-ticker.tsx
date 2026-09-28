@@ -5,6 +5,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type FocusEvent,
   type MouseEvent,
   type Ref,
@@ -14,17 +15,23 @@ import { cn } from '@/lib/utils'
 import { STARTER_QUESTIONS } from './copy'
 import {
   EDGE_FADE_PROPERTY,
+  followPosition,
   loopSeconds,
   openingProgress,
   pillIndexFor,
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  SHARED_CUT_PROPERTY,
+  SHARED_WIDTH_PROPERTY,
+  sharedWindow,
+  type StripPlacement,
   TICKER_ANIMATION_NAME,
   sidewaysWheelPixels,
   TICKER_COPIES,
   tickerRows,
   WHEEL_GESTURE_GAP_MS,
+  widestPlacement,
 } from './ticker-geometry'
 
 /**
@@ -68,13 +75,18 @@ import {
  * only way a row's first pill, with nothing to its left, can be scrolled
  * clear of the gradient.
  *
- * **A row a visitor reaches for is handed over to them.** A touch, or a
- * sideways wheel or trackpad gesture, freezes that row the same way focus
- * does and then hands it over for good: the row becomes a real scroll strip
- * and never moves on its own again, because a row that resumed under a
- * reader's finger would take the question they were reading away from them.
- * Only the row reached for stops; the other keeps drifting until it is
- * reached for itself.
+ * **Rows a visitor reaches for are handed over to them, both at once.** A
+ * touch, or a sideways wheel or trackpad gesture, on either row freezes
+ * each row the same way focus does, at the point its own loop had reached,
+ * and then hands both over for good: they become real scroll strips and
+ * never move on their own again, because a row that resumed under a
+ * reader's finger would take the question they were reading away from
+ * them. From then on the two strips share one scroll position, so a drag on
+ * either moves both the same distance and a reader never has to scroll one
+ * row to catch up with the other. The rows stopped at different points of
+ * their loops, so each is trimmed to the window both can scroll through,
+ * after which one scrollLeft is the position of both and the browser's own
+ * edge is where both stop.
  */
 
 /**
@@ -106,6 +118,9 @@ export function StarterTicker({
   startAt = 0,
   className,
 }: StarterTickerProps) {
+  // One per ticker, for its whole life: both rows' handlers must reach
+  // the same window, and a new one would forget how the rows are trimmed.
+  const [sharedScroll] = useState(createSharedScroll)
   return (
     <div
       aria-label={TICKER_LABEL}
@@ -117,6 +132,7 @@ export function StarterTicker({
           key={index}
           onPick={onPick}
           questions={questions}
+          sharedScroll={sharedScroll}
           startAt={startAt}
         />
       ))}
@@ -136,10 +152,12 @@ export function StarterTicker({
 function TickerRow({
   questions,
   onPick,
+  sharedScroll,
   startAt,
 }: {
   questions: readonly string[]
   onPick: (question: string) => void
+  sharedScroll: SharedScroll
   startAt: number
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -214,48 +232,55 @@ function TickerRow({
     return () => observer.disconnect()
   }, [measure])
 
-  const handleFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
-    const viewport = viewportRef.current
-    const track = trackRef.current
-    const focused = event.target
-    const pill = focused instanceof Element ? focused.closest('button') : null
-    if (!viewport || !track || !pill) return
+  const handleFocus = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const viewport = viewportRef.current
+      const track = trackRef.current
+      const focused = event.target
+      const pill = focused instanceof Element ? focused.closest('button') : null
+      if (!viewport || !track || !pill) return
 
-    // Under reduced motion the row is an ordinary scroll container with
-    // nothing to freeze, and the browser scrolls the pill into view itself,
-    // inside the fades because the row sets scroll-padding to match them.
-    if (prefersReducedMotion()) return
+      // Under reduced motion the row is an ordinary scroll container with
+      // nothing to freeze, and the browser scrolls the pill into view itself,
+      // inside the fades because the row sets scroll-padding to match them.
+      if (prefersReducedMotion()) return
 
-    // A row already frozen, because the visitor is tabbing along it or it
-    // has been handed over, stays at its scroll offset and only the reveal
-    // below applies. With no loop running the row can simply be scrolled.
-    // A loop with no measured width cannot be converted, and scrolling a
-    // track that is still transformed would add one offset to the other:
-    // leaving the row where it is beats moving it wrongly.
-    if (
-      freezeAtLoopPosition(track, viewport, copyWidthRef.current) ===
-      'unmeasured'
-    ) {
-      return
-    }
+      // A row already frozen, because the visitor is tabbing along it or it
+      // has been handed over, stays at its scroll offset and only the reveal
+      // below applies. With no loop running the row can simply be scrolled.
+      // A loop with no measured width cannot be converted, and scrolling a
+      // track that is still transformed would add one offset to the other:
+      // leaving the row where it is beats moving it wrongly.
+      if (
+        freezeAtLoopPosition(track, viewport, copyWidthRef.current) ===
+        'unmeasured'
+      ) {
+        return
+      }
 
-    // A pointer press focuses the pill before the click completes. Moving
-    // the row now would take the pill out from under the cursor and the
-    // click would be lost, and a mouse is already holding the rows still by
-    // hovering them.
-    if (!pill.matches(':focus-visible')) return
+      // A pointer press focuses the pill before the click completes. Moving
+      // the row now would take the pill out from under the cursor and the
+      // click would be lost, and a mouse is already holding the rows still by
+      // hovering them.
+      if (!pill.matches(':focus-visible')) return
 
-    viewport.scrollLeft = revealScrollLeft({
-      scrollLeft: viewport.scrollLeft,
-      viewportWidth: viewport.clientWidth,
-      // The track is the pill's offset parent, so this is already the
-      // coordinate scrollLeft is measured in.
-      pillStart: pill.offsetLeft,
-      pillWidth: pill.offsetWidth,
-      fade: fadeWidth(viewport),
-      maxScrollLeft: viewport.scrollWidth - viewport.clientWidth,
-    })
-  }, [])
+      // A handed-over row is revealed through the window the rows share,
+      // which takes the other row the same distance.
+      if (sharedScroll.reveal(viewport, pill)) return
+
+      viewport.scrollLeft = revealScrollLeft({
+        scrollLeft: viewport.scrollLeft,
+        viewportWidth: viewport.clientWidth,
+        // The track is the pill's offset parent, so this is already the
+        // coordinate scrollLeft is measured in.
+        pillStart: pill.offsetLeft,
+        pillWidth: pill.offsetWidth,
+        fade: fadeWidth(viewport),
+        maxScrollLeft: maxScrollLeftOf(viewport),
+      })
+    },
+    [sharedScroll]
+  )
 
   const handleBlur = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
@@ -287,17 +312,21 @@ function TickerRow({
 
   /**
    * Stops this row for good and gives it to the visitor as a scroll strip.
+   * Only the shared scroll calls it, for every row at once, whichever row
+   * was reached for; a handler that called it directly would hand one row
+   * over and leave the other moving.
    *
    * The loop's position goes to scrollLeft exactly as it does for focus, so
    * the pill under a finger does not move and a tap still lands on it; the
    * stylesheet then lets the row scroll by hand. Nothing takes the row back:
    * blur leaves it frozen, nothing measures it again, and no timer exists to
    * resume it. A row whose position cannot be read yet is left moving rather
-   * than moved wrongly, and the next touch or wheel tries again.
+   * than moved wrongly, and the next touch or wheel on either row tries
+   * again.
    *
    * Returns whether this call is the one that handed the row over.
    */
-  const handOver = useCallback((): boolean => {
+  const handOverThisRow = useCallback((): boolean => {
     const viewport = viewportRef.current
     const track = trackRef.current
     if (!viewport || !track || isHandedOver(viewport)) return false
@@ -312,9 +341,42 @@ function TickerRow({
     return true
   }, [])
 
+  // In the same commit that places the row, so a touch that lands as soon
+  // as the row is visible finds it registered.
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current
+    const track = trackRef.current
+    if (!viewport || !track) return
+    return sharedScroll.add({
+      viewport,
+      track,
+      copyWidth: () => copyWidthRef.current,
+      handOverThisRow,
+    })
+  }, [sharedScroll, handOverThisRow])
+
+  // A drag, its momentum, or a native wheel scroll on a handed-over row
+  // moves the other row with it.
+  const handleScroll = useCallback(() => {
+    const viewport = viewportRef.current
+    if (viewport) sharedScroll.syncFrom(viewport)
+  }, [sharedScroll])
+
+  const handleTouchStart = useCallback(() => {
+    const viewport = viewportRef.current
+    sharedScroll.handOverAll()
+    if (viewport) sharedScroll.touchStarted(viewport)
+  }, [sharedScroll])
+
+  const handleTouchEnd = useCallback(() => {
+    const viewport = viewportRef.current
+    if (viewport) sharedScroll.touchEnded(viewport)
+  }, [sharedScroll])
+
   /**
-   * A sideways wheel or trackpad gesture over a moving row hands it over,
-   * and the rest of that gesture is scrolled here rather than natively.
+   * A sideways wheel or trackpad gesture over a moving row hands both rows
+   * over, and the rest of that gesture is scrolled here rather than
+   * natively, both rows together.
    *
    * The gesture began over a row that could not scroll, and browsers decide
    * which box a gesture scrolls when it begins, so after the hand-over the
@@ -347,7 +409,12 @@ function TickerRow({
         viewport.clientWidth
       )
       if (pixels === 0) return
-      if (!handedOver && !handOver()) return
+      if (!handedOver) {
+        sharedScroll.handOverAll()
+        // This row may be the one that could not be handed over yet; its
+        // track is still transformed, and scrolling it would add to that.
+        if (!isHandedOver(viewport)) return
+      }
       steeredAt = event.timeStamp
       // An event that cannot be cancelled may be one the browser is
       // scrolling itself; moving the strip as well could scroll it twice.
@@ -355,10 +422,11 @@ function TickerRow({
       if (!event.cancelable) return
       event.preventDefault()
       viewport.scrollLeft += pixels
+      sharedScroll.syncFrom(viewport)
     }
     viewport.addEventListener('wheel', handleWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', handleWheel)
-  }, [handOver])
+  }, [sharedScroll])
 
   return (
     <div
@@ -368,9 +436,12 @@ function TickerRow({
       className="edge-faded-row starter-ticker-row -my-1 w-full py-1"
       onBlur={handleBlur}
       onFocus={handleFocus}
+      onScroll={handleScroll}
       // Not behind `pointer: coarse`: a touchstart is itself the evidence,
       // and a touchscreen laptop reports a fine pointer.
-      onTouchStart={handOver}
+      onTouchCancel={handleTouchEnd}
+      onTouchEnd={handleTouchEnd}
+      onTouchStart={handleTouchStart}
       ref={viewportRef}
     >
       <div className="starter-ticker-track" ref={trackRef}>
@@ -500,6 +571,242 @@ function freezeAtLoopPosition(
  */
 function isHandedOver(viewport: HTMLElement): boolean {
   return viewport.dataset.handedOver === 'true'
+}
+
+/** A row as the shared window sees it. */
+interface SharedRow {
+  /** The box that scrolls. */
+  viewport: HTMLElement
+  /** What the window trims, through the custom properties it sets. */
+  track: HTMLElement
+  /** One copy's width as the row last measured it: its period. */
+  copyWidth: () => number
+  /** Hands this row alone over; true when this call is the one that did. */
+  handOverThisRow: () => boolean
+}
+
+/**
+ * The one scroll position the rows share once the visitor has them.
+ *
+ * Each row stays its own scroll box, with its own fades, lead and focus
+ * handling, because a touch browser picks the box a drag scrolls when the
+ * finger lands: the row under the finger has to be the box that scrolls,
+ * from before the hand-over to after it.
+ *
+ * The rows freeze at different points of their loops, so each is trimmed
+ * (its start cut away, its end clipped) to the window both can scroll
+ * through, with sharedWindow in ticker-geometry.ts. Trimmed, both rows
+ * have the same range and one scrollLeft is the position of both: a drag
+ * on either is copied to the other, and the browser stops the dragged row
+ * at the shared end itself, so nothing holds it back by writing to it.
+ *
+ * A finger resting on one row wins over the other row's momentum: on iOS
+ * a touch stops only the scroller it lands on, so a row still coasting
+ * from an earlier flick would otherwise carry the touched row, and the
+ * question under the finger, along with it.
+ */
+interface SharedScroll {
+  /** Adds a row; returns what removes it again. */
+  add(row: SharedRow): () => void
+  /**
+   * Hands every row over at once and trims them to the window they share.
+   * A row that cannot be handed over yet is left moving, and joins the
+   * window when a later touch or wheel on either row hands it over.
+   */
+  handOverAll(): void
+  /**
+   * Copies a handed-over row's scroll to the other rows, unless a finger
+   * rests on another row, in which case this row is held to that one.
+   */
+  syncFrom(viewport: HTMLElement): void
+  /** A finger has landed on this row. */
+  touchStarted(viewport: HTMLElement): void
+  /** The finger on this row has lifted, or the browser took the touch. */
+  touchEnded(viewport: HTMLElement): void
+  /**
+   * Brings a focused pill in a handed-over row into view and takes the
+   * other rows the same distance, trimming them again around where they
+   * end up. False, doing nothing, when the row is not handed over.
+   */
+  reveal(viewport: HTMLElement, pill: HTMLElement): boolean
+}
+
+/** A handed-over row, with its trim and the width it had untrimmed. */
+interface Member {
+  row: SharedRow
+  cut: number
+  naturalScrollWidth: number
+}
+
+function createSharedScroll(): SharedScroll {
+  const rows = new Set<SharedRow>()
+  // Handed-over rows, by their box. A row stays a member when its effect
+  // runs again: it is still handed over, so no later hand-over would bring
+  // it back in.
+  const members = new Map<HTMLElement, Member>()
+  // Where each handed-over row was last left, as the browser read it back.
+  // The scroll event a write here causes finds the row still there and is
+  // ignored, which is what stops two rows answering each other's events.
+  const settled = new Map<HTMLElement, number>()
+  // The row a finger rests on, if any.
+  let touched: HTMLElement | null = null
+
+  /** A member as the window arithmetic sees it, at an untrimmed position. */
+  function placementOf(member: Member, position: number): StripPlacement {
+    const { viewport, copyWidth } = member.row
+    return {
+      position,
+      period: copyWidth(),
+      maxScrollLeft: member.naturalScrollWidth - viewport.clientWidth,
+    }
+  }
+
+  function untrimmedPosition(member: Member): number {
+    return member.row.viewport.scrollLeft + member.cut
+  }
+
+  function settle(viewport: HTMLElement, scrollLeft: number): void {
+    // Written only when it changes, so a row already in place gets no
+    // scroll event to answer.
+    if (viewport.scrollLeft !== scrollLeft) viewport.scrollLeft = scrollLeft
+    settled.set(viewport, viewport.scrollLeft)
+  }
+
+  /**
+   * Trims every member to the window their untrimmed positions share and
+   * scrolls them all to it. A row's cut and its scrollLeft change by the
+   * same amount in the same task, so a row trimmed where it already is does
+   * not move on screen; a row given a new position (a reveal) moves there.
+   */
+  function trimTo(placed: readonly (readonly [Member, number])[]): void {
+    const window = sharedWindow(
+      placed.map(([member, position]) => placementOf(member, position))
+    )
+    placed.forEach(([member], index) => {
+      const { viewport, track } = member.row
+      member.cut = window.cuts[index]
+      track.style.setProperty(SHARED_CUT_PROPERTY, `${member.cut}px`)
+      // The track's end, measured from the cut start, lands where the
+      // shared window ends plus one viewport, which is what makes the
+      // window's end the furthest this box scrolls.
+      track.style.setProperty(
+        SHARED_WIDTH_PROPERTY,
+        `${window.maxScrollLeft + viewport.clientWidth + member.cut}px`
+      )
+    })
+    for (const [member] of placed) {
+      settle(member.row.viewport, window.scrollLeft)
+    }
+  }
+
+  return {
+    add(row) {
+      rows.add(row)
+      return () => {
+        rows.delete(row)
+      }
+    },
+
+    handOverAll() {
+      // Read before anything is handed over or trimmed.
+      const pinned = [...members.values()].map(
+        member => [member, untrimmedPosition(member)] as const
+      )
+      const joining: Member[] = []
+      for (const row of rows) {
+        if (members.has(row.viewport) || !row.handOverThisRow()) continue
+        joining.push({
+          row,
+          cut: 0,
+          // Untrimmed: the row was only just handed over.
+          naturalScrollWidth: row.viewport.scrollWidth,
+        })
+      }
+      if (joining.length === 0) return
+      const candidates = [
+        ...pinned.map(([member, position]) => ({ member, position })),
+        ...joining.map(member => ({
+          member,
+          position: member.row.viewport.scrollLeft,
+        })),
+      ]
+      const positions = widestPlacement(
+        candidates.map(({ member, position }) => ({
+          ...placementOf(member, position),
+          // A row holding focus keeps its pills where they are: moved a
+          // copy on, the focused one would be off screen.
+          canMove:
+            joining.includes(member) &&
+            !member.row.viewport.contains(document.activeElement),
+        }))
+      )
+      for (const member of joining) members.set(member.row.viewport, member)
+      trimTo(candidates.map(({ member }, index) => [member, positions[index]]))
+    },
+
+    syncFrom(source) {
+      if (!members.has(source)) return
+      const scrollLeft = source.scrollLeft
+      if (scrollLeft === settled.get(source)) return
+      if (touched && touched !== source && members.has(touched)) {
+        settle(source, touched.scrollLeft)
+        return
+      }
+      settled.set(source, scrollLeft)
+      for (const viewport of members.keys()) {
+        if (viewport !== source) settle(viewport, scrollLeft)
+      }
+    },
+
+    touchStarted(viewport) {
+      touched = viewport
+    },
+
+    touchEnded(viewport) {
+      if (touched === viewport) touched = null
+    },
+
+    reveal(viewport, pill) {
+      const focused = members.get(viewport)
+      if (!focused) return false
+      const from = untrimmedPosition(focused)
+      const target = revealScrollLeft({
+        scrollLeft: from,
+        viewportWidth: viewport.clientWidth,
+        // The track is the pill's offset parent, so this is the untrimmed
+        // coordinate the row's position is measured in.
+        pillStart: pill.offsetLeft,
+        pillWidth: pill.offsetWidth,
+        fade: fadeWidth(viewport),
+        maxScrollLeft: placementOf(focused, from).maxScrollLeft,
+      })
+      // What moves on screen: the focused pill may sit a whole copy away
+      // from the copy the row was showing, and a copy of the focused row is
+      // not a copy of the other, so the other follows only what is seen.
+      const delta = nearestToZero(target - from, focused.row.copyWidth())
+      const placed = [...members.values()].map(member => {
+        if (member === focused) return [member, target] as const
+        const strip = placementOf(member, untrimmedPosition(member))
+        return [member, followPosition(strip, delta)] as const
+      })
+      trimTo(placed)
+      return true
+    },
+  }
+}
+
+/** Of `distance` and `distance` a whole period either way, the shortest. */
+function nearestToZero(distance: number, period: number): number {
+  if (period <= 0) return distance
+  return [distance, distance - period, distance + period].reduce(
+    (nearest, candidate) =>
+      Math.abs(candidate) < Math.abs(nearest) ? candidate : nearest
+  )
+}
+
+/** The furthest a row can scroll, as its own layout allows. */
+function maxScrollLeftOf(viewport: HTMLElement): number {
+  return Math.max(viewport.scrollWidth - viewport.clientWidth, 0)
 }
 
 /**
