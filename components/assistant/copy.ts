@@ -117,6 +117,12 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * use of AI coding agents, quality with agents, the code he ships himself,
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
+ *
+ * These tags also group the "see all" list (starter-groups.ts): a tagged
+ * question is listed under its theme and every other question under
+ * STARTER_UNTAGGED_HEADING. Retagging a head question moves it in the list
+ * too, and since only head questions can be tagged, no question outside the
+ * head can be listed under a theme.
  */
 export const STARTER_HEAD_THEMES: Partial<
   Record<StarterQuestion, FeaturedThemeKey>
@@ -143,9 +149,9 @@ export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
 
 /**
  * The control under the starter rows that opens every question as one list,
- * and closes it again (Matt, 2026-09-23, MTC-85). The count is the pool's
- * own length, passed in, so the label can never promise a number of
- * questions the list does not show.
+ * and closes it again (Matt, 2026-09-23, MTC-85). The ticker passes the
+ * pool's own length, so the label counts exactly the questions the list
+ * shows.
  */
 export const seeAllQuestionsLabel = (count: number) =>
   `See all ${count} questions`

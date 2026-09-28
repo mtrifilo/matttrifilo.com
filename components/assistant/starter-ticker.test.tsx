@@ -21,6 +21,7 @@ import { usePickPointer } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import {
   EDGE_FADE_PROPERTY,
+  progressForScrollLeft,
   SHARED_CUT_PROPERTY,
   SHARED_WIDTH_PROPERTY,
   TICKER_ANIMATION_NAME,
@@ -1122,6 +1123,25 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       scrollBy(second.viewport, 30)
       expect(first.viewport.scrollLeft).toBe(leftAt[0] + 30)
     })
+
+    test('a pair opened over mid-coast comes back at one position', () => {
+      // A row still coasting can be ahead of the last scroll event that
+      // carried the other; the pair shares one position, so both come back
+      // to the same one.
+      const { rows } = renderLaidOutRows([0.27, 0.61])
+      const [first, second] = rows
+      fireEvent.touchStart(announcedPills(first.viewport)[0])
+      scrollBy(first.viewport, 40)
+      const shared = first.viewport.scrollLeft
+      second.viewport.scrollLeft = shared + 3
+
+      fireEvent.click(listToggle())
+      for (const { viewport } of rows) viewport.scrollLeft = 0
+      fireEvent.click(listToggle())
+
+      expect(first.viewport.scrollLeft).toBe(shared)
+      expect(second.viewport.scrollLeft).toBe(shared)
+    })
   })
 
   /**
@@ -1308,20 +1328,26 @@ describe('every question at once, as a list (MTC-85)', () => {
     )
   }
 
-  /** What the list should read, worked out from the tags themselves. */
+  /**
+   * What the list should read, worked out from the tags themselves rather
+   * than from starterGroups, so a grouping bug cannot agree with itself.
+   */
   function expectedSequence(): string[] {
     const tags: Partial<Record<string, string>> = STARTER_HEAD_THEMES
     const pool: readonly string[] = STARTER_QUESTIONS
-    const themed = FEATURED_THEMES.flatMap(theme => {
-      const questions = pool.filter(question => tags[question] === theme.key)
-      return questions.length > 0
-        ? [`# ${STARTER_THEME_HEADINGS[theme.key]}`, ...questions]
-        : []
-    })
+    const headed = (heading: string, questions: readonly string[]) =>
+      questions.length > 0 ? [`# ${heading}`, ...questions] : []
     return [
-      ...themed,
-      `# ${STARTER_UNTAGGED_HEADING}`,
-      ...pool.filter(question => tags[question] === undefined),
+      ...FEATURED_THEMES.flatMap(theme =>
+        headed(
+          STARTER_THEME_HEADINGS[theme.key],
+          pool.filter(question => tags[question] === theme.key)
+        )
+      ),
+      ...headed(
+        STARTER_UNTAGGED_HEADING,
+        pool.filter(question => tags[question] === undefined)
+      ),
     ]
   }
 
@@ -1368,6 +1394,9 @@ describe('every question at once, as a list (MTC-85)', () => {
     // Outside the group: the stylesheet pauses the rows while focus is
     // anywhere inside it, and a focused control would hold them still.
     expect(group.contains(control)).toBe(false)
+    // First in the DOM, it would be the scroll anchor a browser picks, and
+    // opening the list would scroll the page by the list's height.
+    expect(control.classList.contains('[overflow-anchor:none]')).toBe(true)
   })
 
   test('shows every question once, grouped by theme in the featuring order, the untagged last', () => {
@@ -1464,7 +1493,40 @@ describe('every question at once, as a list (MTC-85)', () => {
     })
   })
 
-  test('under reduced motion the list opens at once and the strips keep their scroll', () => {
+  test('a row held still for focus when the list opens moves again from the pill it showed', () => {
+    // An activation that leaves focus on a pill (a script, or assistive
+    // technology that does not move focus) opens the list over a frozen
+    // row. Hidden, its blur would read a dropped scroll position; closing
+    // would then scroll a row that is moving again.
+    const rows = renderMovingRows({ progress: 0.25 })
+    const [first] = rows
+    const pill = announcedPills(first.viewport)[2]
+    pill.focus()
+    expect(first.track.dataset.frozen).toBe('true')
+    first.viewport.scrollLeft = 240
+    const shownAt = progressForScrollLeft(240, COPY_WIDTH_MEASURED, 0)
+
+    fireEvent.click(listToggle())
+    expect(first.track.dataset.frozen).toBeUndefined()
+    expect(first.viewport.scrollLeft).toBe(0)
+    expect(first.track.style.getPropertyValue('--ticker-offset')).toBe(
+      String(shownAt)
+    )
+    pill.blur()
+    first.track.getAnimations = () => []
+
+    fireEvent.click(listToggle())
+    expect(first.track.dataset.frozen).toBeUndefined()
+    expect(first.viewport.scrollLeft).toBe(0)
+    expect(first.track.style.getPropertyValue('--ticker-offset')).toBe(
+      String(shownAt)
+    )
+  })
+
+  test('static strips under reduced motion get their scroll back when the list closes', () => {
+    // Nothing animates the toggle in any mode, so it is as immediate here
+    // as anywhere; what reduced motion changes is that the rows are strips
+    // with their own scroll positions to keep.
     setReducedMotion(true)
     const { container } = render(<StarterTicker onPick={() => {}} />)
     const { rows } = tickerOf(container)
@@ -1472,7 +1534,6 @@ describe('every question at once, as a list (MTC-85)', () => {
     rows[1].viewport.scrollLeft = 30
 
     fireEvent.click(listToggle())
-    // In the commit the click makes: nothing waits on a transition.
     expect(rowsWrapper(container).hidden).toBe(true)
     expect(listSequence()).toEqual(expectedSequence())
     for (const { viewport } of rows) viewport.scrollLeft = 0
@@ -1485,7 +1546,7 @@ describe('every question at once, as a list (MTC-85)', () => {
     }
   })
 
-  test('closing the list keeps the control on screen, opening it scrolls nothing', () => {
+  test('closing the list keeps the rows and the control on screen, opening it scrolls nothing', () => {
     const scrolled: Element[] = []
     const realScrollIntoView = Element.prototype.scrollIntoView
     Element.prototype.scrollIntoView = function (this: Element) {
@@ -1500,7 +1561,12 @@ describe('every question at once, as a list (MTC-85)', () => {
       expect(scrolled).toEqual([])
 
       fireEvent.click(control)
-      expect(scrolled).toEqual([control])
+      // The whole ticker, rows and control together.
+      const ticker = control.parentElement
+      if (!ticker) throw new Error('the control has no ticker around it')
+      expect(scrolled).toEqual([ticker])
+      expect(ticker.contains(starterGroup())).toBe(true)
+      expect(ticker.className).toContain('scroll-mt-(--nav-height)')
     } finally {
       Element.prototype.scrollIntoView = realScrollIntoView
     }

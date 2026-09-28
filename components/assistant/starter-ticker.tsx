@@ -138,9 +138,11 @@ export function StarterTicker({
   const [sharedScroll] = useState(createSharedScroll)
   const [listOpen, setListOpen] = useState(false)
   // What puts the rows back as they were, from the click that opens the
-  // list until the commit that shows the rows again.
+  // list until the commit that shows the rows again. Anything that opens
+  // the list has to park the rows first, as toggleList does: a hidden row
+  // cannot be asked afterwards where it was.
   const unparkRef = useRef<(() => void) | null>(null)
-  const toggleRef = useRef<HTMLButtonElement>(null)
+  const tickerRef = useRef<HTMLDivElement>(null)
   const groupId = useId()
 
   const toggleList = useCallback(() => {
@@ -158,25 +160,34 @@ export function StarterTicker({
     if (!unpark) return
     unparkRef.current = null
     unpark()
-    // The list collapsing takes the control up the page with it. Where the
-    // browser does not anchor the scroll position, the control holding
-    // focus would be left above the screen.
-    toggleRef.current?.scrollIntoView?.({ block: 'nearest' })
+    // The list collapsing takes the control and the rows up the page with
+    // it. Where the browser does not anchor the scroll position (Safari),
+    // both would be left above the screen; the margin keeps them clear of
+    // the sticky nav when it is the page that scrolls.
+    tickerRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [listOpen])
 
   return (
-    <div className={cn('flex w-full flex-col gap-6', className)}>
+    <div
+      className={cn(
+        'flex w-full scroll-mt-(--nav-height) flex-col gap-6',
+        className
+      )}
+      ref={tickerRef}
+    >
       {/* First in the tab order, drawn under the questions (order-last) as
           the approved frames place it. A keyboard or screen-reader visitor
           reaches it before the pills, so the list is one key away rather
           than one pill after the whole pool, and after it opens the next
-          Tab lands on the first question of the first theme. */}
+          Tab lands on the first question of the first theme.
+          It is never the scroll anchor: first in the DOM, a browser could
+          pick it and scroll the page down by the list's height to hold it
+          still, landing the visitor at the end of the list. */}
       <button
         aria-controls={groupId}
         aria-expanded={listOpen}
-        className="order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 outline-none [overflow-anchor:none] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
         onClick={toggleList}
-        ref={toggleRef}
         type="button"
       >
         {listOpen
@@ -868,9 +879,14 @@ function createSharedScroll(): SharedScroll {
     },
 
     park() {
-      // A finger on a row that is about to be hidden never lifts from it.
+      // No touch on a row that is being hidden should hold the other row
+      // once both are shown again.
       touched = null
-      const unparks = [...rows].map(parkRow)
+      // The handed-over rows share one position, so it is read once: a row
+      // still coasting ahead of its last scroll event would otherwise bring
+      // the pair back a few pixels apart.
+      const shared = members.keys().next().value?.scrollLeft
+      const unparks = [...rows].map(row => parkRow(row, shared))
       return () => {
         for (const unpark of unparks) unpark()
       }
@@ -879,25 +895,44 @@ function createSharedScroll(): SharedScroll {
 
   /**
    * Hiding a row drops its animation and its scroll position, so what it
-   * showed is kept in the one form that survives: a moving row's progress
-   * becomes the offset its animation restarts from when it is shown again,
-   * and any other row (handed over, held still for focus, or a static strip
-   * under reduced motion) keeps its scrollLeft to be given back.
+   * showed is kept in the one form that survives. A handed-over row gets
+   * the shared position back once shown. A moving row's progress becomes
+   * the offset its animation restarts from, and so does the position of a
+   * row held still for focus, which is set moving again here as losing
+   * focus would: hidden, it could only be thawed from a scroll position the
+   * browser has already dropped. A static strip under reduced motion keeps
+   * its scrollLeft to be given back.
    */
-  function parkRow(row: SharedRow): () => void {
+  function parkRow(
+    row: SharedRow,
+    sharedScrollLeft: number | undefined
+  ): () => void {
     const { viewport, track } = row
-    const scrollLeft = viewport.scrollLeft
-    // Through settle, so the scroll event the write causes is taken for
-    // the echo it is and carries nothing to the other row.
-    if (members.has(viewport)) return () => settle(viewport, scrollLeft)
-    const progress = animationProgress(track)
-    if (progress === null) {
-      return () => {
-        viewport.scrollLeft = scrollLeft
-      }
+    if (members.has(viewport) && sharedScrollLeft !== undefined) {
+      // Through settle, so the scroll event the write causes is taken for
+      // the echo it is and carries nothing to the other row.
+      return () => settle(viewport, sharedScrollLeft)
     }
-    track.style.setProperty('--ticker-offset', String(progress))
-    return () => {}
+    if (track.dataset.frozen === 'true') {
+      const progress = progressForScrollLeft(
+        viewport.scrollLeft,
+        row.copyWidth(),
+        leadOf(track)
+      )
+      viewport.scrollLeft = 0
+      track.style.setProperty('--ticker-offset', String(progress))
+      delete track.dataset.frozen
+      return () => {}
+    }
+    const progress = animationProgress(track)
+    if (progress !== null) {
+      track.style.setProperty('--ticker-offset', String(progress))
+      return () => {}
+    }
+    const scrollLeft = viewport.scrollLeft
+    return () => {
+      viewport.scrollLeft = scrollLeft
+    }
   }
 }
 
