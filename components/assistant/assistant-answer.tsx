@@ -180,6 +180,14 @@ function AnswerActions({
         <RefreshCw aria-hidden="true" className="size-3.5" />
         Regenerate
       </button>
+      {/* The label's change to "Copied" is only seen: a screen reader does
+          not reread a focused button whose name changes. This says it once,
+          politely, and says nothing when it empties again. It is rendered
+          before the copy, because a live region added with its text already
+          in it is not reliably announced. */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Copied' : ''}
+      </span>
     </div>
   )
 }
