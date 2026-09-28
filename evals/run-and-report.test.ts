@@ -155,6 +155,14 @@ describe('the plans and package.json agree', () => {
       expect(command.match(/--output\b/g)).toHaveLength(1)
     })
 
+    // The reason is in run-and-report.ts's module comment and in the runbook,
+    // under "Running them locally".
+    test(`${mode}: the run script lets a queued grader wait fifteen minutes`, () => {
+      expect(scripts[plan.runScript]).toContain(
+        'PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000'
+      )
+    })
+
     test(`${mode}: the run script keeps the grader cache off`, () => {
       expect(scripts[plan.runScript]).toContain('PROMPTFOO_CACHE_ENABLED=false')
     })

@@ -14,7 +14,11 @@ import { existsSync, statSync } from 'node:fs'
  *
  * The promptfoo command lines, and the environment they need, stay in
  * package.json (`evals:run`, `evals:smoke:run`) so either step can still be
- * run on its own.
+ * run on its own. Both set `PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000`:
+ * promptfoo's per-provider adaptive scheduler queues the rubric grader's
+ * calls, three grades per rubric test at route concurrency 8 can wait longer
+ * than its five-minute default, and a grade that timed out in that queue is
+ * reported as an error row although nothing about the answer was judged.
  *
  * Usage: bun run evals/run-and-report.ts <full|smoke>
  */
