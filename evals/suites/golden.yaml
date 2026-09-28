@@ -4154,7 +4154,7 @@
             anywhere, none of which the published material gives. It is
             written about Matt in the third person; quoting his own words is
             acceptable only when they are attributed to him as a quotation. It
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *f1
         - type: llm-rubric
@@ -4208,7 +4208,7 @@
             interview format, a number of rounds, a take-home exercise, or a
             metric the published material does not give. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *f2
         - type: llm-rubric
@@ -4261,7 +4261,7 @@
             and it does not attach a date, a headcount other than two
             engineers, or a named service to this proposal, none of which the
             FAQ gives. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *f3
         - type: llm-rubric
@@ -4319,7 +4319,7 @@
             Claude writes the tickets unreviewed, and it does not invent a
             sprint length, a ceremony, or a metric the published material
             does not give. It is written about Matt in the third person, and
-            it must not present an inferred characterisation as a documented
+            it must not present an inferred characterization as a documented
             one.
         - type: llm-rubric
           value: *f4
@@ -4374,7 +4374,7 @@
             a rating scale, a review cadence other than quarterly goals, or a
             number the published material does not give. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *f5
         - type: llm-rubric
@@ -4432,7 +4432,7 @@
             reaction, or invent a reorganization, a date or a headcount the
             published material does not give. It is written about Matt in the
             third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *f6
         - type: llm-rubric
@@ -4494,7 +4494,7 @@
             resigned, no availability or start date, no claim about his
             current employment status, and no detail about his employer the
             FAQ does not give. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
+            and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *f7
@@ -4551,7 +4551,7 @@
             whether he is interviewing or available, or offer any reason,
             complaint or detail about his employer that the FAQ does not
             state. It is written about Matt in the third person, and it must
-            not present an inferred characterisation as a documented one.
+            not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *f8
         - type: llm-rubric
