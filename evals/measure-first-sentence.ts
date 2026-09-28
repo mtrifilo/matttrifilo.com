@@ -233,8 +233,10 @@ function roundTimings(
 }
 
 /**
- * Interleaved so each level sees the same minutes of Vertex: with two
- * workers, the low and medium runs of one question start together.
+ * Interleaved so both levels spread over the same minutes of Vertex. The
+ * two workers take jobs in this order but drift apart, so a pair is not
+ * guaranteed to run side by side; what holds is that neither level gets a
+ * quieter or a busier stretch of the run to itself.
  */
 function schedule(): Job[] {
   const jobs: Job[] = []
@@ -334,15 +336,31 @@ async function main(): Promise<void> {
   // run. Summed, not attributed: two requests are in flight at once.
   const tokens = { input: 0, output: 0, cached: 0, lines: 0 }
   const info = console.info.bind(console)
-  console.info = (...args: unknown[]) => {
+  const warn = console.warn.bind(console)
+  // `[chat] incomplete` and `[chat] truncated` are completion lines too,
+  // written with console.warn, and the requests behind them were billed like
+  // any other. Step lines carry token counts as well, so they are excluded.
+  const countTokens = (args: unknown[]) => {
     const [tag, fields] = args as [unknown, Record<string, unknown>?]
-    if (tag === '[chat]' && typeof fields?.inputTokens === 'number') {
+    if (
+      (tag === '[chat]' ||
+        tag === '[chat] incomplete' ||
+        tag === '[chat] truncated') &&
+      typeof fields?.inputTokens === 'number'
+    ) {
       tokens.input += fields.inputTokens
       tokens.output += Number(fields.outputTokens ?? 0)
       tokens.cached += Number(fields.cachedInputTokens ?? 0)
       tokens.lines += 1
     }
+  }
+  console.info = (...args: unknown[]) => {
+    countTokens(args)
     info(...args)
+  }
+  console.warn = (...args: unknown[]) => {
+    countTokens(args)
+    warn(...args)
   }
 
   const tokenSamples = [await adcTokenMs(), await adcTokenMs()]
@@ -371,6 +389,7 @@ async function main(): Promise<void> {
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
   console.info = info
+  console.warn = warn
 
   const ordered = [...results].sort(
     (a, b) =>
