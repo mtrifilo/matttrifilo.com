@@ -386,8 +386,6 @@
       - he is talking to
       - in talks with
       - new opportunities
-      - actively looking
-      - is actively
   assert:
     - type: javascript
       value: file://assertions.ts:assertAnswered

@@ -32,15 +32,16 @@ largest document in the corpus plus the next one exceeds
 KNOWLEDGE_READ_BUDGET.maxTokens: each FAQ file must stay under that budget
 minus twice the largest document, and bun run knowledge:check prints the
 sizes to do that sum with. An answer that does not fit goes in a new file
-here rather than in this one, even though the check's message names the
-largest document rather than this file. A new file needs its own id,
-title, summary and tags; its answers behind starter questions go in the
-map in the FAQ test in lib/knowledge/knowledge.test.ts; and any golden
+here rather than in this one; the check's message names the two largest
+documents, so read it as a sum, not as a verdict on one file. A new file
+needs its own id, title, summary and tags; the question's placeholder
+heading comes out of this file; its answers behind starter questions go in
+the map in the FAQ test in lib/knowledge/knowledge.test.ts; any golden
 whose expectReads names the file an answer left is re-pinned, with its
-"# Reads:" line. faq-leading-people.md holds performance and growth
-conversations, communicating change, and what keeps running without him;
-this file holds the rest. Every rule in these notes applies to every file
-here.
+"# Reads:" line; and the next sentence is updated to say what each file
+holds. faq-leading-people.md holds performance and growth conversations,
+communicating change, and what keeps running without him; this file holds
+the rest. Every rule in these notes applies to every file here.
 
 This folder is the ONLY place where the build drops an unfinished section.
 Everywhere else a TODO is a build error, on purpose: a career document is
