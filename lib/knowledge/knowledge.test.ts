@@ -11,6 +11,7 @@ import {
   estimateTokens,
   findPlaceholder,
   INDEX_TITLE_SEPARATOR,
+  indexFieldProblem,
   KNOWLEDGE_DIR,
   KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -750,10 +751,15 @@ describe('knowledge corpus build', () => {
       INDEX_TITLE_SEPARATOR.trim(),
       '\u00B7',
       '\u0387',
+      '\u16EB',
+      '\u2022',
+      '\u2027',
       '\u2219',
       '\u22C5',
       '\u2E31',
+      '\u2E33',
       '\u30FB',
+      '\uA78F',
       '\uFF65',
     ]) {
       for (const field of [
@@ -773,12 +779,19 @@ describe('knowledge corpus build', () => {
   })
 
   test('refuses an em dash in a title or summary, as the model would read it', () => {
-    // Built from code points and entities so this file carries no dash.
+    // Built from code points and entities so this file carries no dash. A
+    // spaced en dash or figure dash between words is a sentence dash, which
+    // the check over the whole model context in lib/site-copy.test.ts
+    // refuses too, so the build refuses it here, where the error names the
+    // file.
     for (const dash of [
       String.fromCodePoint(0x2014),
       String.fromCodePoint(0x2015),
       '&mdash;',
       '&#8212;',
+      String.fromCodePoint(0x2013),
+      String.fromCodePoint(0x2012),
+      '&ndash;',
     ]) {
       for (const field of [
         { title: `Before ${dash} after` },
@@ -791,6 +804,40 @@ describe('knowledge corpus build', () => {
         ).toThrow(/may not contain an em dash/)
       }
     }
+  })
+
+  test('accepts an en dash in a range', () => {
+    const enDash = String.fromCodePoint(0x2013)
+    const { index } = buildFixture([
+      {
+        topic: 'career',
+        name: 'ranged.md',
+        title: `Seasons 2019 ${enDash} 2025`,
+        summary: `From Jul 2017 ${enDash} present, and 2019${enDash}2021.`,
+      },
+    ])
+    expect(index.entries).toHaveLength(1)
+  })
+
+  test('a title or summary is one line by any line break', () => {
+    // Checked on the rule itself, which the blog scaffold runs on whatever
+    // was typed. In a document, the frontmatter reader refuses a field line
+    // broken by CR, LF, U+2028 or U+2029 before the rule sees it.
+    for (const lineBreak of [
+      '\n',
+      '\r',
+      '\v',
+      '\f',
+      '\u0085',
+      '\u2028',
+      '\u2029',
+    ]) {
+      expect(
+        indexFieldProblem(`Two${lineBreak}lines`),
+        JSON.stringify(lineBreak)
+      ).toBe('must be one line')
+    }
+    expect(indexFieldProblem('One line')).toBeNull()
   })
 
   test('refuses a document with no tags', () => {

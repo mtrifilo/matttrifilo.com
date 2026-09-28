@@ -2,8 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from 'typescript'
+import { asSchema, type Tool } from 'ai'
 import { buildMessages, SYSTEM_PROMPT } from '@/lib/chat/prompt'
-import { loadKnowledgeIndex } from '@/lib/knowledge'
+import { createReadBudget } from '@/lib/chat/read-budget'
+import { createReadDocumentSession } from '@/lib/chat/read-document'
+import { createRecentActivitySession } from '@/lib/chat/recent-activity'
+import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
 import { findEmDashes, findPunctuationDashes } from './dashes'
 
 /**
@@ -24,9 +28,14 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  *   frame and repository list around it, and the visitor's turn. The index
  *   joins corpus text with punctuation the build adds, so no one file holds
  *   it whole.
+ * - the tools a request offers the model, built by the same session
+ *   factories lib/chat/handler.ts calls: each description and input schema
+ *   as the SDK sends them.
  * - lib/chat/answer.ts and lib/chat/validate.ts (the notices and fallbacks
- *   the chat shows as sent) and content/open-source.ts (the repository
- *   summaries), the same way.
+ *   the chat shows as sent), lib/chat/read-document.ts,
+ *   lib/chat/recent-activity.ts and lib/chat/github-activity.ts (the tools'
+ *   definitions, and the results and activity frame they hand the model)
+ *   and content/open-source.ts (the repository summaries), the same way.
  * - every file under content/knowledge/, whole. HTML comments count there:
  *   the build strips them before the model reads a document, but the
  *   repository is public.
@@ -37,7 +46,10 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  *
  * What an em dash is, entities and look-alike characters included, is
  * lib/dashes.ts, shared with the eval assertion that checks the assistant's
- * answers and with the knowledge build. The en dash is allowed here: the résumé's date ranges use it.
+ * answers and with the knowledge build. The file scans allow the en dash,
+ * since the résumé's date ranges use it. What the model receives (the
+ * policy, the messages, the tools) is held to findPunctuationDashes, which
+ * allows an en dash only in a range.
  */
 
 const ROOT = join(import.meta.dir, '..')
@@ -47,6 +59,9 @@ const SOURCE_FILES = [
   'lib/chat/prompt.ts',
   'lib/chat/answer.ts',
   'lib/chat/validate.ts',
+  'lib/chat/read-document.ts',
+  'lib/chat/recent-activity.ts',
+  'lib/chat/github-activity.ts',
   'content/open-source.ts',
 ]
 const CONTENT_DIRECTORIES = ['content/knowledge']
@@ -206,6 +221,41 @@ describe('no em dash anywhere a visitor reads', () => {
     // Punctuation dashes, as for the policy: a spaced en dash here is a
     // sentence dash the model would copy, and a range in a summary passes.
     expect(findPunctuationDashes(context)).toEqual([])
+  })
+
+  test('the tools a request offers the model', async () => {
+    // Built the way the route builds them, so a constant a description
+    // interpolates from another file is covered too. Nothing is executed:
+    // the fetch is never called.
+    const budget = createReadBudget()
+    const tools: Tool[] = [
+      createReadDocumentSession({
+        entries: loadKnowledgeIndex().entries,
+        readKnowledgeDocument,
+        budget,
+      }).tool,
+      createRecentActivitySession({
+        fetchActivity: () => Promise.reject(new Error('not called')),
+        budget,
+      }).tool,
+    ]
+    const definitions = await Promise.all(
+      tools.map(async tool => ({
+        // The SDK also accepts a description computed per call; the route's
+        // tools use plain text, and anything else reads as empty and fails
+        // below rather than going unscanned.
+        description:
+          typeof tool.description === 'string' ? tool.description : '',
+        schema: JSON.stringify(await asSchema(tool.inputSchema).jsonSchema),
+      }))
+    )
+    // A tool that lost its description would pass the scan for nothing.
+    for (const { description, schema } of definitions) {
+      expect(description.length).toBeGreaterThan(0)
+      expect(schema).toContain('"description"')
+      expect(findPunctuationDashes(description)).toEqual([])
+      expect(findPunctuationDashes(schema)).toEqual([])
+    }
   })
 })
 

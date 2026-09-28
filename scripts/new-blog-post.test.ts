@@ -90,6 +90,14 @@ describe('new-blog-post scaffold', () => {
     expect(frontmatterProblem('title', 'Shipping &mdash; a note')).toMatch(
       /may not contain an em dash/
     )
+    // A spaced en dash between words is a sentence dash; a range is not.
+    const enDash = String.fromCodePoint(0x2013)
+    expect(frontmatterProblem('title', `Shipping ${enDash} a note`)).toMatch(
+      /or an en dash used as one/
+    )
+    expect(
+      frontmatterProblem('title', `Shipping, 2019 ${enDash} 2025`)
+    ).toBeNull()
     expect(frontmatterProblem('title', `Part 1 ${separator} Intro`)).toMatch(
       /or a character that looks like it/
     )

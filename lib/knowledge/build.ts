@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { findEmDashes } from '@/lib/dashes'
+import { findPunctuationDashes } from '@/lib/dashes'
 import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
 
 /**
@@ -202,37 +202,54 @@ export const SUMMARY_MAX_LENGTH = 160
 export const INDEX_TITLE_SEPARATOR = ' · '
 
 /**
- * The separator's mark, and the common characters that render as the same
- * dot: the Greek ano teleia (which Unicode normalises to it), the bullet
- * and dot operators, and the word-separator and katakana middle dots. A
- * title or summary may carry none of them, anywhere: inside one, " · "
- * leaves no way to tell where the title ends, and at either edge the dot
- * joins the separator's spaces ("Title ·" becomes "Title · · summary").
- * Entities such as `&middot;` are not decoded: the index shows them as
- * written, so they do not read as a dot.
+ * The separator's mark, and the characters that render as the same or a
+ * similar centred dot: the Greek ano teleia (which Unicode normalises to
+ * it), the bullet and the bullet and dot operators, the hyphenation point,
+ * the raised dot, the word-separator, katakana and runic middle dots, and
+ * the sinological dot. A title or summary may carry none of them,
+ * anywhere: inside one, " · " leaves no way to tell where the title ends,
+ * and at either edge the dot joins the separator's spaces ("Title ·"
+ * becomes "Title · · summary"). Entities such as `&middot;` are not
+ * decoded: the index shows them as written, so they do not read as a dot.
  */
 const SEPARATOR_MARKS = [
   INDEX_TITLE_SEPARATOR.trim(),
   '\u0387',
+  '\u16EB',
+  '\u2022',
+  '\u2027',
   '\u2219',
   '\u22C5',
   '\u2E31',
+  '\u2E33',
   '\u30FB',
+  '\uA78F',
   '\uFF65',
 ]
+
+/**
+ * A line break by any of the characters an editor or a model may treat as
+ * one, not only CR and LF: each would split an index entry in two.
+ */
+const LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/
 
 /**
  * Why a title or summary cannot go on its index line, or null when it
  * can. The build throws with it; scripts/new-blog-post.ts asks with it at
  * the prompt, so the scaffold and the loader refuse the same values.
+ *
+ * Dashes are judged by findPunctuationDashes, the check lib/site-copy.test.ts
+ * runs over the whole model context, so a value this accepts cannot fail
+ * that test: an em dash is refused, and so is an en dash used as one ("A –
+ * B"), while a range ("2019 – 2021") passes.
  */
 export function indexFieldProblem(value: string): string | null {
-  if (/[\r\n]/.test(value)) return 'must be one line'
+  if (LINE_BREAK.test(value)) return 'must be one line'
   if (SEPARATOR_MARKS.some(mark => value.includes(mark))) {
     return `may not contain "${INDEX_TITLE_SEPARATOR.trim()}" or a character that looks like it; the index uses "${INDEX_TITLE_SEPARATOR}" to separate the title from the summary`
   }
-  if (findEmDashes(value).length > 0) {
-    return 'may not contain an em dash; the model reads the index and copies its punctuation, so use a comma, a colon or a full stop'
+  if (findPunctuationDashes(value).length > 0) {
+    return 'may not contain an em dash, or an en dash used as one; the model reads the index and copies its punctuation, so use a comma, a colon or a full stop'
   }
   return null
 }
