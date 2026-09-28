@@ -340,7 +340,20 @@ A summary that never reaches `evals/results/` is not published; the page shows t
 
 ### A red run
 
-`bun run evals/summarize.ts` exits non-zero when any test failed. Nothing enforces that on a merge; the person opening the pull request does, by running the suites and pasting the result. A red run is one of four things, and `results.json` says which:
+`bun run evals/summarize.ts` exits non-zero when any test failed. Nothing enforces that on a merge; the person opening the pull request does, by running the suites and pasting the result.
+
+`bun run evals` and `bun run evals:smoke` go through `evals/run-and-report.ts`, which runs the suites and then writes the summary whatever the run's exit status, so a red run still prints its table and leaves a `summary.json` (or `smoke-summary.json`) with the three counters for `evals:publish` to refuse on the merits. The exit code still says the run was red:
+
+| Exit code                                                   | Meaning                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0                                                           | every test passed, and the summary was written                                                                                                                                                                                                          |
+| 100                                                         | promptfoo's code for a run in which at least one test did not pass; the summary was written                                                                                                                                                             |
+| non-zero, after the line `the eval run wrote no results to` | the run failed or was interrupted before writing a results file, so nothing was summarised. A `summary.json` still on disk is an earlier run's: read its `ranAt` before treating it as this one, and never publish it as this run                       |
+| any other non-zero                                          | the run step's own code when it failed, otherwise the report's (1 when a row did not pass, or when the results file could not be read). Whether a summary was written is in the output above the code: the per-suite table is printed only when one was |
+
+A results file already on disk from an earlier run is never summarised as this one: the runner summarises only a file the run itself wrote. `bun run evals:run` and `bun run evals:report` run the two halves of a full run on their own.
+
+A red run is one of four things, and `results.json` says which:
 
 1. **The corpus changed and a golden is now wrong.** Fix the golden. That is the suite doing its job.
 2. **The answer got worse.** Fix the prompt or the corpus, not the assertion.
@@ -374,6 +387,14 @@ How to spend a session (MTC-54):
 4. If the published record should cover this change: commit the change first, then `bun run evals:publish`, then commit the record it writes. Publishing from a working copy with uncommitted changes is refused, for the reason under "Publishing a run".
 
 `CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table (it sets its own `--max-concurrency 2` and was left there: it is a comparison of three runs, not a run before a pull request). The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
+
+The grader queue. promptfoo 0.123.0 sends every provider call, the rubric grader's included, through a per-provider adaptive scheduler that lowers a provider's concurrency after rate-limit responses and raises it slowly, and a call waiting in its queue longer than `PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS` (default 300,000 ms) becomes an error row reading `timed out after 300000ms in queue` on the Vertex grader's key. At `--max-concurrency 8`, with three rubric grades per rubric test and graders also capped by `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` (default 3), that queue outlasted five minutes on seven tests of the 2026-09-23 full run (MTC-61). A queued grade is not a failed test: nothing about the answer was judged. So `evals:run` and `evals:smoke:run` set `PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000`, and a run is reproducible from the script alone. If queue timeouts persist, the knobs go in this order, one at a time, each recorded in the script rather than in a shell:
+
+1. The queue timeout, already at 900,000 ms in the scripts.
+2. A lower route concurrency, `--max-concurrency 6` in `evals:run`: fewer tests in flight send fewer grade requests to the grader's queue at once, at the cost of wall time.
+3. Last, `PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER=true`, which removes the queue and with it the backoff on 429 responses, so a busy hour turns into quota errors instead of waiting.
+
+`evals:compare` does not read these scripts: `evals/compare-reasoning.ts` sets its own environment and runs at `--max-concurrency 2`, so it carries none of the three.
 
 Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by promptfoo automatically, and it carries the four federation variables, which pushes the run onto the Vercel OIDC path rather than ADC; move it aside to force ADC. If you ran the `gcloud` setup below in this shell you exported three of those four names, which is a partial set: the provider checks for that before it builds a handler, so every row names the missing variable instead of saying `unavailable`. The run still walks all 171 tests, but it makes no model call and costs nothing. Open a fresh shell. `VERTEX_PROJECT_ID` is separate from `GCP_PROJECT_ID` because promptfoo's own Vertex provider, which grades the rubrics, resolves its project independently of ours. And a local run authenticates as **you**, not as the deployment's service account, so a green local run says nothing about whether that account's `roles/aiplatform.user` is enough; only a CI run answers that.
 
