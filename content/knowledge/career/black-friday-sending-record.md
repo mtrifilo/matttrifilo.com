@@ -79,7 +79,7 @@ He was the team's point of contact, fielded the reliability team's
 escalations, wrote the initial customer-facing status-page comms,
 identified a duplicate-send side effect caused by layered retry logic,
 checked the scope against the warehouse logs, and drove the post-outage
-analysis across the reliability and product organisations.
+analysis across the reliability and product organizations.
 
 ## Adjacent peak-season protections
 

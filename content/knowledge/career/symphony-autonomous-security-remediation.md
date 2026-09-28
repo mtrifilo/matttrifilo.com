@@ -22,7 +22,7 @@ merged. A fix to the harness's silently broken token and turn accounting
 followed the next day. Manual intake was retired on August 18, when a
 daemon began polling continuously, and a dedicated channel was created as
 the agent's reporting surface. A write-up was shared with the
-organisation's engineering managers and the wider engineering channel on
+organization's engineering managers and the wider engineering channel on
 August 31 so any team could adopt it.
 
 ## How it works, plainly
@@ -107,7 +107,7 @@ Several teams asked detailed setup questions, requested API keys to run it,
 or asked whether the skill could extend to other clouds, and one team
 cloned the harness. As of September 10, 2026, **no other team was confirmed
 running its own daemon**, and Matt said so publicly: a single registry for
-the whole organisation "may entail too many edge cases to roll out in the
+the whole organization "may entail too many edge cases to roll out in the
 near term with any confidence."
 
 ## The scaling problem, named honestly
@@ -118,7 +118,7 @@ daemon fails as a platform because it is **operator-bound rather than
 hosted**. Cloud hosting and covering every team repository are the same
 problem: bot identity, an always-on host, and skills that travel with the
 agent. He evaluated a competing editor's cloud agents as the
-lowest-friction organisation-wide path and
+lowest-friction organization-wide path and
 concluded it is a thinner loop, not a drop-in replacement for the harness.
 The research is done; the hosting decision is not, and his standing
 instruction to himself is not to buy a cloud or file a hosting ticket

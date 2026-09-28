@@ -85,7 +85,7 @@ Matt has written:
 
 On where a mid-sized company should sit relative to the frontier, his
 position is that trailing the state of the art slightly is an advantage: a
-smaller organisation can adopt what much larger organisations have already
+smaller organization can adopt what much larger organizations have already
 researched and proven out in production rather than running those
 experiments itself.
 

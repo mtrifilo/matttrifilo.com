@@ -59,7 +59,7 @@ updated: 2026-09-21
   planning-and-writing model for planning and business writing and a
   faster model for unattended agents; plus a second editor.
 - **Agent infrastructure he built, adapted, or runs:** two Claude Code plugin
-  marketplaces (one organisation-wide and co-maintained, one team-owned and
+  marketplaces (one organization-wide and co-maintained, one team-owned and
   solo), the subject-matter plugin system with its scaffold and capture
   skills, the unattended security-remediation daemon (OpenAI's open-source
   Symphony harness, adapted through an internal fork two colleagues built),
@@ -104,7 +104,7 @@ updated: 2026-09-21
 - Stood up autonomous vulnerability remediation with human merge gates, on
   OpenAI's open-source Symphony harness adapted through an internal fork two
   colleagues built.
-- Ran a two-organisation supply-chain audit across 528 repositories in
+- Ran a two-organization supply-chain audit across 528 repositories in
   response to an active registry worm.
 - Built phishing detection and blocking capability, including
   immediate-effect domain blocks. The detection mechanics stay internal.
@@ -121,17 +121,17 @@ updated: 2026-09-21
 - Scheduled-query pipelines feeding compliance scoring and two production
   suppression tables.
 - An in-flight migration of the warehouse to a different platform, with
-  downstream consumers across several teams served through authorised
+  downstream consumers across several teams served through authorized
   views and staging tables with freshness commitments.
 
 ## Financial and vendor work
 
 - A mail-gateway vendor renewal analysis: a warehouse-validated volume
   forecast that matched the vendor's own numbers to within about one
-  percent, a recommended monthly volume tier derived from modelled volume
+  percent, a recommended monthly volume tier derived from modeled volume
   scenarios, and a closed contract at that tier with no service disruption
   during the negotiation.
-- Cost-per-thousand-emails modelling for the legacy path against the new
+- Cost-per-thousand-emails modeling for the legacy path against the new
   one.
 - Fleet right-sizing on the sending gateway, halving the machine count.
 - API-spend accounting for agent runs, and business-case packaging with

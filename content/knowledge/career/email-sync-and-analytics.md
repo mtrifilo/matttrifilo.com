@@ -1,12 +1,12 @@
 ---
 id: email-sync-and-analytics
-title: Email sync stabilisation, email analytics, and the public mail API, 2022 to 2025
+title: Email sync stabilization, email analytics, and the public mail API, 2022 to 2025
 summary: Three smaller programs: a fragile mailbox-sync integration owned for years, the bounce and complaint pages, and public mail endpoints.
 tags: [integration, gmail, microsoft, analytics, api, email]
 updated: 2026-09-21
 ---
 
-# Email sync stabilisation, email analytics, and the public mail API, 2022 to 2025
+# Email sync stabilization, email analytics, and the public mail API, 2022 to 2025
 
 ## Email sync (2022 to 2025, 21 pull requests)
 
@@ -20,7 +20,7 @@ went quiet, and the customer's only signal was that contact emails stopped
 appearing. Support's only remedy was disconnect-and-reconnect, which also
 destroyed the diagnostic trail.
 
-The stabilisation epic states the goal: "to stabilize the email sync
+The stabilization epic states the goal: "to stabilize the email sync
 feature to ensure the connections remain stable long-term. Also so that
 users can self-correct when an edge case occurs affecting any connection,"
 with a success metric of support volume "reduced to almost zero."
@@ -41,10 +41,10 @@ assignee, or both on all but two of the 22 tickets.
 
 - Fixed the authentication strategy the refresh jobs used, which a
   framework upgrade had broken, then fixed the job configuration twice more
-  after modelling it on a reference implementation elsewhere in the fleet.
+  after modeling it on a reference implementation elsewhere in the fleet.
 - Added a **second, independent refresh mechanism**: a task queue scheduling
   a follow-up refresh every time a watch is created or renewed, so the
-  scheduled job became a catch-all rather than the only line of defence.
+  scheduled job became a catch-all rather than the only line of defense.
 - Tightened the refresh cadence from three days to one after watching how
   quickly one provider's watches actually expired in the datastore.
 - Fixed a payload bug where task objects were parsed as literal strings
@@ -81,7 +81,7 @@ rather than a toggle argument on the existing one, reworked "to follow
 GraphQL best practices more closely"; and relying solely on the existing
 scheduled job.
 
-**The honest limits.** The stabilisation epic was never formally closed and
+**The honest limits.** The stabilization epic was never formally closed and
 no ticket reports a number against its "almost zero" target, so the metric
 is unconfirmed. A 2026 production incident, caused by the prior week's
 framework upgrade, is the same class of failure as the 2022 authentication
@@ -139,7 +139,7 @@ new REST standard, plus a version-specific identifier object so the new API
 would not inherit the old one's data shapes, on the stated principle "we
 should not use V1 objects for the V2 REST API if we can avoid it."
 
-On the status endpoint he changed the behaviour rather than copying it
+On the status endpoint he changed the behavior rather than copying it
 forward: a non-existent email address now returns a proper 404 instead of
 the old API's fabricated non-marketable status, resolving an open question
 the story itself had left unanswered.

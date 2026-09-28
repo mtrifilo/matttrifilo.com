@@ -29,7 +29,7 @@ two had been conflated, making the early rollout metrics unreliable.
 **2021, the system.** The largest single change built a round-robin scheme
 injecting the next warming-status domain into outbound links, driven by a
 warming-domain record with per-domain daily usage counts and phased warming
-thresholds modelled on the published guidance of the major sending
+thresholds modeled on the published guidance of the major sending
 providers, plus a manual allow-list of tenants known to send clean mail to
 speed the ramp. A daily scheduled job reset each domain's counter at
 midnight and cleaned up orphaned counters; the same change broke a growing
@@ -43,7 +43,7 @@ gate to throttle the ramp independently of the exclusion list. Once the
 exclusion model proved out he deleted the inclusion-list code rather than
 leaving both.
 
-Two operability fixes landed alongside: a stale personalisation regex
+Two operability fixes landed alongside: a stale personalization regex
 updated for the new domain family (after checking dashboards and the code
 search to confirm the endpoint had no active external consumers), and an
 expected log line that had been firing as an error on every request,
@@ -159,10 +159,10 @@ workflows:
   personal address, which cannot be authenticated on behalf of the
   business, can still send a test broadcast.
 - **Reply-to routing end to end**, for franchise and multi-location
-  businesses that send from a subdomain but need replies centralised in a
+  businesses that send from a subdomain but need replies centralized in a
   monitored inbox. Built through the broadcast objects, then moved onto the
   template object once ownership was clear, then given merge-field
-  personalisation and backend validation.
+  personalization and backend validation.
 - **A per-tenant default authenticated sending address**, the largest and
   most cross-service piece, so a legacy automation hitting an
   unauthenticated address falls back instead of dying. The settings

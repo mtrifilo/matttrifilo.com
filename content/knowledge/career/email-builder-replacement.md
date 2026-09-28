@@ -1,7 +1,7 @@
 ---
 id: email-builder-replacement
 title: Contributing to the new email builder, 2021 to 2022
-summary: Matt was one of the core engineers replacing the product's ageing email-authoring surfaces, with 108 pull requests of his own.
+summary: Matt was one of the core engineers replacing the product's aging email-authoring surfaces, with 108 pull requests of his own.
 tags: [frontend, email, product, vue, java, migration]
 updated: 2026-09-21
 ---
@@ -55,7 +55,7 @@ defects in the same window: an infinite recipient-loading loop, a close
 button that did not return to the gallery predictably, and a template-fetch
 count reduced from 50 to 25 for performance.
 
-**Phase two, compliance and cross-surface parity.** The centrepiece is
+**Phase two, compliance and cross-surface parity.** The centerpiece is
 content-risk integration: a backend client, then the modal in the broadcast
 wizard gating sends on a spam, warn, or acceptable quality signal behind a
 flag, then the same modal ported into the campaign builder. Anti-spam

@@ -14,7 +14,7 @@ inside the core monolith and were read through two different legacy paths: a
 servlet API used by the web front end and a front-facing controller used by
 the mobile app. A newer internal Contacts API had been partly built the year
 before but was not production-ready, and nobody had proven it matched the
-legacy behaviour field for field.
+legacy behavior field for field.
 
 The trigger was a decision to make it real. Two tickets opened the same day
 in March 2019: one to review unit, integration, and end-to-end coverage and
@@ -46,7 +46,7 @@ interview-and-write-up pattern at the decision points he worked on.
 
 ## Parity work before any traffic switch
 
-The new API had to match the monolith's field-level behaviour exactly, not
+The new API had to match the monolith's field-level behavior exactly, not
 approximately. Matt fixed mismatches across the three email fields and two
 fax fields, and separately across address fields, and closed unit-test gaps
 in the health controller, the country-code service, the auth utility, and
@@ -87,7 +87,7 @@ email fields, and ZIP+4 codes, before any customer saw the new path.
 Separately from the comparison, Matt made the API operable: production-grade
 logging on contact creation, a contact-count query that used a database
 count instead of paging through every row, header forwarding so shadow
-requests carried authorisation values rather than a servlet-request
+requests carried authorization values rather than a servlet-request
 reference across threads, and de-duplicated metric histogram names that had
 been throwing exceptions and surfacing to customers as 400 responses. He
 wrote the on-call runbook for Contacts API alerts before the endpoint
@@ -98,7 +98,7 @@ carried real traffic.
 **Mobile first.** Once the list endpoint's comparison stayed clean, the
 mobile backend consumed it behind a feature flag, then a "get all contacts"
 pagination flow using page tokens instead of offsets, then a circuit
-breaker modelled on the web backend's own implementation and scoped to trip
+breaker modeled on the web backend's own implementation and scoped to trip
 only on server errors so client errors would not false-positive it, plus an
 end-to-end test for the whole path. Two mobile engineers did substantial
 implementation alongside him; this was a genuine team effort. The mobile

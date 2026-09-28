@@ -15,7 +15,7 @@ to end.
 
 The email compliance team handles compliance cases through an internal
 compliance system whose case records lived in the acquired company's
-Salesforce organisation. The system evaluates tenants against compliance
+Salesforce organization. The system evaluates tenants against compliance
 policy, opens cases for review, and drives the resulting notifications and
 restrictions. Moving its case handling to the parent company's Salesforce
 meant rewriting how it authenticates, how it addresses tenants, and what
@@ -26,19 +26,19 @@ fields it writes, without stopping enforcement.
 - Created the epics for the cutover, the gap implementation, and the
   research spikes.
 - Built a **per-target configuration toggle** so the system can write to
-  either organisation, and neutralised the hard-coded record identifiers
+  either organization, and neutralized the hard-coded record identifiers
   and queries that assumed the old one.
 - Implemented OAuth client-credentials authentication ahead of a vendor
   authentication deadline, so the system could read and write cases in the
-  new organisation by early June.
+  new organization by early June.
 - Authored the field-parity analysis, plus findings documents on the
-  cancel-grace-period and email-score behaviours.
+  cancel-grace-period and email-score behaviors.
 - Introduced a **gap-annotation convention** so every shortcut in the code
   is traceable to a tracked gap, after one of his engineers pressed for a
   gap-tracking convention. That convention is why the remaining parity work
   was legible to someone else when he handed it over.
 
-**The hard parts.** The two organisations model tenants differently, which
+**The hard parts.** The two organizations model tenants differently, which
 was resolved by keying on a dedicated identifier field with the parent
 company's administrators. Sandbox identifiers changed between the spring
 discovery and the August implementation, almost certainly a sandbox
@@ -49,7 +49,7 @@ than letting the next person trip on them.
 **The slip, stated plainly.** The planned two-week cutover window did not
 hold. Both epics closed in early August; one engineer carried the remaining
 parity gaps to production through late August, when paid cases first
-appeared in the new organisation, and made the target switch **fail loudly
+appeared in the new organization, and made the target switch **fail loudly
 with a paging alert** rather than fall back silently. Tickets were still
 open under the three epics when the implementation epics closed, which is
 why Matt names writing down a "done" definition as an open item: the epics
@@ -67,7 +67,7 @@ This sits on top of five years of earlier ownership of the same system: the
 vendor-exit data-plane rebuild in 2020, a warehouse-source migration in
 2023 alongside a defect fix and the removal of dead dashboard tabs, and a
 2025 upgrade regression that he root-caused, fixed, and covered with unit
-tests. He opened the modernisation epic that fix now sits
+tests. He opened the modernization epic that fix now sits
 under and assigned it to the product manager rather than to himself.
 
 ## Smaller items

@@ -96,7 +96,7 @@ December.
 | Remove the toggle as soon as the new path worked | No | Constants stayed until August, months after the implied target |
 | Keep the old logging client since it still worked | No | It was retiring alongside Splunk; removed in the same pass |
 
-## Division of labour
+## Division of labor
 
 Owned end to end: the ingestion harness, essentially every per-query
 replacement, both feature-toggle cutovers, the alert migration and its

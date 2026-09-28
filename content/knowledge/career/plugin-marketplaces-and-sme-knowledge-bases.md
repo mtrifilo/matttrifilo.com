@@ -14,7 +14,7 @@ brain" that agents load on demand.
 
 ## Origins and attribution, stated precisely
 
-A colleague scaffolded the organisation-wide Claude Code plugin marketplace
+A colleague scaffolded the organization-wide Claude Code plugin marketplace
 repository in May 2026. Matt authored the marketplace governance proposal
 (June 2026) and the architecture decisions that made it federated and safe:
 
@@ -46,7 +46,7 @@ upstream issue, and fixed the documentation to copy rather than symlink.
 
 | Tier | Where content lives | Status at version one |
 |---|---|---|
-| Organisation-wide shared plugins | Marketplace's own folders | Shipped |
+| Organization-wide shared plugins | Marketplace's own folders | Shipped |
 | Federated shared-repo skills | Upstream domain repositories, synced by subdirectory | Shipped |
 | Per-service subject-matter plugins | The service repository's own plugin bundle | Scaffold command shipped; first pilot shipped July |
 | Team multi-repo plugins | Marketplace team folders | Deliberately deferred |
@@ -68,7 +68,7 @@ service everyone least liked touching, chosen for exactly that reason. This
 is the content of the August 2026 talk on giving agents a brain.
 
 **The team marketplace, July 2026:** Email Reliability's own marketplace,
-built in a day as a sibling to the organisation pattern rather than a fork
+built in a day as a sibling to the organization pattern rather than a fork
 of it, with dual catalogs for both editors, CI validation of every plugin
 on every pull request, and a shared adversarial-review workflow other team
 repositories call. The plugins are grouped by kind:
@@ -142,16 +142,16 @@ just the incident document.
 
 ## Adoption signals
 
-- Engineers beyond Matt have opened pull requests on the organisation
+- Engineers beyond Matt have opened pull requests on the organization
   marketplace.
 - An engineer on another team requested write access after a demo.
-- A manager from another organisation routed engineers to Matt for the
+- A manager from another organization routed engineers to Matt for the
   on-call plugin; two more engineers asked for the link the same week.
 - Teammates run it without him: one ran the handoff skill end to end and
   published the result; another triaged an alert storm and added
-  a new runbook for recognising that shape of storm.
+  a new runbook for recognizing that shape of storm.
 - Another engineer turned the pattern into a template so other teams
-  bootstrap the same way; Matt announced the template organisation-wide in
+  bootstrap the same way; Matt announced the template organization-wide in
   August 2026.
 
 ## Not yet measured

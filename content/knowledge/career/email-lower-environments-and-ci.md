@@ -15,13 +15,13 @@ and spam-scoring services, the email compliance system, and the tracking
 link and tracking pixel services) had no real sandbox, integration, or
 staging environments. Everything ran in production, or in ad hoc setups
 that did not match it. The umbrella epic states the goal in one line: align
-with the wider engineering organisation to get sandbox, integration,
+with the wider engineering organization to get sandbox, integration,
 staging, and production environments set up for all of these projects. The
 company-wide multi-environment initiative behind it framed the stakes more
 broadly: product quality was not where the company wanted it to be.
 
 The content-risk service is what made this urgent. It scores the words and
-sending behaviour of an account to detect which tenants are damaging, or
+sending behavior of an account to detect which tenants are damaging, or
 improving, the platform's email deliverability. Its second version was
 being called from the monolith in **shadow mode**, with its answer thrown
 away, and the epic asked for that to change: integrate what it returns as a
@@ -84,7 +84,7 @@ implemented the content-risk SDK in the
 monolith and refactored the existing shadow request to run on a separate
 thread asynchronously, the same pattern he had used on the Contacts API
 comparison, so the monolith could actually consume the new service instead
-of discarding its answer. A CI modernisation across nine services landed in
+of discarding its answer. A CI modernization across nine services landed in
 the same window.
 
 ## Options considered
