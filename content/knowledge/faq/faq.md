@@ -8,8 +8,7 @@ updated: '2026-09-28'
 
 # FAQ
 
-Matt wrote these answers himself. They are given here in the third person, the way the assistant speaks about him. They are the questions
-hiring managers and engineering leaders ask him most often.
+Matt wrote these answers himself. They are given here in the third person, the way the assistant speaks about him.
 
 <!--
 Notes for whoever edits this file. lib/knowledge/build.ts strips HTML

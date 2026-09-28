@@ -257,7 +257,7 @@ Each document is one index line, `- [id] title · summary (tags: …; ~N tokens)
 
 A placeholder is a `## ` heading, or any line outside a fenced block or inline code, that starts with `TODO` (after an optional list marker) or contains `TODO (Matt)`: in `content/knowledge/faq` a question whose heading or answer is one is dropped and listed by `bun run knowledge:check`, and anywhere else it fails the build.
 
-The FAQ is two documents, `faq.md` and `faq-leading-people.md` (MTC-40), because one file cannot hold every answer under the read budget: `lib/knowledge/knowledge.test.ts` fails when twice the largest document plus the next exceeds `KNOWLEDGE_READ_BUDGET.maxTokens`, since a model may read one document twice. The drop rule and the editing notes in `faq.md` apply to both, and the FAQ tests check each file: every question ships or is listed as dropped, and the answers named in the test's map, one for each starter question an FAQ answers, ship.
+The FAQ is two documents, `faq.md` and `faq-leading-people.md` (MTC-40), because one file cannot hold every answer under the read budget: `lib/knowledge/knowledge.test.ts` fails when twice the largest document plus the next exceeds `KNOWLEDGE_READ_BUDGET.maxTokens`, since a model may read one document twice. The drop rule and the editing notes in `faq.md` apply to both, and the FAQ tests check each file: every question ships or is listed as dropped, and the answers named in the test's map, one for each starter question an FAQ document answers or helps answer, ship.
 
 ## Eval suites (MTC-32)
 

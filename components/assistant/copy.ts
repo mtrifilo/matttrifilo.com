@@ -119,10 +119,10 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * untagged questions sit in the head, or their order, also changes
  * APPROVED_UNTAGGED_HEAD_ORDER in copy.test.ts.
  *
- * Only clear matches are tagged. Whether the other head questions (Matt's
- * use of AI coding agents, quality with agents, the code he ships himself,
- * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
- * so they are left out rather than guessed.
+ * Only clear matches are tagged. Whether the other head questions (what
+ * Matt is looking for in his next role, his use of AI coding agents, quality
+ * with agents, the code he ships himself) belong to a theme is Matt's
+ * taxonomy to decide, so they are left out rather than guessed.
  *
  * These tags decide only what the ticker's head opens on. The "see all"
  * list is grouped by STARTER_LIST_THEMES, which covers the whole pool.

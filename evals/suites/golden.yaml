@@ -92,13 +92,14 @@
         - type: llm-rubric
           value: *r2
 
+# Reads any of: resume, owned-systems-and-operations or faq; each gives up to a billion messages a month, the faq in its next-role answer.
 - description: 'golden: sending scale'
   vars:
     question: What scale of email does the platform Matt works on send?
   metadata:
     suite: golden
     smoke: true
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny: [resume, owned-systems-and-operations, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -118,8 +119,8 @@
         - type: llm-rubric
           value: &r3 >-
             The answer says the platform sends up to about a billion messages
-            a month at peak. It does not state a larger or smaller figure as
-            fact.
+            a month, at peak where it says when. It does not state a larger or
+            smaller figure as fact.
         - type: llm-rubric
           value: *r3
         - type: llm-rubric
@@ -192,19 +193,20 @@
         - type: llm-rubric
           value: *r5
 
+# Reads any of: team-throughput-study-2025-2026 or faq; both give open customer-reported defects falling from 28 to 12 as output rose.
 - description: 'golden: quality while throughput rose'
   vars:
     question: Did quality hold up while the team shipped more?
   metadata:
     suite: golden
-    expectReads: [team-throughput-study-2025-2026]
+    expectReadsAny: [team-throughput-study-2025-2026, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -872,13 +874,13 @@
         - type: llm-rubric
           value: *r25
 
-# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go, as the golden 'the stacks he actually works in' accepts either.
+# Reads any of: resume, technical-expertise or faq; all three name Java, Python, TypeScript and Go, the faq in its next-role answer.
 - description: 'golden: languages and stacks'
   vars:
     question: Which languages and frameworks does Matt work in?
   metadata:
     suite: golden
-    expectReadsAny: [resume, technical-expertise]
+    expectReadsAny: [resume, technical-expertise, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2419,13 +2421,16 @@
 # engineering-philosophy: "Hands-on coding is a feature, not a bug, of
 # senior technical leadership ... He did not stop coding when promoted to
 # player-coach and did not stop when promoted to manager; it is a
-# deliberate, defining choice."; resume: "still ships code daily".
+# deliberate, defining choice."; resume: "still ships code daily"; faq:
+# "He still codes every day and actively contributes to the team's
+# engineering commitments."
+# Reads any of: engineering-philosophy, resume or faq; each states at least one fact the rubric accepts on its own.
 - description: 'golden: still hands-on, or fully a manager'
   vars:
     question: Is Matt still hands-on, or has he moved fully into management?
   metadata:
     suite: golden
-    expectReadsAny: [engineering-philosophy, resume]
+    expectReadsAny: [engineering-philosophy, resume, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2447,12 +2452,14 @@
           value: &r60 >-
             The answer says Matt is still hands-on, and rests on at least one
             of these documented facts. It passes on one, because the first two
-            are in the philosophy document and the third is in the résumé, and
-            the run is only required to have opened one of them: that he holds
-            hands-on coding to be a feature and not a bug of senior technical
-            leadership; that he did not stop coding when promoted to
-            player-coach or to manager and calls that a deliberate, defining
-            choice; or that he still ships code daily. It is written about
+            are in the philosophy document and the third is in the résumé and
+            the FAQ, and the run is only required to have opened one of them:
+            that he holds hands-on coding to be a feature and not a bug of
+            senior technical leadership; that he did not stop coding when
+            promoted to player-coach or to manager and calls that a
+            deliberate, defining choice; or that he still ships code daily,
+            which the FAQ puts as still coding every day and contributing to
+            the team's engineering commitments. It is written about
             Matt in the third person, and it must not present an inferred
             characterization as a documented one.
         - type: llm-rubric

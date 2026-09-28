@@ -382,6 +382,7 @@ describe('knowledge corpus content guards', () => {
       'faq-leading-people': [
         'How does he handle performance management and growth conversations?',
         'How does he communicate a change or a reorganization to a team?',
+        'How does he build a team that keeps running without him?',
       ],
     }
     for (const [id, headings] of Object.entries(expected)) {
