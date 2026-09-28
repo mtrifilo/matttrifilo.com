@@ -261,6 +261,117 @@ describe('the follow-up row', () => {
   })
 })
 
+describe("the rows' scrollbar", () => {
+  // Themed, not hidden (Matt, 2026-09-28, MTC-95): a classic bar under a
+  // row a visitor can scroll is thin and in the site's colors, in both
+  // themes, and the transcript's vertical bar is left to the browser.
+  const faded = ruleFor('.edge-faded-row {')
+  const THUMB = '--muted-foreground'
+  const legacy = cssBlock(css, '@supports not (scrollbar-color: auto)')
+  const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  test('is thin and in the theme token, on the class both rows wear', () => {
+    // Both rows, in every state that scrolls, are this element, and
+    // `both rows of pills wear the class that declares it` above holds the
+    // components to it.
+    expect(faded).toContain('scrollbar-width: thin')
+    expect(faded).toContain(`scrollbar-color: var(${THUMB}) transparent`)
+  })
+
+  test('is themed, never hidden', () => {
+    // Matt chose a themed bar over a hidden one (2026-09-28), so a rule
+    // that hides it contradicts his decision however well it scrolls.
+    expect(declarations).not.toMatch(/scrollbar-width:\s*none/)
+    expect(declarations).not.toMatch(
+      /::-webkit-scrollbar[^{]*\{[^}]*display:\s*none/
+    )
+  })
+
+  test('no state of a row overrides it', () => {
+    // A later rule setting its own scrollbar on the follow-up row, a
+    // handed-over row or a reduced-motion strip would split the one
+    // treatment Matt asked for into several.
+    for (const block of [
+      ruleFor('.follow-up-row {'),
+      ruleFor(".starter-ticker-row[data-handed-over='true'] {"),
+      ruleFor('.starter-ticker-row {'),
+      blockAround(".starter-ticker-copy[aria-hidden='true']"),
+      cssBlock(css, '@media (pointer: coarse)'),
+    ]) {
+      expect(block).not.toContain('scrollbar')
+    }
+  })
+
+  test('is declared for the rows only, so the transcript keeps its own bar', () => {
+    // Every scrollbar declaration and pseudo-element in the stylesheet sits
+    // on the rows' class. One on `*`, `html` or a scroll container of the
+    // transcript would restyle the vertical bar Matt left alone, and
+    // `scrollbar-color` is inherited, so one on an ancestor would too.
+    // Declarations end in a semicolon, which the `@supports` test does not.
+    const standard =
+      declarations.match(/scrollbar-(?:width|color):[^;{}]*;/g) ?? []
+    expect(standard).toHaveLength(2)
+    for (const declaration of standard) expect(faded).toContain(declaration)
+    const pseudo = [...declarations.matchAll(/([^\s{}]*)::-webkit-scrollbar/g)]
+    expect(pseudo.length).toBeGreaterThan(0)
+    for (const match of pseudo) expect(match[1]).toBe('.edge-faded-row')
+  })
+
+  test('draws the same bar where only the WebKit pseudo-elements work', () => {
+    expect(legacy).toContain('.edge-faded-row::-webkit-scrollbar {')
+    expect(cssBlock(legacy, '.edge-faded-row::-webkit-scrollbar {')).toMatch(
+      /height: \d+px/
+    )
+    expect(
+      cssBlock(legacy, '.edge-faded-row::-webkit-scrollbar-track {')
+    ).toContain('background: transparent')
+    expect(
+      cssBlock(legacy, '.edge-faded-row::-webkit-scrollbar-thumb {')
+    ).toContain(`background-color: var(${THUMB})`)
+  })
+
+  test.each([
+    ['light', ':root {'],
+    ['dark', '.dark {'],
+  ])(
+    'the %s theme sets its own thumb, at 3:1 against its page and its card',
+    (_theme, selector) => {
+      // WCAG 1.4.11 asks 3:1 of a control's parts. The rows sit on the page
+      // on /ask and on a card on the homepage, so the thumb has to clear
+      // both, and a theme that stopped setting the token would inherit the
+      // other theme's. This is the token's color; within a fade's width of
+      // a row's end the mask paints it fainter, which only the preview shows.
+      const block = ruleFor(selector)
+      const thumb = hexOf(block, THUMB)
+      for (const surface of ['--background', '--card']) {
+        expect(contrast(thumb, hexOf(block, surface))).toBeGreaterThanOrEqual(3)
+      }
+    }
+  )
+})
+
+/** A six-digit hex color a theme block declares for a custom property. */
+function hexOf(block: string, property: string): string {
+  const match = new RegExp(`${property}:\\s*(#[0-9a-f]{6});`, 'i').exec(block)
+  if (match === null) throw new Error(`${property} is not a hex color here`)
+  return match[1]
+}
+
+/** WCAG 2 contrast ratio between two hex colors. */
+function contrast(a: string, b: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map(i => {
+      const channel = Number.parseInt(hex.slice(i, i + 2), 16) / 255
+      return channel <= 0.03928
+        ? channel / 12.92
+        : ((channel + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (light + 0.05) / (dark + 0.05)
+}
+
 function componentSource(file: string): string {
   return readFileSync(
     new URL(`../components/assistant/${file}`, import.meta.url),
