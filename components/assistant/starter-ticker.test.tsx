@@ -211,23 +211,31 @@ function runningLoop(progress: number): Animation {
  *
  * Each row measures one copy of its questions when it mounts, and only a
  * row with a measured width and a running loop has a position to hand
- * over, so both are stated: the copy's width before the render, and the
- * browser's animation on each track after it.
+ * over, so both are stated: the copy's width before the render (one number
+ * for every copy, or one worked out from the copy itself), and the
+ * browser's animation on each track after it (one progress for both rows,
+ * or one per row).
  */
 function renderMovingRows({
   copyWidth = COPY_WIDTH_MEASURED,
   progress = 0.25,
-}: { copyWidth?: number; progress?: number } = {}) {
+}: {
+  copyWidth?: number | ((copy: Element) => number)
+  progress?: number | readonly [number, number]
+} = {}) {
   Element.prototype.getBoundingClientRect = function (this: Element) {
     const rect = REAL_BOUNDING_RECT.call(this)
     if (!this.classList.contains('starter-ticker-copy')) return rect
-    return { ...rect.toJSON(), width: copyWidth } as DOMRect
+    const width = typeof copyWidth === 'number' ? copyWidth : copyWidth(this)
+    return { ...rect.toJSON(), width } as DOMRect
   }
   const { container } = render(<StarterTicker onPick={() => {}} />)
   const { rows } = tickerOf(container)
-  for (const { track } of rows) {
-    track.getAnimations = () => [runningLoop(progress)]
-  }
+  rows.forEach(({ track }, index) => {
+    const rowProgress =
+      typeof progress === 'number' ? progress : progress[index]
+    track.getAnimations = () => [runningLoop(rowProgress)]
+  })
   return rows
 }
 
@@ -356,8 +364,14 @@ describe('a row handed over to the visitor by touch or wheel', () => {
    * the same pitch, both copies end to end, and the freeze's lead pushing
    * every pill right while the track is frozen. Happy DOM lays nothing out,
    * so these offsets are what give "the pill at the left edge" a meaning.
+   * Each row's copy is as wide as its own pills, so the second row, one
+   * question shorter, is the shorter strip, as it is in a browser.
+   *
+   * The returned `copyWidth` is the first row's.
    */
-  function renderLaidOutRows(progress = 0.25) {
+  function renderLaidOutRows(
+    progress: number | readonly [number, number] = 0.25
+  ) {
     stylesheet = document.createElement('style')
     stylesheet.textContent = TICKER_RULES.map(rule =>
       cssBlock(GLOBALS_CSS, rule)
@@ -365,7 +379,10 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     document.head.append(stylesheet)
 
     const copyWidth = FIRST_ROW.length * PILL_PITCH
-    const rows = renderMovingRows({ copyWidth, progress })
+    const rows = renderMovingRows({
+      copyWidth: copy => copy.children.length * PILL_PITCH,
+      progress,
+    })
     for (const { viewport, track } of rows) {
       const pills = [...track.querySelectorAll<HTMLElement>('button')]
       pills.forEach((pill, index) => {
@@ -584,50 +601,290 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     expect(first.track.dataset.frozen).toBeUndefined()
   })
 
-  test('the other row keeps moving until it is touched itself', () => {
-    const { rows } = renderLaidOutRows()
-    const [first, second] = rows
+  describe('both rows, as one strip', () => {
+    /** Where a row's freeze puts it: its own loop, in its own pixels. */
+    function frozenAt(track: HTMLElement, progress: number): number {
+      const copy = track.querySelector('.starter-ticker-copy')
+      const copyWidth = (copy?.children.length ?? 0) * PILL_PITCH
+      return progress * copyWidth + leadOf(track)
+    }
 
-    fireEvent.touchStart(first.viewport)
-    expect(isHandedOver(second.viewport)).toBe(false)
-    expect(second.track.dataset.frozen).toBeUndefined()
+    /**
+     * Scroll a row the way a drag or a native wheel would: the position
+     * changes, then the browser reports it. Happy DOM sends no scroll event
+     * when scrollLeft is set, so the report is sent here.
+     */
+    function scrollBy(viewport: HTMLElement, pixels: number): void {
+      viewport.scrollLeft += pixels
+      fireEvent.scroll(viewport)
+    }
 
-    fireEvent.touchStart(second.viewport)
-    expect(isHandedOver(second.viewport)).toBe(true)
+    /**
+     * Counts every write to a row's scrollLeft from here on, and keeps the
+     * position to whole pixels as some browsers do, so that what a row reads
+     * back is not always what was written to it.
+     */
+    function countWrites(viewport: HTMLElement): { count: number } {
+      let owner: object | null = viewport
+      let property: PropertyDescriptor | undefined
+      while (owner && !property) {
+        property = Object.getOwnPropertyDescriptor(owner, 'scrollLeft')
+        owner = Object.getPrototypeOf(owner)
+      }
+      const { get, set } = property ?? {}
+      if (!get || !set) throw new Error('scrollLeft has no accessor to spy on')
+      const writes = { count: 0 }
+      Object.defineProperty(viewport, 'scrollLeft', {
+        configurable: true,
+        get: () => get.call(viewport),
+        set: (value: number) => {
+          writes.count += 1
+          set.call(viewport, Math.round(value))
+        },
+      })
+      return writes
+    }
+
+    function maxScrollLeft(viewport: HTMLElement): number {
+      return viewport.scrollWidth - viewport.clientWidth
+    }
+
+    test('a touch on the second row hands both over, each where its own loop was', () => {
+      // Different points in their loops, so a hand-over that gave one row
+      // the other's position, or skipped the untouched row, lands wrong.
+      const progress = [0.27, 0.61] as const
+      const { rows } = renderLaidOutRows(progress)
+      const edges = rows.map(({ track }, index) =>
+        pillAtLeftEdge(track, frozenAt(track, progress[index]) - leadOf(track))
+      )
+
+      fireEvent.touchStart(announcedPills(rows[1].viewport)[0])
+
+      rows.forEach(({ viewport, track }, index) => {
+        expect(isHandedOver(viewport)).toBe(true)
+        expect(track.dataset.frozen).toBe('true')
+        expect(viewport.scrollLeft).toBeCloseTo(
+          frozenAt(track, progress[index])
+        )
+        expect(edges[index]).toBeGreaterThan(0)
+        expect(pillAtLeftEdge(track, viewport.scrollLeft)).toBe(edges[index])
+      })
+    })
+
+    test('a sideways wheel on the first row moves both rows by its delta', () => {
+      const progress = [0.25, 0.4] as const
+      const { rows } = renderLaidOutRows(progress)
+      const [first, second] = rows
+
+      wheelAt(first.viewport, 1000, { deltaX: 40, deltaY: 0 })
+      wheelAt(first.viewport, 1016, { deltaX: 25, deltaY: 0 })
+
+      expect(first.viewport.scrollLeft).toBeCloseTo(
+        frozenAt(first.track, progress[0]) + 65
+      )
+      expect(second.viewport.scrollLeft).toBeCloseTo(
+        frozenAt(second.track, progress[1]) + 65
+      )
+    })
+
+    test('a scroll on the second row carries the first, and the echo carries nothing back', () => {
+      // Fractional loop positions, so the rows' offsets are not whole pixels
+      // and a row rounds what it is given.
+      const { rows } = renderLaidOutRows([0.3013, 0.5071])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      const firstAt = first.viewport.scrollLeft
+      const firstWrites = countWrites(first.viewport)
+      const secondWrites = countWrites(second.viewport)
+
+      scrollBy(second.viewport, 120)
+      expect(
+        Math.abs(first.viewport.scrollLeft - (firstAt + 120))
+      ).toBeLessThan(1)
+      expect(firstWrites.count).toBe(1)
+      expect(secondWrites.count).toBe(1)
+
+      // The write to the first row makes a browser report a scroll on it
+      // too. That report is the rows' own doing, not the visitor's, and
+      // answering it would bounce the position between the rows.
+      fireEvent.scroll(first.viewport)
+      fireEvent.scroll(second.viewport)
+      expect(firstWrites.count).toBe(1)
+      expect(secondWrites.count).toBe(1)
+    })
+
+    test('the rows stop together where the shorter reach runs out, at either end', () => {
+      // The second row holds one question fewer, so from the same point in
+      // both loops it runs out first to the right; it also starts nearer
+      // its own start, so it runs out first to the left.
+      const progress = 0.25
+      const { rows } = renderLaidOutRows(progress)
+      const [first, second] = rows
+      const origins = rows.map(({ track }) => frozenAt(track, progress))
+      fireEvent.touchStart(first.viewport)
+
+      scrollBy(first.viewport, 100_000)
+      expect(second.viewport.scrollLeft).toBeCloseTo(
+        maxScrollLeft(second.viewport)
+      )
+      expect(first.viewport.scrollLeft).toBeLessThan(
+        maxScrollLeft(first.viewport)
+      )
+      expect(first.viewport.scrollLeft - origins[0]).toBeCloseTo(
+        second.viewport.scrollLeft - origins[1]
+      )
+
+      scrollBy(first.viewport, -200_000)
+      expect(second.viewport.scrollLeft).toBe(0)
+      expect(first.viewport.scrollLeft).toBeGreaterThan(0)
+      expect(first.viewport.scrollLeft - origins[0]).toBeCloseTo(
+        second.viewport.scrollLeft - origins[1]
+      )
+    })
+
+    test('a drag held at the shorter reach is pulled back once, and its echo moves nothing', () => {
+      // The dragged row is the one written back here, and a browser reports
+      // that write as a scroll of its own; answering it would start the
+      // rows answering each other.
+      const { rows } = renderLaidOutRows(0.25)
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      const firstWrites = countWrites(first.viewport)
+      const secondWrites = countWrites(second.viewport)
+
+      scrollBy(first.viewport, 100_000)
+      // The drag itself, then the hold at the second row's end.
+      expect(firstWrites.count).toBe(2)
+      expect(secondWrites.count).toBe(1)
+
+      fireEvent.scroll(first.viewport)
+      fireEvent.scroll(second.viewport)
+      expect(firstWrites.count).toBe(2)
+      expect(secondWrites.count).toBe(1)
+
+      // Pushing on past the end holds the dragged row again, and leaves
+      // the row already at its end unwritten.
+      scrollBy(first.viewport, 500)
+      expect(firstWrites.count).toBe(4)
+      expect(secondWrites.count).toBe(1)
+    })
+
+    test('a keyboard focus before any hand-over moves only its own row', () => {
+      // Focus freezes a row without handing it over; the rows share a
+      // position only once the visitor has reached for them.
+      const { rows } = renderLaidOutRows([0.3, 0.6])
+      const [first, second] = rows
+      announcedPills(first.viewport)[3].focus()
+      expect(first.track.dataset.frozen).toBe('true')
+
+      scrollBy(first.viewport, 50)
+      expect(isHandedOver(first.viewport)).toBe(false)
+      expect(isHandedOver(second.viewport)).toBe(false)
+      expect(second.track.dataset.frozen).toBeUndefined()
+      expect(second.viewport.scrollLeft).toBe(0)
+    })
+
+    test('a row that could not be handed over yet is left alone, then joins', () => {
+      // Its loop has not started, so there is no position to freeze it at.
+      // Writing its scrollLeft while it still moves would add to its
+      // transform; it joins on the next touch, from where it then is.
+      const { rows } = renderLaidOutRows(0.3)
+      const [first, second] = rows
+      second.track.getAnimations = () => []
+      fireEvent.touchStart(first.viewport)
+      expect(isHandedOver(second.viewport)).toBe(false)
+
+      const secondWrites = countWrites(second.viewport)
+      scrollBy(first.viewport, 80)
+      expect(secondWrites.count).toBe(0)
+
+      second.track.getAnimations = () => [runningLoop(0.6)]
+      fireEvent.touchStart(first.viewport)
+      expect(isHandedOver(second.viewport)).toBe(true)
+      const joinedAt = second.viewport.scrollLeft
+      scrollBy(first.viewport, 50)
+      expect(second.viewport.scrollLeft).toBeCloseTo(joinedAt + 50)
+    })
+
+    test('a focused pill is revealed on its own row, and the other row follows', () => {
+      // The first row is near the end of its loop and the second near its
+      // start, so bringing the first row's second pill into view asks for
+      // more travel to the left than the second row has. The focused row
+      // still goes all the way; the other stops at its start, and the two
+      // move together from there.
+      const { rows } = renderLaidOutRows([0.9, 0.05])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      const pill = announcedPills(first.viewport)[1]
+
+      pill.focus()
+      const fade = Number.parseFloat(
+        getComputedStyle(first.viewport).getPropertyValue(EDGE_FADE_PROPERTY)
+      )
+      expect(first.viewport.scrollLeft).toBe(pill.offsetLeft - fade)
+      expect(second.viewport.scrollLeft).toBe(0)
+
+      const revealed = first.viewport.scrollLeft
+      scrollBy(second.viewport, 40)
+      expect(first.viewport.scrollLeft).toBeCloseTo(revealed + 40)
+    })
+
+    test('a static strip scrolls on its own', () => {
+      // Reduced motion is unchanged: nothing is handed over, so nothing is
+      // shared, and each strip stays where its visitor puts it.
+      setReducedMotion(true)
+      const { rows } = renderLaidOutRows()
+      const [first, second] = rows
+
+      scrollBy(second.viewport, 90)
+      expect(second.viewport.scrollLeft).toBe(90)
+      expect(first.viewport.scrollLeft).toBe(0)
+    })
   })
 
   /**
-   * Scroll a row before its first placement, then place it. A row measures
-   * zero wide until its copy has a width, so the scroll lands first, and
-   * a new `startAt` is what makes it measure again.
+   * Scroll the rows before their first placement, then place them. A row
+   * measures zero wide until its copy has a width, so the scroll lands
+   * first, and a new `startAt` is what makes it measure again.
    */
-  function scrollThenPlace(scrolledTo: number) {
+  function scrollThenPlace(scrolledTo: number, secondScrolledTo = 0) {
     const { container, rerender } = render(
       <StarterTicker onPick={() => {}} startAt={0} />
     )
-    const [first] = tickerOf(container).rows
+    const [first, second] = tickerOf(container).rows
     first.viewport.scrollLeft = scrolledTo
+    second.viewport.scrollLeft = secondScrolledTo
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const rect = REAL_BOUNDING_RECT.call(this)
       if (!this.classList.contains('starter-ticker-copy')) return rect
       return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
     }
     rerender(<StarterTicker onPick={() => {}} startAt={1} />)
-    return first
+    return [first, second] as const
   }
 
   test('a moving row opens at scroll zero even if a finger scrolled it first', () => {
     // Under a coarse pointer a moving row is a scroll container from the
     // first paint, so a drag before the script runs can leave it scrolled;
     // the opening is computed for scroll zero.
-    const first = scrollThenPlace(300)
+    const [first] = scrollThenPlace(300)
     expect(first.track.dataset.placed).toBe('true')
     expect(first.viewport.scrollLeft).toBe(0)
   })
 
+  test('a drag on one row before the script ran leaves the rows in step', () => {
+    // Each row's first placement resets its own scroll, so neither carries
+    // an offset the other lacks into the one position they later share.
+    const rows = scrollThenPlace(0, 300)
+    for (const { viewport, track } of rows) {
+      expect(track.dataset.placed).toBe('true')
+      expect(viewport.scrollLeft).toBe(0)
+    }
+  })
+
   test('a static strip keeps the scroll its visitor gave it', () => {
     setReducedMotion(true)
-    const first = scrollThenPlace(300)
+    const [first] = scrollThenPlace(300)
     expect(first.viewport.scrollLeft).toBe(300)
   })
 
@@ -643,17 +900,22 @@ describe('a row handed over to the visitor by touch or wheel', () => {
   })
 
   describe('never resumes', () => {
-    test('losing focus leaves a handed-over row frozen', () => {
+    test('losing focus leaves a handed-over row frozen, touched or not', () => {
       // The focus path thaws a row on blur; a row handed over to the visitor
-      // must not come back to life because a pill in it lost focus.
+      // must not come back to life because a pill in it lost focus, and
+      // that includes the row the touch was not on.
       const { rows } = renderLaidOutRows()
       const [first] = rows
       fireEvent.touchStart(first.viewport)
-      announcedPills(first.viewport)[0].focus()
-      ;(document.activeElement as HTMLElement).blur()
+      for (const { viewport } of rows) {
+        announcedPills(viewport)[0].focus()
+        ;(document.activeElement as HTMLElement).blur()
+      }
 
-      expect(first.track.dataset.frozen).toBe('true')
-      expect(isHandedOver(first.viewport)).toBe(true)
+      for (const { viewport, track } of rows) {
+        expect(track.dataset.frozen).toBe('true')
+        expect(isHandedOver(viewport)).toBe(true)
+      }
     })
 
     test('a later touch or wheel does not move a row the visitor has scrolled', () => {

@@ -5,6 +5,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type FocusEvent,
   type MouseEvent,
   type Ref,
@@ -13,6 +14,7 @@ import { Suggestion } from '@/components/ai-elements/suggestion'
 import { cn } from '@/lib/utils'
 import { STARTER_QUESTIONS } from './copy'
 import {
+  clampSharedTravel,
   EDGE_FADE_PROPERTY,
   loopSeconds,
   openingProgress,
@@ -22,6 +24,7 @@ import {
   scrollLeftForProgress,
   TICKER_ANIMATION_NAME,
   sidewaysWheelPixels,
+  type StripSpan,
   TICKER_COPIES,
   tickerRows,
   WHEEL_GESTURE_GAP_MS,
@@ -68,13 +71,15 @@ import {
  * only way a row's first pill, with nothing to its left, can be scrolled
  * clear of the gradient.
  *
- * **A row a visitor reaches for is handed over to them.** A touch, or a
- * sideways wheel or trackpad gesture, freezes that row the same way focus
- * does and then hands it over for good: the row becomes a real scroll strip
- * and never moves on its own again, because a row that resumed under a
- * reader's finger would take the question they were reading away from them.
- * Only the row reached for stops; the other keeps drifting until it is
- * reached for itself.
+ * **Rows a visitor reaches for are handed over to them, both at once.** A
+ * touch, or a sideways wheel or trackpad gesture, on either row freezes
+ * each row the same way focus does, at the point its own loop had reached,
+ * and then hands both over for good: they become real scroll strips and
+ * never move on their own again, because a row that resumed under a
+ * reader's finger would take the question they were reading away from
+ * them. From then on the two strips share one scroll position, so a drag on
+ * either moves both the same distance and a reader never has to scroll one
+ * row to catch up with the other.
  */
 
 /**
@@ -106,6 +111,9 @@ export function StarterTicker({
   startAt = 0,
   className,
 }: StarterTickerProps) {
+  // One per ticker, for its whole life: both rows' handlers must reach
+  // the same position, and a new one would forget where the rows are.
+  const [sharedScroll] = useState(createSharedScroll)
   return (
     <div
       aria-label={TICKER_LABEL}
@@ -117,6 +125,7 @@ export function StarterTicker({
           key={index}
           onPick={onPick}
           questions={questions}
+          sharedScroll={sharedScroll}
           startAt={startAt}
         />
       ))}
@@ -136,10 +145,12 @@ export function StarterTicker({
 function TickerRow({
   questions,
   onPick,
+  sharedScroll,
   startAt,
 }: {
   questions: readonly string[]
   onPick: (question: string) => void
+  sharedScroll: SharedScroll
   startAt: number
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -214,48 +225,52 @@ function TickerRow({
     return () => observer.disconnect()
   }, [measure])
 
-  const handleFocus = useCallback((event: FocusEvent<HTMLDivElement>) => {
-    const viewport = viewportRef.current
-    const track = trackRef.current
-    const focused = event.target
-    const pill = focused instanceof Element ? focused.closest('button') : null
-    if (!viewport || !track || !pill) return
+  const handleFocus = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const viewport = viewportRef.current
+      const track = trackRef.current
+      const focused = event.target
+      const pill = focused instanceof Element ? focused.closest('button') : null
+      if (!viewport || !track || !pill) return
 
-    // Under reduced motion the row is an ordinary scroll container with
-    // nothing to freeze, and the browser scrolls the pill into view itself,
-    // inside the fades because the row sets scroll-padding to match them.
-    if (prefersReducedMotion()) return
+      // Under reduced motion the row is an ordinary scroll container with
+      // nothing to freeze, and the browser scrolls the pill into view itself,
+      // inside the fades because the row sets scroll-padding to match them.
+      if (prefersReducedMotion()) return
 
-    // A row already frozen, because the visitor is tabbing along it or it
-    // has been handed over, stays at its scroll offset and only the reveal
-    // below applies. With no loop running the row can simply be scrolled.
-    // A loop with no measured width cannot be converted, and scrolling a
-    // track that is still transformed would add one offset to the other:
-    // leaving the row where it is beats moving it wrongly.
-    if (
-      freezeAtLoopPosition(track, viewport, copyWidthRef.current) ===
-      'unmeasured'
-    ) {
-      return
-    }
+      // A row already frozen, because the visitor is tabbing along it or it
+      // has been handed over, stays at its scroll offset and only the reveal
+      // below applies. With no loop running the row can simply be scrolled.
+      // A loop with no measured width cannot be converted, and scrolling a
+      // track that is still transformed would add one offset to the other:
+      // leaving the row where it is beats moving it wrongly.
+      if (
+        freezeAtLoopPosition(track, viewport, copyWidthRef.current) ===
+        'unmeasured'
+      ) {
+        return
+      }
 
-    // A pointer press focuses the pill before the click completes. Moving
-    // the row now would take the pill out from under the cursor and the
-    // click would be lost, and a mouse is already holding the rows still by
-    // hovering them.
-    if (!pill.matches(':focus-visible')) return
+      // A pointer press focuses the pill before the click completes. Moving
+      // the row now would take the pill out from under the cursor and the
+      // click would be lost, and a mouse is already holding the rows still by
+      // hovering them.
+      if (!pill.matches(':focus-visible')) return
 
-    viewport.scrollLeft = revealScrollLeft({
-      scrollLeft: viewport.scrollLeft,
-      viewportWidth: viewport.clientWidth,
-      // The track is the pill's offset parent, so this is already the
-      // coordinate scrollLeft is measured in.
-      pillStart: pill.offsetLeft,
-      pillWidth: pill.offsetWidth,
-      fade: fadeWidth(viewport),
-      maxScrollLeft: viewport.scrollWidth - viewport.clientWidth,
-    })
-  }, [])
+      viewport.scrollLeft = revealScrollLeft({
+        scrollLeft: viewport.scrollLeft,
+        viewportWidth: viewport.clientWidth,
+        // The track is the pill's offset parent, so this is already the
+        // coordinate scrollLeft is measured in.
+        pillStart: pill.offsetLeft,
+        pillWidth: pill.offsetWidth,
+        fade: fadeWidth(viewport),
+        maxScrollLeft: maxScrollLeftOf(viewport),
+      })
+      sharedScroll.follow(viewport, 'focused')
+    },
+    [sharedScroll]
+  )
 
   const handleBlur = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
@@ -287,13 +302,16 @@ function TickerRow({
 
   /**
    * Stops this row for good and gives it to the visitor as a scroll strip.
+   * The shared scroll calls it for every row at once, whichever row was
+   * reached for.
    *
    * The loop's position goes to scrollLeft exactly as it does for focus, so
    * the pill under a finger does not move and a tap still lands on it; the
    * stylesheet then lets the row scroll by hand. Nothing takes the row back:
    * blur leaves it frozen, nothing measures it again, and no timer exists to
    * resume it. A row whose position cannot be read yet is left moving rather
-   * than moved wrongly, and the next touch or wheel tries again.
+   * than moved wrongly, and the next touch or wheel on either row tries
+   * again.
    *
    * Returns whether this call is the one that handed the row over.
    */
@@ -312,9 +330,23 @@ function TickerRow({
     return true
   }, [])
 
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    return sharedScroll.add({ viewport, handOver })
+  }, [sharedScroll, handOver])
+
+  // A drag, its momentum, or a native wheel scroll on a handed-over row
+  // moves the other row with it.
+  const handleScroll = useCallback(() => {
+    const viewport = viewportRef.current
+    if (viewport) sharedScroll.follow(viewport, 'together')
+  }, [sharedScroll])
+
   /**
-   * A sideways wheel or trackpad gesture over a moving row hands it over,
-   * and the rest of that gesture is scrolled here rather than natively.
+   * A sideways wheel or trackpad gesture over a moving row hands both rows
+   * over, and the rest of that gesture is scrolled here rather than
+   * natively, both rows together.
    *
    * The gesture began over a row that could not scroll, and browsers decide
    * which box a gesture scrolls when it begins, so after the hand-over the
@@ -347,7 +379,10 @@ function TickerRow({
         viewport.clientWidth
       )
       if (pixels === 0) return
-      if (!handedOver && !handOver()) return
+      if (!handedOver) {
+        sharedScroll.handOver()
+        if (!isHandedOver(viewport)) return
+      }
       steeredAt = event.timeStamp
       // An event that cannot be cancelled may be one the browser is
       // scrolling itself; moving the strip as well could scroll it twice.
@@ -355,10 +390,11 @@ function TickerRow({
       if (!event.cancelable) return
       event.preventDefault()
       viewport.scrollLeft += pixels
+      sharedScroll.follow(viewport, 'together')
     }
     viewport.addEventListener('wheel', handleWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', handleWheel)
-  }, [handOver])
+  }, [sharedScroll])
 
   return (
     <div
@@ -368,9 +404,10 @@ function TickerRow({
       className="edge-faded-row starter-ticker-row -my-1 w-full py-1"
       onBlur={handleBlur}
       onFocus={handleFocus}
+      onScroll={handleScroll}
       // Not behind `pointer: coarse`: a touchstart is itself the evidence,
       // and a touchscreen laptop reports a fine pointer.
-      onTouchStart={handOver}
+      onTouchStart={sharedScroll.handOver}
       ref={viewportRef}
     >
       <div className="starter-ticker-track" ref={trackRef}>
@@ -500,6 +537,129 @@ function freezeAtLoopPosition(
  */
 function isHandedOver(viewport: HTMLElement): boolean {
   return viewport.dataset.handedOver === 'true'
+}
+
+/** A row as the shared scroll position sees it. */
+interface SharedRow {
+  /** The box that scrolls. */
+  viewport: HTMLElement
+  /** The row's own hand-over; true when this call handed it over. */
+  handOver: () => boolean
+}
+
+/**
+ * How a handed-over row's own scroll reaches the other row. `together` is
+ * the visitor's drag, momentum or wheel: every row moves the same distance,
+ * and no further than every row can go. `focused` is a pill being brought
+ * into view: its row goes where the pill needs it, and the other row
+ * follows as far as it can.
+ */
+type FollowMode = 'together' | 'focused'
+
+/**
+ * The one scroll position the rows share once the visitor has them.
+ *
+ * Each row stays its own scroll container, with its own fades, its own
+ * focus handling and its own hand-over arithmetic; this only carries a
+ * row's scroll to the other. That is what keeps every row's freeze exact:
+ * the rows stop at different offsets, because their loops are at different
+ * points, so they share a distance travelled rather than a scrollLeft.
+ */
+interface SharedScroll {
+  /** Adds a row; returns what removes it again. */
+  add(row: SharedRow): () => void
+  /**
+   * Hands every row over at once. A row that cannot be handed over yet is
+   * left moving and joins the shared position when a later touch or wheel
+   * hands it over.
+   */
+  handOver(): void
+  /** Carries this row's scroll to the other rows, if it is handed over. */
+  follow(viewport: HTMLElement, mode: FollowMode): void
+}
+
+function createSharedScroll(): SharedScroll {
+  const rows = new Set<SharedRow>()
+  // Each handed-over row's scrollLeft at a shared travel of zero.
+  const origins = new Map<HTMLElement, number>()
+  // Where each handed-over row was last left, as the browser read it back.
+  // The scroll event a write here causes finds the row still there and is
+  // ignored, which is what stops two rows answering each other's events.
+  const settled = new Map<HTMLElement, number>()
+  // How far the rows have moved together since they were handed over.
+  let travel = 0
+
+  function spanOf(viewport: HTMLElement, origin: number): StripSpan {
+    return { origin, maxScrollLeft: maxScrollLeftOf(viewport) }
+  }
+
+  function settle(viewport: HTMLElement, scrollLeft: number): void {
+    // Written only when it changes, so a row already in place gets no
+    // scroll event to answer.
+    if (viewport.scrollLeft !== scrollLeft) viewport.scrollLeft = scrollLeft
+    settled.set(viewport, viewport.scrollLeft)
+  }
+
+  return {
+    add(row) {
+      rows.add(row)
+      return () => {
+        rows.delete(row)
+        origins.delete(row.viewport)
+        settled.delete(row.viewport)
+      }
+    },
+
+    handOver() {
+      for (const row of rows) {
+        if (!row.handOver()) continue
+        const scrollLeft = row.viewport.scrollLeft
+        origins.set(row.viewport, scrollLeft - travel)
+        settled.set(row.viewport, scrollLeft)
+      }
+    },
+
+    follow(source, mode) {
+      const origin = origins.get(source)
+      if (origin === undefined) return
+      if (source.scrollLeft === settled.get(source)) return
+      let next = source.scrollLeft - origin
+      if (mode === 'together') {
+        next = clampSharedTravel(
+          next,
+          [...origins].map(([viewport, rowOrigin]) =>
+            spanOf(viewport, rowOrigin)
+          )
+        )
+        // Held back only when another row is the one that ran out. A row
+        // bouncing past its own end is left to the browser's bounce.
+        const reachable = Math.min(
+          Math.max(source.scrollLeft, 0),
+          maxScrollLeftOf(source)
+        )
+        if (reachable - origin !== next) settle(source, origin + next)
+      }
+      settled.set(source, source.scrollLeft)
+      travel = next
+      for (const [viewport, rowOrigin] of origins) {
+        if (viewport === source) continue
+        settle(
+          viewport,
+          Math.min(Math.max(rowOrigin + next, 0), maxScrollLeftOf(viewport))
+        )
+        // A row that could not follow a focused pill all the way shares
+        // the position again from where it stopped.
+        if (mode === 'focused') {
+          origins.set(viewport, viewport.scrollLeft - next)
+        }
+      }
+    },
+  }
+}
+
+/** The furthest a row can scroll, as its own layout allows. */
+function maxScrollLeftOf(viewport: HTMLElement): number {
+  return Math.max(viewport.scrollWidth - viewport.clientWidth, 0)
 }
 
 /**
