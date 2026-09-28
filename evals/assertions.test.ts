@@ -248,15 +248,27 @@ describe('assertReadsWithinIndex', () => {
   })
 
   test('does not count reads against the budget, which it cannot see', () => {
-    // read-document.ts consults the store before applying the token budget,
-    // so a correct run can leave more ids here than it was allowed to read.
-    // The budget belongs to lib/chat/read-document.test.ts.
+    // A correct run can resolve more documents than it may read: the extra
+    // ones are refused and land in the other half of the ledger. The budget
+    // belongs to lib/chat/read-document.test.ts.
     const ids = loadKnowledgeIndex()
       .entries.slice(0, 4)
       .map(entry => entry.id)
     expect(
-      assertReadsWithinIndex('', ctx(undefined, { readIds: ids })).pass
+      assertReadsWithinIndex(
+        '',
+        ctx(undefined, { readIds: ids.slice(0, 3), refusedIds: ids.slice(3) })
+      ).pass
     ).toBe(true)
+  })
+
+  test('checks the refused half too, since the store resolved it', () => {
+    const result = assertReadsWithinIndex(
+      '',
+      ctx(undefined, { readIds: [realId], refusedIds: ['salary-negotiations'] })
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('salary-negotiations')
   })
 })
 
@@ -695,8 +707,8 @@ describe('assertCites', () => {
   })
 
   test('does not tolerate a miss on the strength of any read at all', () => {
-    // `readIds` is a superset of what the answer saw, so "it opened
-    // something" is not evidence that THIS answer used a document.
+    // A read of some other document is not evidence that THIS answer used
+    // the one the test names.
     const other = ctx(
       { expectReadsAny: ['resume'] },
       { readIds: ['owned-systems-and-operations'] }
@@ -794,6 +806,115 @@ describe('assertCites', () => {
       read
     )
     expect(result.reason).toContain('does not cover the question')
+  })
+})
+
+/*
+ * The read ledger split (MTC-80). One completed read and one refused read,
+ * the fixture every read assertion is held to: the refused document
+ * satisfies nothing, the completed one satisfies what it should, and a red
+ * row's reason names the refusal so it is not read as a document never
+ * asked for.
+ */
+describe('read assertions, on one completed and one refused read', () => {
+  const ledger = { readIds: ['resume'], refusedIds: ['open-source'] }
+
+  test('assertReadsExpected counts the completed read only', () => {
+    expect(
+      assertReadsExpected('', ctx({ expectReads: ['resume'] }, ledger)).pass
+    ).toBe(true)
+    const refused = assertReadsExpected(
+      '',
+      ctx({ expectReads: ['open-source'] }, ledger)
+    )
+    expect(refused.pass).toBe(false)
+    expect(refused.reason).toBe(
+      'never read open-source; read resume; refused open-source'
+    )
+  })
+
+  test('assertReadsAnyOf counts the completed read only', () => {
+    expect(
+      assertReadsAnyOf('', ctx({ expectReadsAny: ['resume', 'x'] }, ledger))
+        .pass
+    ).toBe(true)
+    const refused = assertReadsAnyOf(
+      '',
+      ctx({ expectReadsAny: ['open-source', 'technical-expertise'] }, ledger)
+    )
+    expect(refused.pass).toBe(false)
+    expect(refused.reason).toBe(
+      'read none of open-source, technical-expertise; read resume; refused open-source'
+    )
+  })
+
+  test('assertReadsAnySet: a refused document leaves its set incomplete', () => {
+    const both = { expectReadsAnySet: [['resume', 'open-source']] }
+    const result = assertReadsAnySet('', ctx(both, ledger))
+    expect(result.pass).toBe(false)
+    expect(result.reason).toBe(
+      'read no complete set of resume + open-source; read resume; refused open-source'
+    )
+    expect(
+      assertReadsAnySet(
+        '',
+        ctx({ expectReadsAnySet: [['open-source'], ['resume']] }, ledger)
+      ).pass
+    ).toBe(true)
+  })
+
+  test('assertCitesOnlyWhatItRead: a refused document may not be cited', () => {
+    // The model was handed a refusal, not the text, so a trailer naming the
+    // document claims words the answer never saw.
+    expect(
+      assertCitesOnlyWhatItRead(
+        'He led it.\n\nSources: resume',
+        ctx(undefined, ledger)
+      ).pass
+    ).toBe(true)
+    const result = assertCitesOnlyWhatItRead(
+      'He led it.\n\nSources: resume, open-source',
+      ctx(undefined, ledger)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toBe(
+      'cited documents it never read: open-source (refused by the route: open-source)'
+    )
+  })
+
+  test('assertCites grants no missing-trailer tolerance on a refused read', () => {
+    const answer = 'He led the migration in 2024.'
+    const refused = assertCites(
+      answer,
+      ctx({ expectReadsAny: ['open-source'] }, ledger)
+    )
+    expect(refused.pass).toBe(false)
+    expect(refused.reason).toContain('read none of open-source')
+    const completed = assertCites(
+      answer,
+      ctx({ expectReadsAny: ['resume'] }, ledger)
+    )
+    expect(completed.pass).toBe(true)
+    expect(completed.reason).toContain('warning')
+  })
+
+  test('a run whose only document was refused did not use one', () => {
+    // So an answer written from nothing but a refusal is not counted as a
+    // dropped citation, and assertCites fails it as a run that read nothing.
+    const onlyRefused = { readIds: [], refusedIds: ['open-source'] }
+    expect(isUncitedAnswer('He led it.', onlyRefused.readIds)).toBe(false)
+    const result = assertCites(
+      'He led it.',
+      ctx({ expectReadsAny: ['open-source'] }, onlyRefused)
+    )
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('opened no document')
+  })
+
+  test('assertReadsWithinIndex checks both halves', () => {
+    expect(assertReadsWithinIndex('', ctx(undefined, ledger)).reason).toBe(
+      'resolved 2 indexed document(s): resume, open-source'
+    )
   })
 })
 
