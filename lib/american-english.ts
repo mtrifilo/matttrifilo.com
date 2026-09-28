@@ -68,6 +68,7 @@ const ISE_STEMS = [
   'token',
   'util',
   'visual',
+  'wizard',
 ] as const
 
 const ISE_ENDINGS = [
@@ -82,6 +83,7 @@ const ISE_ENDINGS = [
   'er',
   'ers',
   'able',
+  'ably',
 ] as const
 
 /**
@@ -112,6 +114,8 @@ const OUR_ENDINGS = [
   'ably',
   'ite',
   'ites',
+  'itism',
+  'ly',
   'ful',
   'less',
   'hood',
@@ -136,6 +140,8 @@ const WORD_PAIRS: readonly (readonly [british: string, american: string])[] = [
   ['centrepieces', 'centerpieces'],
   ['centres', 'centers'],
   ['centring', 'centering'],
+  ['datacentre', 'datacenter'],
+  ['datacentres', 'datacenters'],
   ['defence', 'defense'],
   ['defences', 'defenses'],
   ['enrol', 'enroll'],
@@ -189,18 +195,23 @@ const PREFIXES = ['co', 'de', 'dis', 'mis', 'non', 'over', 're', 'un', 'under']
 
 /**
  * Proper nouns and quotations that keep their British spelling, written
- * exactly as they appear. Each entry is Matt's decision; add one only with
- * his word, and say where it appears.
+ * exactly as they appear, each with the file it appears in. Whether one
+ * stays is Matt's decision; an entry waiting on it says so. A test fails
+ * when an entry no longer appears in its file.
  */
-export const KEPT_AS_WRITTEN: readonly string[] = [
-  // Quotations, kept as the corpus quotes them until Matt says whether a
-  // quotation takes American spelling (MTC-94).
-  // content/knowledge/career/ai-email-engagement-summary.md, quoting the plan.
-  '"productionise, even if that means a rewrite"',
-  // content/knowledge/career/symphony-autonomous-security-remediation.md,
-  // quoting Matt.
-  'prescribing things for the entire organisation',
+export const KEPT_AS_WRITTEN: readonly {
+  phrase: string
+  file: string
+}[] = [
+  {
+    // Matt's words, quoted verbatim in a block quote. Waiting on Matt
+    // (MTC-94): whether his quoted words take American spelling.
+    phrase: 'prescribing things for the entire organisation',
+    file: 'content/knowledge/career/symphony-autonomous-security-remediation.md',
+  },
 ]
+
+const KEPT_PHRASES = KEPT_AS_WRITTEN.map(entry => entry.phrase)
 
 /** Every listed British form, lowercase, with its American spelling. */
 export const BRITISH_SPELLINGS: ReadonlyMap<string, string> = new Map([
@@ -234,11 +245,13 @@ const WORD = /[\p{L}\p{M}\p{N}]+/gu
  * first so a URL inside a code span is masked with the span.
  */
 const NOT_PROSE = [
-  // A fenced code block, to its closing fence or the end of the text.
-  /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\1[ \t]*$|(?![\s\S]))/gm,
-  // An inline code span on one line, with one or two backticks.
-  /``[^\n]*?``|`[^`\n]+`/g,
-  // A URL, with or without its scheme.
+  // A fenced code block, to its closing fence (which may be longer than the
+  // opening one) or the end of the text.
+  /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\1[`~]*[ \t]*$|(?![\s\S]))/gm,
+  // An inline code span with one or two backticks. It may wrap onto the
+  // next line, as hard-wrapped Markdown does, but never across a blank line.
+  /``(?:[^`\n]|`(?!`)|\n(?![ \t]*\n))+?``|`(?:[^`\n]|\n(?![ \t]*\n))+`/g,
+  // A URL with a scheme, or one that starts "www."
   /\b(?:https?|ftp|file):\/\/[^\s<>"'`)\]]+|\bwww\.[^\s<>"'`)\]]+/gi,
   // A Markdown link target, which may be a relative path.
   /\]\([^)\s]*\)/g,
@@ -297,7 +310,7 @@ function americanFor(word: string): string | undefined {
  */
 export function findBritishSpellings(
   text: string,
-  kept: readonly string[] = KEPT_AS_WRITTEN
+  kept: readonly string[] = KEPT_PHRASES
 ): BritishSpellingHit[] {
   const masked = maskNotProse(text, kept)
   return [...masked.matchAll(WORD)].flatMap(match => {

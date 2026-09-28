@@ -34,7 +34,7 @@ counted.
 Three epics, each with a stated user problem:
 
 - **The campaigns page did not explain itself.** Small-business owners
-  installing pre-built "wizardised" campaigns or hand-building advanced
+  installing pre-built "wizardized" campaigns or hand-building advanced
   ones needed different explanations and different setup paths, and the
   page did not distinguish them.
 - **The product could not act on the owner's behalf.** The assisted
@@ -49,7 +49,7 @@ Three epics, each with a stated user problem:
 
 ## What he built
 
-**The campaign page and details modal.** The wizardised and advanced
+**The campaign page and details modal.** The wizardized and advanced
 campaign-card and detail flows in the monolith, then ported into the newer
 web front end, then the details modal itself.
 

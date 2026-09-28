@@ -44,7 +44,7 @@ production, flat across a thirty-day sample with no decline trend, because
 old emails permanently exist in inboxes and archives, search engines have
 indexed the URLs, and DNS pointed the domain family straight at the
 application-hosting platform. Matt ran bot detection across user-agent
-fingerprints, datacentre address ranges, residential-proxy patterns, and
+fingerprints, datacenter address ranges, residential-proxy patterns, and
 the time-of-day distribution, and found the daily curve flat to within four
 percent, with no human peak at all. His conclusion, which is what made the
 shutdown decision possible: of 24,300 requests a day, roughly 24,000 were

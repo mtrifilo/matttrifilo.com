@@ -62,7 +62,7 @@ Goals were defined before any code:
   every one of those: the managed Vertex AI RAG engine, documents in cloud
   storage, managed embeddings, and an automated daily sync of help-center
   articles. Matt wrote that table of differences into the plan before
-  building, so "productionise, even if that means a rewrite" was a stated
+  building, so "productionize, even if that means a rewrite" was a stated
   expectation rather than a surprise.
 - The service reads the engagement data the monolith already fetches from
   two internal reporting services, aggregates it, and posts it to a

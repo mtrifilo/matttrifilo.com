@@ -8,7 +8,7 @@ import { createReadBudget } from '@/lib/chat/read-budget'
 import { createReadDocumentSession } from '@/lib/chat/read-document'
 import { createRecentActivitySession } from '@/lib/chat/recent-activity'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
-import { findBritishSpellings } from './american-english'
+import { findBritishSpellings, KEPT_AS_WRITTEN } from './american-english'
 import { findEmDashes, findPunctuationDashes } from './dashes'
 
 /**
@@ -43,9 +43,10 @@ import { findEmDashes, findPunctuationDashes } from './dashes'
  *   repository is public.
  * - content/resume.md, and any .md or .mdx file under the script
  *   directories above, whole.
- * - for spelling only, every string in evals/suites/*.yaml (the questions,
- *   the rubrics and the expected strings), as YAML parses it, so a comment
- *   is never read there either.
+ * - for spelling only, every string in evals/suites/*.yaml outside a
+ *   test's vars (the rubrics, the expected strings, the descriptions), as
+ *   YAML parses it, so a comment is never read there either. A test's vars
+ *   are the visitor's own words, which a test may spell as a visitor would.
  *
  * Not read: content/blog/, which is Matt's own writing and his to police.
  *
@@ -220,9 +221,11 @@ const evalSuitePaths = filesUnder(EVAL_SUITE_DIRECTORY).filter(path =>
   /\.ya?ml$/.test(path)
 )
 
-const evalSuiteStrings = evalSuitePaths.flatMap(path =>
-  yamlStrings(Bun.YAML.parse(readFileSync(join(ROOT, path), 'utf8')), path)
-)
+const evalSuiteStrings = evalSuitePaths
+  .flatMap(path =>
+    yamlStrings(Bun.YAML.parse(readFileSync(join(ROOT, path), 'utf8')), path)
+  )
+  .filter(({ path }) => !/^[^.]+\.yaml\[\d+\]\.vars\./.test(path))
 
 /**
  * The messages a request sends the model, joined, rendered by buildMessages
@@ -378,7 +381,14 @@ describe('no British spelling anywhere a visitor or the model reads', () => {
     }
   })
 
-  test('the questions, rubrics and expected strings in the eval suites', () => {
+  test('every kept phrase still appears in the file it names', () => {
+    // An exemption that outlived its quotation would hide a new one.
+    for (const { phrase, file } of KEPT_AS_WRITTEN) {
+      expect(readFileSync(join(ROOT, file), 'utf8')).toContain(phrase)
+    }
+  })
+
+  test('the rubrics and expected strings in the eval suites', () => {
     expect(
       evalSuiteStrings.flatMap(({ path, text }) =>
         excerpts(findSpellings, text).map(excerpt => `${path}: ${excerpt}`)

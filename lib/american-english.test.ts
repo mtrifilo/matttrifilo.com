@@ -133,6 +133,33 @@ describe('findBritishSpellings', () => {
     ).toEqual([])
   })
 
+  test('finds the forms the first review found missing', () => {
+    expect(
+      words('datacentre, wizardised, recognisably, neighbourly, favouritism')
+    ).toEqual([
+      'datacentre',
+      'wizardised',
+      'recognisably',
+      'neighbourly',
+      'favouritism',
+    ])
+  })
+
+  test('skips a code span that wraps, and reads the prose after it', () => {
+    expect(
+      words('Run `optimise\n--colour` then the programme and `x`.')
+    ).toEqual(['programme'])
+    // A blank line ends a paragraph, so a lone backtick cannot mask the
+    // paragraph after it.
+    expect(words('A stray ` here.\n\nThe programme ` there.')).toEqual([
+      'programme',
+    ])
+  })
+
+  test('closes a fence on a longer closing fence', () => {
+    expect(words('```\ncentre\n````\nThe programme.')).toEqual(['programme'])
+  })
+
   test('skips inline code and fenced blocks', () => {
     const fence = '```'
     expect(
