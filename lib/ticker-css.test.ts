@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import {
   EDGE_FADE_PROPERTY,
+  SHARED_CUT_PROPERTY,
+  SHARED_WIDTH_PROPERTY,
   TICKER_ANIMATION_NAME,
   TICKER_COPIES,
   TICKER_KEYFRAME_FROM,
@@ -153,6 +155,22 @@ describe('a row handed over to the visitor', () => {
     )
   })
 
+  test('is trimmed to the window both rows share, by the names the component sets', () => {
+    // The component writes these two properties on the track; a stylesheet
+    // spelling either differently leaves the rows untrimmed, so a drag on
+    // one would run on past where the other stops.
+    const track = ruleFor(`${HANDED_OVER} .starter-ticker-track {`)
+    expect(track).toContain(
+      `margin-inline-start: calc(var(${SHARED_CUT_PROPERTY}, 0px) * -1)`
+    )
+    expect(track).toContain(`width: var(${SHARED_WIDTH_PROPERTY}, max-content)`)
+    // Clipped sideways only: `overflow: clip` would also clip a focused
+    // pill's ring above and below, and `hidden` would make the track a
+    // scroll box of its own inside the row.
+    expect(track).toContain('overflow-x: clip')
+    expect(track).not.toMatch(/overflow(-y)?:/)
+  })
+
   test('is not scoped to reduced motion, where the rows already scroll', () => {
     // The hand-over is for rows that move. Written inside the reduced-motion
     // block it would never apply to one.
@@ -298,9 +316,9 @@ describe('the state flags the component writes', () => {
   })
 
   test('hover pauses only where a pointer can hover', () => {
-    // A touch hands both rows over, but a row whose loop is not measured
-    // yet is left moving. A touch browser keeps :hover on the last thing
-    // tapped, so an unscoped hover pause would hold that row instead.
+    // A touch browser keeps :hover on the last thing tapped, and a tap in
+    // the gap between the rows hands nothing over, so an unscoped hover
+    // pause would hold both rows still with no strip to scroll.
     expect(
       blockAround('.starter-ticker:hover .starter-ticker-track {')
     ).toContain('@media (hover: hover)')

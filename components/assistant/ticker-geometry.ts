@@ -220,39 +220,137 @@ export function revealScrollLeft({
 }
 
 /**
- * Where a handed-over row sits in the one scroll position both rows share.
- *
- * Every row stops at its own loop position, so the rows start the shared
- * position at different scroll offsets: `origin` is the offset a row had
- * when the shared travel was zero, and the row is at `origin + travel` from
- * then on. `maxScrollLeft` is the furthest the row itself can scroll.
+ * The custom properties that trim a handed-over row to the window both rows
+ * share, set on its track by the component and read by app/globals.css:
+ * how much of the row's start is cut away (a negative start margin), and
+ * how wide the track is kept (clipping its end). lib/ticker-css.test.ts
+ * keeps the stylesheet using these names.
  */
-export interface StripSpan {
-  origin: number
+export const SHARED_CUT_PROPERTY = '--ticker-shared-cut'
+export const SHARED_WIDTH_PROPERTY = '--ticker-shared-width'
+
+/**
+ * A handed-over row, in its own pixels before any trim.
+ *
+ * `position` is its scrollLeft, `maxScrollLeft` the furthest it can scroll,
+ * and `period` one copy of its questions: the row shows the same pills one
+ * period further on, because its track holds the questions twice.
+ */
+export interface StripPlacement {
+  position: number
+  period: number
   maxScrollLeft: number
 }
 
 /**
- * The travel every row can follow, as close to the asked-for travel as
- * that allows.
+ * The one scroll position the handed-over rows share, and how each row is
+ * trimmed to it.
  *
- * The rows hold different questions and so run different lengths, and each
- * starts from its own offset, so each one runs out at a different travel.
- * The rows stop together at the first of those ends, whichever row and
- * whichever edge it is: a row that kept going alone would put the two rows
+ * Trimmed, every row has the same range, from zero to `maxScrollLeft`, and
+ * sits at the same `scrollLeft`, so one number is the position of both and
+ * the browser's own edge is where both stop. `cuts[i]` is how far row i's
+ * start is cut away: its untrimmed position is `scrollLeft + cuts[i]`, and
+ * so is every one of its pills' offsets, less the cut, in the scroll box.
+ */
+export interface SharedWindow {
+  scrollLeft: number
+  maxScrollLeft: number
+  cuts: number[]
+}
+
+/**
+ * The window rows at these positions share: as far back as the row with
+ * least room behind it can go, as far on as the row with least room ahead
+ * can go. So the rows stop together at whichever end comes first, and a
+ * row never runs on alone past the other's end, which would put the two
  * out of step for the rest of the visit.
  */
-export function clampSharedTravel(
-  travel: number,
-  strips: readonly StripSpan[]
-): number {
-  let low = Number.NEGATIVE_INFINITY
-  let high = Number.POSITIVE_INFINITY
-  for (const { origin, maxScrollLeft } of strips) {
-    low = Math.max(low, -origin)
-    high = Math.min(high, maxScrollLeft - origin)
+export function sharedWindow(strips: readonly StripPlacement[]): SharedWindow {
+  if (strips.length === 0) return { scrollLeft: 0, maxScrollLeft: 0, cuts: [] }
+  const positions = strips.map(strip =>
+    clamp(strip.position, 0, Math.max(strip.maxScrollLeft, 0))
+  )
+  let behind = Number.POSITIVE_INFINITY
+  let ahead = Number.POSITIVE_INFINITY
+  strips.forEach((strip, index) => {
+    behind = Math.min(behind, positions[index])
+    ahead = Math.min(ahead, strip.maxScrollLeft - positions[index])
+  })
+  const reach = Math.max(ahead, 0)
+  return {
+    scrollLeft: behind,
+    maxScrollLeft: behind + reach,
+    cuts: positions.map(position => position - behind),
   }
-  return clamp(travel, low, high)
+}
+
+/**
+ * Where to put rows being handed over so the window they share is as wide
+ * as it can be.
+ *
+ * A row that freezes near the start of its loop has almost nothing behind
+ * it, and the shared window would inherit that: a visitor could barely
+ * drag back, and in the worst pairings the other row could not bring every
+ * question into view. One period on, the same row shows the same pixels
+ * with a whole copy behind it, so each row that `canMove` may take that
+ * placement instead; nothing on screen changes. A row that cannot move
+ * (one already handed over, whose pills a visitor may be reading or
+ * focusing) keeps its position. Ties keep the positions as given.
+ */
+export function widestPlacement(
+  strips: readonly (StripPlacement & { canMove: boolean })[]
+): number[] {
+  const choices = strips.map(strip => {
+    const later = strip.position + strip.period
+    return strip.canMove && strip.period > 0 && later <= strip.maxScrollLeft
+      ? [strip.position, later]
+      : [strip.position]
+  })
+  let best = strips.map(strip => strip.position)
+  let bestWidth = windowWidth(strips, best)
+  for (const positions of everyCombination(choices)) {
+    const width = windowWidth(strips, positions)
+    if (width > bestWidth) {
+      best = positions
+      bestWidth = width
+    }
+  }
+  return best
+}
+
+function windowWidth(
+  strips: readonly StripPlacement[],
+  positions: readonly number[]
+): number {
+  return sharedWindow(
+    strips.map((strip, index) => ({ ...strip, position: positions[index] }))
+  ).maxScrollLeft
+}
+
+function everyCombination(choices: readonly number[][]): number[][] {
+  return choices.reduce<number[][]>(
+    (combinations, options) =>
+      combinations.flatMap(combination =>
+        options.map(option => [...combination, option])
+      ),
+    [[]]
+  )
+}
+
+/**
+ * Where a row goes when the other row is moved `delta` by something that
+ * has to win, a focused pill being brought into view: the same distance,
+ * or the same pixels one period either way when the distance itself would
+ * run the row off an end; only when neither fits, as far as the row goes.
+ */
+export function followPosition(strip: StripPlacement, delta: number): number {
+  const target = strip.position + delta
+  const max = Math.max(strip.maxScrollLeft, 0)
+  for (const shift of [0, -strip.period, strip.period]) {
+    const shifted = target + shift
+    if (shifted >= 0 && shifted <= max) return shifted
+  }
+  return clamp(target, 0, max)
 }
 
 function clamp(value: number, low: number, high: number): number {

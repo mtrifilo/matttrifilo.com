@@ -14,20 +14,24 @@ import { Suggestion } from '@/components/ai-elements/suggestion'
 import { cn } from '@/lib/utils'
 import { STARTER_QUESTIONS } from './copy'
 import {
-  clampSharedTravel,
   EDGE_FADE_PROPERTY,
+  followPosition,
   loopSeconds,
   openingProgress,
   pillIndexFor,
   progressForScrollLeft,
   revealScrollLeft,
   scrollLeftForProgress,
+  SHARED_CUT_PROPERTY,
+  SHARED_WIDTH_PROPERTY,
+  sharedWindow,
+  type StripPlacement,
   TICKER_ANIMATION_NAME,
   sidewaysWheelPixels,
-  type StripSpan,
   TICKER_COPIES,
   tickerRows,
   WHEEL_GESTURE_GAP_MS,
+  widestPlacement,
 } from './ticker-geometry'
 
 /**
@@ -79,7 +83,10 @@ import {
  * reader's finger would take the question they were reading away from
  * them. From then on the two strips share one scroll position, so a drag on
  * either moves both the same distance and a reader never has to scroll one
- * row to catch up with the other.
+ * row to catch up with the other. The rows stopped at different points of
+ * their loops, so each is trimmed to the window both can scroll through,
+ * after which one scrollLeft is the position of both and the browser's own
+ * edge is where both stop.
  */
 
 /**
@@ -112,7 +119,7 @@ export function StarterTicker({
   className,
 }: StarterTickerProps) {
   // One per ticker, for its whole life: both rows' handlers must reach
-  // the same position, and a new one would forget where the rows are.
+  // the same window, and a new one would forget how the rows are trimmed.
   const [sharedScroll] = useState(createSharedScroll)
   return (
     <div
@@ -257,6 +264,10 @@ function TickerRow({
       // hovering them.
       if (!pill.matches(':focus-visible')) return
 
+      // A handed-over row is revealed through the window the rows share,
+      // which takes the other row the same distance.
+      if (sharedScroll.reveal(viewport, pill)) return
+
       viewport.scrollLeft = revealScrollLeft({
         scrollLeft: viewport.scrollLeft,
         viewportWidth: viewport.clientWidth,
@@ -267,7 +278,6 @@ function TickerRow({
         fade: fadeWidth(viewport),
         maxScrollLeft: maxScrollLeftOf(viewport),
       })
-      sharedScroll.follow(viewport, 'focused')
     },
     [sharedScroll]
   )
@@ -302,8 +312,9 @@ function TickerRow({
 
   /**
    * Stops this row for good and gives it to the visitor as a scroll strip.
-   * The shared scroll calls it for every row at once, whichever row was
-   * reached for.
+   * Only the shared scroll calls it, for every row at once, whichever row
+   * was reached for; a handler that called it directly would hand one row
+   * over and leave the other moving.
    *
    * The loop's position goes to scrollLeft exactly as it does for focus, so
    * the pill under a finger does not move and a tap still lands on it; the
@@ -315,7 +326,7 @@ function TickerRow({
    *
    * Returns whether this call is the one that handed the row over.
    */
-  const handOver = useCallback((): boolean => {
+  const handOverThisRow = useCallback((): boolean => {
     const viewport = viewportRef.current
     const track = trackRef.current
     if (!viewport || !track || isHandedOver(viewport)) return false
@@ -330,17 +341,29 @@ function TickerRow({
     return true
   }, [])
 
-  useEffect(() => {
+  // In the same commit that places the row, so a touch that lands as soon
+  // as the row is visible finds it registered.
+  useLayoutEffect(() => {
     const viewport = viewportRef.current
-    if (!viewport) return
-    return sharedScroll.add({ viewport, handOver })
-  }, [sharedScroll, handOver])
+    const track = trackRef.current
+    if (!viewport || !track) return
+    return sharedScroll.add({
+      viewport,
+      track,
+      copyWidth: () => copyWidthRef.current,
+      handOverThisRow,
+    })
+  }, [sharedScroll, handOverThisRow])
 
   // A drag, its momentum, or a native wheel scroll on a handed-over row
   // moves the other row with it.
   const handleScroll = useCallback(() => {
     const viewport = viewportRef.current
-    if (viewport) sharedScroll.follow(viewport, 'together')
+    if (viewport) sharedScroll.syncFrom(viewport)
+  }, [sharedScroll])
+
+  const handleTouchStart = useCallback(() => {
+    sharedScroll.handOverAll()
   }, [sharedScroll])
 
   /**
@@ -380,7 +403,9 @@ function TickerRow({
       )
       if (pixels === 0) return
       if (!handedOver) {
-        sharedScroll.handOver()
+        sharedScroll.handOverAll()
+        // This row may be the one that could not be handed over yet; its
+        // track is still transformed, and scrolling it would add to that.
         if (!isHandedOver(viewport)) return
       }
       steeredAt = event.timeStamp
@@ -390,7 +415,7 @@ function TickerRow({
       if (!event.cancelable) return
       event.preventDefault()
       viewport.scrollLeft += pixels
-      sharedScroll.follow(viewport, 'together')
+      sharedScroll.syncFrom(viewport)
     }
     viewport.addEventListener('wheel', handleWheel, { passive: false })
     return () => viewport.removeEventListener('wheel', handleWheel)
@@ -407,7 +432,7 @@ function TickerRow({
       onScroll={handleScroll}
       // Not behind `pointer: coarse`: a touchstart is itself the evidence,
       // and a touchscreen laptop reports a fine pointer.
-      onTouchStart={sharedScroll.handOver}
+      onTouchStart={handleTouchStart}
       ref={viewportRef}
     >
       <div className="starter-ticker-track" ref={trackRef}>
@@ -539,58 +564,82 @@ function isHandedOver(viewport: HTMLElement): boolean {
   return viewport.dataset.handedOver === 'true'
 }
 
-/** A row as the shared scroll position sees it. */
+/** A row as the shared window sees it. */
 interface SharedRow {
   /** The box that scrolls. */
   viewport: HTMLElement
-  /** The row's own hand-over; true when this call handed it over. */
-  handOver: () => boolean
+  /** What the window trims, through the custom properties it sets. */
+  track: HTMLElement
+  /** One copy's width as the row last measured it: its period. */
+  copyWidth: () => number
+  /** Hands this row alone over; true when this call is the one that did. */
+  handOverThisRow: () => boolean
 }
-
-/**
- * How a handed-over row's own scroll reaches the other row. `together` is
- * the visitor's drag, momentum or wheel: every row moves the same distance,
- * and no further than every row can go. `focused` is a pill being brought
- * into view: its row goes where the pill needs it, and the other row
- * follows as far as it can.
- */
-type FollowMode = 'together' | 'focused'
 
 /**
  * The one scroll position the rows share once the visitor has them.
  *
- * Each row stays its own scroll container, with its own fades, its own
- * focus handling and its own hand-over arithmetic; this only carries a
- * row's scroll to the other. That is what keeps every row's freeze exact:
- * the rows stop at different offsets, because their loops are at different
- * points, so they share a distance travelled rather than a scrollLeft.
+ * Each row stays its own scroll box, with its own fades, lead and focus
+ * handling, because a touch browser picks the box a drag scrolls when the
+ * finger lands: the row under the finger has to be the box that scrolls,
+ * from before the hand-over to after it.
+ *
+ * The rows freeze at different points of their loops, so each is trimmed
+ * (its start cut away, its end clipped) to the window both can scroll
+ * through, with sharedWindow in ticker-geometry.ts. Trimmed, both rows
+ * have the same range and one scrollLeft is the position of both: a drag
+ * on either is copied to the other, and the browser stops the dragged row
+ * at the shared end itself, so nothing ever writes to a row under a finger.
  */
 interface SharedScroll {
   /** Adds a row; returns what removes it again. */
   add(row: SharedRow): () => void
   /**
-   * Hands every row over at once. A row that cannot be handed over yet is
-   * left moving and joins the shared position when a later touch or wheel
-   * hands it over.
+   * Hands every row over at once and trims them to the window they share.
+   * A row that cannot be handed over yet is left moving, and joins the
+   * window when a later touch or wheel on either row hands it over.
    */
-  handOver(): void
-  /** Carries this row's scroll to the other rows, if it is handed over. */
-  follow(viewport: HTMLElement, mode: FollowMode): void
+  handOverAll(): void
+  /** Copies a handed-over row's scroll to the other rows. */
+  syncFrom(viewport: HTMLElement): void
+  /**
+   * Brings a focused pill in a handed-over row into view and takes the
+   * other rows the same distance, trimming them again around where they
+   * end up. False, doing nothing, when the row is not handed over.
+   */
+  reveal(viewport: HTMLElement, pill: HTMLElement): boolean
+}
+
+/** A handed-over row, with its trim and the width it had untrimmed. */
+interface Member {
+  row: SharedRow
+  cut: number
+  naturalScrollWidth: number
 }
 
 function createSharedScroll(): SharedScroll {
   const rows = new Set<SharedRow>()
-  // Each handed-over row's scrollLeft at a shared travel of zero.
-  const origins = new Map<HTMLElement, number>()
+  // Handed-over rows, by their box. A row stays a member when its effect
+  // runs again: it is still handed over, so no later hand-over would bring
+  // it back in.
+  const members = new Map<HTMLElement, Member>()
   // Where each handed-over row was last left, as the browser read it back.
   // The scroll event a write here causes finds the row still there and is
   // ignored, which is what stops two rows answering each other's events.
   const settled = new Map<HTMLElement, number>()
-  // How far the rows have moved together since they were handed over.
-  let travel = 0
 
-  function spanOf(viewport: HTMLElement, origin: number): StripSpan {
-    return { origin, maxScrollLeft: maxScrollLeftOf(viewport) }
+  /** A member as the window arithmetic sees it, at an untrimmed position. */
+  function placementOf(member: Member, position: number): StripPlacement {
+    const { viewport, copyWidth } = member.row
+    return {
+      position,
+      period: copyWidth(),
+      maxScrollLeft: member.naturalScrollWidth - viewport.clientWidth,
+    }
+  }
+
+  function untrimmedPosition(member: Member): number {
+    return member.row.viewport.scrollLeft + member.cut
   }
 
   function settle(viewport: HTMLElement, scrollLeft: number): void {
@@ -600,59 +649,109 @@ function createSharedScroll(): SharedScroll {
     settled.set(viewport, viewport.scrollLeft)
   }
 
+  /**
+   * Trims every member to the window their untrimmed positions share and
+   * scrolls them all to it. A row's cut and its scrollLeft change by the
+   * same amount in the same task, so nothing on screen moves.
+   */
+  function trimTo(placed: readonly (readonly [Member, number])[]): void {
+    const window = sharedWindow(
+      placed.map(([member, position]) => placementOf(member, position))
+    )
+    placed.forEach(([member], index) => {
+      const { viewport, track } = member.row
+      member.cut = window.cuts[index]
+      track.style.setProperty(SHARED_CUT_PROPERTY, `${member.cut}px`)
+      // The track's end, measured from the cut start, lands where the
+      // shared window ends plus one viewport, which is what makes the
+      // window's end the furthest this box scrolls.
+      track.style.setProperty(
+        SHARED_WIDTH_PROPERTY,
+        `${window.maxScrollLeft + viewport.clientWidth + member.cut}px`
+      )
+    })
+    for (const [member] of placed) {
+      settle(member.row.viewport, window.scrollLeft)
+    }
+  }
+
   return {
     add(row) {
       rows.add(row)
       return () => {
         rows.delete(row)
-        origins.delete(row.viewport)
-        settled.delete(row.viewport)
       }
     },
 
-    handOver() {
+    handOverAll() {
+      // Read before anything is handed over or trimmed.
+      const pinned = [...members.values()].map(
+        member => [member, untrimmedPosition(member)] as const
+      )
+      const joining: Member[] = []
       for (const row of rows) {
-        if (!row.handOver()) continue
-        const scrollLeft = row.viewport.scrollLeft
-        origins.set(row.viewport, scrollLeft - travel)
-        settled.set(row.viewport, scrollLeft)
+        if (members.has(row.viewport) || !row.handOverThisRow()) continue
+        joining.push({
+          row,
+          cut: 0,
+          // Untrimmed: the row was only just handed over.
+          naturalScrollWidth: row.viewport.scrollWidth,
+        })
+      }
+      if (joining.length === 0) return
+      const candidates = [
+        ...pinned.map(([member, position]) => ({ member, position })),
+        ...joining.map(member => ({
+          member,
+          position: member.row.viewport.scrollLeft,
+        })),
+      ]
+      const positions = widestPlacement(
+        candidates.map(({ member, position }) => ({
+          ...placementOf(member, position),
+          // A row holding focus keeps its pills where they are: moved a
+          // copy on, the focused one would be off screen.
+          canMove:
+            joining.includes(member) &&
+            !member.row.viewport.contains(document.activeElement),
+        }))
+      )
+      for (const member of joining) members.set(member.row.viewport, member)
+      trimTo(candidates.map(({ member }, index) => [member, positions[index]]))
+    },
+
+    syncFrom(source) {
+      if (!members.has(source)) return
+      const scrollLeft = source.scrollLeft
+      if (scrollLeft === settled.get(source)) return
+      settled.set(source, scrollLeft)
+      for (const viewport of members.keys()) {
+        if (viewport !== source) settle(viewport, scrollLeft)
       }
     },
 
-    follow(source, mode) {
-      const origin = origins.get(source)
-      if (origin === undefined) return
-      if (source.scrollLeft === settled.get(source)) return
-      let next = source.scrollLeft - origin
-      if (mode === 'together') {
-        next = clampSharedTravel(
-          next,
-          [...origins].map(([viewport, rowOrigin]) =>
-            spanOf(viewport, rowOrigin)
-          )
-        )
-        // Held back only when another row is the one that ran out. A row
-        // bouncing past its own end is left to the browser's bounce.
-        const reachable = Math.min(
-          Math.max(source.scrollLeft, 0),
-          maxScrollLeftOf(source)
-        )
-        if (reachable - origin !== next) settle(source, origin + next)
-      }
-      settled.set(source, source.scrollLeft)
-      travel = next
-      for (const [viewport, rowOrigin] of origins) {
-        if (viewport === source) continue
-        settle(
-          viewport,
-          Math.min(Math.max(rowOrigin + next, 0), maxScrollLeftOf(viewport))
-        )
-        // A row that could not follow a focused pill all the way shares
-        // the position again from where it stopped.
-        if (mode === 'focused') {
-          origins.set(viewport, viewport.scrollLeft - next)
-        }
-      }
+    reveal(viewport, pill) {
+      const focused = members.get(viewport)
+      if (!focused) return false
+      const from = untrimmedPosition(focused)
+      const target = revealScrollLeft({
+        scrollLeft: from,
+        viewportWidth: viewport.clientWidth,
+        // The track is the pill's offset parent, so this is the untrimmed
+        // coordinate the row's position is measured in.
+        pillStart: pill.offsetLeft,
+        pillWidth: pill.offsetWidth,
+        fade: fadeWidth(viewport),
+        maxScrollLeft: placementOf(focused, from).maxScrollLeft,
+      })
+      const delta = target - from
+      const placed = [...members.values()].map(member => {
+        if (member === focused) return [member, target] as const
+        const strip = placementOf(member, untrimmedPosition(member))
+        return [member, followPosition(strip, delta)] as const
+      })
+      trimTo(placed)
+      return true
     },
   }
 }
