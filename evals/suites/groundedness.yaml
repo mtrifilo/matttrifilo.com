@@ -150,8 +150,8 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
-# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give nine services in nine weeks, the programme document the nine and their dates.
-- description: 'groundedness: cites the deployment programme'
+# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give nine services in nine weeks, the program document the nine and their dates.
+- description: 'groundedness: cites the deployment program'
   vars:
     question: How many services did the team move onto independent deploys, and how long did it take?
   metadata:

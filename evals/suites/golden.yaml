@@ -387,7 +387,7 @@
             The answer says Matt authored the marketplace governance proposal
             and the architecture decisions that made distribution federated,
             and mentions his team's own marketplace. It does not claim he
-            scaffolded the organisation-wide repository, which a colleague did.
+            scaffolded the organization-wide repository, which a colleague did.
         - type: llm-rubric
           value: *r11
         - type: llm-rubric
@@ -681,7 +681,7 @@
         - type: llm-rubric
           value: &r20 >-
             The answer says the compliance case system's records moved to the
-            parent company's Salesforce organisation, and names at least one
+            parent company's Salesforce organization, and names at least one
             mechanism Matt used, such as a per-target configuration toggle,
             OAuth client-credentials authentication, a field-parity analysis,
             or a gap-annotation convention.
@@ -854,7 +854,7 @@
             The answer names at least two of the Thryv Accelerator Award, the
             Thryv Emerging Leaders Program, and the Keap Better Together Award,
             and does not invent an award. Calling them the company's award and
-            programme without naming Thryv is correct, and so is adding the
+            program without naming Thryv is correct, and so is adding the
             documented promotions or the peer recognition posted in company
             channels; those are recorded, not invented.
         - type: llm-rubric
@@ -1008,7 +1008,7 @@
         - type: llm-rubric
           value: *r29
 
-# Reads: owned-systems-and-operations, the document about how the team runs on-call. The résumé names the programme, Matt's shifts, his escalation role and the on-call plugin, but not the standing rule that every alert gets a permanent runbook, which the rubric grades. The golden 'running a 24/7 rotation for an ESP' pins the same document.
+# Reads: owned-systems-and-operations, the document about how the team runs on-call. The résumé names the program, Matt's shifts, his escalation role and the on-call plugin, but not the standing rule that every alert gets a permanent runbook, which the rubric grades. The golden 'running a 24/7 rotation for an ESP' pins the same document.
 - description: 'golden: how on-call runs'
   vars:
     question: How does Matt run on-call for his team?
@@ -1101,8 +1101,8 @@
         - type: llm-rubric
           value: &r32 >-
             The answer says Matt sees trailing the state of the art slightly as
-            an advantage for a smaller organisation, because it can adopt what
-            larger organisations have already proven in production.
+            an advantage for a smaller organization, because it can adopt what
+            larger organizations have already proven in production.
         - type: llm-rubric
           value: *r32
         - type: llm-rubric
@@ -1168,7 +1168,6 @@
     - type: icontains-any
       value:
         - seat
-        - licence
         - license
         - spend
     - type: assert-set
@@ -1176,11 +1175,11 @@
       assert:
         - type: llm-rubric
           value: &r34 >-
-            The answer says Matt owns his organisation's AI tooling access
+            The answer says Matt owns his organization's AI tooling access
             and spend, and gives at least one concrete decision behind that:
             a trial that concluded against buying a third-party agent, or
             giving up his own seat on the other editor to pay for the first
-            enterprise licences. It is written about Matt in the third
+            enterprise licenses. It is written about Matt in the third
             person.
         - type: llm-rubric
           value: *r34
@@ -1267,7 +1266,7 @@
 # run it without him"; owned-systems-and-operations, "The knowledge base is
 # written by the whole rotation, not by Matt alone". None of the three says
 # "single point of failure", so an answer led by that phrase is asserting a
-# characterisation the corpus never made.
+# characterization the corpus never made.
 - description: 'golden: a team that keeps running without him'
   vars:
     question: How does Matt build a team that keeps running without him?
@@ -1300,7 +1299,7 @@
         - grow people
     # Whether one exact idiom is present is not a judgement call, so it is
     # not left to the grader. No document uses this phrase; an answer that
-    # leads with it is characterising rather than reporting.
+    # leads with it is characterizing rather than reporting.
     - type: not-icontains
       value: single point of failure
     - type: assert-set
@@ -1324,8 +1323,8 @@
             let any engineer ship to production. It is written about Matt in
             the third person. It FAILS if it asserts that Matt designs
             himself out of being a single point of failure, or any equivalent
-            characterisation, as though the documents said so: the documents
-            never use that framing, and an inferred characterisation must not
+            characterization, as though the documents said so: the documents
+            never use that framing, and an inferred characterization must not
             be presented as a documented one.
         - type: llm-rubric
           value: *r37
@@ -1342,7 +1341,7 @@
 # Every rubric names the documented facts the answer rests on. The comment
 # above each test cites the document and the sentence those facts come from,
 # because a rubric that drifts from the corpus is how a golden starts
-# rewarding a characterisation the documents never made.
+# rewarding a characterization the documents never made.
 
 # ai-tooling-leadership: "every engineer on the team has access, and Matt
 # works alongside them using it daily"; team-throughput-study-2025-2026:
@@ -1385,17 +1384,17 @@
             and security work; or that his rule is agents open the pull
             request while a person approves it. It is written about Matt in
             the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r38
         - type: llm-rubric
           value: *r38
 
 # ai-tooling-leadership: "Led the Claude Code trial whose results informed
-# the organisation-wide decision to adopt Claude Code and Cursor as primary
-# tooling for roughly fifty engineers"; "The organisation's AI-tools forum:
+# the organization-wide decision to adopt Claude Code and Cursor as primary
+# tooling for roughly fifty engineers"; "The organization's AI-tools forum:
 # founded by Matt in February 2026"; "Matt created and maintains the
-# organisation's agent-skills library".
+# organization's agent-skills library".
 - description: 'golden: the org-wide AI rollout'
   vars:
     question: How did Matt roll out AI tooling and best practices across Thryv's engineering org?
@@ -1424,13 +1423,13 @@
         - type: llm-rubric
           value: &r39 >-
             The answer names at least two documented mechanisms: the Claude
-            Code trial whose results informed the organisation-wide decision
+            Code trial whose results informed the organization-wide decision
             to adopt Claude Code and Cursor for roughly fifty engineers, the
             AI-tools forum he founded in February 2026, the agent-skills
             library he created and maintains, the plugin marketplace
             governance he authored, the brown-bag talks, or the weekly
             developer-experience demo series. It is written about Matt in the
-            third person, and it must not present an inferred characterisation
+            third person, and it must not present an inferred characterization
             as a documented one.
         - type: llm-rubric
           value: *r39
@@ -1476,7 +1475,7 @@
             that this is a correlation and not a controlled experiment, or at
             least does not assert the agents caused the change. It is written
             about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r40
         - type: llm-rubric
@@ -1524,7 +1523,7 @@
             gate every independent deploy. It may add the measured result
             that customer-reported defects fell while output roughly tripled.
             It is written about Matt in the third person, and it must not
-            present an inferred characterisation as a documented one.
+            present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r41
         - type: llm-rubric
@@ -1564,7 +1563,7 @@
             quarter to 339 because he was running several agents in parallel.
             It does not state a different number as fact. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r42
         - type: llm-rubric
@@ -1613,7 +1612,7 @@
             risk scoring, domain authentication, the email data warehouse,
             the compliance case system, mailbox sync, or the AI email health
             features. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r43
         - type: llm-rubric
@@ -1662,7 +1661,7 @@
             marketplace, the move of nine microservices to independent gated
             deploys, or the compliance case-system migration to the parent
             company's Salesforce. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
+            person, and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r44
@@ -1674,7 +1673,7 @@
 # distribution of contacts by how recently they had engaged. What it did not
 # do was explain what those numbers meant or what to do next." Stack:
 # "Gemini Flash Lite on Vertex AI, a Cloud Run service, and Vector Search";
-# production retrieval runs over "an automated daily sync of help-centre
+# production retrieval runs over "an automated daily sync of help-center
 # articles". The résumé's one-line version words it differently (the last 30
 # days of sending practice, deliverability); a run that read both may use
 # that wording, so the rubric accepts it. Vertex is in both, and the rubric
@@ -1710,7 +1709,7 @@
             The answer says Matt proposed and built it as an LLM feature
             (saying he also designed it, or that it was one of the product's
             first LLM features, is correct but not required), that it runs on
-            Gemini on Vertex AI with retrieval over the product's help-centre
+            Gemini on Vertex AI with retrieval over the product's help-center
             content, and that it explains a sender's engagement figures, such
             as bounce rate, complaint rate and how recently contacts engaged,
             and recommends what to do next. Describing that instead as how the
@@ -1721,7 +1720,7 @@
             behind its model changes, is correct but not required; a different
             duration for any of those three milestones is wrong. It is written
             about Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r45
         - type: llm-rubric
@@ -1775,7 +1774,7 @@
             services at about 80 percent hands-free, is correct but not
             required; a different figure stated as fact is wrong. It is
             written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r46
         - type: llm-rubric
@@ -1787,8 +1786,8 @@
 # independent-deployment-program: "first independent production deploy on
 # July 9"; "The scheduling service completed the set on August 21"; "with a
 # December 31 target".
-# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give the nine weeks, the programme document the dates.
-- description: 'golden: the independent-deploy programme and its duration'
+# Reads any of: resume, owned-systems-and-operations or independent-deployment-program; the first two give the nine weeks, the program document the dates.
+- description: 'golden: the independent-deploy program and its duration'
   vars:
     question: How did Matt's team move to independent deploys, and how long did it take?
   metadata:
@@ -1818,12 +1817,12 @@
             release train onto independent, gated production deploys, and
             says how long it took: nine weeks, four months ahead of schedule,
             as the résumé and the operations document put it, or the
-            programme document's dates, the first independent production
+            program document's dates, the first independent production
             deploy on July 9 and the last service on August 21 against a
             December 31 target. It may add that any engineer can now ship
             once end-to-end, contract, load and manual readiness tests pass.
             It is written about Matt in the third person, and it must not
-            present an inferred characterisation as a documented one.
+            present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r47
         - type: llm-rubric
@@ -1862,7 +1861,7 @@
       assert:
         - type: llm-rubric
           value: &r48 >-
-            The answer names at least two documented parts of the programme:
+            The answer names at least two documented parts of the program:
             a weekly rotation covering roughly a dozen cloud projects,
             services, data pipelines and the gateway fleet; Matt taking shifts
             in it as a manager and serving as escalation lead for
@@ -1870,7 +1869,7 @@
             service modules; or the standing rule that every alert, including
             a one-off, gets a permanent runbook. It is written about Matt in
             the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r48
         - type: llm-rubric
@@ -1923,7 +1922,7 @@
             running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
             on Cyber Monday 2025. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
+            person, and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r49
@@ -1974,7 +1973,7 @@
             analysis. It says no messages were lost, because sends were queued
             and retried rather than dead-lettered. It is written about Matt in
             the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r50
         - type: llm-rubric
@@ -2028,7 +2027,7 @@
             It does not claim he led the Contacts decomposition or was its
             lead engineer, which no document states. It is written
             about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r51
         - type: llm-rubric
@@ -2073,7 +2072,7 @@
             developer role of typing code by hand with no part in product
             planning is going extinct while agentic engineering replaces it.
             It is written about Matt in the third person, and it must not
-            present an inferred characterisation as a documented one.
+            present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r52
         - type: llm-rubric
@@ -2112,7 +2111,7 @@
             and working UX, while insisting they must still be able to build
             software without AI, and that they should use the latest models as
             a teacher. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r53
         - type: llm-rubric
@@ -2161,7 +2160,7 @@
             that neither the résumé nor the technical-expertise document
             lists. It is written
             about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r54
         - type: llm-rubric
@@ -2203,7 +2202,7 @@
             at all. It states no star count, primary language or last-push
             date, which the published material deliberately omits. It is
             written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r55
         - type: llm-rubric
@@ -2246,7 +2245,7 @@
             and Go, as the résumé does, and it states no star count, primary
             language or last-push date, which the published material
             deliberately omits. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
+            and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r56
@@ -2288,12 +2287,12 @@
             Thryv Accelerator Award of March 2026, the Thryv Emerging Leaders
             Program of 2025, and the Keap Better Together Award of December
             2019. It does not invent an award or a year. Calling them the
-            company's award and programme without naming Thryv is correct. It
+            company's award and program without naming Thryv is correct. It
             may add that an award-winning branded film for Intel sits in his
             earlier sound work, or the documented promotions and peer
             recognition posted in company channels, which are recorded rather
             than invented. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r57
         - type: llm-rubric
@@ -2332,7 +2331,7 @@
             in-office, hybrid or remote work in the US. It invents no timing,
             no condition and no reason for the preference, none of which the
             published material gives. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
+            person, and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r58
@@ -2373,7 +2372,7 @@
             working as a barista when he took his first engineering offer, and
             that he has a degree in Audio Arts and Acoustics rather than
             computer science. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
+            and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r59
@@ -2423,7 +2422,7 @@
             player-coach or to manager and calls that a deliberate, defining
             choice; or that he still ships code daily. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r60
         - type: llm-rubric
@@ -2462,7 +2461,7 @@
             player-coach on Email Reliability from July 2022 to May 2025, half
             coding and half management for a team of five, through the Keap to
             Thryv acquisition. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
+            and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r61
@@ -2491,7 +2490,7 @@
     - type: icontains-any
       value:
         - forum
-        - organisation
+        - organization
         - company template
         - marketplace
     - type: assert-set
@@ -2499,16 +2498,16 @@
       assert:
         - type: llm-rubric
           value: &r62 >-
-            The answer says the work reached the wider organisation and names
+            The answer says the work reached the wider organization and names
             at least two documented instances: the AI-tools forum he founded
-            as the cross-organisation channel, the agent-skills library he
+            as the cross-organization channel, the agent-skills library he
             created and maintains, the trial whose results informed
-            organisation-wide adoption for roughly fifty engineers, the
+            organization-wide adoption for roughly fifty engineers, the
             marketplace governance whose team marketplace became the company
             template, the AI-champions-per-team proposal, or his invitations
-            onto organisation-wide agentic-engineering interview panels. It is
+            onto organization-wide agentic-engineering interview panels. It is
             written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r62
         - type: llm-rubric
@@ -2516,7 +2515,7 @@
 
 # ai-tooling-leadership: "Led a trial of a third-party coding agent in late
 # 2025 that concluded against purchase. The trial ran as a structured
-# internal programme with nine developers, trial questions, two weekly
+# internal program with nine developers, trial questions, two weekly
 # check-ins, and a survey."
 - description: 'golden: a tool evaluation that said no'
   vars:
@@ -2545,11 +2544,11 @@
           value: &r63 >-
             The answer says yes and gives the documented case: Matt led a
             trial of a third-party coding agent in late 2025 that concluded
-            against purchase, run as a structured programme with nine
+            against purchase, run as a structured program with nine
             developers, trial questions, two weekly check-ins and a survey. It
             does not name the tool, which the published material does not. It
             is written about Matt in the third person, and it must not present
-            an inferred characterisation as a documented one.
+            an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r63
         - type: llm-rubric
@@ -2596,7 +2595,7 @@
             welcome, and its absence is not a failure: what is graded is the
             documented practice, never whether a date was recited. It is
             written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r64
         - type: llm-rubric
@@ -2639,7 +2638,7 @@
             second editor that never became a pipeline, or the comparison
             against other teams that has not been run. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r65
         - type: llm-rubric
@@ -2682,7 +2681,7 @@
             August 2026, is the mechanism for keeping that true as volume
             grows, and that Matt carried a large share of the review load
             himself. It is written about Matt in the third person, and it must
-            not present an inferred characterisation as a documented one.
+            not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r66
         - type: llm-rubric
@@ -2722,14 +2721,14 @@
         - type: llm-rubric
           value: &r67 >-
             The answer keeps the three documented roles distinct: Matt owns
-            his team's 24/7 on-call programme and is escalation lead for
+            his team's 24/7 on-call program and is escalation lead for
             unacknowledged alerts; separately, in the Engineering Manager
-            rotation, he backs up the organisation's Incident Commander on P0
+            rotation, he backs up the organization's Incident Commander on P0
             and P1 incidents; and he was incident lead for the February 2024
-            cloud-provider outage. It does not say he is the organisation's
+            cloud-provider outage. It does not say he is the organization's
             Incident Commander, which the published material does not claim.
             It is written about Matt in the third person, and it must not
-            present an inferred characterisation as a documented one.
+            present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r67
         - type: llm-rubric
@@ -2740,7 +2739,7 @@
 # within ~1% and closed at my recommended tier, roughly flat year over
 # year." The published material states no dollar amount anywhere.
 # Reads: resume only; the quoted increase and the flat outcome are in no other document.
-- description: 'golden: vendor negotiation and licence cost'
+- description: 'golden: vendor negotiation and license cost'
   vars:
     question: Has Matt owned a vendor negotiation or a licensing budget?
   metadata:
@@ -2763,7 +2762,6 @@
       value:
         - renewal
         - forecast
-        - licence
         - license
     - type: assert-set
       threshold: 0.6
@@ -2772,13 +2770,13 @@
           value: &r68 >-
             The answer says yes and gives the documented case: Matt forecast
             monthly sending volume through 2026 for the annual mail transfer
-            agent licence renewal, which the vendor had quoted at plus 48
+            agent license renewal, which the vendor had quoted at plus 48
             percent, matched the vendor's own reporting within about one
             percent, and closed at his recommended tier roughly flat year over
-            year. It may add that he owns his organisation's AI tooling access
+            year. It may add that he owns his organization's AI tooling access
             and spend. It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
+            person, and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r68
@@ -2832,7 +2830,7 @@
             growth-conversation format, none of which the published material
             sets out; where it goes beyond what is published it says so. It is
             written about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r69
         - type: llm-rubric
@@ -2871,15 +2869,15 @@
         - type: llm-rubric
           value: &r70 >-
             The answer names at least two of the documented adoption signals:
-            engineers beyond Matt opening pull requests on the organisation
+            engineers beyond Matt opening pull requests on the organization
             marketplace, an engineer on another team requesting write access
-            after a demo, a manager from another organisation routing
+            after a demo, a manager from another organization routing
             engineers to him for the on-call plugin, or another engineer
             turning the pattern into a template that Matt announced
-            organisation-wide in August 2026. It does not claim another team
+            organization-wide in August 2026. It does not claim another team
             is running an adapted copy in its own rotation, which the document
             lists as not yet measured. It is written about Matt in the third
-            person, and it must not present an inferred characterisation as a
+            person, and it must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *r70
@@ -2927,7 +2925,7 @@
             audience test adopted from review feedback that removed two
             entries, or the per-team rollout path built ahead of the
             announcement. It is written about Matt in the third person, and it
-            must not present an inferred characterisation as a documented one.
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r71
         - type: llm-rubric
@@ -2978,7 +2976,7 @@
             broadcast; or the throughput study's own unmeasured gaps. It
             invents no failure the material does not describe. It is written
             about Matt in the third person, and it must not present an
-            inferred characterisation as a documented one.
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *r72
         - type: llm-rubric
@@ -2988,12 +2986,12 @@
 # a public company of ~3,000." Those two are COMPANY headcounts. The only
 # engineering figure published is ai-tooling-leadership's "roughly fifty
 # engineers", the population the tooling rollout reached, so an answer that
-# offers 400 or 3,000 as the size of the engineering organisation is
+# offers 400 or 3,000 as the size of the engineering organization is
 # substituting one denominator for another.
 # Reads: resume only; the company headcounts are in no other document.
-- description: 'golden: the size and kind of organisation he has worked in'
+- description: 'golden: the size and kind of organization he has worked in'
   vars:
-    question: What size of engineering organisation has Matt worked in?
+    question: What size of engineering organization has Matt worked in?
   metadata:
     suite: golden
     expectReads: [resume]
@@ -3020,16 +3018,16 @@
             people and stayed through its acquisition by Thryv, a
             public company of about 3,000, and is clear that those two figures
             are whole-company headcounts. If it gives a figure for the
-            engineering organisation itself it gives the published one,
+            engineering organization itself it gives the published one,
             roughly fifty engineers, the population his tooling rollout
             reached. It FAILS if it offers 400 or 3,000 as the size of the
-            engineering organisation, or states any engineering headcount the
+            engineering organization, or states any engineering headcount the
             published material does not give. Dating the join to 2017 and the
             acquisition to 2024 is correct and welcome, and their absence is
             not a failure: what is graded is the two headcounts and the
             denominator, never whether a year was recited. It is written about
             Matt in the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r73
         - type: llm-rubric
@@ -3094,7 +3092,7 @@
             onboarding process for people: the document gives it as his rule
             for building context for an agent. It is written about Matt in
             the third person, and it must not present an inferred
-            characterisation as a documented one.
+            characterization as a documented one.
         - type: llm-rubric
           value: *r74
         - type: llm-rubric
@@ -3106,7 +3104,7 @@
 # without a conflict in the middle of a test.
 #
 # Each rubric names facts its own document states and forbids an inferred
-# characterisation presented as documented, because the corpus is the only
+# characterization presented as documented, because the corpus is the only
 # thing between a hiring manager's question and a confident invention.
 #
 # `mtc53: true` marks the block so it can be run alone with
@@ -3144,7 +3142,7 @@
             about one week, a production beta about five weeks from build
             kickoff, the Gemini on Vertex AI and RAG stack, or the Promptfoo
             eval suite that gates model changes. It stays in the third person
-            and does not present an inferred characterisation as something
+            and does not present an inferred characterization as something
             the documents state.
         - type: llm-rubric
           value: *k33
@@ -3220,7 +3218,7 @@
             while the new API was called alongside it and the two were
             compared, without affecting the customer-facing result, and the
             diffs found real fidelity bugs before any customer saw the new
-            path. It does not present an inferred characterisation as
+            path. It does not present an inferred characterization as
             something the documents state.
         - type: llm-rubric
           value: *k35
@@ -3258,7 +3256,7 @@
             warm-up, engagement-tracking hardening, send-time suppression of
             spam-trap and bounced addresses, or sender-authentication
             enforcement in the builder. It does not present an inferred
-            characterisation as something the documents state, and it does
+            characterization as something the documents state, and it does
             not claim a measured deliverability improvement, which the
             documents say was never measured.
         - type: llm-rubric
@@ -3297,7 +3295,7 @@
             one documented instance such as the monolith troubleshooting
             page, the front-end interview content, the compliance service
             README, or the data-pipeline runbook and walkthrough video. It
-            does not present an inferred characterisation as something the
+            does not present an inferred characterization as something the
             documents state.
         - type: llm-rubric
           value: *k37
@@ -3335,7 +3333,7 @@
             names documented substance such as his 108 pull requests, the
             content-risk and anti-spam compliance gates, or the file-upload
             and tag-applying-link capabilities. It does not upgrade his role
-            to leader of the programme.
+            to leader of the program.
         - type: llm-rubric
           value: *k38
         - type: llm-rubric
@@ -3372,7 +3370,7 @@
             service by service along with their CI, and names at least one
             documented specific such as the content-risk and spam-scoring
             services, the compliance service cron migration, or the fleet-wide
-            CI fixes. It does not present an inferred characterisation as
+            CI fixes. It does not present an inferred characterization as
             something the documents state.
         - type: llm-rubric
           value: *k39
@@ -3416,7 +3414,7 @@
         - type: llm-rubric
           value: *k40
 
-- description: 'golden: stabilising the mailbox sync integration'
+- description: 'golden: stabilizing the mailbox sync integration'
   vars:
     question: What did Matt do about the email sync integration breaking?
   metadata:
@@ -3446,7 +3444,7 @@
             subscriptions that expired silently, and names what Matt added:
             a second independent refresh mechanism alongside the scheduled
             job, and a visible watch-expired status so users could see and
-            act. It reflects the document's own limit, that the stabilisation
+            act. It reflects the document's own limit, that the stabilization
             target was never measured, rather than claiming a proven outcome.
         - type: llm-rubric
           value: *k41
@@ -3597,7 +3595,7 @@
             modal, the assisted follow-up feature, the design-system
             components, the anti-spam compliance detection in the wizard, or
             the appointment-nurture flow. It does not present an inferred
-            characterisation as something the documents state.
+            characterization as something the documents state.
         - type: llm-rubric
           value: *k45
         - type: llm-rubric
@@ -3629,7 +3627,7 @@
       assert:
         - type: llm-rubric
           value: &k46 >-
-            The answer describes Matt's documented method: characterise the
+            The answer describes Matt's documented method: characterize the
             real traffic rather than trusting the raw request count, find the
             consumer the inventory missed, capture evidence that the pipeline
             is already dead, and stage the removal so a surprise is
@@ -3673,7 +3671,7 @@
             as a tour of duty for the Platform Services team, and names at
             least one documented specific such as the phased delivery, the
             merge contexts, the asynchronous bulk path, or consumer-supplied
-            mergeables. It does not present an inferred characterisation as
+            mergeables. It does not present an inferred characterization as
             something the documents state.
         - type: llm-rubric
           value: *k47
@@ -3711,7 +3709,7 @@
             changes on the monolith's Liquid merge-field implementation,
             with Matt the assignee on nearly all of them, spanning custom
             field types, locale formatting, and address merging. It does not
-            present an inferred characterisation as something the documents
+            present an inferred characterization as something the documents
             state.
         - type: llm-rubric
           value: *k48
@@ -3748,7 +3746,7 @@
             on-call-connected alerts on Google Cloud Operations under a
             company-wide deadline, and names at least one documented design
             decision such as the decoupled alert dashboard, the per-service
-            infrastructure module, standardised health checks, or thresholds
+            infrastructure module, standardized health checks, or thresholds
             tuned against each service's real ambient error rate. It does not
             claim alert-noise or resolution-time improvements, which the
             document says were never measured.
@@ -3794,9 +3792,9 @@
         - type: llm-rubric
           value: *k50
 
-- description: 'golden: recognition and leadership programmes'
+- description: 'golden: recognition and leadership programs'
   vars:
-    question: What recognition and leadership programmes has Matt been part of?
+    question: What recognition and leadership programs has Matt been part of?
   metadata:
     suite: golden
     mtc53: true
@@ -3821,7 +3819,7 @@
         - type: llm-rubric
           value: &k51 >-
             The answer names the Accelerator award in March 2026 and the 2025
-            Emerging Leaders programme, with at least one documented detail
+            Emerging Leaders program, with at least one documented detail
             about either. It repeats the document's own framing that the
             award is corroboration rather than a performance rating, and it
             does not describe any other person's performance.
@@ -3859,7 +3857,7 @@
             The answer names at least two of the documented threads:
             sustained remediation throughput across hundreds of security and
             scanner tickets, the supply-chain audit across two code-host
-            organisations that found zero active compromises, a new detection
+            organizations that found zero active compromises, a new detection
             capability for phishing campaigns, and an alerting audit. It does
             not describe how any detection or blocking mechanism works, nor
             name any specific weakness, because the document deliberately
