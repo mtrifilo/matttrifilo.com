@@ -628,6 +628,30 @@ nav[data-scrolled='true'] {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
 }
 
+/*
+ * A hit area of at least 44 by 44 px for a control drawn smaller (MTC-88),
+ * the size WCAG 2.5.5 and Apple's guidelines set for a finger. What the
+ * control draws is unchanged: an empty ::after, centred on it, is what grows
+ * the area a tap lands on, and a control already wider or taller than 44 px
+ * keeps its own size on that side. It goes only on controls with room
+ * around them; two grown areas that overlapped would split the space
+ * between them by paint order, not by what the finger meant.
+ *
+ * The control has to be positioned (`relative`, or `absolute` where it
+ * already floats) for the area to centre on it. That is left to the
+ * control's own classes: a `position` here would outrank every Tailwind
+ * utility and pull a floating control back into the flow.
+ */
+.touch-target::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
 /* Tactile button feedback */
 [data-slot='button']:active {
   transform: scale(0.98);

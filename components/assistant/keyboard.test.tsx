@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { FOCUS_RING } from '@/lib/focus-ring'
+import { answered } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
 import {
   progressSummary,
@@ -61,15 +62,7 @@ function answeringFetch() {
     { type: 'text-end', id: 't' },
     { type: 'finish' },
   ]
-  const stream = chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`)
-  return Promise.resolve(
-    new Response(`${stream.join('')}data: [DONE]\n\n`, {
-      headers: {
-        'content-type': 'text/event-stream',
-        'x-vercel-ai-ui-message-stream': 'v1',
-      },
-    })
-  )
+  return Promise.resolve(answered(chunks))
 }
 
 beforeEach(() => {

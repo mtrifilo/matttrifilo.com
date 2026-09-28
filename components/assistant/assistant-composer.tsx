@@ -140,7 +140,7 @@ export function AssistantComposer({
           <button
             aria-label="Stop generating"
             className={cn(
-              'flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70',
+              'touch-target relative flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70',
               FOCUS_RING
             )}
             onClick={onStop}
@@ -152,7 +152,7 @@ export function AssistantComposer({
           <button
             aria-label="Send question"
             className={cn(
-              'flex size-9 shrink-0 items-center justify-center rounded-full',
+              'touch-target relative flex size-9 shrink-0 items-center justify-center rounded-full',
               'bg-primary text-primary-foreground transition-opacity',
               'disabled:opacity-40',
               FOCUS_RING

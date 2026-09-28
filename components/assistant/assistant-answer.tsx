@@ -131,7 +131,7 @@ function FollowUpRow({
 }
 
 const ACTION_CLASS =
-  'flex items-center gap-2 transition-colors hover:text-foreground'
+  'touch-target relative flex items-center gap-2 transition-colors hover:text-foreground'
 
 function AnswerActions({
   onRegenerate,

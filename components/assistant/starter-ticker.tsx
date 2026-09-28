@@ -198,7 +198,7 @@ export function StarterTicker({
         aria-controls={groupId}
         aria-expanded={listOpen}
         className={cn(
-          'order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 [overflow-anchor:none] hover:underline',
+          'touch-target relative order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 [overflow-anchor:none] hover:underline',
           FOCUS_RING
         )}
         onClick={toggleList}

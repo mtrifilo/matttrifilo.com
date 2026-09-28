@@ -69,7 +69,7 @@ export const ConversationScrollButton = ({
       // Opaque in both themes: the pill floats over the transcript, and the
       // Button outline variant's dark background is translucent.
       className={cn(
-        "absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full",
+        "touch-target absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full",
         "bg-background dark:bg-background dark:hover:bg-muted",
         className
       )}

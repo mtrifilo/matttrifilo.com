@@ -322,7 +322,7 @@ export function AssistantChat() {
         {hasTranscript && (
           <button
             className={cn(
-              'flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground',
+              'touch-target relative flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground',
               FOCUS_RING
             )}
             onClick={reset}
