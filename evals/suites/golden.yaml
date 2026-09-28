@@ -2428,10 +2428,13 @@
         - type: llm-rubric
           value: *r60
 
-# resume: "Software Engineer III / Tech Lead (player-coach), Email
-# Reliability · Jul 2022 - May 2025 - Half coding, half management for a
-# team of 5 through the Keap-to-Thryv acquisition."
-# Reads: resume only; recognition-and-programs lacks the Tech Lead title, team of five and acquisition graded here.
+# resume: "Software Engineer III, player-coach, Email Reliability · Jul
+# 2022 - May 2025 - Player-coach with an engineering manager's
+# accountability for the team, its people, delivery and operations, while
+# coding roughly half the time." Matt was not the team's tech lead (Matt,
+# 2026-09-28, MTC-96), so a Tech Lead title fails the rubric.
+# "player-coach" is not a distinctive phrase here: the question supplies it.
+# Reads: resume only; recognition-and-programs dates the July 2022 start and the roughly even split, but not the role's title or the engineering manager's accountability graded here.
 - description: 'golden: the player-coach years'
   vars:
     question: Has Matt worked as a player-coach, and how did he split his time?
@@ -2449,20 +2452,26 @@
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
       value:
-        - player-coach
+        - Software Engineer III
+        - accountability
+        - accountable
+        - half the time
+        - half his time
+        - half of his time
         - half coding
-        - Tech Lead
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r61 >-
-            The answer says Matt was Software Engineer III and Tech Lead as a
-            player-coach on Email Reliability from July 2022 to May 2025, half
-            coding and half management for a team of five, through the Keap to
-            Thryv acquisition. It is written about Matt in the third person,
-            and it must not present an inferred characterization as a
-            documented one.
+            The answer says that from July 2022 to May 2025 Matt was a
+            Software Engineer III working as a player-coach on Email
+            Reliability, carrying an engineering manager's accountability for
+            the team, its people, delivery and operations, while coding
+            roughly half the time. It FAILS if it says Matt was the team's tech
+            lead or held a Tech Lead title, which the published material does
+            not state. It is written about Matt in the third person, and it
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r61
         - type: llm-rubric
