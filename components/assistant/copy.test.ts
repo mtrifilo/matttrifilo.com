@@ -9,15 +9,19 @@ import {
   PROGRESS_TOOL_NAME,
   PROGRESS_WRITING,
   RATE_LIMIT_NOTICE,
+  SHOW_FEWER_LABEL,
   STARTER_QUESTIONS,
   STARTER_HEAD_PILLS_PER_ROW,
   STARTER_HEAD_THEMES,
   STARTER_TABLE_STAKES_QUESTION,
+  STARTER_THEME_HEADINGS,
+  STARTER_UNTAGGED_HEADING,
   progressChecking,
   progressHeadings,
   progressReading,
   progressSummary,
   progressTopic,
+  seeAllQuestionsLabel,
 } from './copy'
 import { HOME_START_AT, pillIndexFor, tickerRows } from './ticker-geometry'
 
@@ -334,5 +338,30 @@ describe('the assistant never speaks as Matt', () => {
   test('the email is his, and the voice is about him', () => {
     expect(MATT_EMAIL).toBe('matt.trifilo@gmail.com')
     expect(RATE_LIMIT_NOTICE.lead).toContain("Matt's")
+  })
+})
+
+describe('the control that opens every question at once (MTC-85)', () => {
+  test("says Matt's words, with the count it is given", () => {
+    // Matt, 2026-09-23: "See all N questions", N computed from the pool,
+    // and "Show fewer".
+    expect(seeAllQuestionsLabel(27)).toBe('See all 27 questions')
+    expect(seeAllQuestionsLabel(STARTER_QUESTIONS.length)).toBe(
+      `See all ${STARTER_QUESTIONS.length} questions`
+    )
+    expect(SHOW_FEWER_LABEL).toBe('Show fewer')
+  })
+
+  test('every featured theme has a heading of its own, and the rest have one too', () => {
+    const headings = FEATURED_THEMES.map(
+      theme => STARTER_THEME_HEADINGS[theme.key]
+    )
+    for (const heading of headings) {
+      expect(heading.trim().length).toBeGreaterThan(0)
+    }
+    expect(new Set([...headings, STARTER_UNTAGGED_HEADING]).size).toBe(
+      headings.length + 1
+    )
+    expect(STARTER_UNTAGGED_HEADING).toBe('More')
   })
 })

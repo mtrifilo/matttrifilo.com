@@ -142,6 +142,35 @@ export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"
 
 /**
+ * The control under the starter rows that opens every question as one list,
+ * and closes it again (Matt, 2026-09-23, MTC-85). The count is the pool's
+ * own length, passed in, so the label can never promise a number of
+ * questions the list does not show.
+ */
+export const seeAllQuestionsLabel = (count: number) =>
+  `See all ${count} questions`
+export const SHOW_FEWER_LABEL = 'Show fewer'
+
+/**
+ * Matt's to change: the small heading over each featured theme's questions
+ * in that list, as the approved frames draft them (MTC-85). Keyed by theme,
+ * so a theme added to lib/chat/featuring.ts without a heading here fails
+ * typecheck; the order of the groups is FEATURED_THEMES' own.
+ */
+export const STARTER_THEME_HEADINGS: Record<FeaturedThemeKey, string> = {
+  measuredDelivery: 'Measured delivery change from AI adoption',
+  productOutcomes: 'Product and platform outcomes',
+  operationalOwnership: 'Operational ownership at scale',
+  orgAiAdoption: 'Org-wide AI adoption',
+}
+
+/**
+ * Matt's to change: the heading over the questions no featured theme
+ * claims, which the list shows last (MTC-85).
+ */
+export const STARTER_UNTAGGED_HEADING = 'More'
+
+/**
  * The control that empties the transcript. Two of the route's refusals tell
  * the visitor to "start a new one", and this is the thing they mean.
  */
