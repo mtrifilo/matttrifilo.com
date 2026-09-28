@@ -144,9 +144,8 @@ export const STARTER_HEAD_THEMES: Partial<
  * The starter question about the table-stakes practice in
  * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
  * sits outside the homepage's head, and it is the eleventh question of the
- * pool (Matt, 2026-09-28, MTC-40, superseding "position 10" of 2026-09-22,
- * MTC-41). copy.test.ts holds both. Neither pin governs /ask, which opens
- * each row at ASK_START_AT.
+ * pool (Matt, 2026-09-28, MTC-40). copy.test.ts holds both. Neither pin
+ * governs /ask, which opens each row at ASK_START_AT.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"

@@ -257,7 +257,7 @@ Each document is one index line, `- [id] title · summary (tags: …; ~N tokens)
 
 A placeholder is a `## ` heading, or any line outside a fenced block or inline code, that starts with `TODO` (after an optional list marker) or contains `TODO (Matt)`: in `content/knowledge/faq` a question whose heading or answer is one is dropped and listed by `bun run knowledge:check`, and anywhere else it fails the build.
 
-The FAQ is two documents, `faq.md` and `faq-leading-people.md` (MTC-40), because one file cannot hold every answer under the read budget: `lib/knowledge/knowledge.test.ts` fails when twice the largest document plus the next exceeds `KNOWLEDGE_READ_BUDGET.maxTokens`, since a model may read one document twice. The drop rule and the editing notes in `faq.md` apply to both, and the FAQ tests check each file: every question ships or is listed as dropped, and the answers behind starter questions ship.
+The FAQ is two documents, `faq.md` and `faq-leading-people.md` (MTC-40), because one file cannot hold every answer under the read budget: `lib/knowledge/knowledge.test.ts` fails when twice the largest document plus the next exceeds `KNOWLEDGE_READ_BUDGET.maxTokens`, since a model may read one document twice. The drop rule and the editing notes in `faq.md` apply to both, and the FAQ tests check each file: every question ships or is listed as dropped, and the answers named in the test's map, one for each starter question an FAQ answers, ship.
 
 ## Eval suites (MTC-32)
 
@@ -475,6 +475,7 @@ A question's position in the pool decides when a visitor sees it: the homepage p
 4. Find the sentence in `content/knowledge/**` that answers it, cite the document and that sentence in a comment above the test, and write the rubric to those facts. A rubric must never reward an inferred characterisation presented as documented.
 5. If the facts the rubric names live in different documents, say in the rubric that any one of them is enough. `assertReadsAnyOf` only requires the run to have opened one, so a conjunctive rubric over several documents is a flaky test, not a strict one.
 6. `bun test` catches a missing golden, a bad document id, a duplicate question and a duplicated YAML anchor before anything is spent.
+7. If the answer is an FAQ question, add its heading under its file's id in the map in the FAQ test in `lib/knowledge/knowledge.test.ts` ("the FAQ answers the starter questions rely on still ship"), so a stray `TODO` that drops it fails `bun test` rather than a paid run.
 
 The "see all" list needs nothing extra: its count is the pool's length, and a new question is listed under "More" until Matt places it in `STARTER_LIST_THEMES` (`components/assistant/starter-groups.ts` reads it). `starter-groups.test.ts` pins his approved assignment question by question, so placing a question means changing both.
 

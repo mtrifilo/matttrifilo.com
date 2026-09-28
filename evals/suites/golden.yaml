@@ -3094,10 +3094,11 @@
 # for an agent", so calling it Matt's onboarding process for PEOPLE is the
 # inference this suite will not have presented as documentation.
 #
-# faq, "How does he hire and grow engineers?", does document a ramp for
-# people: a 30/60/90-day plan tailored to the new hire, and "the goal is to
-# merge their first pull request within the first few days".
-# Reads any of: plugin-marketplaces-and-sme-knowledge-bases, engineering-philosophy or faq; each states at least one mechanism the rubric accepts on its own.
+# faq, "How does he hire and grow engineers?", documents a ramp for a new
+# hire to the team (a tailored 30/60/90-day plan, a first pull request in the
+# first few days), which is a neighbouring question to getting someone onto
+# an unfamiliar service, so the rubric accepts it only as added detail.
+# Reads any of: plugin-marketplaces-and-sme-knowledge-bases or engineering-philosophy; each states a mechanism the rubric accepts on its own.
 - description: 'golden: ramping a person or an agent onto an unfamiliar service'
   vars:
     question: How does Matt get someone up to speed on a service they have never worked on?
@@ -3106,7 +3107,6 @@
     expectReadsAny:
       - plugin-marketplaces-and-sme-knowledge-bases
       - engineering-philosophy
-      - faq
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -3116,9 +3116,8 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
-    # "new teammate" is the token the philosophy document carries, and the
-    # last two are the faq's, so each document can satisfy this check on its
-    # own.
+    # "new teammate" is the token the philosophy document carries, so that
+    # document can satisfy this check on its own.
     - type: icontains-any
       value:
         - second brain
@@ -3126,8 +3125,6 @@
         - subject-matter
         - cold
         - new teammate
-        - 30/60/90
-        - first pull request
     - type: assert-set
       threshold: 0.6
       assert:
@@ -3139,10 +3136,10 @@
             second brains carrying decision records, research spikes, rollout
             plans and handoffs so anyone can pick the work up cold, or the
             skill that promotes the lessons learned in tickets into the
-            knowledge base so it compounds, or, for a new hire, the
-            30/60/90-day plan tailored to the person with the goal of merging
-            their first pull request within the first few days, which the FAQ
-            sets out as his ramp for people. It may also cite Matt's own
+            knowledge base so it compounds. It may add, as detail, the
+            30/60/90-day plan the FAQ sets out for a new hire, aimed at a
+            first pull request within the first few days, but that plan alone
+            is not enough. It may also cite Matt's own
             written framing, asking what a new teammate who knows nothing
             about the team, project and codebase would need to be told, which
             is quoted in the philosophy document and is enough on its own. It

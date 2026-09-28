@@ -92,8 +92,7 @@ describe('the starter questions', () => {
 
   /**
    * Where the table-stakes question stays: the eleventh question of the
-   * pool, counting from one (Matt, 2026-09-28, MTC-40, which supersedes
-   * "stays where it is (position 10)" of 2026-09-22, MTC-41).
+   * pool, counting from one (Matt, 2026-09-28, MTC-40).
    */
   const TABLE_STAKES_INDEX = 10
 

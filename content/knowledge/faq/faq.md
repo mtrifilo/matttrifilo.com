@@ -26,11 +26,22 @@ itself, then bump updated and add its topic to the tags and the summary,
 rewording the summary to stay under its 160-character limit: the index
 line is how the assistant decides whether to open this file.
 
-The answers about leading people are in faq-leading-people.md, next to
-this file, because one file cannot hold every answer under the read
-budget: the re-read check in lib/knowledge/knowledge.test.ts fails when
-twice the largest document plus the next one exceeds it. Every rule in
-these notes applies to both files.
+The FAQ is more than one file because one file cannot hold every answer
+under the read budget. A model may read one document twice, so the
+re-read check in lib/knowledge/knowledge.test.ts fails when twice the
+largest document in the corpus plus the next one exceeds
+KNOWLEDGE_READ_BUDGET.maxTokens: each FAQ file must stay under that budget
+minus twice the largest document, and bun run knowledge:check prints the
+sizes to do that sum with. An answer that does not fit goes in a new file
+here rather than in this one, even though the check's message names the
+largest document rather than this file. A new file needs its own id,
+title, summary and tags; its answers behind starter questions go in the
+map in the FAQ test in lib/knowledge/knowledge.test.ts; and any golden
+whose expectReads names the file an answer left is re-pinned, with its
+"# Reads:" line. faq-leading-people.md holds performance and growth
+conversations, communicating change, and what keeps running without him;
+this file holds the rest. Every rule in these notes applies to every file
+here.
 
 This folder is the ONLY place where the build drops an unfinished section.
 Everywhere else a TODO is a build error, on purpose: a career document is

@@ -370,7 +370,8 @@ describe('knowledge corpus content guards', () => {
     // A stray TODO line inside a finished answer drops the whole question,
     // and nothing but a paid eval run would notice: the starter question it
     // backs would then decline. Renaming or moving one of these headings
-    // changes this list too.
+    // changes this list too, and moving one to another file re-pins its
+    // golden's expectReads in evals/suites/golden.yaml.
     const expected: Record<string, string[]> = {
       faq: [
         'What is he looking for in his next role?',
