@@ -994,7 +994,7 @@
     - type: icontains-any
       value:
         - Email Engagement Summary
-        - deliverability
+        - Vertex
     - type: assert-set
       threshold: 0.6
       assert:
@@ -1004,8 +1004,9 @@
             Summary on Gemini on Vertex AI with retrieval over help content,
             and that it explains a sender's email-engagement results and what
             to do about them. Either document's framing of that is correct:
-            how recent sending practice affects deliverability, as the résumé
-            puts it, or what the bounce, complaint and engagement figures mean
+            diagnosing a user's last 30 days of sending practice and
+            recommending fixes, as the résumé puts it, or what the bounce,
+            complaint and engagement figures mean
             and what to do next, as the feature's own document puts it. Saying
             he also designed it is correct but not required.
         - type: llm-rubric
@@ -1680,10 +1681,10 @@
 # do was explain what those numbers meant or what to do next." Stack:
 # "Gemini Flash Lite on Vertex AI, a Cloud Run service, and Vector Search";
 # production retrieval runs over "an automated daily sync of help-center
-# articles". The résumé's one-line version words it differently (the last 30
-# days of sending practice, deliverability); a run that read both may use
-# that wording, so the rubric accepts it. Vertex is in both, and the rubric
-# requires it.
+# articles". The résumé's one-line version words it differently (it
+# diagnoses the last 30 days of sending practice and recommends fixes); a
+# run that read both may use that wording, so the rubric accepts it. Vertex
+# is in both, and the rubric requires it.
 # Reads: ai-email-engagement-summary, the document about this feature; the résumé gives it one line.
 - description: 'golden: the engagement summary feature in detail'
   vars:
@@ -1704,7 +1705,6 @@
       value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
-        - deliverability
         - Vertex
         - 30 days
     - type: assert-set
@@ -1718,9 +1718,10 @@
             Gemini on Vertex AI with retrieval over the product's help-center
             content, and that it explains a sender's engagement figures, such
             as bounce rate, complaint rate and how recently contacts engaged,
-            and recommends what to do next. Describing that instead as how the
-            last 30 days of sending practice help or hurt deliverability, as
-            the résumé does, is equally correct. Naming the proof of concept in
+            and recommends what to do next. Describing that instead as
+            diagnosing the last 30 days of sending practice and recommending
+            fixes, as the résumé does, is equally correct. Naming the proof of
+            concept in
             one week, the production beta about five weeks after build kickoff,
             and every user two months after kickoff, or the Promptfoo evals
             behind its model changes, is correct but not required; a different
