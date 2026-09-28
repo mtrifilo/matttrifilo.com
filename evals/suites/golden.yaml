@@ -1924,7 +1924,7 @@
             service before Black Friday 2022, the 2023 sending-limit
             hardening, the 2023 load tests across the services in the sending
             path, or the resilience library built for the 2019 season (which
-            the résumé says removed thousands of failed sends; a different
+            the résumé says mitigated thousands of failed sends; a different
             figure is wrong). It may add that Matt owned readiness four years
             running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
@@ -1986,7 +1986,7 @@
         - type: llm-rubric
           value: *r50
 
-# resume: "Led the Merge API decomposition effort ... moved Liquid template
+# resume: "Led the Merge API decomposition ... moved email template
 # rendering out of the monolith into a standalone Java service"; "On the
 # Platform team (2019): helped decompose the Contacts domain out of the Core
 # monolith, moving Mobile's and Web's contact reads onto the new Contacts
@@ -2028,8 +2028,9 @@
             Contacts document credits him with, such as the readiness audit,
             the parity fixes or the shadow-comparison harness), and from 2020
             to 2021 he led
-            the Merge API decomposition as a tour of duty, moving Liquid
-            template rendering into a standalone service, which the résumé
+            the Merge API decomposition as a tour of duty, moving email
+            template rendering (Liquid template merging, as the Merge API
+            document names it) into a standalone service, which the résumé
             calls a Java service and the Merge API document a Micronaut one.
             It does not claim he led the Contacts decomposition or was its
             lead engineer, which no document states. It is written
@@ -2126,8 +2127,8 @@
 
 # resume, Skills: "Java, Python, TypeScript, Go · Spring Boot, Micronaut,
 # Flask, FastAPI · Vue.js, React, GraphQL" and "Google Cloud (GKE, Cloud
-# Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions,
-# CircleCI, Google Cloud Operations, OpsGenie"; technical-expertise: Java,
+# Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, CI/CD (GitHub
+# Actions, CircleCI)"; technical-expertise: Java,
 # TypeScript and Node, Vue, Python and Go, Spring Boot and Micronaut,
 # Kubernetes, Google Cloud Platform, GitHub Actions, CircleCI, Terraform.
 # Reads any of: resume or technical-expertise; technical-expertise is the document about the stack. Not owned-systems-and-operations: it names the services' languages (Java/Micronaut, Python, Go) but no infrastructure platform, only "cloud projects, container and serverless services, data pipelines".
@@ -2295,8 +2296,9 @@
             Program of 2025, and the Keap Better Together Award of December
             2019. It does not invent an award or a year. Calling them the
             company's award and program without naming Thryv is correct. It
-            may add that an award-winning branded film for Intel sits in his
-            earlier sound work, or the documented promotions and peer
+            may add that an Intel branded film recognized with a 2011
+            Intercom Gold Plaque sits in his earlier sound work, or the
+            documented promotions and peer
             recognition posted in company channels, which are recorded rather
             than invented. It is written about Matt in the third person, and it
             must not present an inferred characterization as a documented one.
@@ -2346,7 +2348,8 @@
           value: *r58
 
 # resume: "Earlier: Freelance sound design and post-production, Chicago
-# (2009-2015), including an award-winning branded film for Intel."
+# (2009-2015), including an Intel branded film (2011 Intercom Gold
+# Plaque)."
 - description: 'golden: the pre-software career, in the pool wording'
   vars:
     question: What did Matt do before software engineering?
@@ -2374,8 +2377,9 @@
         - type: llm-rubric
           value: &r59 >-
             The answer says Matt worked in freelance sound design and
-            post-production in Chicago from 2009 to 2015, including an
-            award-winning branded film for Intel. It may add that he was
+            post-production in Chicago from 2009 to 2015, including an Intel
+            branded film recognized with a 2011 Intercom Gold Plaque. It may
+            add that he was
             working as a barista when he took his first engineering offer, and
             that he has a degree in Audio Arts and Acoustics rather than
             computer science. It is written about Matt in the third person,
@@ -2703,10 +2707,10 @@
         - type: llm-rubric
           value: *r66
 
-# resume: "serve as escalation lead for unacknowledged alerts. Separately,
-# in the Engineering Manager rotation, back up the org's Incident Commander
-# on P0/P1s."; "Incident lead for a 30-minute cloud-provider outage (Feb
-# 2024)". He backs the Incident Commander up; he is not the org's IC.
+# resume: "escalation lead for unacknowledged alerts; backup Incident
+# Commander for org-wide P0/P1s in the Engineering Manager rotation.";
+# "Incident lead for a 30-minute cloud-provider outage (Feb 2024)". He backs
+# the Incident Commander up; he is not the org's IC.
 # Reads: resume only; it alone states the three roles together.
 - description: 'golden: his incident command responsibilities, stated exactly'
   vars:
@@ -2750,10 +2754,11 @@
         - type: llm-rubric
           value: *r67
 
-# resume: "Forecast monthly sending volume through 2026 for the annual MTA
-# license renewal (quoted at +48%); matched the vendor's own reporting
-# within ~1% and closed at my recommended tier, roughly flat year over
-# year." The published material states no dollar amount anywhere.
+# resume: "Forecast 2026 sending volume for the annual mail-transfer (MTA)
+# software license renewal, quoted at +48%; matched the vendor's own
+# reporting within ~1%, and the renewal closed at the recommended tier,
+# roughly flat year over year." The published material states no dollar
+# amount anywhere.
 # Reads: resume only; the quoted increase and the flat outcome are in no other document.
 - description: 'golden: vendor negotiation and license cost'
   vars:
@@ -2785,10 +2790,11 @@
         - type: llm-rubric
           value: &r68 >-
             The answer says yes and gives the documented case: Matt forecast
-            monthly sending volume through 2026 for the annual mail transfer
+            2026 sending volume for the annual mail transfer
             agent license renewal, which the vendor had quoted at plus 48
             percent, matched the vendor's own reporting within about one
-            percent, and closed at his recommended tier roughly flat year over
+            percent, and the renewal closed at the recommended tier, roughly
+            flat year over
             year. It may add that he owns his organization's AI tooling access
             and spend. It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
