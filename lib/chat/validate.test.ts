@@ -519,34 +519,37 @@ describe('the replayed progress part', () => {
     kind: 'activity',
   })
 
-  function partWith(reads: number, checks: number) {
+  /**
+   * The most rows the route writes: the read and activity budgets bound
+   * them at every moment of a run, not only at its end. `withProgress`
+   * predicts each budget from the calls still in flight as well as the
+   * finished ones, and checks a kind's cap before any row of it goes up,
+   * so a step that asks for more than the budget never lists the extra
+   * calls, and a refused call withdraws its row.
+   */
+  function partAtCaps(ending: Pick<ChatProgress, 'phase' | 'ms'>) {
     const data: ChatProgress = {
       steps: [
-        ...Array.from({ length: reads }, readAtCaps),
-        ...Array.from({ length: checks }, checkAtCaps),
+        ...Array.from(
+          { length: KNOWLEDGE_READ_BUDGET.maxDocuments },
+          readAtCaps
+        ),
+        ...Array.from({ length: RECENT_ACTIVITY_MAX_CALLS }, checkAtCaps),
       ],
-      phase: 'done',
-      ms: LONGEST_RUN_MS,
+      ...ending,
     }
     return { type: PROGRESS_PART_TYPE, id: PROGRESS_PART_ID, data }
   }
 
-  /**
-   * A run that finished: the read and activity budgets bound its steps,
-   * because a refused call withdraws its row before `done`.
-   */
+  /** A run that finished: `done`, with the longest duration. */
   const finishedRunPart = () =>
-    partWith(KNOWLEDGE_READ_BUDGET.maxDocuments, RECENT_ACTIVITY_MAX_CALLS)
+    partAtCaps({ phase: 'done', ms: LONGEST_RUN_MS })
 
   /**
-   * A run stopped inside a step. The route opens a row when a call starts
-   * and predicts the budgets from outcomes, so one step that asks for more
-   * than the budget shows every distinct id it named until the refusals
-   * arrive, and a visitor who stops the run in that window keeps the part.
-   * Rows are one per distinct id, so the index and the allowlist bound it.
+   * A run stopped at any point: the same rows, under `reading` or `writing`
+   * (the same length), and no duration, which only `done` carries.
    */
-  const stoppedRunPart = () =>
-    partWith(loadKnowledgeIndex().entries.length, ASSISTANT_REPOSITORIES.length)
+  const stoppedRunPart = () => partAtCaps({ phase: 'reading' })
 
   test('every real id fits the stand-in the worst case uses', () => {
     const ids = [
@@ -575,7 +578,18 @@ describe('the replayed progress part', () => {
     expect(JSON.stringify(finishedRunPart()).length).toBe(6_383)
   })
 
-  test('a conversation at the input budget, a stopped part on every answer, fits the platform', () => {
+  test('a stopped run leaves no larger a part than a finished one', () => {
+    // Pinned as well, because this is the number that moved: while rows
+    // were predicted from finished calls alone, a run stopped inside a
+    // step that asked for the whole index kept a row per id it named.
+    const stopped = JSON.stringify(stoppedRunPart()).length
+    expect(stopped).toBe(6_374)
+    expect(stopped).toBeLessThanOrEqual(
+      JSON.stringify(finishedRunPart()).length
+    )
+  })
+
+  test('a conversation at the input budget, the largest part on every answer, fits the platform', () => {
     // The text is filled to exactly the input budget the real index leaves,
     // which is what bounds a body's text; the part rides outside that
     // budget by design, so the same body with it still validates.
@@ -605,7 +619,7 @@ describe('the replayed progress part', () => {
             role: 'assistant',
             parts: [
               { type: 'step-start' },
-              stoppedRunPart(),
+              finishedRunPart(),
               { type: 'text', text },
             ],
           }
