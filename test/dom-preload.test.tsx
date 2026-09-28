@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import { join } from 'node:path'
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { BUN_GLOBALS } from './dom-preload'
+import { BUN_GLOBALS, takeCaughtDomErrors } from './dom-preload'
 
 /**
  * The preload's own contract (MTC-59).
@@ -120,4 +121,79 @@ describe('the cleanup the preload registers', () => {
   test('hands the next test an empty document', () => {
     expect(document.body.textContent).toBe('')
   })
+})
+
+describe('an error a DOM listener throws', () => {
+  // The Happy DOM behaviour the preload's error hook is built on. A listener's
+  // error never leaves `dispatchEvent`: Happy DOM catches it and dispatches it
+  // on `window` as an `ErrorEvent`. So no wrapper around `dispatchEvent` could
+  // see it, and a test that fired the event would pass. If a Happy DOM bump
+  // changes either half, this fails and names the premise that moved.
+  test('arrives on the window as an ErrorEvent, not at the caller', () => {
+    const thrown = new Error('a listener failed')
+    const target = document.createElement('button')
+    target.addEventListener('click', () => {
+      throw thrown
+    })
+    const heard: unknown[] = []
+    const onError = (event: Event) => heard.push((event as ErrorEvent).error)
+    // Happy DOM prints what it catches; this error is expected.
+    const printed = spyOn(console, 'error').mockImplementation(() => {})
+    window.addEventListener('error', onError)
+    try {
+      expect(() => target.dispatchEvent(new Event('click'))).not.toThrow()
+    } finally {
+      window.removeEventListener('error', onError)
+      printed.mockRestore()
+    }
+    expect(heard).toHaveLength(1)
+    expect(heard[0]).toBe(thrown)
+
+    // Taken here, so the preload does not fail this test for it.
+    const taken = takeCaughtDomErrors()
+    expect(taken).toHaveLength(1)
+    expect(taken[0]).toBe(thrown)
+  })
+
+  // The acceptance itself, run in a child `bun test` because the tests it
+  // proves are meant to fail. The fixture holds four that should go red
+  // (a listener added with `addEventListener` that throws and one that
+  // rejects, which only the preload's hook catches, and a React `onClick`
+  // that throws and one that rejects, which Bun catches) and two that should
+  // stay green after them.
+  test('fails the test that fired it, with the stack of the listener', () => {
+    const run = Bun.spawnSync(
+      [
+        process.execPath,
+        'test',
+        './test/fixtures/throwing-listener.fixture.tsx',
+      ],
+      {
+        cwd: join(import.meta.dir, '..'),
+        env: { ...process.env, NO_COLOR: '1' },
+      }
+    )
+    const output = `${run.stdout.toString()}${run.stderr.toString()}`
+
+    const failed = [...output.matchAll(/^\(fail\) (.+?) \[/gm)].map(
+      match => match[1]
+    )
+    expect(failed).toEqual([
+      'red: a listener added with addEventListener throws',
+      'red: a listener added with addEventListener rejects',
+      'red: a React onClick throws',
+      'red: a React onClick rejects',
+    ])
+    expect(output).toMatch(/^ 2 pass$/m)
+    expect(run.exitCode).toBe(1)
+    // The report carries the stack from the listener, not from the hook
+    // that rethrew it.
+    for (const message of ['the listener threw', 'the listener rejected']) {
+      expect(output).toMatch(
+        new RegExp(
+          `Error: ${message}\\n(?: +at .*\\n)*? +at .*throwing-listener\\.fixture\\.tsx:\\d+:\\d+`
+        )
+      )
+    }
+  }, 30_000)
 })
