@@ -327,18 +327,68 @@ describe('knowledge corpus content guards', () => {
     expect(found).toEqual([])
   })
 
-  test('drops the unanswered FAQ questions entirely', () => {
-    // faq/faq.md ships eight questions with `TODO (Matt)` bodies. Until
-    // Matt answers one, the document must not exist at all: not exist and
-    // be empty, and certainly not carry the placeholders into the index.
-    const faqSource = fs.readFileSync(
-      path.join(KNOWLEDGE_DIR, 'faq', 'faq.md'),
-      'utf8'
-    )
-    expect(faqSource).toContain('TODO (Matt)')
-    expect(corpus.documents.map(d => d.id)).not.toContain('faq')
-    expect(index.text).not.toContain('[faq]')
-    expect(everything).not.toContain("What does Matt's team own?")
+  /**
+   * The `## ` questions in a text, read from the lines the build reads:
+   * sourceLines blanks HTML comments, so an example in the editing notes is
+   * not a question. Read off the text rather than `headings`, which is capped
+   * for the progress view.
+   */
+  const faqQuestions = (text: string) =>
+    sourceLines(text)
+      .map(line => line.text)
+      .filter(line => /^## (?!#)/.test(line))
+      .map(line => line.slice(3).trim())
+  const faqFiles = fs
+    .readdirSync(path.join(KNOWLEDGE_DIR, 'faq'))
+    .filter(name => name.endsWith('.md'))
+  const shippedFaqQuestions = (id: string) =>
+    faqQuestions(corpus.documents.find(d => d.id === id)?.text ?? '')
+
+  test('every FAQ question either ships or is reported as dropped', () => {
+    // content/knowledge/faq holds answered questions next to `TODO (Matt)`
+    // placeholders. In each file, every question is in exactly one of the
+    // shipped document or the dropped list, a dropped question reaches no
+    // surface, and the index lists the file only when something ships.
+    expect(faqFiles.length).toBeGreaterThan(0)
+    for (const name of faqFiles) {
+      const id = path.basename(name, '.md')
+      const questions = faqQuestions(
+        fs.readFileSync(path.join(KNOWLEDGE_DIR, 'faq', name), 'utf8')
+      )
+      const shipped = shippedFaqQuestions(id)
+      const dropped = corpus.unanswered
+        .filter(q => path.basename(q.file) === name)
+        .map(q => q.heading)
+      expect(questions.length).toBeGreaterThan(0)
+      expect([...shipped, ...dropped].sort()).toEqual([...questions].sort())
+      for (const heading of dropped) expect(everything).not.toContain(heading)
+      expect(index.text.includes(`[${id}]`)).toBe(shipped.length > 0)
+    }
+  })
+
+  test('the FAQ answers the starter questions rely on still ship', () => {
+    // A stray TODO line inside a finished answer drops the whole question,
+    // and nothing but a paid eval run would notice: the starter question it
+    // backs would then decline. Renaming or moving one of these headings
+    // changes this list too, and moving one to another file re-pins its
+    // golden's expectReads in evals/suites/golden.yaml.
+    const expected: Record<string, string[]> = {
+      faq: [
+        'What is he looking for in his next role?',
+        'How does he hire and grow engineers?',
+        'How does he work with Product to decide what the team builds?',
+        "How does he run the team's delivery process, and how did it change with AI agents?",
+      ],
+      'faq-leading-people': [
+        'How does he handle performance management and growth conversations?',
+        'How does he communicate a change or a reorganization to a team?',
+        'How does he build a team that keeps running without him?',
+      ],
+    }
+    for (const [id, headings] of Object.entries(expected)) {
+      const shipped = shippedFaqQuestions(id)
+      for (const heading of headings) expect(shipped).toContain(heading)
+    }
   })
 })
 

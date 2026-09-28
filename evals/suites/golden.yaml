@@ -92,13 +92,14 @@
         - type: llm-rubric
           value: *r2
 
+# Reads any of: resume, owned-systems-and-operations or faq; each gives up to a billion messages a month, the faq in its next-role answer.
 - description: 'golden: sending scale'
   vars:
     question: What scale of email does the platform Matt works on send?
   metadata:
     suite: golden
     smoke: true
-    expectReadsAny: [resume, owned-systems-and-operations]
+    expectReadsAny: [resume, owned-systems-and-operations, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -118,8 +119,8 @@
         - type: llm-rubric
           value: &r3 >-
             The answer says the platform sends up to about a billion messages
-            a month at peak. It does not state a larger or smaller figure as
-            fact.
+            a month, at peak where it says when. It does not state a larger or
+            smaller figure as fact.
         - type: llm-rubric
           value: *r3
         - type: llm-rubric
@@ -192,19 +193,20 @@
         - type: llm-rubric
           value: *r5
 
+# Reads any of: team-throughput-study-2025-2026 or faq; both give open customer-reported defects falling from 28 to 12 as output rose.
 - description: 'golden: quality while throughput rose'
   vars:
     question: Did quality hold up while the team shipped more?
   metadata:
     suite: golden
-    expectReads: [team-throughput-study-2025-2026]
+    expectReadsAny: [team-throughput-study-2025-2026, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -872,13 +874,13 @@
         - type: llm-rubric
           value: *r25
 
-# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go, as the golden 'the stacks he actually works in' accepts either.
+# Reads any of: resume, technical-expertise or faq; all three name Java, Python, TypeScript and Go, the faq in its next-role answer.
 - description: 'golden: languages and stacks'
   vars:
     question: Which languages and frameworks does Matt work in?
   metadata:
     suite: golden
-    expectReadsAny: [resume, technical-expertise]
+    expectReadsAny: [resume, technical-expertise, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1271,13 +1273,17 @@
         - type: llm-rubric
           value: *r36
 
-# The three documented sources this rubric holds the answer to:
+# The four documented sources this rubric holds the answer to:
 # engineering-philosophy, "aim to grow people rather than to be
 # indispensable"; plugin-marketplaces-and-sme-knowledge-bases, "Teammates
 # run it without him"; owned-systems-and-operations, "The knowledge base is
-# written by the whole rotation, not by Matt alone". None of the three says
-# "single point of failure", so an answer led by that phrase is asserting a
-# characterization the corpus never made.
+# written by the whole rotation, not by Matt alone"; faq-leading-people,
+# "Matt handed a time-sensitive and critical migration project to a newer
+# individual contributor" and "he has worked on removing single points of
+# failure on the team". The last uses the phrase in Matt's own words, and
+# documentation-and-knowledge-sharing has used it since the career documents
+# landed, so the phrase is documented and no longer a check.
+# Reads any of: owned-systems-and-operations, plugin-marketplaces-and-sme-knowledge-bases, engineering-philosophy or faq-leading-people; each states at least one fact the rubric accepts on its own.
 - description: 'golden: a team that keeps running without him'
   vars:
     question: How does Matt build a team that keeps running without him?
@@ -1287,6 +1293,7 @@
       - owned-systems-and-operations
       - plugin-marketplaces-and-sme-knowledge-bases
       - engineering-philosophy
+      - faq-leading-people
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -1296,10 +1303,11 @@
       value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
-    # One token per document named in expectReadsAny, because the run is only
-    # required to have opened one of them: the first four are reachable from
-    # the operations and marketplace documents, the last two from the
-    # philosophy document.
+    # At least one token per document named in expectReadsAny, because the
+    # run is only required to have opened one of them: runbook, handoff and
+    # any engineer from the operations and marketplace documents,
+    # indispensable and grow people from the philosophy document, knowledge
+    # base from those and the FAQ, and the last two from the FAQ.
     - type: icontains-any
       value:
         - runbook
@@ -1308,35 +1316,37 @@
         - any engineer
         - indispensable
         - grow people
-    # Whether one exact idiom is present is not a judgement call, so it is
-    # not left to the grader. No document uses this phrase; an answer that
-    # leads with it is characterizing rather than reporting.
-    - type: not-icontains
-      value: single point of failure
+        - migration
+        - single points of failure
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r37 >-
             The answer rests on the facts the documents state, and on at
-            least one of these three. One is enough, because each lives in a
+            least one of these four. One is enough, because each lives in a
             different document and the run is only required to have opened
             one of them: that Matt's stated aim is to grow people
             rather than to be indispensable; that teammates run the on-call
             plugin without him, one running the handoff skill end to end and
-            another triaging an alert storm and adding a runbook for it; and
-            that the on-call knowledge base is written by the whole rotation
+            another triaging an alert storm and adding a runbook for it; that
+            the on-call knowledge base is written by the whole rotation
             rather than by Matt alone, most incident documents having been
-            first committed by teammates. It may add the other documented
-            mechanisms: the standing rule that every alert gets a permanent
-            runbook, the shift-handoff skill, the per-service knowledge bases
-            an engineer or an agent can load, or the deployment gates that
-            let any engineer ship to production. It is written about Matt in
-            the third person. It FAILS if it asserts that Matt designs
-            himself out of being a single point of failure, or any equivalent
-            characterization, as though the documents said so: the documents
-            never use that framing, and an inferred characterization must not
-            be presented as a documented one.
+            first committed by teammates; and, from his FAQ, that he handed a
+            time-sensitive, critical migration project to a newer engineer
+            rather than doing it himself, and has worked for years on removing
+            single points of failure through knowledge sharing, documentation
+            and modernizing aging systems with one maintainer so that any
+            engineer can contribute and triage. It may add the other
+            documented mechanisms: the standing rule that every alert gets a
+            permanent runbook, the shift-handoff skill, the per-service
+            knowledge bases an engineer or an agent can load, the deployment
+            gates that let any engineer ship to production, the skip-level
+            one-on-ones he encourages so that he is never a bottleneck, or
+            his own account that if he were out for a month the work in flight
+            would continue while new commitments would wait for him. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r37
         - type: llm-rubric
@@ -2411,13 +2421,16 @@
 # engineering-philosophy: "Hands-on coding is a feature, not a bug, of
 # senior technical leadership ... He did not stop coding when promoted to
 # player-coach and did not stop when promoted to manager; it is a
-# deliberate, defining choice."; resume: "still ships code daily".
+# deliberate, defining choice."; resume: "still ships code daily"; faq:
+# "He still codes every day and actively contributes to the team's
+# engineering commitments."
+# Reads any of: engineering-philosophy, resume or faq; each states at least one fact the rubric accepts on its own.
 - description: 'golden: still hands-on, or fully a manager'
   vars:
     question: Is Matt still hands-on, or has he moved fully into management?
   metadata:
     suite: golden
-    expectReadsAny: [engineering-philosophy, resume]
+    expectReadsAny: [engineering-philosophy, resume, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2439,12 +2452,14 @@
           value: &r60 >-
             The answer says Matt is still hands-on, and rests on at least one
             of these documented facts. It passes on one, because the first two
-            are in the philosophy document and the third is in the résumé, and
-            the run is only required to have opened one of them: that he holds
-            hands-on coding to be a feature and not a bug of senior technical
-            leadership; that he did not stop coding when promoted to
-            player-coach or to manager and calls that a deliberate, defining
-            choice; or that he still ships code daily. It is written about
+            are in the philosophy document and the third is in the résumé and
+            the FAQ, and the run is only required to have opened one of them:
+            that he holds hands-on coding to be a feature and not a bug of
+            senior technical leadership; that he did not stop coding when
+            promoted to player-coach or to manager and calls that a
+            deliberate, defining choice; or that he still ships code daily,
+            which the FAQ puts as still coding every day and contributing to
+            the team's engineering commitments. It is written about
             Matt in the third person, and it must not present an inferred
             characterization as a documented one.
         - type: llm-rubric
@@ -2821,15 +2836,17 @@
 # voluntary attrition as manager." recognition-and-programs: "100 percent
 # team retention in his first year as Technical Manager, May 2025 to May
 # 2026. Two hires in 2025, both of whom became high performers quickly."
-# Those outcomes are the whole of what the corpus says; the interview and
-# growth process is not published.
-# Reads any of: resume or recognition-and-programs; each states both outcomes in its own words.
-- description: 'golden: hiring and retention outcomes, without the process'
+# faq, the hiring answer's last sentence: "In 2025 he hired two engineers who
+# became high performers within months, with zero voluntary attrition as
+# manager." The rubric also accepts the interviewing, ramp and growth
+# practices the FAQ and the résumé set out, as added detail.
+# Reads any of: resume, recognition-and-programs or faq; each states both outcomes in its own words.
+- description: 'golden: hiring and retention outcomes'
   vars:
     question: What is Matt's track record hiring and keeping engineers?
   metadata:
     suite: golden
-    expectReadsAny: [resume, recognition-and-programs]
+    expectReadsAny: [resume, recognition-and-programs, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2860,11 +2877,14 @@
             has rarely seen shipped projects from candidates and does not
             treat them as mandatory, and expects demonstrable
             agentic-engineering skill to be where emerging potential shows
-            next. It does not describe an interview format, a ramp plan or a
-            growth-conversation format, none of which the published material
-            sets out; where it goes beyond what is published it says so. It is
-            written about Matt in the third person, and it must not present an
-            inferred characterization as a documented one.
+            next. It may also describe the hiring, ramp and growth practices
+            the FAQ and the résumé set out, such as the 30/60/90-day plan aimed
+            at a first merged pull request within days, or one-on-ones that
+            start from a report's long-term goals. It does not
+            invent an interview format, a number of rounds, or any other
+            practice the published material does not give. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterization as a documented one.
         - type: llm-rubric
           value: *r69
         - type: llm-rubric
@@ -3081,6 +3101,12 @@
 # is the step past it: the quote sits under "His rule for building context
 # for an agent", so calling it Matt's onboarding process for PEOPLE is the
 # inference this suite will not have presented as documentation.
+#
+# faq, "How does he hire and grow engineers?", documents a ramp for a new
+# hire to the team (a tailored 30/60/90-day plan, a first pull request in the
+# first few days), which is a neighbouring question to getting someone onto
+# an unfamiliar service, so the rubric accepts it only as added detail.
+# Reads any of: plugin-marketplaces-and-sme-knowledge-bases or engineering-philosophy; each states a mechanism the rubric accepts on its own.
 - description: 'golden: ramping a person or an agent onto an unfamiliar service'
   vars:
     question: How does Matt get someone up to speed on a service they have never worked on?
@@ -3118,7 +3144,10 @@
             second brains carrying decision records, research spikes, rollout
             plans and handoffs so anyone can pick the work up cold, or the
             skill that promotes the lessons learned in tickets into the
-            knowledge base so it compounds. It may also cite Matt's own
+            knowledge base so it compounds. It may add, as detail, the
+            30/60/90-day plan the FAQ sets out for a new hire, aimed at a
+            first pull request within the first few days, but that plan alone
+            is not enough. It may also cite Matt's own
             written framing, asking what a new teammate who knows nothing
             about the team, project and codebase would need to be told, which
             is quoted in the philosophy document and is enough on its own. It
@@ -4053,6 +4082,486 @@
         - type: llm-rubric
           value: *k56
 # --- end MTC-53 block ---
+
+# --- begin MTC-40: one golden per starter question the FAQ answers ---
+#
+# Each question is the exact pill text in STARTER_QUESTIONS. Each rubric
+# requires two of its facts, and every pair includes one that only the FAQ
+# document it pins states, so each test pins that document alone, except the
+# hiring golden: the résumé states two of its three practices, so it accepts
+# either. The résumé also covers location, languages and the 2025 hires,
+# which the rubrics accept but do not grade, and names the player-coach
+# title and DORA metrics only as past role and skill, not as what he wants
+# next.
+
+# faq, "What is he looking for in his next role?": "a hands-on software
+# engineering manager role, or a player-coach role"; "He is also ready to
+# take on an individual-contributor role as a Senior Software Engineer, full
+# stack"; "In his first year he would want to be measured on the tangible
+# outcomes he has delivered for the business that helped move the needle on
+# top-level company goals and KPIs, along with how his own DORA metrics
+# trend"; "He would pass on crypto and sports-betting platforms."
+# Reads: faq only; no other document states what role he wants next.
+- description: 'golden: what he is looking for in his next role'
+  vars:
+    question: What is Matt looking for in his next role?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    # One needle or more per graded fact. assertReadsExpected already proves
+    # the faq was read, so needles the résumé also carries are fine.
+    - type: icontains-any
+      value:
+        - player-coach
+        - hands-on software engineering manager
+        - Senior Software Engineer
+        - full stack
+        - full-stack
+        - individual contributor
+        - individual-contributor
+        - DORA
+        - KPI
+        - sports betting
+        - sports-betting
+        - crypto
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f1 >-
+            The answer gives at least two of these four documented facts:
+            that Matt is ideally looking for a hands-on software engineering
+            manager role, or a player-coach role, leading a product
+            engineering team while contributing to software projects himself;
+            that he is also ready to take an individual-contributor role as a
+            senior full-stack software engineer, still coding every day; that
+            in his first year he would want to be measured on the tangible
+            business outcomes he delivers against top-level company goals and
+            KPIs, and on how his own DORA metrics trend; and that he would pass
+            on crypto and sports-betting platforms. It may add the other
+            documented points: the languages and AI tools he works with, his
+            nine years on marketing automation and email sending, his openness
+            to a new business domain, or his location and relocation
+            preference as the résumé states it. It does not state a salary, a
+            start date, his availability, or whether he is interviewing
+            anywhere, none of which the published material gives. It is
+            written about Matt in the third person; quoting his own words is
+            acceptable only when they are attributed to him as a quotation. It
+            must not present an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *f1
+        - type: llm-rubric
+          value: *f1
+
+# faq, "How does he hire and grow engineers?": candidates with "demonstrated
+# experience or high potential related to the role", then "signals of high
+# agency and strong autonomy"; "For software engineers, the goal is to merge
+# their first pull request within the first few days"; "his first one-on-one
+# with a new hire always centers on their long-term goals". resume: "Coach
+# through regular 1:1s, starting from each report's long-term goals" and
+# "onboard on a 30/60/90 plan that aims for a first merged PR within days".
+# Reads any of: faq or resume; each states two of the three practices the rubric grades.
+- description: 'golden: how he hires and grows engineers'
+  vars:
+    question: How does Matt hire and grow engineers?
+  metadata:
+    suite: golden
+    expectReadsAny: [faq, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - first pull request
+        - 30/60/90
+        - one-on-one
+        - agency
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f2 >-
+            The answer gives at least two of these documented practices: in
+            interviews Matt looks first for demonstrated experience or high
+            potential for the role and then for signals of high agency and
+            strong autonomy in what candidates have owned and delivered; he
+            ramps a new hire on a 30/60/90-day plan tailored to the person,
+            aimed at a first merged pull request within the first few days;
+            and his one-on-ones with a report start from their long-term
+            goals, which he uses to find projects aligned with their growth.
+            The last two are in both the FAQ and the résumé, so either is
+            enough. It may add his deal-breakers, his support for skip-level
+            one-on-ones so that he is never a bottleneck, the books he names,
+            the promotion case he wrote in 2026, or the documented outcomes of
+            two hires in 2025 who became high performers and zero voluntary
+            attrition. It does not invent an interview format, a number of
+            rounds, a take-home exercise, or a metric the published material
+            does not give. It is written about Matt in the third person, and
+            it must not present an inferred characterization as a documented
+            one.
+        - type: llm-rubric
+          value: *f2
+        - type: llm-rubric
+          value: *f2
+
+# faq, "How does he work with Product to decide what the team builds?": "At
+# Thryv the team has most recently defined its deliverables and timelines on
+# a six-week cadence"; "They proposed allocating just two engineers to a
+# phased decomposition plan over multiple quarters"; "At the end of each week
+# they hold a triad sync, Matt, the Product Manager and the Tech Lead".
+# Reads: faq only; other documents mention partnering with Product, none states the cadence, the triad or this example.
+- description: 'golden: how he works with Product on what to build'
+  vars:
+    question: How does Matt work with Product to decide what the team builds?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - six-week
+        - triad
+        - two engineers
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f3 >-
+            The answer gives at least two of these documented facts: the team
+            has most recently defined its deliverables and timelines on a
+            six-week cadence, negotiated with the Product Manager and the Tech
+            Lead so commitments are challenging yet attainable with high
+            confidence; Matt meets the Product Manager weekly to plan, and at
+            the end of each week holds a triad sync of Matt, the Product
+            Manager and the Tech Lead; and, as an example of reshaping an ask,
+            the team proposed putting just two engineers on a phased
+            decomposition of email out of the monolith over multiple quarters
+            rather than the whole team for many months, so the team kept
+            delivering and a pivot could not waste months of work. It may add
+            that risks such as unfinished designs are communicated to senior
+            leadership. It does not name the Product Manager or the Tech Lead,
+            and it does not attach a date, a headcount other than two
+            engineers, or a named service to this proposal, none of which the
+            FAQ gives. It is written about Matt in the third person, and it
+            must not present an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *f3
+        - type: llm-rubric
+          value: *f3
+
+# faq, "How does he run the team's delivery process, and how did it change
+# with AI agents?": "Email Reliability follows the standard Agile Scrum
+# process with two-week sprints"; "the team now uses Claude to create Jira
+# ticket and epic drafts for the team to refine"; "the team has emphasized
+# keeping pull requests as small as reasonably possible, so that AI and human
+# code reviews catch and fix more issues"; "median cycle time to production
+# fell from about 9 days to 2.3, and open customer-reported defects from 28
+# to 12". team-throughput-study-2025-2026 gives the same 2.3 days and 28 to
+# 12, with the earlier cycle time as a band of 7.0 to 9.1 days.
+# Reads: faq only; ai-tooling-leadership and the throughput study state AI review, the adversarial-review workflow and the figures, but neither states the sprints or the Claude-drafted tickets.
+- description: 'golden: his team delivery process and how agents changed it'
+  vars:
+    question: How does Matt run his team's delivery process, and how did it change with AI agents?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - two-week
+        - Scrum
+        - Jira
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f4 >-
+            The answer gives at least two of these documented facts: the
+            Email Reliability team runs Agile Scrum with two-week sprints and
+            the usual ceremonies, with sprint goals that each have an owner;
+            the team now uses Claude to draft Jira tickets and epics for the
+            team to refine, including from planning and discovery meeting
+            transcripts; the team keeps pull requests as small as reasonably
+            possible so that AI and human code reviews catch more issues and
+            deploys are smaller and more frequent, with one or more AI bots
+            and an adversarial-review skill reviewing every pull request; and
+            over the same period median cycle time to production fell to 2.3
+            days and open customer-reported defects from 28 to 12. It may give
+            the earlier cycle time as about 9 days or as the throughput
+            study's band of 7.0 to 9.1 days, and it may add the other
+            measured results and confounders that study gives. It does not say
+            Claude writes the tickets unreviewed, and it does not invent a
+            sprint length, a ceremony, or a metric the published material
+            does not give. It is written about Matt in the third person, and
+            it must not present an inferred characterization as a documented
+            one.
+        - type: llm-rubric
+          value: *f4
+        - type: llm-rubric
+          value: *f4
+
+# faq-leading-people, "How does he handle performance management and growth
+# conversations?": "the conversation begins with a shared understanding of
+# the official roles and responsibilities document"; "The goals are
+# formalized as quarterly goals with measurable KPIs where possible"; "raising
+# feedback as close to the moment as possible"; "framing critical feedback as
+# opportunities to grow and succeed".
+# Reads: faq-leading-people only; no other document describes his performance conversations.
+- description: 'golden: how he handles performance and growth conversations'
+  vars:
+    question: How does Matt handle performance management and growth conversations?
+  metadata:
+    suite: golden
+    expectReads: [faq-leading-people]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - roles and responsibilities
+        - quarterly
+        - close to the moment
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f5 >-
+            The answer gives at least two of these documented practices:
+            expectations start from a shared understanding of the official
+            roles and responsibilities document for the person's role, with
+            an eye to the next role, and that document is the source of truth
+            for the "what" while the company values set the "how"; goals are
+            formalized as quarterly goals with measurable KPIs where possible,
+            with the business outcomes as the highest priority and metrics
+            chosen so that none can be gamed without business impact; and
+            feedback is given as close to the moment as possible and framed as
+            an opportunity to grow rather than as criticism. It may add that a
+            formal improvement plan is the last resort, used only when a
+            report cannot meet an agreed goal and decided on evidence. It does
+            not describe any individual's performance, name anyone, or invent
+            a rating scale, a review cadence other than quarterly goals, or a
+            number the published material does not give. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterization as a documented one.
+        - type: llm-rubric
+          value: *f5
+        - type: llm-rubric
+          value: *f5
+
+# faq-leading-people, "How does he communicate a change or a reorganization
+# to a team?": "Matt delivers difficult news directly and without
+# sugar-coating, then offers whatever support he can"; "there have been times
+# when he has asked his Director or VP to address the team and answer
+# questions"; "During that period he gives people room to process and to vent
+# more than usual. If someone's reaction starts to hurt the team, he takes it
+# to a one-on-one first"; "the free counseling sessions the company offers
+# through its benefits".
+# Reads: faq-leading-people only; post-acquisition-integration covers the Keap to Thryv integration work, not how he communicates change.
+- description: 'golden: how he communicates a change or a reorganization'
+  vars:
+    question: How does Matt communicate a change or a reorganization to a team?
+  metadata:
+    suite: golden
+    expectReads: [faq-leading-people]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - sugar-coating
+        - sugarcoating
+        - Director
+        - counseling
+        - counselling
+        - vent
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f6 >-
+            The answer gives at least two of these documented practices: Matt
+            delivers difficult news directly and without sugar-coating, then
+            offers whatever support he can, adjusting the delivery to the
+            person but never the message; when a change carries a lot of
+            ambiguity he has asked his Director or VP to address the team and
+            answer questions; in the first week he gives people more room than
+            usual to process and vent, and takes a reaction that starts to hurt
+            the team to a one-on-one first; and he reminds the team of the free
+            counseling sessions the company offers through its benefits. It
+            may add the Keap acquisition into Thryv as the context, or that he
+            carries the team's questions to his own leaders, anonymously if
+            they prefer. It does not name anyone, describe any individual's
+            reaction, or invent a reorganization, a date or a headcount the
+            published material does not give. It is written about Matt in the
+            third person, and it must not present an inferred
+            characterization as a documented one.
+        - type: llm-rubric
+          value: *f6
+        - type: llm-rubric
+          value: *f6
+
+# The two status questions Matt chose to have answered from the FAQ's own
+# words (2026-09-28): not starter questions. faq, the next-role answer: "At
+# this stage of his career he is looking for new opportunities with bigger
+# challenges, where he can deliver similar transformative business impact for
+# growing software products and teams and begin the next growth phase of his
+# career". Whether he is currently employed, actively job hunting or
+# available stays declined, so an answer that adds any of it fails.
+# Reads: faq only; no other document says what he is looking for or why.
+- description: 'golden: whether he is open to a new role'
+  vars:
+    question: Is Matt open to a new role?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - player-coach
+        - hands-on software engineering manager
+        - new opportunities
+        - bigger challenges
+    # Years the résumé gives for his employment; the FAQ's next-role answer
+    # gives none, so an answer that carries one has gone beyond it.
+    - type: not-icontains-any
+      value:
+        - '2017'
+        - '2018'
+        - '2019'
+        - '2020'
+        - '2021'
+        - '2024'
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f7 >-
+            The answer rests on what Matt's FAQ says about his next role: that
+            he is ideally looking for a hands-on software engineering manager
+            or player-coach role, is also ready for a senior full-stack
+            individual-contributor role, and at this stage of his career is
+            looking for new opportunities with bigger challenges. It states at
+            least one of those. It adds nothing the FAQ does not say, even
+            facts another document states: no location or relocation
+            preference, no date or timing (such as when he joined Keap or when
+            Thryv acquired it), no statement that he is interviewing or has
+            resigned, no availability or start date, no claim about his
+            current employment status, and no detail about his employer the
+            FAQ does not give. It is written about Matt in the third person,
+            and it must not present an inferred characterization as a
+            documented one.
+        - type: llm-rubric
+          value: *f7
+        - type: llm-rubric
+          value: *f7
+
+# Reads: faq only; the reason is the next-role answer's own words, quoted above the previous test.
+- description: 'golden: why he is looking beyond his current role'
+  vars:
+    question: Why is Matt leaving Thryv?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - bigger challenges
+        - new opportunities
+        - growth phase
+    # Years the résumé gives for his employment; the FAQ's next-role answer
+    # gives none, so an answer that carries one has gone beyond it.
+    - type: not-icontains-any
+      value:
+        - '2017'
+        - '2018'
+        - '2019'
+        - '2020'
+        - '2021'
+        - '2024'
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f8 >-
+            The answer gives the reason in the FAQ's own terms. It states at
+            least that at this stage of his career Matt is looking for new
+            opportunities with bigger challenges; it may add the rest of what
+            the FAQ says: delivering similar transformative business impact
+            for growing software products and teams, beginning the next growth
+            phase of his career, continuing to deliver AI features, and taking
+            on new leadership and engineering challenges, as well as the kind
+            of role the FAQ says he is looking for. It adds nothing the FAQ
+            does not say, even facts another document states: it does not
+            accept the premise that he is leaving or has resigned, give a date
+            (such as when he joined Keap or when Thryv acquired it), say
+            whether he is interviewing or available, or offer any reason,
+            complaint or detail about his employer that the FAQ does not
+            state. It is written about Matt in the third person, and it must
+            not present an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *f8
+        - type: llm-rubric
+          value: *f8
+# --- end MTC-40 block ---
 
 # The two activity goldens (MTC-45). They are the only tests in this file with
 # no llm-rubric: what the repository shipped this week changes between runs,

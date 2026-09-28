@@ -61,6 +61,7 @@ export const STARTER_QUESTIONS = [
   'What is the AI Email Engagement Summary feature Matt built?',
   "What does Matt's Email Reliability team own at Thryv?",
   "How did Matt roll out AI tooling and best practices across Thryv's engineering org?",
+  'What is Matt looking for in his next role?',
   'How does Matt use AI coding agents?',
   'How does Matt keep quality high when AI agents write most of the code?',
   'How much code does Matt ship himself as an engineering manager?',
@@ -85,6 +86,11 @@ export const STARTER_QUESTIONS = [
   'How did Matt handle resistance to AI tools on the team?',
   'What does Matt think good engineering leadership looks like?',
   'How does Matt build a team that keeps running without him?',
+  'How does Matt hire and grow engineers?',
+  'How does Matt work with Product to decide what the team builds?',
+  "How does Matt run his team's delivery process, and how did it change with AI agents?",
+  'How does Matt handle performance management and growth conversations?',
+  'How does Matt communicate a change or a reorganization to a team?',
 ] as const
 
 /**
@@ -113,10 +119,10 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * untagged questions sit in the head, or their order, also changes
  * APPROVED_UNTAGGED_HEAD_ORDER in copy.test.ts.
  *
- * Only clear matches are tagged. Whether the other head questions (Matt's
- * use of AI coding agents, quality with agents, the code he ships himself,
- * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
- * so they are left out rather than guessed.
+ * Only clear matches are tagged. Whether the other head questions (what
+ * Matt is looking for in his next role, his use of AI coding agents, quality
+ * with agents, the code he ships himself) belong to a theme is Matt's
+ * taxonomy to decide, so they are left out rather than guessed.
  *
  * These tags decide only what the ticker's head opens on. The "see all"
  * list is grouped by STARTER_LIST_THEMES, which covers the whole pool.
@@ -137,8 +143,8 @@ export const STARTER_HEAD_THEMES: Partial<
 /**
  * The starter question about the table-stakes practice in
  * lib/chat/featuring.ts. It is supporting detail, never a headline, so it
- * sits outside the homepage's head, and it stays the tenth question of the
- * pool (Matt, 2026-09-22, MTC-41). copy.test.ts holds both. Neither pin
+ * sits outside the homepage's head, and it is the eleventh question of the
+ * pool (Matt, 2026-09-28, MTC-40). copy.test.ts holds both. Neither pin
  * governs /ask, which opens each row at ASK_START_AT.
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
