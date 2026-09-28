@@ -242,6 +242,35 @@ The press decides, not the device (Matt, 2026-09-23, MTC-81). A control activate
 
 Tests state a touch device with `test/touch-device.ts` and a press with `fireEvent.pointerDown` (a `pointerType`) or `fireEvent.keyDown` before the click.
 
+## Accessibility and performance (MTC-88)
+
+The reader includes a hiring manager who uses a screen reader and a recruiter on a mid-range phone (`~/docs/research/hiring/hiring-audience-2026.md`, 2026-09-22). Three layers hold the assistant to them: `bun test`, a CI job against a production build, and hand checks only a person with a screen reader or a phone can make.
+
+**What `bun test` holds.**
+
+- `lib/theme-contrast.test.ts`: every token pair the assistant draws, computed from `app/globals.css` on the surface it is drawn on (the page on /ask, the card on the homepage, the resting honeycomb canvas under the text of a phone), at 4.5:1 for text and 3:1 for a control's parts and its focus ring (WCAG 1.4.3, 1.4.11). It fails on a token edit that drops a pair below its line.
+- `components/assistant/keyboard.test.tsx`: the tab order on /ask before and after an answer and in the homepage panel, a focus indicator on every stop, and no stop that cancels Tab, Shift+Tab or Escape. Controls without the Button component's own ring wear `FOCUS_RING` from `lib/focus-ring.ts`, a solid 2 px outline in the ring token.
+- `components/assistant/screen-reader.test.tsx`: forty streamed tokens leave the status region alone, it changes once per step, the answer sits in no live region, and "Copied" is announced politely.
+- `components/assistant/accessibility.test.tsx` and `lib/touch-target-css.test.ts`: no text token drawn at reduced opacity in the progress rows, and the 44 px hit area (`.touch-target`) on every control drawn smaller: New conversation, Copy, Regenerate, the progress headline, Send, Stop, "See all questions", "Jump to latest". The pills are 46 px tall on their own; links inside a sentence keep WCAG 2.5.8's exemption.
+- `lib/use-prefers-reduced-motion.test.tsx`: under reduced motion the transcript jumps to its newest line instead of springing, and the Button press does not scale. The ticker, the follow-up reveal, the spinners and the canvas already had their own reduced-motion branches.
+
+**What CI runs.** `.github/workflows/accessibility.yml`, beside CI and independent of it: `bun run build` with `CHAT_DISABLED` unset, `next start`, then axe-core through Playwright (`a11y/axe.a11y.ts`, `a11y/playwright.config.ts`) on the homepage and /ask at 390 px (touch, 3x) and 1440 px, in both themes, and /ask with every question open, failing on any WCAG 2.0 to 2.2 A or AA violation; then Lighthouse CI (`a11y/lighthouserc.mobile.json`, `a11y/lighthouserc.desktop.json`), three runs of each page. The representative scores go to the job summary and every report is kept as the run's `accessibility-and-performance` artifact for 14 days. Nothing asks a question, so the chat route and the model are never called and an answer on screen is never scanned; the component tests above hold what an answer adds. Playwright files are `*.a11y.ts` under `a11y/`, because `bun test` collects `*.test.*` and `*.spec.*` anywhere. Lighthouse CI runs through `npx` at an exact version rather than from `package.json`, so the site's own install does not carry it.
+
+**Budgets.** Lighthouse's assertions live in the two `a11y/lighthouserc.*.json` files, set from the first measured run and recorded on MTC-88 with the date and the commit. Until they are added, the job records the scores without asserting on them.
+
+**Known gaps, left for Matt (2026-09-28).**
+
+- Light muted text over the full-bleed canvas (below 56rem, no veil) is 4.36:1 against the brightest resting stroke and 4.35:1 under the pointer's glow, against 4.5:1. The stroke is a hairline under a glyph, not the text's surroundings; a darker light `--muted-foreground` or a fainter full-bleed canvas clears it. `lib/theme-contrast.test.ts` records it as `test.failing`. At 56rem and wider the veil takes the column's field to 8 percent and the pair is 4.72:1 even under the glow.
+- The status region says "Responding" again for the moment between the route's `done` part and `finish`, because `announcementFor` in `lib/chat/answer.ts` names no step for `done`; a screen reader may speak it before "Response complete". Recorded as `test.failing` in `components/assistant/screen-reader.test.tsx`.
+- An answer cut short by the output cap, or a run that ended without one, is announced "Response complete"; the notice under it is seen but not announced. What the region should say instead is a copy call.
+- Text inside a pill row's edge fade drops to nothing by design, for the pill entering or leaving; no contrast check can hold it.
+
+**Hand checks.** Only a person can confirm these; the VoiceOver ones overlap the Safari pass in MTC-89:
+
+- VoiceOver on macOS Safari and on iOS Safari: the empty state read in order (heading, intro, "See all questions", the starter group by name, the composer, the disclosure); a pick by touch lands on the status region and hears the run's steps once each, then "Response complete", with no token read aloud; the progress headline reads as a collapsed button naming the tool and the sources; the follow-up group by name and each pill by its question; a refusal notice read once, as an alert; "New conversation" by keyboard lands on the composer, by touch on the heading; "Copied" heard once.
+- Keyboard on a desktop browser, both themes: the ring visible on every stop, a focused pill scrolled clear of the fade, Tab leaving the ticker at its last pill, Escape doing nothing surprising anywhere.
+- A phone: each control above tappable without a miss, and the rows' motion stopping under the system's reduced-motion setting.
+
 ## The Turbopack build cache (MTC-62)
 
 Vercel restores a build cache before every build, keyed by team, project, framework, root directory, Node version, package manager and Git branch; a branch's first build has no cache of its own and gets the last production deployment's ([Vercel: caching process](https://vercel.com/docs/deployments/troubleshoot-a-build#caching-process)). Next.js 16.3 turned on Turbopack's persistent build cache inside that restore. On 2026-09-22 the first preview of PR #41, which changed `app/globals.css`, served the branch's JavaScript with main's stylesheet: the follow-up row it added had no rules at all and the transcript scrolled sideways. CI runs `bun run build` cold and was green.
