@@ -80,6 +80,52 @@ describe('parseUiMessageStream', () => {
   })
 })
 
+describe('parseUiMessageStream, on the progress part', () => {
+  const progress = (steps: unknown[], phase = 'reading') => ({
+    type: 'data-progress',
+    id: 'progress',
+    data: { steps, phase },
+  })
+
+  test('keeps the last part, which is the run after every refusal', () => {
+    // The row for a refused read goes up at the call and is withdrawn when
+    // the refusal arrives, so only the last part says what was read.
+    const answer = parseUiMessageStream(
+      sse([
+        progress([
+          { id: 'resume', title: 'Résumé' },
+          { id: 'faq', title: 'FAQ' },
+        ]),
+        progress([{ id: 'resume', title: 'Résumé' }]),
+        progress([{ id: 'resume', title: 'Résumé' }], 'done'),
+      ])
+    )
+
+    expect(answer.progress).toEqual({
+      phase: 'done',
+      steps: [{ id: 'resume', title: 'Résumé' }],
+    })
+  })
+
+  test('a malformed last part is no progress, not the one before it', () => {
+    const answer = parseUiMessageStream(
+      sse([
+        progress([{ id: 'resume', title: 'Résumé' }]),
+        { type: 'data-progress', id: 'progress', data: { phase: 'nonsense' } },
+      ])
+    )
+
+    expect(answer.progress).toBeUndefined()
+  })
+
+  test('a run that narrated nothing has no progress', () => {
+    expect(
+      parseUiMessageStream(sse([{ type: 'text-delta', id: '1', delta: 'ok' }]))
+        .progress
+    ).toBeUndefined()
+  })
+})
+
 describe('sourcesTrailerIds', () => {
   test('reads the ids off a final Sources line', () => {
     expect(sourcesTrailerIds('Text.\n\nSources: resume, faq')).toEqual([
