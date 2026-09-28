@@ -5,8 +5,8 @@
  * It is one file because the framing is the constraint: the assistant is
  * always a third party talking *about* Matt, never Matt, and that is easier to
  * hold to when every line is readable together. It is not every string the
- * components render — labels, the disclosure paragraph and the composer's
- * hints sit with their markup — and two kinds of copy live elsewhere on
+ * components render (labels, the disclosure paragraph and the composer's
+ * hints sit with their markup), and two kinds of copy live elsewhere on
  * purpose: the route's own, which the UI renders as sent, and the error
  * fallback in lib/chat/answer.ts, decided alongside the parsing it covers.
  */
