@@ -579,9 +579,9 @@ describe('the replayed progress part', () => {
   })
 
   test('a stopped run leaves no larger a part than a finished one', () => {
-    // Pinned as well, because this is the number that moved: while rows
-    // were predicted from finished calls alone, a run stopped inside a
-    // step that asked for the whole index kept a row per id it named.
+    // Pinned as well: the budgets bound a stopped run's rows exactly as
+    // they bound a finished one's, and this is the figure that holds them
+    // to it.
     const stopped = JSON.stringify(stoppedRunPart()).length
     expect(stopped).toBe(6_374)
     expect(stopped).toBeLessThanOrEqual(

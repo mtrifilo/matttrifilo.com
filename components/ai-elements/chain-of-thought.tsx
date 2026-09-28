@@ -52,12 +52,10 @@ import { createContext, useContext, useMemo } from "react";
  *   the message on every render and passes fresh elements each time: the
  *   header's `icon`, the steps as `ChainOfThoughtContent`'s children, the
  *   header and content as `ChainOfThought`'s, and a read row's
- *   `description`. A shallow comparison never matches any of them, so each
- *   memo cost a prop walk per render and skipped nothing. Measured under
- *   Happy DOM, all three memoised parts rendered on 10 of 10 re-renders
- *   that changed nothing on screen. Making the props stable would mean
- *   memoising elements in the caller for panels that hold a handful of
- *   lines of text.
+ *   `description`. A shallow comparison would never match any of them, so
+ *   a memo would add a prop walk per render and skip nothing. Making the
+ *   props stable would mean memoising elements in the caller for panels
+ *   that hold a handful of lines of text.
  *
  * `@radix-ui/react-use-controllable-state` is a direct dependency pinned to
  * the exact version `radix-ui` itself depends on, so the tree holds one copy

@@ -459,6 +459,35 @@ function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
 }
 
 /** Each progress payload the route wrote, in the order it wrote them. */
+/**
+ * Every progress payload the progress stage writes for these chunks, fed to
+ * it directly. For the orderings the handler cannot produce, and for runs
+ * whose outcomes a test wants to state one by one.
+ */
+async function progressThroughStage(
+  input: readonly unknown[]
+): Promise<ChatProgress[]> {
+  const stage = withProgress({
+    entries: index.entries,
+    now: () => 0,
+    started: 0,
+  }) as unknown as TransformStream<unknown, { type: string; data?: unknown }>
+  const output = new ReadableStream<unknown>({
+    start(controller) {
+      for (const chunk of input) controller.enqueue(chunk)
+      controller.close()
+    },
+  }).pipeThrough(stage)
+  const payloads: ChatProgress[] = []
+  const reader = output.getReader()
+  for (let next = await reader.read(); !next.done; next = await reader.read()) {
+    if (next.value.type === PROGRESS_PART_TYPE) {
+      payloads.push(next.value.data as ChatProgress)
+    }
+  }
+  return payloads
+}
+
 function progressFrom(body: string): ChatProgress[] {
   return chunksFrom(body)
     .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
@@ -1922,28 +1951,7 @@ describe('progress on the stream', () => {
       refused(1),
       served(3, 'projects'),
     ]
-    const stage = withProgress({
-      entries: index.entries,
-      now: () => 0,
-      started: 0,
-    }) as unknown as TransformStream<unknown, { type: string; data?: unknown }>
-    const output = new ReadableStream<unknown>({
-      start(controller) {
-        for (const chunk of input) controller.enqueue(chunk)
-        controller.close()
-      },
-    }).pipeThrough(stage)
-    const payloads: ChatProgress[] = []
-    const reader = output.getReader()
-    for (
-      let next = await reader.read();
-      !next.done;
-      next = await reader.read()
-    ) {
-      if (next.value.type === PROGRESS_PART_TYPE) {
-        payloads.push(next.value.data as ChatProgress)
-      }
-    }
+    const payloads = await progressThroughStage(input)
 
     for (const payload of payloads) {
       expect(payload.steps.length).toBeLessThanOrEqual(
@@ -1958,6 +1966,44 @@ describe('progress on the stream', () => {
         ['faq', 'projects', 'timeline'],
       ]
     )
+  })
+
+  test('a repository whose fetch failed has spent its call in the prediction', async () => {
+    // The session spends a call before it fetches, so a repository GitHub
+    // did not answer counts against the cap like one it did. Asked for again
+    // once the other two are checked, it is refused on count, so it must
+    // not come back as a row, even for the moment before that refusal.
+    const [first, second, third] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
+    const call = (n: number, repository: string) => ({
+      type: 'tool-input-available',
+      toolCallId: `check-${n}`,
+      toolName: RECENT_ACTIVITY_TOOL_NAME,
+      input: { repository },
+    })
+    const outcome = (n: number, output: unknown) => ({
+      type: 'tool-output-available',
+      toolCallId: `check-${n}`,
+      output,
+    })
+    const digest = (repository: string) => ({ repository, activity: 'x' })
+    const payloads = await progressThroughStage([
+      call(1, first),
+      call(2, second),
+      call(3, third),
+      outcome(1, { error: 'activity_unavailable' }),
+      outcome(2, digest(second)),
+      outcome(3, digest(third)),
+      call(4, first),
+      outcome(4, { error: 'activity_budget_exhausted' }),
+    ])
+
+    const withdrawn = payloads.findIndex(
+      payload => !payload.steps.some(step => step.id === first)
+    )
+    expect(withdrawn).toBeGreaterThan(0)
+    for (const payload of payloads.slice(withdrawn)) {
+      expect(payload.steps.map(step => step.id)).toEqual([second, third])
+    }
   })
 
   test('a document read twice is one row', async () => {

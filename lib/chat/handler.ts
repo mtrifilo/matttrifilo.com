@@ -709,23 +709,24 @@ export function withProgress({
   /** Reads that succeeded, duplicates included, as the read budget counts them. */
   let reads = 0
   /**
-   * Repositories whose digest reached the model. Not the same as the
-   * session's `activityCalls`, which counts failures too: a row is for work
-   * the visitor can be told happened, and a fetch that returned nothing is
-   * not that.
+   * Repositories the activity session has spent a call on, as far as the
+   * outcomes show, for the prediction in `fitsPrediction`. Every outcome
+   * counts, a refusal as much as a digest: the session spends its call
+   * before the fetch, so a fetch that failed or a digest the read budget
+   * refused has spent one, a repeat told `repository_already_checked` is
+   * for a repository already here, and a refusal on the call cap means the
+   * cap is spent for the rest of the request anyway.
    *
    * A set of ids rather than a count of outputs, because one fetch can
    * answer two calls. The activity session answers a repeat call for a
    * repository whose fetch is still running with that same fetch
    * (lib/chat/recent-activity.ts), so a step that asks for one repository
-   * twice ends with two successful outputs from one fetch. The session's cap
-   * spends one call on that fetch, so the prediction in `fitsPrediction`
-   * must count it once too: counted per output, a repository asked for in a
-   * later step would be held back as over the cap while the session fetched
-   * it. The dedup lives where outputs are counted because the overcount is
-   * in the outputs.
+   * twice ends with two outputs from one fetch. The session's cap spends one
+   * call on that fetch, so the prediction must count it once too: counted
+   * per output, a repository asked for in a later step would be held back
+   * as over the cap while the session fetched it.
    */
-  const checked = new Set<string>()
+  const spentRepositories = new Set<string>()
   let phase: ChatProgressPhase = 'reading'
   let emitted = false
   let failed = false
@@ -791,7 +792,12 @@ export function withProgress({
           if (!step) break
           // Predicted before this call joins the calls in flight: the
           // prediction is about what is ahead of it.
-          const fits = fitsPrediction(step, reads, checked, inFlight.values())
+          const fits = fitsPrediction(
+            step,
+            reads,
+            spentRepositories,
+            inFlight.values()
+          )
           const callId = toolCallId(chunk)
           // Remembered even when it earns no row, because its outcome below
           // still counts: a repeated read is charged again, a repeat of
@@ -809,18 +815,18 @@ export function withProgress({
           // The row goes up when the call starts, because narrating the wait
           // is the point; it is corrected here, when the outcome is known.
           // Both counters live here rather than at the call, so what they
-          // hold is work that happened and not work that was attempted: a
-          // refused read or an unreachable repository must neither be counted
-          // against the caps nor left on screen.
+          // hold is what the sessions have spent and not what was asked
+          // for: a refused read must not be counted against the cap, and a
+          // refused call of either tool must not be left on screen.
           const callId = toolCallId(chunk)
           const step = callId === undefined ? undefined : inFlight.get(callId)
           if (!step || callId === undefined) break
           inFlight.delete(callId)
+          if (isActivity(step)) spentRepositories.add(step.id)
 
           if (!refusedOutput(chunk)) {
             if (!succeeded.has(step.id)) succeeded.set(step.id, step)
-            if (isActivity(step)) checked.add(step.id)
-            else reads += 1
+            if (!isActivity(step)) reads += 1
             // A call the prediction held back, which the session served
             // after all because a call ahead of it was refused for a reason
             // the prediction cannot see. The work happened, so it is
@@ -925,26 +931,27 @@ function rowCap(step: ChatProgressStep): number {
  *   so `reads` holds every successful read, repeats included, and every
  *   read in flight is one more.
  * - Checks count per repository. The activity session fetches a repository
- *   once and answers a repeat in the same step from that fetch, so
- *   `checkedRepositories` and the repositories in flight are one set.
+ *   once, spends the call whatever the fetch returns, and answers a repeat
+ *   in the same step from that fetch, so `spentRepositories` and the
+ *   repositories in flight are one set.
  *
- * A call in flight may still be refused for something this stage cannot
+ * A read in flight may still be refused for something this stage cannot
  * see: a document larger than the remaining token budget, which depends on
  * text this stage never reads and on how much of the shared budget the
- * GitHub digests already spent (lib/chat/read-budget.ts), or a fetch that
- * fails. The first spends no place, so the prediction can hold back a call
- * the session then serves. The caller lists that one when its success
+ * GitHub digests already spent (lib/chat/read-budget.ts). That refusal
+ * spends no place, so the prediction can hold back a call the session then
+ * serves. The caller lists that one when its success
  * arrives, which is why guessing at the refusal is not needed here, and a
  * refusal it did not predict withdraws its row when the outcome arrives.
  */
 function fitsPrediction(
   step: ChatProgressStep,
   reads: number,
-  checkedRepositories: ReadonlySet<string>,
+  spentRepositories: ReadonlySet<string>,
   inFlight: Iterable<ChatProgressStep>
 ): boolean {
   if (isActivity(step)) {
-    const repositories = new Set(checkedRepositories)
+    const repositories = new Set(spentRepositories)
     for (const other of inFlight) {
       if (isActivity(other)) repositories.add(other.id)
     }
