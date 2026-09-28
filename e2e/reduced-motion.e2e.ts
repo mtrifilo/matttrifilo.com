@@ -8,6 +8,7 @@ import {
   expectRecordedAnswer,
   pickFromRows,
   rowOpenings,
+  settle,
   test,
   tickerRows,
   waitForRows,
@@ -55,12 +56,13 @@ for (const path of ['/', '/ask'] as const) {
     await page.goto(path)
     await tickerRows(page).first().scrollIntoViewIfNeeded()
     await waitForRows(page)
+    await settle(page)
 
     expect(await running(page)).toEqual([])
-    // Nothing loops, so the rows are said once: no trailing copy.
-    await expect(
-      page.locator('.starter-ticker-copy[aria-hidden="true"]').first()
-    ).toBeHidden()
+    // Nothing loops, so the rows are said once: no trailing copy in either.
+    const copies = page.locator('.starter-ticker-copy[aria-hidden="true"]')
+    await expect(copies).toHaveCount(2)
+    for (const copy of await copies.all()) await expect(copy).toBeHidden()
     for (const row of await tickerRows(page).all()) {
       await expect(row).toHaveCSS('overflow-x', 'auto')
     }

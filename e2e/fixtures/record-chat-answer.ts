@@ -1,4 +1,5 @@
 import { writeFileSync } from 'fs'
+import path from 'path'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import { createChatHandler } from '@/lib/chat/handler'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
@@ -9,7 +10,7 @@ import type {
 } from '@/lib/knowledge'
 import {
   RECORDED_ANSWER_PARAGRAPHS,
-  RECORDED_ANSWER_PATH,
+  RECORDED_ANSWER_FILE,
   RECORDED_RUN_MS,
   RECORDED_SOURCE,
   recordedModelText,
@@ -174,6 +175,7 @@ export async function recordChatAnswer(): Promise<RecordedResponse> {
 
 if (import.meta.main) {
   const { body } = await recordChatAnswer()
-  writeFileSync(RECORDED_ANSWER_PATH, body)
-  console.log(`wrote ${RECORDED_ANSWER_PATH}`)
+  const file = path.join(__dirname, RECORDED_ANSWER_FILE)
+  writeFileSync(file, body)
+  console.log(`wrote ${file}`)
 }

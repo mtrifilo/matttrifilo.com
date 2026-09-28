@@ -18,8 +18,12 @@
  * Playwright under Node.
  */
 
-/** Where the recorded response body lives, relative to the repository. */
-export const RECORDED_ANSWER_PATH = 'e2e/fixtures/chat-answer.sse'
+/**
+ * The recorded response body's file name, beside this module. Each reader
+ * joins it to its own directory, so nothing depends on where a command was
+ * run from.
+ */
+export const RECORDED_ANSWER_FILE = 'chat-answer.sse'
 
 /**
  * The headers the handler answers a streamed run with. The AI SDK's client

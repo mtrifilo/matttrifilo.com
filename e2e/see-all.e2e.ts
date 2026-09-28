@@ -12,6 +12,7 @@ import {
   horizontalOverflow,
   press,
   starterGroup,
+  statusRegion,
   test,
   tickerRows,
   waitForRows,
@@ -85,26 +86,36 @@ for (const path of ['/ask', '/'] as const) {
   })
 }
 
-test('a question picked from the list is asked', async ({
-  page,
-  chat,
-  hasTouch,
-}) => {
-  await page.goto('/ask')
-  await waitForRows(page)
-  await press(page.getByRole('button', { name: SEE_ALL }), hasTouch)
+for (const path of ['/ask', '/'] as const) {
+  test(`a question picked from the list on ${path} is asked`, async ({
+    page,
+    chat,
+    hasTouch,
+  }) => {
+    await page.goto(path)
+    await waitForRows(page)
+    const toggle = page.getByRole('button', { name: SEE_ALL })
+    await toggle.scrollIntoViewIfNeeded()
+    await press(toggle, hasTouch)
 
-  // The first question of the second group, so the pick is not simply the
-  // pool's first question, which the rows also open on.
-  const question = GROUPS[1].questions[0]
-  await press(
-    starterGroup(page).getByRole('button', { name: question, exact: true }),
-    hasTouch
-  )
+    // The first question of the second group, so the pick is not simply
+    // the pool's first question, which the rows also open on.
+    const question = GROUPS[1].questions[0]
+    await press(
+      starterGroup(page).getByRole('button', { name: question, exact: true }),
+      hasTouch
+    )
 
-  await expect(askedQuestion(page, question)).toBeVisible()
-  await expectRecordedAnswer(page)
-  expect(chat.calls.map(call => call.question)).toEqual([question])
-  if (hasTouch) await expect(composer(page)).not.toBeFocused()
-  else await expect(composer(page)).toBeFocused()
-})
+    await expect(page).toHaveURL(/\/ask$/)
+    await expect(askedQuestion(page, question)).toBeVisible()
+    await expectRecordedAnswer(page)
+    expect(chat.calls.map(call => call.question)).toEqual([question])
+    // A pick from the list follows the rows' focus rule (MTC-74).
+    if (hasTouch) {
+      await expect(statusRegion(page)).toBeFocused()
+      await expect(composer(page)).not.toBeFocused()
+    } else {
+      await expect(composer(page)).toBeFocused()
+    }
+  })
+}

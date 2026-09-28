@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs'
+import path from 'path'
 import {
   expect,
   test as base,
@@ -7,10 +8,14 @@ import {
   type Request,
   type Route,
 } from '@playwright/test'
+import { FOLLOW_UPS_LABEL, progressSummary } from '@/components/assistant/copy'
+import { toSeconds } from '@/lib/chat/progress'
 import {
   RECORDED_ANSWER_HEADERS,
   RECORDED_ANSWER_PARAGRAPHS,
-  RECORDED_ANSWER_PATH,
+  RECORDED_ANSWER_FILE,
+  RECORDED_FOLLOW_UPS,
+  RECORDED_RUN_MS,
 } from './fixtures/chat-answer'
 
 /**
@@ -30,8 +35,18 @@ export interface ChatReply {
 export const RECORDED_REPLY: ChatReply = {
   status: 200,
   headers: { ...RECORDED_ANSWER_HEADERS },
-  body: readFileSync(RECORDED_ANSWER_PATH, 'utf8'),
+  body: readFileSync(
+    path.join(__dirname, 'fixtures', RECORDED_ANSWER_FILE),
+    'utf8'
+  ),
 }
+
+/** The collapsed line above the recorded answer. */
+export const RECORDED_SUMMARY = progressSummary(
+  1,
+  0,
+  toSeconds(RECORDED_RUN_MS)
+)
 
 /** What one POST to /api/chat carried. */
 export interface ChatCall {
@@ -102,10 +117,14 @@ export const test = base.extend<Fixtures>({
 
   chat: [
     async ({ page }, use) => {
+      // Routed on the context, not the page, so a popup or a second page is
+      // answered the same way.
+      const context = page.context()
+
       // Vercel serves its analytics script; `next start` does not, and the
       // 404 would be a console error that says nothing about the site. An
       // empty script sends no page views either.
-      await page.route('**/_vercel/insights/**', route =>
+      await context.route('**/_vercel/insights/**', route =>
         route.fulfill({
           status: 200,
           contentType: 'text/javascript',
@@ -113,10 +132,12 @@ export const test = base.extend<Fixtures>({
         })
       )
 
+      await context.route(isBotIdChallenge, answerBotIdChallenge)
+
       const calls: ChatCall[] = []
       let reply = RECORDED_REPLY
       let held: Promise<void> | null = null
-      await page.route('**/api/chat', async (route: Route) => {
+      await context.route('**/api/chat', async (route: Route) => {
         const request = route.request()
         if (request.method() !== 'POST') return route.abort()
         calls.push({
@@ -149,6 +170,30 @@ export const test = base.extend<Fixtures>({
     { auto: true },
   ],
 })
+
+/**
+ * BotID's challenge script, which its patched `fetch` loads and waits on
+ * before it sends a protected request (node_modules/botid, client core).
+ * `next start` proxies it to Vercel's endpoint (`withBotId` in
+ * next.config.ts), so without a stub every question in the suite would wait
+ * on a third-party service answering a CI runner. ./botid.e2e.ts removes
+ * the stub and loads the real script.
+ */
+export const isBotIdChallenge = (url: URL): boolean =>
+  url.pathname.endsWith('/a-4-a/c.js')
+
+/**
+ * Stands in for the challenge: hands BotID's client a token through the
+ * queue it listens on, as the real script does once it has run. The route
+ * would refuse this token, but the route is never reached.
+ */
+export function answerBotIdChallenge(route: Route): Promise<void> {
+  return route.fulfill({
+    status: 200,
+    contentType: 'text/javascript',
+    body: 'window.V_C = window.V_C || []; window.V_C.push({ b: 1 })',
+  })
+}
 
 export { expect }
 
@@ -191,11 +236,32 @@ export const statusRegion = (page: Page): Locator =>
 export const askedQuestion = (page: Page, question: string): Locator =>
   page.locator('.is-user').filter({ hasText: question })
 
-/** Waits for the recorded answer to be on screen, whole. */
+/** The newest assistant turn in the transcript. */
+export const lastAnswer = (page: Page): Locator =>
+  page.locator('.is-assistant').last()
+
+/**
+ * Waits for the recorded answer to be on screen, whole, and checks what the
+ * page made of the stream: the prose, the collapsed line naming the tool and
+ * its one source, both trailers taken off the text, and the follow-up pills.
+ */
 export async function expectRecordedAnswer(page: Page): Promise<void> {
+  const answer = lastAnswer(page)
   for (const paragraph of RECORDED_ANSWER_PARAGRAPHS) {
-    await expect(page.getByText(paragraph, { exact: true })).toBeVisible()
+    await expect(answer.getByText(paragraph, { exact: true })).toBeVisible()
   }
+  // Collapsed: the steps fold away behind the summary once the answer is in.
+  await expect(
+    answer.getByRole('button', { name: RECORDED_SUMMARY })
+  ).toHaveAttribute('aria-expanded', 'false')
+  await expect(answer).not.toContainText('Sources:')
+  await expect(answer).not.toContainText('Follow-ups:')
+  await expect(
+    page
+      .getByRole('group', { name: FOLLOW_UPS_LABEL })
+      .last()
+      .getByRole('button')
+  ).toHaveText([...RECORDED_FOLLOW_UPS])
 }
 
 /**
@@ -207,6 +273,20 @@ export async function waitForRows(page: Page): Promise<void> {
   await expect(
     page.locator('.starter-ticker-track[data-placed="true"]')
   ).toHaveCount(2)
+}
+
+/**
+ * Waits for the page's fonts and two more frames. A row measures itself
+ * again when a font changes its pills' widths, so a measurement taken before
+ * the fonts are in may be of a layout the visitor never keeps.
+ */
+export async function settle(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await document.fonts.ready
+    for (let frame = 0; frame < 2; frame += 1) {
+      await new Promise(resolve => requestAnimationFrame(resolve))
+    }
+  })
 }
 
 /** Where a pill sits on the page, and what it asks. */
@@ -222,7 +302,7 @@ export interface PillSpot {
  * a visitor would put a finger or the pointer. At 390 a question is often
  * wider than the window, so "most of itself" rather than "all of it". The
  * rows move, so the spot is only good for a moment; a caller either stops
- * the rows first or acts on it straight away.
+ * the rows first or acts on it right away.
  */
 export async function pillInView(page: Page, row: number): Promise<PillSpot> {
   const spot = await page.evaluate(rowIndex => {
@@ -314,8 +394,14 @@ export async function holdLoopsAtOpening(page: Page): Promise<void> {
       if (route.request().resourceType() !== 'document') return route.fallback()
       const response = await route.fetch()
       const html = await response.text()
+      // The text is decoded and about to change length, so the server's
+      // encoding and length no longer describe it.
+      const headers = { ...response.headers() }
+      delete headers['content-encoding']
+      delete headers['content-length']
       await route.fulfill({
         response,
+        headers,
         body: html.replace(
           '</head>',
           '<style>.starter-ticker-track{animation-play-state:paused!important}</style></head>'

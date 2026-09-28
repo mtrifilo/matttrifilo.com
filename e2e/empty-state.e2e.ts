@@ -15,6 +15,7 @@ import {
   holdLoopsAtOpening,
   horizontalOverflow,
   rowOpenings,
+  settle,
   test,
   tickerRows,
   waitForRows,
@@ -41,6 +42,7 @@ for (const surface of SURFACES) {
       await page.goto(surface.path)
       await tickerRows(page).first().scrollIntoViewIfNeeded()
       await waitForRows(page)
+      await settle(page)
       await expect(tickerRows(page)).toHaveCount(2)
       for (const row of await tickerRows(page).all()) {
         await expect(row).toBeVisible()
@@ -65,13 +67,14 @@ for (const surface of SURFACES) {
     }) => {
       await page.goto(surface.path)
       const box = composer(page)
+      if (surface.path === '/ask') {
+        // One centered group: the composer is on the first screen, before
+        // anything has been scrolled.
+        await expect(box).toBeInViewport({ ratio: 1 })
+      }
       await box.scrollIntoViewIfNeeded()
       await expect(box).toBeVisible()
       await expect(box).toBeEditable()
-      if (surface.path === '/ask') {
-        // One centred group: the composer is on the first screen.
-        await expect(box).toBeInViewport({ ratio: 1 })
-      }
 
       await expect(
         page.getByText('AI-generated. May be incomplete or wrong.', {
@@ -107,7 +110,48 @@ test.describe('/ask on load', () => {
     await waitForRows(page)
     // MTC-67 and MTC-81: the composer is the page's focal point, except on a
     // touch device, where focusing it would raise the keyboard unasked.
-    if (hasTouch) await expect(composer(page)).not.toBeFocused()
-    else await expect(composer(page)).toBeFocused()
+    if (hasTouch) {
+      // Past the frame in which the page would have focused it.
+      await settle(page)
+      await expect(composer(page)).not.toBeFocused()
+      expect(
+        await page.evaluate(() => document.activeElement === document.body)
+      ).toBe(true)
+    } else {
+      await expect(composer(page)).toBeFocused()
+    }
   })
+})
+
+test('each project emulates the pointer it names', async ({
+  page,
+  hasTouch,
+}) => {
+  // The site decides focus, scrolling and hover pauses from these media
+  // features and from a press's pointer type, so a project whose engine did
+  // not emulate them would test a different device than it claims.
+  await page.goto('/contact')
+  const media = await page.evaluate(() => ({
+    coarse: matchMedia('(pointer: coarse)').matches,
+    hover: matchMedia('(hover: hover)').matches,
+  }))
+  expect(media).toEqual({ coarse: hasTouch, hover: !hasTouch })
+
+  await page.evaluate(() => {
+    const target = document.createElement('button')
+    target.id = 'pointer-probe'
+    target.textContent = 'Probe'
+    target.style.cssText = 'position:fixed;top:120px;left:40px;z-index:99'
+    target.addEventListener('pointerdown', event => {
+      target.dataset.pointerType = event.pointerType
+    })
+    document.body.append(target)
+  })
+  const probe = page.locator('#pointer-probe')
+  if (hasTouch) await probe.tap()
+  else await probe.click()
+  await expect(probe).toHaveAttribute(
+    'data-pointer-type',
+    hasTouch ? 'touch' : 'mouse'
+  )
 })

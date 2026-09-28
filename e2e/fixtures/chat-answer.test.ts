@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'fs'
+import path from 'path'
 import { DefaultChatTransport, readUIMessageStream } from 'ai'
 import { toAnswerView, type AnswerView } from '@/lib/chat/answer'
 import type { ChatUIMessage } from '@/lib/chat/handler'
@@ -7,7 +8,7 @@ import { createChatFetch } from '@/lib/chat/transport'
 import {
   RECORDED_ANSWER_HEADERS,
   RECORDED_ANSWER_PARAGRAPHS,
-  RECORDED_ANSWER_PATH,
+  RECORDED_ANSWER_FILE,
   RECORDED_FOLLOW_UPS,
   RECORDED_RUN_MS,
   RECORDED_SOURCE,
@@ -20,7 +21,8 @@ import { recordChatAnswer } from './record-chat-answer'
  * the client while the browser checks keep passing against it.
  */
 
-const committed = () => readFileSync(RECORDED_ANSWER_PATH, 'utf8')
+const committed = () =>
+  readFileSync(path.join(__dirname, RECORDED_ANSWER_FILE), 'utf8')
 
 describe('the recorded chat answer', () => {
   test('is what the route handler writes today', async () => {

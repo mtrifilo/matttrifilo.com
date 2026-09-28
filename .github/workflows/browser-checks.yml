@@ -11,10 +11,12 @@ name: Browser checks
 # ci.yml.
 #
 # It needs no secret. The chat route is never reached: every request to
-# /api/chat is answered inside the browser by the suite, and the last step
-# fails the job if the server logged a single chat request. No GCP
+# /api/chat is answered inside the browser by the suite, and a step after
+# the suite fails the job if the server logged a single chat request. No GCP
 # credentials exist here, so a request that did get through could not reach
-# Vertex either.
+# Vertex either. One test (e2e/botid.e2e.ts) loads BotID's real challenge
+# script, which `next start` proxies to Vercel; it is the job's only call to
+# a third party at test time.
 
 on:
   pull_request:
@@ -46,9 +48,11 @@ jobs:
           bun-version: 1.3.3
       - run: bun install --frozen-lockfile
 
-      - name: Read the Playwright version
+      - name: Read the Playwright version and the runner image
         id: playwright
-        run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
       # The browsers are keyed by the Playwright version that downloads them;
       # the system libraries they need are installed on every run, because
       # they live outside the cached directory.
@@ -57,7 +61,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+          # The runner image is in the key because WebKit is built against
+          # the image's system libraries.
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-chromium-webkit
       - name: Install the browsers
         if: steps.browsers.outputs.cache-hit != 'true'
         run: bunx playwright install --with-deps chromium webkit
@@ -65,15 +71,10 @@ jobs:
         if: steps.browsers.outputs.cache-hit == 'true'
         run: bunx playwright install-deps chromium webkit
 
+      # CHAT_DISABLED is left unset: the kill switch is read at build time,
+      # and the suite needs the assistant rendered.
       - name: Build the site
-        run: |
-          # The assistant has to be rendered to be tested; the kill switch
-          # is read at build time.
-          if [ -n "${CHAT_DISABLED:-}" ]; then
-            echo "::error::CHAT_DISABLED is set; the suite needs the assistant rendered"
-            exit 1
-          fi
-          bun run build
+        run: bun run build
         env:
           # As in ci.yml: the /open-source build-time fetch, authenticated
           # with the workflow's own read-only token.
@@ -102,7 +103,12 @@ jobs:
       - name: Confirm the chat route was never called
         if: success() || failure()
         run: |
-          if grep -F '[chat]' "$RUNNER_TEMP/next-start.log"; then
+          log="$RUNNER_TEMP/next-start.log"
+          if [ ! -f "$log" ]; then
+            echo "The site never started, so there is nothing to check."
+            exit 0
+          fi
+          if grep -F '[chat]' "$log"; then
             echo "::error::The chat route handled a request during the browser checks"
             exit 1
           fi

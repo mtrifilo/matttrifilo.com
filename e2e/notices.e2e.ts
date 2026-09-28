@@ -1,11 +1,19 @@
 import { MATT_MAILTO, RATE_LIMIT_NOTICE } from '@/components/assistant/copy'
 import { CHAT_UNKNOWN_ERROR_MESSAGE } from '@/lib/chat/answer'
-import { askedQuestion, composer, expect, press, test } from './support'
+import {
+  askedQuestion,
+  composer,
+  expect,
+  horizontalOverflow,
+  press,
+  test,
+} from './support'
 
 /**
  * The two refusals a preview cannot produce on demand (MTC-33, MTC-34): the
- * edge rate limit's 429, which arrives with Vercel's body rather than the
- * route's, and a 502 from in front of the route. Both are answered in the
+ * edge rate limit's 429, which arrives without the route's envelope (a
+ * plain-text body stands in for the edge's, which has not been captured),
+ * and a 502 from in front of the route. Both are answered in the
  * browser, as every chat request in these checks is.
  */
 
@@ -26,7 +34,8 @@ test('a 429 from the edge shows the rate-limit notice', async ({
   hasTouch,
   pageErrors,
 }) => {
-  // Chromium reports a failed response in the console; this one is the test.
+  // The browser reports a failed response in the console; this one is the
+  // test.
   pageErrors.expectConsoleError(/status of 429/)
   chat.replyWith({
     status: 429,
@@ -46,6 +55,7 @@ test('a 429 from the edge shows the rate-limit notice', async ({
     notice.getByRole('link', { name: RATE_LIMIT_NOTICE.emailLabel })
   ).toHaveAttribute('href', MATT_MAILTO)
   expect(chat.calls.map(call => call.question)).toEqual([QUESTION])
+  if (hasTouch) expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
 })
 
 test('a 502 shows the error notice and keeps the question', async ({
@@ -70,4 +80,5 @@ test('a 502 shows the error notice and keeps the question', async ({
   await expect(askedQuestion(page, QUESTION)).toBeVisible()
   await expect(composer(page)).toHaveValue('')
   expect(chat.calls.map(call => call.question)).toEqual([QUESTION])
+  if (hasTouch) expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
 })

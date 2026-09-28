@@ -1,10 +1,9 @@
+import type { Page } from '@playwright/test'
 import {
   FOLLOW_UPS_LABEL,
   PROGRESS_THINKING,
-  progressSummary,
 } from '@/components/assistant/copy'
-import { toSeconds } from '@/lib/chat/progress'
-import { RECORDED_FOLLOW_UPS, RECORDED_RUN_MS } from './fixtures/chat-answer'
+import { RECORDED_FOLLOW_UPS } from './fixtures/chat-answer'
 import {
   askedQuestion,
   composer,
@@ -18,13 +17,29 @@ import {
 } from './support'
 
 /**
- * A question asked three ways, and the answer the page makes of the stream
- * (MTC-33, MTC-41, MTC-42, MTC-74). The route is never reached: every answer
- * is the recorded one in e2e/fixtures, which carries one read, a short
- * answer, its citation line and two follow-ups.
+ * A question asked each way a visitor can ask one, and the answer the page
+ * makes of the stream (MTC-33, MTC-41, MTC-42, MTC-74). The route is never
+ * reached: every answer is the recorded one in e2e/fixtures, which carries
+ * one read, a short answer, its citation line and two follow-ups, and
+ * `expectRecordedAnswer` checks all of what the page draws from it.
  */
 
-const SUMMARY = progressSummary(1, 0, toSeconds(RECORDED_RUN_MS))
+/**
+ * Where focus lands after a pick (MTC-74): a finger's pick leaves the
+ * keyboard down by focusing the status line; any other pick puts the caret
+ * in the composer for the next question.
+ */
+async function expectFocusAfterPick(
+  page: Page,
+  hasTouch: boolean
+): Promise<void> {
+  if (hasTouch) {
+    await expect(statusRegion(page)).toBeFocused()
+    await expect(composer(page)).not.toBeFocused()
+  } else {
+    await expect(composer(page)).toBeFocused()
+  }
+}
 
 test('a question picked from the rows on /ask is answered in full', async ({
   page,
@@ -37,30 +52,11 @@ test('a question picked from the rows on /ask is answered in full', async ({
   await expect(askedQuestion(page, question)).toBeVisible()
   await expectRecordedAnswer(page)
   expect(chat.calls.map(call => call.question)).toEqual([question])
+  await expectFocusAfterPick(page, hasTouch)
 
-  // The collapsed line names the tool and the one source it read.
-  await expect(page.getByText(SUMMARY, { exact: true })).toBeVisible()
-  // Both trailers are taken off before anything is drawn.
-  await expect(page.getByText('Sources:', { exact: false })).toHaveCount(0)
-  await expect(page.getByText('Follow-ups:', { exact: false })).toHaveCount(0)
-
-  const followUps = page.getByRole('group', { name: FOLLOW_UPS_LABEL })
-  await expect(followUps.getByRole('button')).toHaveText([
-    ...RECORDED_FOLLOW_UPS,
-  ])
-
-  // MTC-74: a finger's pick leaves the keyboard down; any other pick puts the
-  // caret in the composer for the next question.
-  if (hasTouch) {
-    await expect(composer(page)).not.toBeFocused()
-    await expect(statusRegion(page)).toBeFocused()
-  } else {
-    await expect(composer(page)).toBeFocused()
-  }
-
-  // The client half of BotID ran: its challenge script loaded, answered, and
-  // stamped the request. Only the route checks the stamp, and the route is
-  // stubbed here.
+  // BotID's patched fetch waited for its challenge and stamped the request
+  // before it left the page. The stamp is only checked by the route, which
+  // is stubbed; ./botid.e2e.ts loads the real challenge.
   expect(chat.calls.every(call => call.botIdHeader)).toBe(true)
 
   if (hasTouch) expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
@@ -84,13 +80,13 @@ test('a follow-up is asked as the next question', async ({
   )
 
   await expect(askedQuestion(page, followUp)).toBeVisible()
-  await expect.poll(() => chat.calls.length).toBe(2)
+  await expectRecordedAnswer(page)
+  expect(chat.calls.map(call => call.question)).toHaveLength(2)
   expect(chat.calls[1].question).toBe(followUp)
-  if (hasTouch) await expect(composer(page)).not.toBeFocused()
-  else await expect(composer(page)).toBeFocused()
+  await expectFocusAfterPick(page, hasTouch)
 })
 
-test('a typed question shows the wait, then the answer', async ({
+test('a typed question on /ask shows the wait, then the answer', async ({
   page,
   chat,
   hasTouch,
@@ -130,7 +126,25 @@ test('a question picked on the homepage is answered on /ask', async ({
   await expect(askedQuestion(page, question)).toBeVisible()
   await expectRecordedAnswer(page)
   expect(chat.calls.map(call => call.question)).toEqual([question])
-  // The hand-off carries how the question was picked (MTC-74).
-  if (hasTouch) await expect(composer(page)).not.toBeFocused()
-  else await expect(composer(page)).toBeFocused()
+  // The hand-off carries how the question was picked.
+  await expectFocusAfterPick(page, hasTouch)
+  if (hasTouch) expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
+})
+
+test('a question typed on the homepage is answered on /ask', async ({
+  page,
+  chat,
+  hasTouch,
+}) => {
+  await page.goto('/')
+  const question = 'What does the recorded fixture say?'
+  const box = composer(page)
+  await box.scrollIntoViewIfNeeded()
+  await box.fill(question)
+  await press(page.getByRole('button', { name: 'Send question' }), hasTouch)
+
+  await expect(page).toHaveURL(/\/ask$/)
+  await expect(askedQuestion(page, question)).toBeVisible()
+  await expectRecordedAnswer(page)
+  expect(chat.calls.map(call => call.question)).toEqual([question])
 })

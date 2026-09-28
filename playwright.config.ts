@@ -12,15 +12,15 @@ import { defineConfig, devices } from '@playwright/test'
  *
  * The specs are `*.e2e.ts` rather than Playwright's usual `*.spec.ts`
  * because `bun test` collects `*.spec.ts` too, and a Playwright spec loaded
- * by Bun's runner throws. `e2e/fixtures/*.test.ts` is the other way round:
+ * by Bun's runner throws. `e2e/fixtures/*.test.ts` is the other way around:
  * a Bun test that lives here because it guards the recording these checks
  * use, and `testMatch` keeps Playwright away from it.
  */
 
 /**
  * The phone both mobile projects emulate: touch, a coarse pointer, no hover,
- * the mobile viewport meta honoured, at the 390 x 844 viewport the design
- * was approved at. Each engine keeps its own phone's user agent and pixel
+ * the mobile viewport meta applied, at a 390 x 844 viewport. Each engine
+ * keeps its own phone's user agent and pixel
  * ratio, so neither claims to be a browser it is not.
  */
 const PHONE = { width: 390, height: 844 }
