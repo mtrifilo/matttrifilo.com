@@ -98,7 +98,7 @@ The wider frame, from the same threads:
 > reviewing and signing off on the code."
 
 > "Teams need some flexibility to set this up in ways that might be unique
-> per team, versus prescribing things for the entire organisation that
+> per team, versus prescribing things for the entire organization that
 > might not work for every team."
 
 ## What he did not oversell

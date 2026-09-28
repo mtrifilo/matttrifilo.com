@@ -202,14 +202,7 @@ const PREFIXES = ['co', 'de', 'dis', 'mis', 'non', 'over', 're', 'un', 'under']
 export const KEPT_AS_WRITTEN: readonly {
   phrase: string
   file: string
-}[] = [
-  {
-    // Matt's words, quoted verbatim in a block quote. Waiting on Matt
-    // (MTC-94): whether his quoted words take American spelling.
-    phrase: 'prescribing things for the entire organisation',
-    file: 'content/knowledge/career/symphony-autonomous-security-remediation.md',
-  },
-]
+}[] = []
 
 const KEPT_PHRASES = KEPT_AS_WRITTEN.map(entry => entry.phrase)
 
