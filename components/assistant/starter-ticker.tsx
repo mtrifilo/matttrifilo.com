@@ -12,6 +12,7 @@ import {
   type Ref,
 } from 'react'
 import { Suggestion } from '@/components/ai-elements/suggestion'
+import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import {
   seeAllQuestionsLabel,
@@ -196,7 +197,10 @@ export function StarterTicker({
       <button
         aria-controls={groupId}
         aria-expanded={listOpen}
-        className="order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 outline-none [overflow-anchor:none] hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className={cn(
+          'order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 [overflow-anchor:none] hover:underline',
+          FOCUS_RING
+        )}
         onClick={toggleList}
         type="button"
       >

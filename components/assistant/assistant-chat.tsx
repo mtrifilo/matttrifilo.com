@@ -29,6 +29,7 @@ import {
 import type { ChatUIMessage } from '@/lib/chat/handler'
 import { STOPPED_BEFORE_FIRST_STEP } from '@/lib/chat/progress'
 import { createChatFetch } from '@/lib/chat/transport'
+import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
@@ -320,7 +321,10 @@ export function AssistantChat() {
         <AssistantHeader />
         {hasTranscript && (
           <button
-            className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className={cn(
+              'flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground',
+              FOCUS_RING
+            )}
             onClick={reset}
             type="button"
           >

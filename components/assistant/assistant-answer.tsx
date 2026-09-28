@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { noticeFor, type AnswerView } from '@/lib/chat/answer'
+import { FOCUS_RING } from '@/lib/focus-ring'
+import { cn } from '@/lib/utils'
 import { IncompleteNotice, TruncatedNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { FOLLOW_UPS_LABEL } from './copy'
@@ -128,6 +130,9 @@ function FollowUpRow({
   )
 }
 
+const ACTION_CLASS =
+  'flex items-center gap-2 transition-colors hover:text-foreground'
+
 function AnswerActions({
   onRegenerate,
   text,
@@ -156,7 +161,7 @@ function AnswerActions({
   return (
     <div className="flex items-center gap-5 text-sm text-muted-foreground">
       <button
-        className="flex items-center gap-2 transition-colors hover:text-foreground"
+        className={cn(ACTION_CLASS, FOCUS_RING)}
         onClick={copy}
         type="button"
       >
@@ -168,7 +173,7 @@ function AnswerActions({
         {copied ? 'Copied' : 'Copy'}
       </button>
       <button
-        className="flex items-center gap-2 transition-colors hover:text-foreground"
+        className={cn(ACTION_CLASS, FOCUS_RING)}
         onClick={onRegenerate}
         type="button"
       >

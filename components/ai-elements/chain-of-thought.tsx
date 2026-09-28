@@ -5,6 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { FOCUS_RING } from "@/lib/focus-ring";
 import { cn } from "@/lib/utils";
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { ChevronDownIcon, DotIcon, type LucideIcon } from "lucide-react";
@@ -144,6 +145,7 @@ export const ChainOfThoughtHeader = ({
     <CollapsibleTrigger
       className={cn(
         "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground motion-reduce:transition-none",
+        FOCUS_RING,
         className
       )}
       {...props}

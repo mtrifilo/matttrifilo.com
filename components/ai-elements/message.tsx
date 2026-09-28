@@ -76,6 +76,7 @@ export const MessageResponse = memo(
       className={cn(
         "space-y-4 [&_li]:my-1 [&_ol]:pl-1 [&_strong]:font-semibold [&_ul]:pl-1",
         "[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-primary",
+        "[&_[data-streamdown=link]:focus-visible]:outline-2 [&_[data-streamdown=link]:focus-visible]:outline-offset-2 [&_[data-streamdown=link]:focus-visible]:outline-ring",
         className
       )}
       {...props}
