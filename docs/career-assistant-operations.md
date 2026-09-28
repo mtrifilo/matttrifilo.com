@@ -419,6 +419,8 @@ Goldens are hand-written from the corpus. They are never mined from traffic, bec
 
 ### Adding a starter question (MTC-51)
 
+A question's position in the pool decides when a visitor sees it: the homepage panel and `/ask` both open each ticker row on its first pill (`HOME_START_AT` and `ASK_START_AT` in `components/assistant/ticker-geometry.ts`), so the pool's leading positions are the first view on both surfaces.
+
 1. Add the question to `STARTER_QUESTIONS` in `components/assistant/copy.ts`.
 2. Keep the pool's pinned order. The independent-deploys question stays the tenth question (Matt, 2026-09-22, MTC-41), so a question inserted before it moves it and fails `copy.test.ts`. Each ticker row's head (`STARTER_HEAD_PILLS_PER_ROW` pills from `HOME_START_AT`) opens on the questions tagged in `STARTER_HEAD_THEMES`, in the featuring order (Matt, 2026-09-23, MTC-76), with the untagged head questions after them in the order `APPROVED_UNTAGGED_HEAD_ORDER` in `copy.test.ts` names (the orchestrator's default on MTC-76, which Matt may override). A question that lands in the head fails `copy.test.ts` until it is tagged or added to that list.
 3. Add a `golden` test whose `vars.question` is that string **byte for byte**. A golden on the same subject in other words does not satisfy the correspondence test, and is not meant to: what is being measured is the wording in the pill.

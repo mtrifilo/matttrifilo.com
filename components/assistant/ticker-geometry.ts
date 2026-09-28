@@ -67,14 +67,17 @@ export const TICKER_KEYFRAME_TO = `translateX(-${100 / TICKER_COPIES}%)`
 /**
  * Which pill of each row sits against the left fade when a surface opens.
  *
- * The homepage opens each row on its first question. A visitor who submits
- * from there lands on /ask a second later, and rows that opened on the same
- * pills would look like they had not moved, so /ask opens about a third of
- * the way into each row. Both are whole pills rather than fractions of a
- * track, which is what keeps the opening from cutting a question in half.
+ * Both surfaces open each row on its first question, so the pool's leading
+ * positions are the first view wherever the ticker appears. The two are
+ * equal because Matt chose one opening for both surfaces, "for consistency"
+ * (MTC-83, 2026-09-23). They stay two names because where a surface opens
+ * is decided per surface: one that should open elsewhere changes its own
+ * constant, and ticker-geometry.test.ts is where the pairing is pinned.
+ * Both are whole pills rather than fractions of a track, which is what
+ * keeps the opening from cutting a question in half.
  */
 export const HOME_START_AT = 0
-export const ASK_START_AT = 4
+export const ASK_START_AT = 0
 
 /**
  * The pool split across the two rows: the odd positions, then the even ones,
