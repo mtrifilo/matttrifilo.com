@@ -3,6 +3,7 @@ import {
   handOffQuestion,
   hasPendingQuestion,
   takePendingQuestion,
+  type PendingQuestion,
 } from './pending-question'
 
 /**
@@ -12,7 +13,10 @@ import {
  * lost between the render and the send.
  */
 
-const TYPED = { question: 'What did Matt ship?', pickedByTouch: false }
+const TYPED: PendingQuestion = {
+  question: 'What did Matt ship?',
+  askedBy: 'typing',
+}
 
 /** Store an entry as another build of the homepage might have written it. */
 function storeRaw(entry: Record<string, unknown>): void {
@@ -42,20 +46,22 @@ describe('the pending question', () => {
     expect(takePendingQuestion(1_500)).toBeNull()
   })
 
-  test('carries whether it was picked by touch', () => {
-    // /ask keeps the on-screen keyboard down on arrival after a touch pick,
-    // and can only know by being told: the tap happened on the homepage.
-    handOffQuestion({ ...TYPED, pickedByTouch: true }, 1_000)
-    expect(takePendingQuestion(1_500)).toEqual({
-      ...TYPED,
-      pickedByTouch: true,
-    })
+  test('carries how it was asked', () => {
+    // /ask keeps the on-screen keyboard down on arrival after a touch pick
+    // and focuses the composer after any other pick, and can only know by
+    // being told: the pick happened on the homepage.
+    for (const askedBy of ['touch-pick', 'other-pick', 'typing'] as const) {
+      handOffQuestion({ ...TYPED, askedBy }, 1_000)
+      expect(takePendingQuestion(1_500)).toEqual({ ...TYPED, askedBy })
+    }
   })
 
-  test('reads anything but an explicit true as not picked by touch', () => {
+  test('reads a missing or unknown way of asking as typed', () => {
     storeRaw({ question: TYPED.question, at: 1_000 })
     expect(takePendingQuestion(1_500)).toEqual(TYPED)
-    storeRaw({ question: TYPED.question, pickedByTouch: 'yes', at: 1_000 })
+    storeRaw({ question: TYPED.question, askedBy: 'yes', at: 1_000 })
+    expect(takePendingQuestion(1_500)).toEqual(TYPED)
+    storeRaw({ question: TYPED.question, askedBy: true, at: 1_000 })
     expect(takePendingQuestion(1_500)).toEqual(TYPED)
   })
 

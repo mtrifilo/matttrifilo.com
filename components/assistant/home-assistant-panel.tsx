@@ -7,7 +7,7 @@ import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
 import { handOffQuestion, type PendingQuestion } from './pending-question'
-import { usePickPointer } from './pointer'
+import { useActivationPress } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import { HOME_START_AT } from './ticker-geometry'
 
@@ -21,8 +21,23 @@ import { HOME_START_AT } from './ticker-geometry'
  * about something else.
  */
 export function HomeAssistantPanel() {
-  const [input, setInput] = useState('')
   const router = useRouter()
+  return <RoutedHomeAssistantPanel router={router} />
+}
+
+/** The part of the app router the panel uses. */
+export type PanelRouter = Pick<
+  ReturnType<typeof useRouter>,
+  'prefetch' | 'push'
+>
+
+/**
+ * The panel itself, handed its router rather than reading it from context,
+ * so a test can hand it one without reaching into Next.js internals for the
+ * context the app router provides.
+ */
+export function RoutedHomeAssistantPanel({ router }: { router: PanelRouter }) {
+  const [input, setInput] = useState('')
 
   // The panel's whole job is to send someone to /ask, so the route is worth
   // having in hand before they ask for it.
@@ -36,15 +51,21 @@ export function HomeAssistantPanel() {
     [router]
   )
 
-  // The tap happens here and the answer streams on /ask, so how the question
-  // was picked travels with it: /ask keeps the keyboard down on arrival.
-  const { pressHandlers, pickedByTouch } = usePickPointer()
+  // The pick happens here and the answer streams on /ask, so how the
+  // question was picked travels with it: /ask keeps the keyboard down on
+  // arrival after a touch, and puts the caret in the composer after any
+  // other pick.
+  const { pressHandlers, activatedByTouch } = useActivationPress()
   const pick = useCallback(
-    (question: string) => start({ question, pickedByTouch: pickedByTouch() }),
-    [pickedByTouch, start]
+    (question: string) =>
+      start({
+        question,
+        askedBy: activatedByTouch() ? 'touch-pick' : 'other-pick',
+      }),
+    [activatedByTouch, start]
   )
   const submit = useCallback(
-    (question: string) => start({ question, pickedByTouch: false }),
+    (question: string) => start({ question, askedBy: 'typing' }),
     [start]
   )
 

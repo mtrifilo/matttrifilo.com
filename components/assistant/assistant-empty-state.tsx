@@ -1,5 +1,6 @@
 'use client'
 
+import type { Ref } from 'react'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
 import { StarterTicker } from './starter-ticker'
 import { ASK_START_AT } from './ticker-geometry'
@@ -16,11 +17,15 @@ import { ASK_START_AT } from './ticker-geometry'
  *
  * The heading is the page's `h1`. Once a conversation exists it survives as a
  * visually hidden one, so the page never loses its heading, and the group
- * simply stops taking up room.
+ * simply stops taking up room. It is focusable by script only: a new
+ * conversation started by touch puts focus there rather than in the
+ * composer, so a phone's keyboard stays down.
  */
 export function AssistantEmptyState({
+  headingRef,
   onPick,
 }: {
+  headingRef?: Ref<HTMLHeadingElement>
   onPick: (question: string) => void
 }) {
   return (
@@ -28,7 +33,9 @@ export function AssistantEmptyState({
       <div className="flex flex-col gap-3">
         <h1
           className="font-semibold"
+          ref={headingRef}
           style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
+          tabIndex={-1}
         >
           {ASSISTANT_NAME}
         </h1>

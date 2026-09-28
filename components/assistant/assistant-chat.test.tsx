@@ -1,18 +1,27 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { setTouchDevice } from '@/test/touch-device'
 import { AssistantChat } from './assistant-chat'
-import { STARTER_QUESTIONS } from './copy'
+import { ASSISTANT_NAME, RESET_LABEL, STARTER_QUESTIONS } from './copy'
 import { handOffQuestion } from './pending-question'
 
 /**
- * Where focus lands on /ask: on load, on arrival from the homepage, and after
- * a question is asked.
+ * Where focus lands on /ask: on load, on arrival from the homepage, after a
+ * question is asked, and after a new conversation is started.
  *
  * A focused composer is a raised keyboard on a phone, so every path that
- * focuses it has a touch counterpart that does not. What a phone then draws
- * (the keyboard staying down, the answer visible while it streams) is a
- * preview check; what is asserted here is which element holds focus.
+ * focuses it has a touch counterpart that does not. The press decides, not
+ * the device: a mouse, pen or key focuses the composer even on a touch
+ * device (Matt, 2026-09-23, MTC-81). What a phone then draws (the keyboard
+ * staying down, the answer visible while it streams) is a preview check;
+ * what is asserted here is which element holds focus.
  *
  * A touch device is stated through Happy DOM's settings (test/touch-device.ts).
  */
@@ -25,6 +34,16 @@ let asked: string[] = []
 const realFetch = globalThis.fetch
 
 /**
+ * When set, the route refuses every request from then on as a conversation
+ * that has gone on too long, which is a refusal whose notice offers a new
+ * conversation.
+ */
+let refusing = false
+const REFUSAL = {
+  error: { code: 'too_many_turns', message: 'This conversation is full.' },
+}
+
+/**
  * The route, answering every question at once with a one-line answer and one
  * follow-up, so a run ends and the follow-up row can be drawn.
  */
@@ -34,6 +53,14 @@ function answeringFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
   const last = body.messages.at(-1)
   asked.push(last?.parts.find(part => part.type === 'text')?.text ?? '')
+  if (refusing) {
+    return Promise.resolve(
+      new Response(JSON.stringify(REFUSAL), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+  }
   const chunks = [
     { type: 'start', messageMetadata: { followUps: [FOLLOW_UP] } },
     { type: 'text-start', id: 't' },
@@ -54,6 +81,7 @@ function answeringFetch(input: RequestInfo | URL, init?: RequestInit) {
 
 beforeEach(() => {
   asked = []
+  refusing = false
   sessionStorage.clear()
   globalThis.fetch = answeringFetch as typeof fetch
 })
@@ -84,6 +112,8 @@ function focused(): string {
   if (active === null || active === document.body) return 'nothing'
   if (active === composer()) return 'composer'
   if (active === statusRegion()) return 'status region'
+  if (active === screen.queryByRole('heading', { name: ASSISTANT_NAME }))
+    return 'heading'
   return `another element (${active.tagName.toLowerCase()})`
 }
 
@@ -140,6 +170,22 @@ describe('a starter question picked on /ask', () => {
     fireEvent.click(starterPill())
     expect(focused()).toBe('composer')
     await answered()
+  })
+
+  test('returns focus to the composer after a mouse, pen or keyboard pick on a touch device', async () => {
+    // A tablet with a hardware keyboard or a mouse, or a pen: the press
+    // wins over the device.
+    setTouchDevice(true)
+    for (const press of ['mouse', 'pen', 'keyboard'] as const) {
+      const { unmount } = render(<AssistantChat />)
+      if (press === 'keyboard') fireEvent.keyDown(starterPill(), { key: ' ' })
+      else fireEvent.pointerDown(starterPill(), { pointerType: press })
+      fireEvent.click(starterPill())
+      expect(`${press}: ${focused()}`).toBe(`${press}: composer`)
+      await answered()
+      unmount()
+    }
+    expect(asked).toHaveLength(3)
   })
 
   test('moves focus to the status region after a touch pick', async () => {
@@ -245,6 +291,154 @@ describe('a follow-up picked under an answer', () => {
   })
 })
 
+describe('a new conversation', () => {
+  /** Resolves once a first question has been asked and answered. */
+  async function renderAnswered(): Promise<void> {
+    render(<AssistantChat />)
+    fireEvent.change(composer(), { target: { value: 'What did Matt ship?' } })
+    fireEvent.keyDown(composer(), { key: 'Enter' })
+    await answered()
+  }
+
+  /** The header's control, there whenever a transcript is. */
+  function headerReset(): HTMLElement {
+    return screen.getAllByRole('button', { name: RESET_LABEL })[0]
+  }
+
+  /** The refusal notice's control, there once the route has refused. */
+  async function noticeReset(): Promise<HTMLElement> {
+    const notice = await screen.findByRole('alert')
+    return within(notice).getByRole('button', { name: RESET_LABEL })
+  }
+
+  /**
+   * Answers one question, then has the route refuse the next, and resolves
+   * once the refused question is back in the composer, which is the last
+   * thing a refusal changes.
+   */
+  async function renderRefused(): Promise<void> {
+    await renderAnswered()
+    refusing = true
+    fireEvent.change(composer(), { target: { value: 'And after that?' } })
+    fireEvent.keyDown(composer(), { key: 'Enter' })
+    await waitFor(() =>
+      expect((composer() as HTMLTextAreaElement).value).toBe('And after that?')
+    )
+  }
+
+  /**
+   * Gives the control focus, as a browser does when it is clicked or reached
+   * by Tab, so the composer holds focus afterwards only if the reset put it
+   * there: asking a typed question leaves it in the composer.
+   */
+  function focusOn(control: HTMLElement): void {
+    act(() => control.focus())
+    expect(focused()).toBe('another element (button)')
+  }
+
+  /** Resolves once the transcript is gone and the empty state is back. */
+  async function emptied(): Promise<void> {
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: RESET_LABEL })).toBeNull()
+    )
+  }
+
+  describe('from the header', () => {
+    test('focuses the composer after a mouse press, even on a touch device', async () => {
+      setTouchDevice(true)
+      await renderAnswered()
+      focusOn(headerReset())
+      fireEvent.pointerDown(headerReset(), { pointerType: 'mouse' })
+      fireEvent.click(headerReset())
+      await emptied()
+      expect(focused()).toBe('composer')
+    })
+
+    test('focuses the composer after a key, even on a touch device', async () => {
+      setTouchDevice(true)
+      await renderAnswered()
+      focusOn(headerReset())
+      fireEvent.keyDown(headerReset(), { key: 'Enter' })
+      fireEvent.click(headerReset())
+      await emptied()
+      expect(focused()).toBe('composer')
+    })
+
+    test('moves focus to the heading after a touch, so the keyboard stays down', async () => {
+      setTouchDevice(true)
+      await renderAnswered()
+      fireEvent.pointerDown(headerReset(), { pointerType: 'touch' })
+      fireEvent.click(headerReset())
+      await emptied()
+      expect(focused()).toBe('heading')
+    })
+
+    test('moves focus to the heading after a click with no press on a touch device', async () => {
+      // A screen reader's activation can be a bare click; the device decides.
+      setTouchDevice(true)
+      await renderAnswered()
+      fireEvent.click(headerReset())
+      await emptied()
+      expect(focused()).toBe('heading')
+    })
+
+    test('focuses the composer after a click with no press on a fine-pointer device', async () => {
+      await renderAnswered()
+      focusOn(headerReset())
+      fireEvent.click(headerReset())
+      await emptied()
+      expect(focused()).toBe('composer')
+    })
+  })
+
+  describe('from the refusal notice', () => {
+    test('focuses the composer after a mouse press, even on a touch device', async () => {
+      setTouchDevice(true)
+      await renderRefused()
+      const reset = await noticeReset()
+      focusOn(reset)
+      fireEvent.pointerDown(reset, { pointerType: 'mouse' })
+      fireEvent.click(reset)
+      await emptied()
+      expect(focused()).toBe('composer')
+    })
+
+    test('focuses the composer after a key, even on a touch device', async () => {
+      setTouchDevice(true)
+      await renderRefused()
+      const reset = await noticeReset()
+      focusOn(reset)
+      fireEvent.keyDown(reset, { key: 'Enter' })
+      fireEvent.click(reset)
+      await emptied()
+      expect(focused()).toBe('composer')
+    })
+
+    test('moves focus to the heading after a touch, so the keyboard stays down', async () => {
+      setTouchDevice(true)
+      await renderRefused()
+      const reset = await noticeReset()
+      fireEvent.pointerDown(reset, { pointerType: 'touch' })
+      fireEvent.click(reset)
+      await emptied()
+      expect(focused()).toBe('heading')
+      // The refused question was handed back and is still there to send.
+      expect((composer() as HTMLTextAreaElement).value).toBe('And after that?')
+    })
+  })
+})
+
+describe('the heading', () => {
+  test('is focusable by script and never in the tab order', () => {
+    render(<AssistantChat />)
+    expect(
+      screen
+        .getByRole('heading', { name: ASSISTANT_NAME })
+        .getAttribute('tabindex')
+    ).toBe('-1')
+  })
+})
+
 describe('a typed question', () => {
   test('keeps focus in the composer on a touch device', async () => {
     // The keyboard is already up for typing; sending does not move focus.
@@ -262,7 +456,7 @@ describe('a typed question', () => {
 describe('a question handed over from the homepage', () => {
   test('lands on the status region when it was picked by touch', async () => {
     setTouchDevice(true)
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'touch-pick' })
     render(<AssistantChat />)
     await statusFocused()
     await answered()
@@ -270,14 +464,29 @@ describe('a question handed over from the homepage', () => {
   })
 
   test('lands on the status region after a tap on a fine-pointer touchscreen', async () => {
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'touch-pick' })
     render(<AssistantChat />)
     await statusFocused()
     await answered()
   })
 
-  test('lands on the composer when it was picked with a mouse or a key', async () => {
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: false })
+  test('lands on the composer when it was picked with a mouse, a pen or a key', async () => {
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'other-pick' })
+    render(<AssistantChat />)
+    expect(focused()).toBe('composer')
+    await answered()
+  })
+
+  test('lands on the composer on a touch device when it was picked with a mouse, a pen or a key', async () => {
+    setTouchDevice(true)
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'other-pick' })
+    render(<AssistantChat />)
+    expect(focused()).toBe('composer')
+    await answered()
+  })
+
+  test('lands on the composer with a fine pointer when it was typed', async () => {
+    handOffQuestion({ question: 'What did Matt ship?', askedBy: 'typing' })
     render(<AssistantChat />)
     expect(focused()).toBe('composer')
     await answered()
@@ -285,7 +494,7 @@ describe('a question handed over from the homepage', () => {
 
   test('focuses nothing on a touch device when it was typed', async () => {
     setTouchDevice(true)
-    handOffQuestion({ question: 'What did Matt ship?', pickedByTouch: false })
+    handOffQuestion({ question: 'What did Matt ship?', askedBy: 'typing' })
     render(<AssistantChat />)
     expect(focused()).toBe('nothing')
     await answered()
