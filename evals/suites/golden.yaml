@@ -2121,13 +2121,13 @@
 # CircleCI, Google Cloud Operations, OpsGenie"; technical-expertise: Java,
 # TypeScript and Node, Vue, Python and Go, Spring Boot and Micronaut,
 # Kubernetes, Google Cloud Platform, GitHub Actions, CircleCI, Terraform.
-# Reads any of: resume, owned-systems-and-operations or technical-expertise; technical-expertise is the document about the stack.
+# Reads any of: resume or technical-expertise; technical-expertise is the document about the stack. Not owned-systems-and-operations: it names the services' languages (Java/Micronaut, Python, Go) but no infrastructure platform, only "cloud projects, container and serverless services, data pipelines".
 - description: 'golden: the team stack, languages through infrastructure'
   vars:
     question: What languages, frameworks, and infrastructure do Matt and his team use?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations, technical-expertise]
+    expectReadsAny: [resume, technical-expertise]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
