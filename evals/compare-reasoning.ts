@@ -35,7 +35,7 @@ async function runLevel(level: (typeof LEVELS)[number]): Promise<LevelResult> {
       '-c',
       'evals/promptfooconfig.yaml',
       '--max-concurrency',
-      '2',
+      '8',
       '--filter-metadata',
       'smoke=true',
       '--output',
