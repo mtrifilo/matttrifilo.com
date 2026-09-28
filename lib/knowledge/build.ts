@@ -541,28 +541,38 @@ function splitBlocks(lines: readonly SourceLine[]): {
 }
 
 /**
- * The `##` section titles of one document, in order, for the progress view
- * (MTC-50).
+ * Every `##` section title of one document, in order, before the progress
+ * caps are applied.
  *
  * Read off the text the tool would hand the model, so the faq's dropped
- * questions are not listed as sections of it. Titles only: a heading is a
- * few words the author wrote to label a section, and nothing under it comes
- * along.
+ * questions are not sections of it, and a `##` line inside a fenced code
+ * block is not one either. An empty title is left out: there is nothing to
+ * show. These are the titles `documentHeadings` chooses from, which is why
+ * the corpus test checks the caps against this list rather than the one the
+ * build keeps: a title the caps skip is gone from that one without a trace.
+ */
+export function sectionTitles(text: string): string[] {
+  return splitBlocks(sourceLines(text))
+    .sections.map(section => headingTitle(section.heading))
+    .filter(heading => heading !== '')
+}
+
+/**
+ * The `##` section titles of one document, in order, for the progress view
+ * (MTC-50). Titles only: a heading is a few words the author wrote to label
+ * a section, and nothing under it comes along.
  *
- * The caps come from the progress wire contract rather than being chosen
- * here, so the build can never emit a heading that lib/chat/progress.ts
- * would drop on arrival. One past either cap is skipped rather than
- * truncated, the same way an over-long document title is.
+ * The caps live in lib/progress-caps.ts, which lib/chat/progress.ts also
+ * validates the wire against, so the build can never emit a heading the
+ * browser would drop on arrival. One past either cap is skipped rather than
+ * truncated, the same way an over-long document title is; the corpus is
+ * held below both by lib/knowledge/knowledge.test.ts, so the skip only ever
+ * meets a document that has not been through that test.
  */
 export function documentHeadings(text: string): string[] {
-  const headings: string[] = []
-  for (const section of splitBlocks(sourceLines(text)).sections) {
-    const heading = headingTitle(section.heading)
-    if (heading === '' || heading.length > MAX_HEADING_CHARS) continue
-    headings.push(heading)
-    if (headings.length === MAX_HEADINGS) break
-  }
-  return headings
+  return sectionTitles(text)
+    .filter(heading => heading.length <= MAX_HEADING_CHARS)
+    .slice(0, MAX_HEADINGS)
 }
 
 /** An inline code span: one or more backticks, matching run to close. */

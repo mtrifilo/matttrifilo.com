@@ -15,6 +15,7 @@ import {
   KNOWLEDGE_DIR,
   KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
+  sectionTitles,
   sourceLines,
   SUMMARY_MAX_LENGTH,
 } from './build'
@@ -571,6 +572,37 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     expect(documentHeadings(many)).toHaveLength(MAX_HEADINGS)
   })
 
+  test('an over-long title is kept by the source list the caps are checked on', () => {
+    const long = 'x'.repeat(MAX_HEADING_CHARS + 1)
+    const text = `## ${long}\nBody.\n\n## Kept\nBody.`
+    expect(sectionTitles(text)).toEqual([long, 'Kept'])
+    expect(documentHeadings(text)).toEqual(['Kept'])
+    // Not a section, so not a title the caps apply to either.
+    expect(sectionTitles('## Real\n\n```md\n## Not a heading\n```\n')).toEqual([
+      'Real',
+    ])
+  })
+
+  test('a corpus heading past the cap fails by document and heading', () => {
+    // The build skips it, so the row loses a section without a word: the
+    // check has to read the source titles to see it at all.
+    const long = 'Why '.repeat(MAX_HEADING_CHARS / 4 + 1).trim()
+    const built = buildFixture([
+      {
+        topic: 'career',
+        name: 'long-heading.md',
+        body: `Intro.\n\n## ${long}\nBody.\n\n## Kept\nBody.`,
+      },
+    ])
+    expect(built.documents[0].headings).toEqual(['Kept'])
+    expect(sectionCapProblems(built.documents)).toEqual([
+      {
+        id: 'long-heading',
+        problem: `heading of ${long.length} characters, cap ${MAX_HEADING_CHARS}: ${long}`,
+      },
+    ])
+  })
+
   test('every corpus document stays inside both caps', () => {
     // The caps are there to distrust the wire, not to trim the corpus. A
     // document that reached one would have a row showing some of its
@@ -582,16 +614,12 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     // definition of that here would fail a correct document and report it
     // as a blown cap.
     for (const document of corpus.documents) {
-      const sections = documentHeadings(document.text)
       expect({ id: document.id, headings: document.headings ?? [] }).toEqual({
         id: document.id,
-        headings: sections,
+        headings: documentHeadings(document.text),
       })
-      expect(sections.length).toBeLessThan(MAX_HEADINGS)
-      for (const heading of sections) {
-        expect(heading.length).toBeLessThan(MAX_HEADING_CHARS)
-      }
     }
+    expect(sectionCapProblems(corpus.documents)).toEqual([])
   })
 
   test('the index the model reads does not grow by a single heading', () => {
@@ -614,6 +642,36 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     expect(new Set(lines)).toEqual(new Set(catalogue))
   })
 })
+
+/**
+ * Every document whose source section titles reach a progress cap, named
+ * by id with the title that does. Read from `sectionTitles` rather than the
+ * built `headings`, because the build skips a title past the character cap
+ * and stops at the count cap, so the built list never shows either.
+ */
+function sectionCapProblems(
+  documents: readonly { id: string; text: string }[]
+): { id: string; problem: string }[] {
+  const problems: { id: string; problem: string }[] = []
+  for (const document of documents) {
+    const titles = sectionTitles(document.text)
+    if (titles.length >= MAX_HEADINGS) {
+      problems.push({
+        id: document.id,
+        problem: `${titles.length} sections, cap ${MAX_HEADINGS}`,
+      })
+    }
+    for (const title of titles) {
+      if (title.length >= MAX_HEADING_CHARS) {
+        problems.push({
+          id: document.id,
+          problem: `heading of ${title.length} characters, cap ${MAX_HEADING_CHARS}: ${title}`,
+        })
+      }
+    }
+  }
+  return problems
+}
 
 /**
  * What to do when a post has no knowledge twin. scripts/new-blog-post.ts
