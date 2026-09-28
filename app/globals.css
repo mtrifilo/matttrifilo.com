@@ -656,3 +656,10 @@ nav[data-scrolled='true'] {
 [data-slot='button']:active {
   transform: scale(0.98);
 }
+
+/* After the rule above, which it has to follow to win. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='button']:active {
+    transform: none;
+  }
+}
