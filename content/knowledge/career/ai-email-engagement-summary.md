@@ -12,7 +12,7 @@ The same arc as the Merge API decomposition, on a compressed timeline.
 Counting only the time the work was in Matt's hands: a proof of concept in
 one week; from build kickoff to a production beta in about five weeks; and
 100 percent of users two months after kickoff. Seven weeks between the
-finished proof of concept and the green light were a prioritisation
+finished proof of concept and the green light were a prioritization
 decision, not build time, and Matt is explicit that they should not be
 counted as delivery.
 
@@ -45,7 +45,7 @@ Matt proposed three experiments in the company's AI projects forum:
 Goals were defined before any code:
 
 - implement rapid prototypes to start testing as experimental betas;
-- productionise the betas that prove traction, **even if that involves a
+- productionize the betas that prove traction, **even if that involves a
   full rewrite**;
 - throw away the experiments that do not gain traction and move on.
 
@@ -60,9 +60,9 @@ Goals were defined before any code:
 - The proof of concept used a local Postgres vector store, local embeddings,
   local markdown files, and manual indexing. The production build replaced
   every one of those: the managed Vertex AI RAG engine, documents in cloud
-  storage, managed embeddings, and an automated daily sync of help-centre
+  storage, managed embeddings, and an automated daily sync of help-center
   articles. Matt wrote that table of differences into the plan before
-  building, so "productionise, even if that means a rewrite" was a stated
+  building, so "productionize, even if that means a rewrite" was a stated
   expectation rather than a surprise.
 - The service reads the engagement data the monolith already fetches from
   two internal reporting services, aggregates it, and posts it to a
@@ -73,9 +73,9 @@ Goals were defined before any code:
 - **October 2025, one week:** proof of concept implemented and shared with
   a demo video.
 - **October to December 2025, about seven weeks:** waiting on a
-  prioritisation decision. No beta work was approved.
+  prioritization decision. No beta work was approved.
 - **December 2025:** green light. A research spike on a viable RAG approach
-  over the help-centre articles, plus the beta deployment strategy,
+  over the help-center articles, plus the beta deployment strategy,
   resolved in early January with a written summary: architecture, a cost
   model, a four-to-five-week plan, and an explicit "determine if this
   feature is viable; if not, throw it out" goal.
@@ -109,10 +109,10 @@ Goals were defined before any code:
 - Audited the eval suite itself and wrote up what it did not cover. The
   five original cases all varied one axis, the metric values, and held
   everything else constant; they tested numerical fidelity on well-formed
-  input. Matt proposed behavioural personas the suite was blind to: a
+  input. Matt proposed behavioral personas the suite was blind to: a
   brand-new sender with no history at all (does the model invent metrics or
   pivot to onboarding advice?), a sender in crisis well above every
-  threshold (does it under-react or catastrophise?), and input shapes
+  threshold (does it under-react or catastrophize?), and input shapes
   outside the well-formed happy path. His stated standard: coverage that
   surfaces real failure modes before customers do, not test count for its
   own sake.
@@ -131,7 +131,7 @@ analysis to do.
 ## Why this thread matters
 
 Proof that the hackathon-to-production pattern scales to LLM work.
-Throw-away versus productionise criteria were defined before writing code,
+Throw-away versus productionize criteria were defined before writing code,
 the rewrite from prototype to production stack was planned rather than
 discovered, and the model-upgrade discipline, eval first and then switch,
 is one other teams can copy.

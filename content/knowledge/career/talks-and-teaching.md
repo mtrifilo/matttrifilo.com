@@ -32,7 +32,7 @@ the window, not how big the window is.** Quality of context beats quantity.
 Behind the talk sit four research documents, each written to stand alone so
 an engineer who reads only one still gets a complete argument:
 
-1. **How LLMs build and use the context window:** tokenisation, embeddings,
+1. **How LLMs build and use the context window:** tokenization, embeddings,
    attention, the key-value cache, positional encoding, prefill versus
    decode, and where context actually lives in a real agent harness.
 2. **Why context windows expanded:** the five-year arc from two thousand
@@ -52,8 +52,8 @@ dependencies, so they work offline and are safe to run live in a talk:
   animated merges, images becoming patches, audio becoming frames, and
   video becoming tubelets, the "everything becomes tokens" idea made
   visible;
-- a **tokeniser visualiser**, paste text and see how it tokenises;
-- a **context-budget visualiser** breaking a window into system prompt,
+- a **tokenizer visualizer**, paste text and see how it tokenizes;
+- a **context-budget visualizer** breaking a window into system prompt,
   tool definitions, history, file reads, and output, so budgets stop being
   abstract;
 - a **context-layers walkthrough** showing how an agent's context builds up,
@@ -68,7 +68,7 @@ a writing standard: cross-references are explicit; sources are cited inline
 with a sources section per document; numbers come from official vendor
 documentation, primary papers, or named third-party benchmarks; anything
 that is an estimate or a rule of thumb is flagged as such; the audience is
-senior software engineers, not machine-learning researchers; and the maths
+senior software engineers, not machine-learning researchers; and the math
 is included only where it pays for itself.
 
 A colleague asked for the demo files the same day the talk was given.
@@ -86,13 +86,13 @@ demo-plus-office-hours format was what developers wanted.
 
 Teaching is not only talks. The written record includes:
 
-- a structured programme evaluating a third-party coding agent, with trial
+- a structured program evaluating a third-party coding agent, with trial
   questions and participants, two weekly check-in notes, and a survey,
   concluding against purchase;
 - an LLM evaluation-framework proposal, local eval tooling first with
   managed evaluation later;
 - testing-workflow proof-of-concept notes written with peers elsewhere in
-  the organisation, covering independent deployment and agent-written
+  the organization, covering independent deployment and agent-written
   tests;
 - an AI-champions-per-team adoption proposal pitched to senior leadership;
 - a research-spike summary for an AI feature, written with an explicit
@@ -107,13 +107,13 @@ and a troubleshooting section, for engineers who were not on his team.
 - Completed a course on taking AI agents from prototype to production
   (2025).
 - Attended a GraphQL conference (2025) and shared the learnings back with
-  the organisation alongside a colleague, using them to guide early AI
+  the organization alongside a colleague, using them to guide early AI
   agent implementation.
 - Taught himself business-case writing in 2026, cost to build, cost to
   maintain, estimated return, and competitive analysis, with an AI
   assistant as the tutor.
 - A standing habit of reading industry practitioners and research and
-  routing what matters back into the organisation's channels.
+  routing what matters back into the organization's channels.
 
 ## The open items he names
 

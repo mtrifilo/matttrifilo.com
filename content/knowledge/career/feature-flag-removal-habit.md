@@ -24,7 +24,7 @@ Software Engineer III, becoming player-coach in July 2022 partway through.
 
 Two bursts stand out: eight flag-removal changes in the first two weeks of
 January 2022, closing out defects from the initial builder rollout, and
-nine changes explicitly labelled as hackathon work merged in a single week
+nine changes explicitly labeled as hackathon work merged in a single week
 in May 2022, cleaning up flags from the tag-applying-link and
 campaign-merge-field features.
 

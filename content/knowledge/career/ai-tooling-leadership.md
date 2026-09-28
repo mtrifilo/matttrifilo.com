@@ -1,14 +1,14 @@
 ---
 id: ai-tooling-leadership
-title: AI tooling leadership across the engineering organisation
+title: AI tooling leadership across the engineering organization
 summary: The talks, demos, forums, skills library, trials, and proposals behind Matt's push for AI-agent adoption across roughly fifty engineers.
 tags: [ai, agentic-engineering, claude-code, talks, enablement, leadership]
 updated: 2026-09-15
 ---
 
-# AI tooling leadership across the engineering organisation
+# AI tooling leadership across the engineering organization
 
-A cross-organisation operating system for AI enablement that Matt built and
+A cross-organization operating system for AI enablement that Matt built and
 maintains. In 2026 it matured from evangelism into governed distribution
 infrastructure (the plugin marketplaces) and autonomous agents. This
 document covers the community layer.
@@ -43,46 +43,46 @@ agreed with leadership.
   independent-deployment epic was generated live during a July demo. His
   framing at the last of them: any of the experiments can be adapted to
   many other use cases.
-- **The organisation's AI-tools forum:** founded by Matt in February 2026
-  as the cross-organisation channel for questions, access requests,
+- **The organization's AI-tools forum:** founded by Matt in February 2026
+  as the cross-organization channel for questions, access requests,
   troubleshooting, and knowledge sharing. It is where the marketplace alpha
   was announced and where the marketplace governance feedback landed.
 - **A short-lived newsletter:** three monthly editions covering models,
-  tools, and industry articles, retired in early 2026 in favour of sharing
+  tools, and industry articles, retired in early 2026 in favor of sharing
   updates as they happen. Lower ceremony, higher frequency, more
   conversation.
 
 ## The skills library
 
-Matt created and maintains the organisation's agent-skills library, the
+Matt created and maintains the organization's agent-skills library, the
 distribution mechanism before the marketplaces. The skills for drafting
 tickets and epics were the breakout hit; one engineer reported that they
 turned three to four hours of work into a thirty-minute conversation, and
-an early update to organisation leaders credited them with saving teams
+an early update to organization leaders credited them with saving teams
 significant time.
 
 ## Access, budget, and proposals
 
-- Owns the organisation's AI tooling access and spend for agent workflows.
+- Owns the organization's AI tooling access and spend for agent workflows.
 - Authored proposals to leadership: an AI-champions-per-team adoption
   proposal; the plugin marketplace governance proposal; an LLM
   evaluation-framework proposal (February 2026, local eval tooling first
   with managed evaluation later); and testing-workflow proof-of-concept
-  notes written with peers elsewhere in the organisation.
-- Invited onto organisation-wide agentic-engineering interview panels.
+  notes written with peers elsewhere in the organization.
+- Invited onto organization-wide agentic-engineering interview panels.
 
 ## Evaluating tools honestly
 
 - Led a trial of a third-party coding agent in late 2025 that concluded
-  **against** purchase. The trial ran as a structured internal programme
+  **against** purchase. The trial ran as a structured internal program
   with nine developers, trial questions, two weekly check-ins, and a
   survey.
-- Led the Claude Code trial whose results informed the organisation-wide
+- Led the Claude Code trial whose results informed the organization-wide
   decision to adopt Claude Code and Cursor as primary tooling for roughly
   fifty engineers, and traded in his own seat on the other editor to pay
   for it.
 - Enabled newer models in the company's existing AI account, coordinated
-  network allowlisting, and pulled usage analytics for cross-organisation
+  network allowlisting, and pulled usage analytics for cross-organization
   adoption measurement with three peers.
 
 ## On his own team

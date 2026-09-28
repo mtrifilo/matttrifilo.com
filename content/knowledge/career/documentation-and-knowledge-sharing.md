@@ -57,7 +57,7 @@ common alert.
   illustrative of a habit rather than as the full inventory.
 - The 2025 runbook update was explicitly a stopgap, "until the runbook can
   be more thoroughly expanded," tied to a specific coverage gap rather than
-  a general on-call improvement programme.
+  a general on-call improvement program.
 
 ## Where the habit went next
 
@@ -66,7 +66,7 @@ base (98 incident documents, permanent runbooks, an alert routing table,
 under a standing rule that every alert produces a permanent runbook), the
 decision logs kept in every 2026 project folder, and the subject-matter
 plugin system that promotes lessons learned in tickets into
-a knowledge base agents can load. His 2025 leadership-programme capstone
+a knowledge base agents can load. His 2025 leadership-program capstone
 argued the same case formally: knowledge is a single point of failure, and
 the fix is documenting the *why*, pairing experts with a second engineer,
 and naming who can take ownership gradually.

@@ -39,7 +39,7 @@ service to avoid additional defects related to merge fields."
 A representative defect, open nearly three years: emails in one account
 sometimes carried the wrong first name, and nobody could duplicate it. The
 contact's name had not been changed after the message sent. It took three
-instrumentation pull requests just to characterise the bug. That is why
+instrumentation pull requests just to characterize the bug. That is why
 this work kept landing on Matt: not reproducible on demand, and it requires
 understanding how a cached contact object flows through the merge pipeline.
 
@@ -65,7 +65,7 @@ merging through code paths that did not match the type's semantics.
 
 **Locale and format handling.** Birthday and anniversary fields merging in
 US format for UK-locale accounts, fixed across three repositories in three
-days by adding a localised date filter to the shared short filter and
+days by adding a localized date filter to the shared short filter and
 wiring it in. The same symptom recurred in the new builder years later as a
 full timestamp where a date was expected. A date-and-time field merging as
 date-only at exactly midnight. A company-country field emitting the postal
@@ -132,7 +132,7 @@ years working the first side of.
 - Reviewers, a consistent small group of monolith engineers, read every one
   of these changes. They reviewed this work; they did not do it.
 - Whether the multi-year gap on the hardest defect was genuine
-  unreproducibility or deprioritisation is an open question.
+  unreproducibility or deprioritization is an open question.
 - No part of the legacy engine has been decommissioned. The monolith's path
   and the extracted service still run in parallel, and retiring the legacy
   path is what the V2 decomposition intends.

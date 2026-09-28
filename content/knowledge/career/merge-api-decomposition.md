@@ -70,7 +70,7 @@ merge contexts (contact, user, profile, today, appointment, invoice, quote,
 product) resolving into mergeables; consumers call synchronously through
 the SDK or asynchronously through cloud storage plus a queue for bulk
 volume; and a custom-mergeable escape hatch lets a consumer supply its own
-context data without the service modelling it first.
+context data without the service modeling it first.
 
 The first consumer was the simpler automations product, then the web
 application, and finally the core monolith. Matt led the effort for the
@@ -84,7 +84,7 @@ when it shipped.
 - The foundation of the multi-year email decomposition roadmap: migrating
   email status data out of the monolith, decomposing the status service,
   and integrating the merge service into the sending flow.
-- Five years on, Matt remains the recognised subject-matter expert for
+- Five years on, Matt remains the recognized subject-matter expert for
   Liquid merging at the company; engineers from other teams still route
   merge questions to him.
 - The team also owns the legacy merge-fields library that runs alongside
@@ -102,7 +102,7 @@ when it shipped.
 - Reimplementing the Liquid templating engine from scratch. Deferred, not
   solved: the legacy library was wrapped behind an interface so it could be
   swapped later.
-- Requiring every consumer's data shape to be modelled server-side as a
+- Requiring every consumer's data shape to be modeled server-side as a
   first-class context before use. Superseded in phase four by
   consumer-supplied mergeables.
 - A synchronous-only API. Rejected in phase three for volume the

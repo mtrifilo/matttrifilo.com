@@ -13,7 +13,7 @@ building a strategy-builder product that never released on its own and
 evolved into the simpler automation experience of the company's newer
 product edition. He took part in the large hackathon project that became
 that newer edition: a Vue front end that started as a replacement for the
-legacy product's ageing interface and turned into a separate product with
+legacy product's aging interface and turned into a separate product with
 easier-to-use features on the legacy back end, plus a set of new
 microservices and a web backend-for-frontend. The official name of that
 2017 hackathon did not survive message retention and remains unconfirmed.
@@ -34,7 +34,7 @@ counted.
 Three epics, each with a stated user problem:
 
 - **The campaigns page did not explain itself.** Small-business owners
-  installing pre-built "wizardised" campaigns or hand-building advanced
+  installing pre-built "wizardized" campaigns or hand-building advanced
   ones needed different explanations and different setup paths, and the
   page did not distinguish them.
 - **The product could not act on the owner's behalf.** The assisted
@@ -49,7 +49,7 @@ Three epics, each with a stated user problem:
 
 ## What he built
 
-**The campaign page and details modal.** The wizardised and advanced
+**The campaign page and details modal.** The wizardized and advanced
 campaign-card and detail flows in the monolith, then ported into the newer
 web front end, then the details modal itself.
 
@@ -64,7 +64,7 @@ thing again in the email builder three years later.
 notification dot badge, category labels and custom label and value
 properties on a button dropdown, and multi-select modifiers. The
 nested-modal work records a real design decision: he first tried adding
-slots to the modal so callers could customise its header, found that "too
+slots to the modal so callers could customize its header, found that "too
 complex of an undertaking for our use case," and reverted to boolean props,
 choosing a smaller, easier-to-reason-about interface over a more flexible
 one.

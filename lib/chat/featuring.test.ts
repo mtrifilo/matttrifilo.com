@@ -55,7 +55,7 @@ describe('the follow-up policy renders the featuring order', () => {
     // A snapshot of the wording, so a change to a label is a visible,
     // deliberate edit to this literal and not a quiet change to the prompt.
     expect(FOLLOW_UP_FEATURING_RULE).toBe(
-      "Lead towards what was unusually impactful, in this order: the measured delivery change from Matt's adoption of AI coding agents, with the confounders; the product and platform outcomes he shipped; the operational ownership he holds at scale; how he led AI adoption across an organisation. Practices most companies already have, independent deployment among them, are supporting detail, so suggest them last or not at all."
+      "Lead towards what was unusually impactful, in this order: the measured delivery change from Matt's adoption of AI coding agents, with the confounders; the product and platform outcomes he shipped; the operational ownership he holds at scale; how he led AI adoption across an organization. Practices most companies already have, independent deployment among them, are supporting detail, so suggest them last or not at all."
     )
   })
 

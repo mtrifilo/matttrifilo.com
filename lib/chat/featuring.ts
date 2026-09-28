@@ -63,9 +63,9 @@ export const FEATURED_THEMES = [
   },
   {
     key: 'orgAiAdoption',
-    promptLabel: 'how he led AI adoption across an organisation',
-    skillPhrase: 'leading AI adoption across the organisation',
-    description: 'Leading AI adoption across the engineering organisation.',
+    promptLabel: 'how he led AI adoption across an organization',
+    skillPhrase: 'leading AI adoption across the organization',
+    description: 'Leading AI adoption across the engineering organization.',
   },
 ] as const satisfies readonly FeaturedTheme[]
 

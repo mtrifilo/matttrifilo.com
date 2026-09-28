@@ -9,13 +9,13 @@ updated: 2026-09-21
 # Moving nine services off the weekly release train
 
 The most concrete, quantifiable program of Matt's 2026. The team goal was
-to get every Email Reliability microservice off the organisation's weekly
+to get every Email Reliability microservice off the organization's weekly
 release train and onto independent, gated production deploys, with a
 December 31 target. It finished on August 21.
 
 ## What "independent" required, per service
 
-The organisation had an existing eight-criterion readiness standard,
+The organization had an existing eight-criterion readiness standard,
 written years earlier by another senior manager and used by all teams, with
 its canonical requirements in the engineering handbook and a nine-step
 migration track in a shared release-tooling repository. **Matt adopted that
@@ -37,7 +37,7 @@ What Matt built on top of the standard is a Claude Code skill that encodes
 those requirements and patterns, so each service can be prepared the same
 way without re-researching the process, and without spending the tokens to
 do so. He also published the team's independent-deployment runbook in July
-2026, and each service got an internal programme hub, a prerequisites
+2026, and each service got an internal program hub, a prerequisites
 review, a rollout plan, compatibility notes, and a first-production rollout
 plan.
 
@@ -73,7 +73,7 @@ enforces, which is what let each service go faster than the last:
 
 - keep environment configuration in plain manifests rather than a
   templating layer, after one service's release flow broke on it;
-- preserve an existing CI tagging behaviour through the release-flow
+- preserve an existing CI tagging behavior through the release-flow
   rewrite, because it was silently load-bearing;
 - no shell heredocs in the CI configuration, learned the hard way in
   August;

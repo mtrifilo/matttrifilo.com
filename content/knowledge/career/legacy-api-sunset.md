@@ -15,7 +15,7 @@ and delete it rather than leave it as debt.
 
 ## The earlier efforts, 2020 to 2024
 
-- **A hosted-email service (2020).** The trigger was a data-minimisation
+- **A hosted-email service (2020).** The trigger was a data-minimization
   concern rather than cost, and almost nobody used the feature. Matt made
   the related merge fields resolve to empty strings behind a flag, tested on
   and off in both builders, and moved the tracking-artifact generation
@@ -44,7 +44,7 @@ production, flat across a thirty-day sample with no decline trend, because
 old emails permanently exist in inboxes and archives, search engines have
 indexed the URLs, and DNS pointed the domain family straight at the
 application-hosting platform. Matt ran bot detection across user-agent
-fingerprints, datacentre address ranges, residential-proxy patterns, and
+fingerprints, datacenter address ranges, residential-proxy patterns, and
 the time-of-day distribution, and found the daily curve flat to within four
 percent, with no human peak at all. His conclusion, which is what made the
 shutdown decision possible: of 24,300 requests a day, roughly 24,000 were
@@ -70,7 +70,7 @@ before the application was disabled nine days earlier, so the pipeline was
 structurally alive and functionally dead. Matt blocked the teardown, filed
 a ticket for it, had the job removed from its configuration, and cancelled
 it manually in all three environments, each transition clean in about
-ninety seconds with neighbouring jobs untouched, before a soak period.
+ninety seconds with neighboring jobs untouched, before a soak period.
 
 He then captured the strongest pre-flight evidence available: the
 destination table held **1.45 billion historical rows and zero writes** for
@@ -147,7 +147,7 @@ removal as eight independently shippable steps.
 ## Why this matters
 
 Deleting a system safely is a research problem before it is an engineering
-one. The method, characterise the real traffic rather than the raw count,
+one. The method, characterize the real traffic rather than the raw count,
 find the consumer the inventory missed, capture proof that the pipeline is
 already dead, and stage the removal so a surprise is recoverable, is the
 transferable part.

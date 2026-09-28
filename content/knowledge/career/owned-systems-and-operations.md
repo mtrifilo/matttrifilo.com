@@ -36,7 +36,7 @@ with the team and reports through product.
 The web application and its backend-for-frontend call the monolith's email
 module, which is the entry point every product surface uses. It renders
 merge fields, builds tracked links, writes to the legacy database queue, and
-calls the sending API for tracking tokens. The sending API owns the send and initialise endpoints, a
+calls the sending API for tracking tokens. The sending API owns the send and initialize endpoints, a
 publish-subscribe processing pipeline handling bounce classification, risk
 scoring, tracking, return-path addressing and authentication headers, and
 the hand-off to the mail transfer agent. From there the gateway routes to
@@ -88,7 +88,7 @@ alone, which is the intended outcome.
 - **2023, sending-limit hardening.** Hardened sending limits ahead of peak
   season.
 - **2025, contact-engagement hygiene.** Led a contact-engagement hygiene
-  programme, coordinated with another team on the transactional path.
+  program, coordinated with another team on the transactional path.
 - **A short-lived delivery slowdown** that self-resolved; Matt wrote the
   follow-up proposal and used it to argue for accelerating planned platform
   work.

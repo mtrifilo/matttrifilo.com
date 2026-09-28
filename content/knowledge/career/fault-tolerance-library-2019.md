@@ -64,7 +64,7 @@ was dev- and product-pair-tested before merge. He then made those settings
 runtime-tunable through the company's internal configuration service rather
 than requiring a deployment to change them; the pull request states that
 this "will be essential for responding to changing network conditions" at
-peak. He wrote the architecture decision record formalising resilience4j as
+peak. He wrote the architecture decision record formalizing resilience4j as
 the monolith's agreed resilience library.
 
 **Infrastructure scale-up alongside the code.** In the same window he
@@ -80,9 +80,9 @@ same design twice, in two codebases, in the space of a few weeks is what
 made the case for a library.
 
 **Extraction.** Working from the senior engineer's review feedback, he
-generalised the configurations into a standalone library. The pull request
+generalized the configurations into a standalone library. The pull request
 lists the concrete first consumers it was built to serve: the event bridge's
-dead-letter-queue resiliency, and normalising usage across the
+dead-letter-queue resiliency, and normalizing usage across the
 tracking-link service, the hosted email service, and the monolith,
 replacing both hand-rolled implementations with one shared, tested tool.
 
@@ -90,7 +90,7 @@ replacing both hand-rolled implementations with one shared, tested tool.
 library he built a **failure-injection test harness**, a service that can be
 configured to fail on demand, and a client application that exercises the
 library end to end against it. The retry, circuit-breaker, and time-limiter
-behaviour could then be verified against a real, controllable failure
+behavior could then be verified against a real, controllable failure
 source rather than mocks.
 
 **Rollout.** The following spring he replaced the tracking-link service's
@@ -102,7 +102,7 @@ paths in the same change.
 
 | Option | Taken? | Why |
 |---|---|---|
-| A one-off fix in each service that needed it | Partly, then reversed | Done twice, recognised as duplication, extracted |
+| A one-off fix in each service that needed it | Partly, then reversed | Done twice, recognized as duplication, extracted |
 | Hard-code the thresholds in application code | No | Made runtime-tunable specifically for peak-season conditions |
 | Verify the library with unit tests only | No | Built a dedicated failure-injection harness and client |
 | Migrate all three planned consumers in one push | No | Only the tracking-link migration has a pull request in this window |
@@ -111,9 +111,9 @@ paths in the same change.
 ## What happened after
 
 The library's own epic resolved in February 2020 and the tracking-link
-rollout in April. The sibling tickets to normalise the hosted email service
+rollout in April. The sibling tickets to normalize the hosted email service
 and the monolith onto the same library carry a resolution date of October
-2021, roughly eighteen months later, so the full normalisation across all
+2021, roughly eighteen months later, so the full normalization across all
 three services took considerably longer than the initial push suggests.
 Matt cannot describe the mechanism of those two later migrations from the
 record.

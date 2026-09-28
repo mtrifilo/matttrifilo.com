@@ -52,7 +52,7 @@ event bridge, content risk, recipient risk, spam scoring, email compliance,
 and the scheduling service, plus two batches of log-based alerts for the
 monolith's email domain.
 
-**Standardised health checks so the alert config needed no one-off hacks.**
+**Standardized health checks so the alert config needed no one-off hacks.**
 Several services returned inconsistent health-check payloads. Matt changed
 two of them to return a uniform status body "to allow the health check
 alerts to work without one-off configuration changes that are difficult to
@@ -89,7 +89,7 @@ which Matt does not claim.
 | Auto-instrumentation annotations for one service | Tried, reverted | Did not produce usable metrics |
 | One global error-rate threshold across services | No | Per-service thresholds tuned against each service's real ambient error rate |
 | The same severity in all environments | No | Lower environments set to warning so on-call is not paged for non-production |
-| Leave inconsistent health-check payloads per service | No | Standardised so the alert configuration needed no per-service special cases |
+| Leave inconsistent health-check payloads per service | No | Standardized so the alert configuration needed no per-service special cases |
 
 ## What happened after
 

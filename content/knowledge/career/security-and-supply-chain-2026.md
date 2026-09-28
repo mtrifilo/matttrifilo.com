@@ -30,7 +30,7 @@ Through September 10, 2026, the team resolved 228 security-type tickets and
 
 In response to an active worm wave in the public package registries and a
 parallel supply-chain campaign, Matt ran a rolling audit across two code
-host organisations, 333 repositories in one and 195 in the other.
+host organizations, 333 repositories in one and 195 in the other.
 
 **Result:** zero active compromises, two high findings, and 75 findings in
 total, each routed to the team that owned it. The findings themselves are
@@ -115,5 +115,5 @@ numbers.
 ## The gap he names himself
 
 None of this is a formal security *tooling evaluation* in the sense a
-senior-staff ladder would recognise. He names it as the candidate for the
+senior-staff ladder would recognize. He names it as the candidate for the
 next quarter rather than claiming the work already covers it.
