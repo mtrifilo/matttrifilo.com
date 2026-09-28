@@ -68,6 +68,22 @@ describe('app/globals.css through the build optimiser', () => {
     }
   )
 
+  test("the rows' themed scrollbar survives the optimiser, both halves", () => {
+    // MTC-95: the standard properties on the rows' class, and the WebKit
+    // pseudo-elements kept to browsers without `scrollbar-color`. Dropping
+    // or merging either would leave a classic bar in the browser's colors.
+    expect(emitted(ruleFor('.edge-faded-row {'))).toContain(
+      'scrollbar-width:thin;scrollbar-color:var(--muted-foreground)transparent'
+    )
+    const legacy = emitted(ruleFor('@supports not (scrollbar-color: auto)'))
+    expect(legacy).toStartWith('@supports not (scrollbar-color:auto){')
+    expect(legacy).toContain('.edge-faded-row::-webkit-scrollbar{height:8px}')
+    expect(legacy).toContain(
+      '.edge-faded-row::-webkit-scrollbar-thumb{background-color:var(--muted-foreground)'
+    )
+    expect(legacy).toContain('.edge-faded-row::-webkit-scrollbar-track{')
+  })
+
   test('no hand-written vendor prefix sits in the source', () => {
     // The optimiser adds every prefix it needs from its own targets. A
     // hand-written one is at best duplicated bytes and at worst the

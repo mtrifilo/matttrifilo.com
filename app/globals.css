@@ -244,11 +244,46 @@
     black calc(100% - var(--edge-fade)),
     transparent 100%
   );
+  /*
+   * Wherever a row can be scrolled by hand (the follow-up row, a starter row
+   * once handed over, the static strips under reduced motion), a browser
+   * that draws classic scrollbars puts one under it. It is themed rather
+   * than hidden (Matt, 2026-09-28, MTC-95): thin, the thumb in the muted
+   * text token, which each theme sets and which clears 3:1 against both
+   * themes' page and card, over no track at all. Declared on this class,
+   * which only the horizontal rows wear, so the transcript's vertical bar
+   * keeps the browser's default. The mask above fades the bar at the ends
+   * along with the pills.
+   */
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
 }
 
 @media (min-width: 48rem) {
   .edge-faded-row {
     --edge-fade: 72px;
+  }
+}
+
+/*
+ * The same bar for a browser that predates `scrollbar-color` (Safari before
+ * 26.2, Chrome before 121). A browser that has it ignores these rules on any
+ * element whose `scrollbar-color` is not `auto`, and forced colors resets
+ * that property to `auto`, which would bring these colors back over the
+ * system's: the query keeps them to the older browsers only. Sizing the bar
+ * is what makes an overlay bar draw at all times there, so the height is
+ * the thin bar's and no more.
+ */
+@supports not (scrollbar-color: auto) {
+  .edge-faded-row::-webkit-scrollbar {
+    height: 8px;
+  }
+  .edge-faded-row::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .edge-faded-row::-webkit-scrollbar-thumb {
+    background-color: var(--muted-foreground);
+    border-radius: 9999px;
   }
 }
 
