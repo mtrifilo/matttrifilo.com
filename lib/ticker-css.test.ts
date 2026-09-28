@@ -316,8 +316,8 @@ describe('the state flags the component writes', () => {
   })
 
   test('hover pauses only where a pointer can hover', () => {
-    // A touch browser keeps :hover on the last thing tapped, and a tap in
-    // the gap between the rows hands nothing over, so an unscoped hover
+    // A touch browser keeps :hover on the last thing tapped, and a tap
+    // before the rows are placed hands nothing over, so an unscoped hover
     // pause would hold both rows still with no strip to scroll.
     expect(
       blockAround('.starter-ticker:hover .starter-ticker-track {')

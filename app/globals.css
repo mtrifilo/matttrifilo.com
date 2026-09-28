@@ -383,12 +383,11 @@
  * one being read is the distraction the pause exists to remove. That is why
  * both conditions are read off the group rather than off a single row.
  *
- * A touch is not a pause: on a row it hands both rows over for good
- * (below). Hover is still read only where a pointer can hover, because a
- * touch browser keeps `:hover` on whatever was last tapped: a tap in the
- * gap between the rows lands on the group but on neither row, hands
- * nothing over, and would otherwise hold both rows still with no strip to
- * scroll.
+ * A touch is not a pause: it hands both rows over for good (below). Hover
+ * is still read only where a pointer can hover, because a touch browser
+ * keeps `:hover` on whatever was last tapped, and a tap that hands nothing
+ * over (one that lands before the rows are placed) would otherwise leave
+ * both rows paused, with no strip to scroll, once they appear.
  */
 .starter-ticker:focus-within .starter-ticker-track {
   animation-play-state: paused;

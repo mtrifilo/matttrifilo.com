@@ -363,7 +363,14 @@ function TickerRow({
   }, [sharedScroll])
 
   const handleTouchStart = useCallback(() => {
+    const viewport = viewportRef.current
     sharedScroll.handOverAll()
+    if (viewport) sharedScroll.touchStarted(viewport)
+  }, [sharedScroll])
+
+  const handleTouchEnd = useCallback(() => {
+    const viewport = viewportRef.current
+    if (viewport) sharedScroll.touchEnded(viewport)
   }, [sharedScroll])
 
   /**
@@ -432,6 +439,8 @@ function TickerRow({
       onScroll={handleScroll}
       // Not behind `pointer: coarse`: a touchstart is itself the evidence,
       // and a touchscreen laptop reports a fine pointer.
+      onTouchCancel={handleTouchEnd}
+      onTouchEnd={handleTouchEnd}
       onTouchStart={handleTouchStart}
       ref={viewportRef}
     >
@@ -589,7 +598,12 @@ interface SharedRow {
  * through, with sharedWindow in ticker-geometry.ts. Trimmed, both rows
  * have the same range and one scrollLeft is the position of both: a drag
  * on either is copied to the other, and the browser stops the dragged row
- * at the shared end itself, so nothing ever writes to a row under a finger.
+ * at the shared end itself, so nothing holds it back by writing to it.
+ *
+ * A finger resting on one row wins over the other row's momentum: on iOS
+ * a touch stops only the scroller it lands on, so a row still coasting
+ * from an earlier flick would otherwise carry the touched row, and the
+ * question under the finger, along with it.
  */
 interface SharedScroll {
   /** Adds a row; returns what removes it again. */
@@ -600,8 +614,15 @@ interface SharedScroll {
    * window when a later touch or wheel on either row hands it over.
    */
   handOverAll(): void
-  /** Copies a handed-over row's scroll to the other rows. */
+  /**
+   * Copies a handed-over row's scroll to the other rows, unless a finger
+   * rests on another row, in which case this row is held to that one.
+   */
   syncFrom(viewport: HTMLElement): void
+  /** A finger has landed on this row. */
+  touchStarted(viewport: HTMLElement): void
+  /** The finger on this row has lifted, or the browser took the touch. */
+  touchEnded(viewport: HTMLElement): void
   /**
    * Brings a focused pill in a handed-over row into view and takes the
    * other rows the same distance, trimming them again around where they
@@ -627,6 +648,8 @@ function createSharedScroll(): SharedScroll {
   // The scroll event a write here causes finds the row still there and is
   // ignored, which is what stops two rows answering each other's events.
   const settled = new Map<HTMLElement, number>()
+  // The row a finger rests on, if any.
+  let touched: HTMLElement | null = null
 
   /** A member as the window arithmetic sees it, at an untrimmed position. */
   function placementOf(member: Member, position: number): StripPlacement {
@@ -652,7 +675,8 @@ function createSharedScroll(): SharedScroll {
   /**
    * Trims every member to the window their untrimmed positions share and
    * scrolls them all to it. A row's cut and its scrollLeft change by the
-   * same amount in the same task, so nothing on screen moves.
+   * same amount in the same task, so a row trimmed where it already is does
+   * not move on screen; a row given a new position (a reveal) moves there.
    */
   function trimTo(placed: readonly (readonly [Member, number])[]): void {
     const window = sharedWindow(
@@ -724,10 +748,22 @@ function createSharedScroll(): SharedScroll {
       if (!members.has(source)) return
       const scrollLeft = source.scrollLeft
       if (scrollLeft === settled.get(source)) return
+      if (touched && touched !== source && members.has(touched)) {
+        settle(source, touched.scrollLeft)
+        return
+      }
       settled.set(source, scrollLeft)
       for (const viewport of members.keys()) {
         if (viewport !== source) settle(viewport, scrollLeft)
       }
+    },
+
+    touchStarted(viewport) {
+      touched = viewport
+    },
+
+    touchEnded(viewport) {
+      if (touched === viewport) touched = null
     },
 
     reveal(viewport, pill) {
@@ -744,7 +780,10 @@ function createSharedScroll(): SharedScroll {
         fade: fadeWidth(viewport),
         maxScrollLeft: placementOf(focused, from).maxScrollLeft,
       })
-      const delta = target - from
+      // What moves on screen: the focused pill may sit a whole copy away
+      // from the copy the row was showing, and a copy of the focused row is
+      // not a copy of the other, so the other follows only what is seen.
+      const delta = nearestToZero(target - from, focused.row.copyWidth())
       const placed = [...members.values()].map(member => {
         if (member === focused) return [member, target] as const
         const strip = placementOf(member, untrimmedPosition(member))
@@ -754,6 +793,15 @@ function createSharedScroll(): SharedScroll {
       return true
     },
   }
+}
+
+/** Of `distance` and `distance` a whole period either way, the shortest. */
+function nearestToZero(distance: number, period: number): number {
+  if (period <= 0) return distance
+  return [distance, distance - period, distance + period].reduce(
+    (nearest, candidate) =>
+      Math.abs(candidate) < Math.abs(nearest) ? candidate : nearest
+  )
 }
 
 /** The furthest a row can scroll, as its own layout allows. */

@@ -777,6 +777,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       const { rows } = renderLaidOutRows([0.3013, 0.5071])
       const [first, second] = rows
       fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
       const firstAt = first.viewport.scrollLeft
       // The dragged row sits at a fraction of a pixel, the followed one at
       // whole pixels, so the echo reads back a position the drag never had.
@@ -941,14 +942,14 @@ describe('a row handed over to the visitor by touch or wheel', () => {
 
     test('a focused pill is revealed on its own row, and the other row follows the same distance', () => {
       // The first row stopped near the start of its loop and is placed on
-      // its second copy; the second row stopped near the end of its own.
-      // Bringing the first row's second pill (in its first copy) into view
-      // is a long way back, further than the second row has behind it, so
-      // the second row goes the same distance in its other copy, and the
-      // two share one position again from there.
+      // its second copy, which shows the same pills. Tab reaches its second
+      // pill in the first copy, a copy back, where the row shows almost
+      // exactly what it showed; the second row moves only that little, and
+      // the two share one position again from there.
       const { rows } = renderLaidOutRows([0.05, 0.9])
       const [first, second] = rows
       fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
       const firstFrom = positionOf(first)
       const secondFrom = positionOf(second)
       const pill = announcedPills(first.viewport)[1]
@@ -956,16 +957,47 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       pill.focus()
 
       expect(isClearOfFades(first, pill)).toBe(true)
+      // The first row was showing its second copy, so the pill's own copy
+      // is most of a copy back, but on screen the row moves only a little.
+      const period = copyWidthOf(first.track)
       const moved = positionOf(first) - firstFrom
-      expect(moved).toBeLessThan(0)
+      expect(moved).toBeLessThan(-period / 2)
+      const seen = [moved, moved + period, moved - period].reduce((a, b) =>
+        Math.abs(b) < Math.abs(a) ? b : a
+      )
+      expect(Math.abs(seen)).toBeLessThan(PILL_PITCH)
+      // The other row moves what the first row was seen to move, not the
+      // copy it jumped: a copy of one row is not a copy of the other.
       expect(
-        samePixels(second.track, positionOf(second), secondFrom + moved)
+        samePixels(second.track, positionOf(second), secondFrom + seen)
       ).toBe(true)
       expect(first.viewport.scrollLeft).toBe(second.viewport.scrollLeft)
 
       const revealed = positionOf(first)
       scrollBy(second.viewport, 40)
       expect(positionOf(first)).toBeCloseTo(revealed + 40)
+    })
+
+    test('a finger resting on one row holds it while the other row still coasts', () => {
+      // On iOS a touch stops only the scroller it lands on. A row still
+      // coasting from an earlier flick must not carry the touched row, and
+      // the question under the finger, along with it.
+      const { rows } = renderLaidOutRows([0.3, 0.6])
+      const [first, second] = rows
+      fireEvent.touchStart(first.viewport)
+      fireEvent.touchEnd(first.viewport)
+      scrollBy(first.viewport, 200)
+
+      fireEvent.touchStart(second.viewport)
+      const resting = second.viewport.scrollLeft
+      scrollBy(first.viewport, 90)
+      expect(second.viewport.scrollLeft).toBe(resting)
+      // Held to the touched row instead of running on without it.
+      expect(first.viewport.scrollLeft).toBe(resting)
+
+      fireEvent.touchEnd(second.viewport)
+      scrollBy(first.viewport, 50)
+      expect(second.viewport.scrollLeft).toBe(resting + 50)
     })
 
     test("a rotation that changes both rows' width keeps them in step", () => {
