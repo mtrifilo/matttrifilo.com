@@ -48,6 +48,26 @@ test('red: a listener added with addEventListener rejects', () => {
   press()
 })
 
+/** A component that listens on `window`, as a scroll-aware header does. */
+function ScrollWatcher({ onScroll }: { onScroll: () => unknown }) {
+  useEffect(() => {
+    window.addEventListener('scroll', onScroll)
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [onScroll])
+  return null
+}
+
+test('red: a listener on window throws', () => {
+  render(
+    <ScrollWatcher
+      onScroll={() => {
+        throw new Error('the window listener threw')
+      }}
+    />
+  )
+  fireEvent.scroll(window)
+})
+
 test('red: a React onClick throws', () => {
   render(
     <button

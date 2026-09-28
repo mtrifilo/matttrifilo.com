@@ -128,40 +128,95 @@ describe('an error a DOM listener throws', () => {
   // error never leaves `dispatchEvent`: Happy DOM catches it and dispatches it
   // on `window` as an `ErrorEvent`. So no wrapper around `dispatchEvent` could
   // see it, and a test that fired the event would pass. If a Happy DOM bump
-  // changes either half, this fails and names the premise that moved.
-  test('arrives on the window as an ErrorEvent, not at the caller', () => {
-    const thrown = new Error('a listener failed')
-    const target = document.createElement('button')
-    target.addEventListener('click', () => {
-      throw thrown
-    })
+  // changes either half, these fail and name the premise that moved.
+  function dispatchQuietly(target: EventTarget, event: Event) {
     const heard: unknown[] = []
-    const onError = (event: Event) => heard.push((event as ErrorEvent).error)
-    // Happy DOM prints what it catches; this error is expected.
+    const onError = (error: Event) => heard.push((error as ErrorEvent).error)
+    // Happy DOM prints what it catches; these errors are expected.
     const printed = spyOn(console, 'error').mockImplementation(() => {})
     window.addEventListener('error', onError)
     try {
-      expect(() => target.dispatchEvent(new Event('click'))).not.toThrow()
+      expect(() => target.dispatchEvent(event)).not.toThrow()
     } finally {
       window.removeEventListener('error', onError)
       printed.mockRestore()
     }
+    return heard
+  }
+
+  test('on an element arrives on the window, not at the caller', () => {
+    const thrown = new Error('an element listener failed')
+    const target = document.createElement('button')
+    target.addEventListener('click', () => {
+      throw thrown
+    })
+
+    const heard = dispatchQuietly(target, new Event('click'))
+
     expect(heard).toHaveLength(1)
     expect(heard[0]).toBe(thrown)
-
     // Taken here, so the preload does not fail this test for it.
     const taken = takeCaughtDomErrors()
     expect(taken).toHaveLength(1)
     expect(taken[0]).toBe(thrown)
   })
 
+  test('on the window itself arrives the same way', () => {
+    // Without the method the preload gives `globalThis`, Happy DOM throws a
+    // TypeError of its own here and this error is lost.
+    const thrown = new Error('a window listener failed')
+    const listener = () => {
+      throw thrown
+    }
+    window.addEventListener('scroll', listener)
+    let heard: unknown[]
+    try {
+      heard = dispatchQuietly(window, new Event('scroll'))
+    } finally {
+      window.removeEventListener('scroll', listener)
+    }
+
+    expect(heard).toHaveLength(1)
+    expect(heard[0]).toBe(thrown)
+    const taken = takeCaughtDomErrors()
+    expect(taken).toHaveLength(1)
+    expect(taken[0]).toBe(thrown)
+  })
+
+  test('on a MediaQueryList leaves dispatchEvent, since Happy DOM does not catch it', () => {
+    // A MediaQueryList belongs to no window, so its listener's error fails
+    // whatever dispatched the event directly, and the preload records nothing.
+    const thrown = new Error('a media query listener failed')
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+    query.addEventListener('change', () => {
+      throw thrown
+    })
+
+    expect(() => query.dispatchEvent(new Event('change'))).toThrow(thrown)
+    expect(takeCaughtDomErrors()).toEqual([])
+  })
+
+  test('dispatched by a test without an error is not recorded', () => {
+    // Only Happy DOM's report carries the error it caught; a test exercising
+    // a component's own `error` listener is not a listener failure.
+    window.dispatchEvent(new ErrorEvent('error', { message: 'simulated' }))
+    expect(takeCaughtDomErrors()).toEqual([])
+  })
+
   // The acceptance itself, run in a child `bun test` because the tests it
-  // proves are meant to fail. The fixture holds four that should go red
-  // (a listener added with `addEventListener` that throws and one that
-  // rejects, which only the preload's hook catches, and a React `onClick`
+  // proves are meant to fail. The fixture holds five that should go red
+  // (listeners added with `addEventListener` that throw, reject, or sit on
+  // `window`, which only the preload's hook catches, and a React `onClick`
   // that throws and one that rejects, which Bun catches) and two that should
   // stay green after them.
   test('fails the test that fired it, with the stack of the listener', () => {
+    // Bun lets FORCE_COLOR win over NO_COLOR, and a coloured report marks a
+    // failure with a glyph rather than `(fail)`.
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      NO_COLOR: '1',
+    }
+    delete env.FORCE_COLOR
     const run = Bun.spawnSync(
       [
         process.execPath,
@@ -170,10 +225,13 @@ describe('an error a DOM listener throws', () => {
       ],
       {
         cwd: join(import.meta.dir, '..'),
-        env: { ...process.env, NO_COLOR: '1' },
+        env,
       }
     )
-    const output = `${run.stdout.toString()}${run.stderr.toString()}`
+    const output = `${run.stdout.toString()}${run.stderr.toString()}`.replace(
+      /\x1b\[[0-9;]*m/g,
+      ''
+    )
 
     const failed = [...output.matchAll(/^\(fail\) (.+?) \[/gm)].map(
       match => match[1]
@@ -181,17 +239,26 @@ describe('an error a DOM listener throws', () => {
     expect(failed).toEqual([
       'red: a listener added with addEventListener throws',
       'red: a listener added with addEventListener rejects',
+      'red: a listener on window throws',
       'red: a React onClick throws',
       'red: a React onClick rejects',
     ])
     expect(output).toMatch(/^ 2 pass$/m)
     expect(run.exitCode).toBe(1)
-    // The report carries the stack from the listener, not from the hook
-    // that rethrew it.
-    for (const message of ['the listener threw', 'the listener rejected']) {
+    // Each failure carries the stack from the handler. The hook's report
+    // quotes `error.stack`, which reads `Error: ...`; Bun's own report of a
+    // React handler's error reads `error: ...`.
+    const reports = [
+      'Error: the listener threw',
+      'Error: the listener rejected',
+      'Error: the window listener threw',
+      'error: the onClick threw',
+      'error: the onClick rejected',
+    ]
+    for (const report of reports) {
       expect(output).toMatch(
         new RegExp(
-          `Error: ${message}\\n(?: +at .*\\n)*? +at .*throwing-listener\\.fixture\\.tsx:\\d+:\\d+`
+          `${report}\\n(?: +at .*\\n)*? +at .*throwing-listener\\.fixture\\.tsx:\\d+:\\d+`
         )
       )
     }
