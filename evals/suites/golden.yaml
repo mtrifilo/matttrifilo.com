@@ -19,7 +19,7 @@
 #
 # Adding a document to the corpus means adding goldens for it here.
 
-# Reads any of: owned-systems-and-operations or resume; both say the team owns, or is accountable for, email sending and name deliverability and compliance, as the golden 'the Email Reliability charter' accepts either.
+# Reads any of: owned-systems-and-operations or resume; the first says the team owns the outbound email platform, the résumé that Matt, as the team's manager, is accountable for sending and compliance, as the golden 'the Email Reliability charter' accepts either.
 - description: 'golden: what the team owns'
   vars:
     question: What does Matt's team own?
@@ -45,8 +45,9 @@
       assert:
         - type: llm-rubric
           value: &r1 >-
-            The answer says Matt's team owns email sending or the outbound
-            email platform, and names at least one concrete part of it such as
+            The answer says Matt's team owns, or he as its manager is
+            accountable for, email sending or the outbound email platform, and
+            names at least one concrete part of it such as
             deliverability, compliance, engagement tracking, or the mail
             gateway. It is written about Matt in the third person.
         - type: llm-rubric
@@ -153,7 +154,8 @@
             does not present the change as a proven causal result. It may add
             the résumé's narrower figure, that the rest of the team's merged
             pull requests per week rose 2.9 times from 2025 Q1 to 2026 Q3, as
-            long as it does not present the two as one measure.
+            long as it does not present the two as one measure: the study's
+            2.7 times compares the 2025 full year with 2026 to September 12.
         - type: llm-rubric
           value: *r4
         - type: llm-rubric
@@ -216,7 +218,8 @@
           value: &r6 >-
             The answer says customer-reported defects fell and the open backlog
             went from 28 to 12, or otherwise reports that quality held while
-            output rose, without inventing a metric the study does not give.
+            output rose, without inventing a metric the published material
+            does not give.
         - type: llm-rubric
           value: *r6
         - type: llm-rubric
@@ -861,7 +864,9 @@
             and does not invent an award. Calling them the company's award and
             program without naming Thryv is correct, and so is adding the
             documented promotions or the peer recognition posted in company
-            channels; those are recorded, not invented.
+            channels; those are recorded, not invented. It may also add that
+            an Intel branded film recognised with a 2011 Intercom Gold Plaque
+            sits in his earlier sound work.
         - type: llm-rubric
           value: *r25
         - type: llm-rubric
@@ -1476,7 +1481,8 @@
             The answer gives at least two of the measured figures: merged
             pull requests per week for five engineers rising from about 10 to
             about 28, median cycle time to production falling from a seven to
-            nine day band to about 2.3 days, or the open customer-defect
+            nine day band (or from over a week, as the résumé puts it) to
+            about 2.3 days, or the open customer-defect
             backlog falling from 28 to 12. It carries the study's own framing
             that this is a correlation and not a controlled experiment, or at
             least does not assert the agents caused the change. It is written
@@ -1492,7 +1498,10 @@
 # contract, load, and benchmark gates is just faster breakage.";
 # team-throughput-study-2025-2026: "Automated adversarial review as a
 # repository workflow, added in August, is the mechanism for keeping that
-# true as volume grows."
+# true as volume grows."; resume: "human-reviewed AI coding agents" and
+# "independent, gated production deploys" once "end-to-end, contract, load,
+# and manual readiness tests pass".
+# Reads any of: engineering-philosophy, team-throughput-study-2025-2026 or resume; the résumé names two of the three mechanisms the rubric lists, the human-reviewed agents and the tests that gate each deploy.
 - description: 'golden: holding quality with agent-written code'
   vars:
     question: How does Matt keep quality high when AI agents write most of the code?
@@ -1515,15 +1524,19 @@
       value:
         - merge button
         - human review
+        - human-reviewed
         - adversarial review
         - gates
+        - gated
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r41 >-
             The answer names at least two documented mechanisms: human review
-            on every change with a person on the merge button, automated
+            of agent-written changes (a person on the merge button for every
+            change, as the philosophy document puts it, or human-reviewed AI
+            coding agents, as the résumé does), automated
             adversarial review as a repository workflow added in August 2026,
             or the end-to-end, contract, load and manual readiness tests that
             gate every independent deploy. It may add the measured result
@@ -1616,8 +1629,8 @@
             sending path and the mail transfer agent fleet, engagement
             tracking, bounce and feedback-loop intake, recipient or content
             risk scoring, domain authentication, the email data warehouse,
-            the compliance case system or compliance operations, mailbox
-            sync, or the AI email health
+            the compliance case system or compliance, mailbox sync, or the AI
+            email health
             features. It is written about Matt in the third person, and it
             must not present an inferred characterization as a documented one.
         - type: llm-rubric
@@ -1839,7 +1852,7 @@
 # cloud projects ... Matt has been in the rotation since his individual-
 # contributor years ... and he stayed in it as a manager."; "under a
 # standing rule that every alert, including a one-off, gets a permanent
-# runbook"; resume: "serve as escalation lead for unacknowledged alerts".
+# runbook"; resume: "escalation lead for unacknowledged alerts".
 # Reads: owned-systems-and-operations, as the golden 'how on-call runs' does. The rubric asks for two of four parts; the résumé holds one (Matt's shifts and his escalation role), this document the rotation, his shifts, the alert policies in code and the runbook rule.
 - description: 'golden: running a 24/7 rotation for an ESP'
   vars:
@@ -2445,7 +2458,7 @@
 # coding roughly half the time." Matt was not the team's tech lead (Matt,
 # 2026-09-28, MTC-96), so a Tech Lead title fails the rubric.
 # "player-coach" is not a distinctive phrase here: the question supplies it.
-# Reads: resume only; recognition-and-programs dates the July 2022 start and the roughly even split, but not the role's title or the engineering manager's accountability graded here.
+# Reads: resume only; recognition-and-programs dates the July 2022 start and the roughly even split, but not the engineering manager's accountability graded here.
 - description: 'golden: the player-coach years'
   vars:
     question: Has Matt worked as a player-coach, and how did he split his time?
@@ -2465,7 +2478,6 @@
       value:
         - Software Engineer III
         - accountability
-        - accountable
         - half the time
         - half his time
         - half of his time
@@ -2489,9 +2501,9 @@
           value: *r61
 
 # ai-tooling-leadership: the forum, the skills library, the proposals, the
-# interview panels; resume: "Wrote the governance for Thryv's Claude Code
-# plugin marketplace; the team's marketplace ... became the company
-# template."
+# interview panels; resume: "Wrote the governance and architecture
+# decisions for Thryv's Claude Code plugin marketplace; the team's
+# marketplace ... became the company template."
 - description: 'golden: influence beyond his own team'
   vars:
     question: Has Matt led AI adoption beyond his own team, or only within it?
