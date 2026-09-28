@@ -77,24 +77,25 @@ describe('the starter questions', () => {
   /**
    * The untagged questions the head holds, in the relative order they keep
    * after the themed ones: the pool's approved order (MTC-39), kept by the
-   * orchestrator's default on MTC-76 (2026-09-23, Matt may override).
+   * orchestrator's default on MTC-76 (2026-09-23, Matt may override), with
+   * the next-role question fifth in the pool (Matt, 2026-09-28, MTC-40).
    * Tagging one with a theme takes it out of the check below rather than
    * breaking it; a question joining or leaving the head, or a change to their
    * order, is a change to this list.
    */
   const APPROVED_UNTAGGED_HEAD_ORDER = [
+    'What is Matt looking for in his next role?',
     'How does Matt use AI coding agents?',
     'How does Matt keep quality high when AI agents write most of the code?',
     'How much code does Matt ship himself as an engineering manager?',
-    'What did Matt ship recently?',
   ]
 
   /**
-   * Where the table-stakes question stays: Matt's "stays where it is
-   * (position 10)" (MTC-41, 2026-09-22) counts from one, so it is the tenth
-   * question of the pool.
+   * Where the table-stakes question stays: the eleventh question of the
+   * pool, counting from one (Matt, 2026-09-28, MTC-40, which supersedes
+   * "stays where it is (position 10)" of 2026-09-22, MTC-41).
    */
-  const TABLE_STAKES_INDEX = 9
+  const TABLE_STAKES_INDEX = 10
 
   // The pool's first question is not pinned: each row's head opens on the
   // featured themes (Matt, 2026-09-23, MTC-76), so index 0 holds whichever

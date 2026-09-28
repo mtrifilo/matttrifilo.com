@@ -4078,6 +4078,361 @@
           value: *k56
 # --- end MTC-53 block ---
 
+# --- begin MTC-40: one golden per starter question the FAQ answers ---
+#
+# Each question is the exact pill text in STARTER_QUESTIONS. Each rubric
+# requires two of its facts, and every pair includes one that only the FAQ
+# document it pins states, so each test pins that document alone. The résumé
+# covers location, languages and the 2025 hires, which the rubrics accept
+# but do not grade, and names the player-coach title and DORA metrics only
+# as past role and skill, not as what he wants next.
+
+# faq, "What is he looking for in his next role?": "a hands-on software
+# engineering manager role, or a player-coach role"; "He is also ready to
+# take on an individual-contributor role as a Senior Software Engineer, full
+# stack"; "In his first year he would want to be measured on the tangible
+# outcomes he has delivered for the business that helped move the needle on
+# top-level company goals and KPIs, along with how his own DORA metrics
+# trend"; "He would pass on crypto and sports-betting platforms."
+# Reads: faq only; no other document states what role he wants next.
+- description: 'golden: what he is looking for in his next role'
+  vars:
+    question: What is Matt looking for in his next role?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    # One needle or more per graded fact. assertReadsExpected already proves
+    # the faq was read, so needles the résumé also carries are fine.
+    - type: icontains-any
+      value:
+        - player-coach
+        - hands-on software engineering manager
+        - Senior Software Engineer
+        - full stack
+        - full-stack
+        - individual contributor
+        - individual-contributor
+        - DORA
+        - KPI
+        - sports betting
+        - sports-betting
+        - crypto
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f1 >-
+            The answer gives at least two of these four documented facts:
+            that Matt is ideally looking for a hands-on software engineering
+            manager role, or a player-coach role, leading a product
+            engineering team while contributing to software projects himself;
+            that he is also ready to take an individual-contributor role as a
+            senior full-stack software engineer, still coding every day; that
+            in his first year he would want to be measured on the tangible
+            business outcomes he delivers against top-level company goals and
+            KPIs, and on how his own DORA metrics trend; and that he would pass
+            on crypto and sports-betting platforms. It may add the other
+            documented points: the languages and AI tools he works with, his
+            nine years on marketing automation and email sending, his openness
+            to a new business domain, or his location and relocation
+            preference as the résumé states it. It does not state a salary, a
+            start date, his availability, or whether he is interviewing
+            anywhere, none of which the published material gives. It is
+            written about Matt in the third person; quoting his own words is
+            acceptable only when they are attributed to him as a quotation. It
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *f1
+        - type: llm-rubric
+          value: *f1
+
+# faq, "How does he hire and grow engineers?": candidates with "demonstrated
+# experience or high potential related to the role", then "signals of high
+# agency and strong autonomy"; "For software engineers, the goal is to merge
+# their first pull request within the first few days"; "his first one-on-one
+# with a new hire always centers on their long-term goals".
+# Reads: faq only; the résumé and recognition-and-programs give the hiring outcomes but none of the process graded here.
+- description: 'golden: how he hires and grows engineers'
+  vars:
+    question: How does Matt hire and grow engineers?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - first pull request
+        - 30/60/90
+        - one-on-one
+        - agency
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f2 >-
+            The answer gives at least two of these documented practices: in
+            interviews Matt looks first for demonstrated experience or high
+            potential for the role and then for signals of high agency and
+            strong autonomy in what candidates have owned and delivered; he
+            ramps a new hire by updating and tailoring the team's
+            30/60/90-day plan, with the goal that a new software engineer
+            merges their first pull request within the first few days; and his
+            first one-on-one with a new hire centers on their long-term goals,
+            which he uses to find projects aligned with their growth. It may
+            add his deal-breakers, his support for skip-level one-on-ones so
+            that he is never a bottleneck, the books he names, or the
+            documented outcomes of two hires in 2025 who became high
+            performers and zero voluntary attrition. It does not invent an
+            interview format, a number of rounds, a take-home exercise, or a
+            metric the published material does not give. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *f2
+        - type: llm-rubric
+          value: *f2
+
+# faq, "How does he work with Product to decide what the team builds?": "At
+# Thryv the team has most recently defined its deliverables and timelines on
+# a six-week cadence"; "They proposed allocating just two engineers to a
+# phased decomposition plan over multiple quarters"; "At the end of each week
+# they hold a triad sync, Matt, the Product Manager and the Tech Lead".
+# Reads: faq only; other documents mention partnering with Product, none states the cadence, the triad or this example.
+- description: 'golden: how he works with Product on what to build'
+  vars:
+    question: How does Matt work with Product to decide what the team builds?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - six-week
+        - triad
+        - two engineers
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f3 >-
+            The answer gives at least two of these documented facts: the team
+            has most recently defined its deliverables and timelines on a
+            six-week cadence, negotiated with the Product Manager and the Tech
+            Lead so commitments are challenging yet attainable with high
+            confidence; Matt meets the Product Manager weekly to plan, and at
+            the end of each week holds a triad sync of Matt, the Product
+            Manager and the Tech Lead; and, as an example of reshaping an ask,
+            the team proposed putting just two engineers on a phased
+            decomposition of email out of the monolith over multiple quarters
+            rather than the whole team for many months, so the team kept
+            delivering and a pivot could not waste months of work. It may add
+            that risks such as unfinished designs are communicated to senior
+            leadership. It does not name the Product Manager or the Tech Lead,
+            and it does not attach a date, a headcount other than two
+            engineers, or a named service to this proposal, none of which the
+            FAQ gives. It is written about Matt in the third person, and it
+            must not present an inferred characterisation as a documented one.
+        - type: llm-rubric
+          value: *f3
+        - type: llm-rubric
+          value: *f3
+
+# faq, "How does he run the team's delivery process, and how did it change
+# with AI agents?": "Email Reliability follows the standard Agile Scrum
+# process with two-week sprints"; "the team now uses Claude to create Jira
+# ticket and epic drafts for the team to refine"; "the team has emphasized
+# keeping pull requests as small as reasonably possible, so that AI and human
+# code reviews catch and fix more issues"; "median cycle time to production
+# fell from about 9 days to 2.3, and open customer-reported defects from 28
+# to 12". team-throughput-study-2025-2026 gives the same 2.3 days and 28 to
+# 12, with the earlier cycle time as a band of 7.0 to 9.1 days.
+# Reads: faq only; ai-tooling-leadership and the throughput study state AI review, the adversarial-review workflow and the figures, but neither states the sprints or the Claude-drafted tickets.
+- description: 'golden: his team delivery process and how agents changed it'
+  vars:
+    question: How does Matt run his team's delivery process, and how did it change with AI agents?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - two-week
+        - Scrum
+        - Jira
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f4 >-
+            The answer gives at least two of these documented facts: the
+            Email Reliability team runs Agile Scrum with two-week sprints and
+            the usual ceremonies, with sprint goals that each have an owner;
+            the team now uses Claude to draft Jira tickets and epics for the
+            team to refine, including from planning and discovery meeting
+            transcripts; the team keeps pull requests as small as reasonably
+            possible so that AI and human code reviews catch more issues and
+            deploys are smaller and more frequent, with one or more AI bots
+            and an adversarial-review skill reviewing every pull request; and
+            over the same period median cycle time to production fell to 2.3
+            days and open customer-reported defects from 28 to 12. It may give
+            the earlier cycle time as about 9 days or as the throughput
+            study's band of 7.0 to 9.1 days, and it may add the other
+            measured results and confounders that study gives. It does not say
+            Claude writes the tickets unreviewed, and it does not invent a
+            sprint length, a ceremony, or a metric the published material
+            does not give. It is written about Matt in the third person, and
+            it must not present an inferred characterisation as a documented
+            one.
+        - type: llm-rubric
+          value: *f4
+        - type: llm-rubric
+          value: *f4
+
+# faq-leading-people, "How does he handle performance management and growth
+# conversations?": "the conversation begins with a shared understanding of
+# the official roles and responsibilities document"; "The goals are
+# formalized as quarterly goals with measurable KPIs where possible"; "raising
+# feedback as close to the moment as possible"; "framing critical feedback as
+# opportunities to grow and succeed".
+# Reads: faq-leading-people only; no other document describes his performance conversations.
+- description: 'golden: how he handles performance and growth conversations'
+  vars:
+    question: How does Matt handle performance management and growth conversations?
+  metadata:
+    suite: golden
+    expectReads: [faq-leading-people]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - roles and responsibilities
+        - quarterly
+        - close to the moment
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f5 >-
+            The answer gives at least two of these documented practices:
+            expectations start from a shared understanding of the official
+            roles and responsibilities document for the person's role, with
+            an eye to the next role, and that document is the source of truth
+            for the "what" while the company values set the "how"; goals are
+            formalized as quarterly goals with measurable KPIs where possible,
+            with the business outcomes as the highest priority and metrics
+            chosen so that none can be gamed without business impact; and
+            feedback is given as close to the moment as possible and framed as
+            an opportunity to grow rather than as criticism. It may add that a
+            formal improvement plan is the last resort, used only when a
+            report cannot meet an agreed goal and decided on evidence. It does
+            not describe any individual's performance, name anyone, or invent
+            a rating scale, a review cadence other than quarterly goals, or a
+            number the published material does not give. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *f5
+        - type: llm-rubric
+          value: *f5
+
+# faq-leading-people, "How does he communicate a change or a reorganization
+# to a team?": "Matt delivers difficult news directly and without
+# sugar-coating, then offers whatever support he can"; "there have been times
+# when he has asked his Director or VP to address the team and answer
+# questions"; "During that period he gives people room to process and to vent
+# more than usual. If someone's reaction starts to hurt the team, he takes it
+# to a one-on-one first"; "the free counseling sessions the company offers
+# through its benefits".
+# Reads: faq-leading-people only; post-acquisition-integration covers the Keap to Thryv integration work, not how he communicates change.
+- description: 'golden: how he communicates a change or a reorganization'
+  vars:
+    question: How does Matt communicate a change or a reorganization to a team?
+  metadata:
+    suite: golden
+    expectReads: [faq-leading-people]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - sugar-coating
+        - sugarcoating
+        - Director
+        - counseling
+        - counselling
+        - vent
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f6 >-
+            The answer gives at least two of these documented practices: Matt
+            delivers difficult news directly and without sugar-coating, then
+            offers whatever support he can, adjusting the delivery to the
+            person but never the message; when a change carries a lot of
+            ambiguity he has asked his Director or VP to address the team and
+            answer questions; in the first week he gives people more room than
+            usual to process and vent, and takes a reaction that starts to hurt
+            the team to a one-on-one first; and he reminds the team of the free
+            counseling sessions the company offers through its benefits. It
+            may add the Keap acquisition into Thryv as the context, or that he
+            carries the team's questions to his own leaders, anonymously if
+            they prefer. It does not name anyone, describe any individual's
+            reaction, or invent a reorganization, a date or a headcount the
+            published material does not give. It is written about Matt in the
+            third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *f6
+        - type: llm-rubric
+          value: *f6
+# --- end MTC-40 block ---
 
 # The two activity goldens (MTC-45). They are the only tests in this file with
 # no llm-rubric: what the repository shipped this week changes between runs,
