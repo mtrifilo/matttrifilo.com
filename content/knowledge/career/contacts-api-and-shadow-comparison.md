@@ -1,20 +1,20 @@
 ---
 id: contacts-api-and-shadow-comparison
 title: The Contacts API program and the shadow-comparison harness, 2019
-summary: Matt's first end-to-end decomposition, verified field for field by a shadow-comparison harness before any customer saw the new path.
+summary: "The 2019 Contacts decomposition Matt contributed to, verified field for field by a shadow-comparison harness before any customer saw the new path."
 tags: [decomposition, api, verification, mobile, java, platform]
 updated: 2026-09-21
 ---
 
 # The Contacts API program and the shadow-comparison harness, 2019
 
-The first decomposition Matt worked end to end, two years before the merge
-service. Contacts lived entirely inside the core monolith and were read
-through two different legacy paths: a servlet API used by the web front end
-and a front-facing controller used by the mobile app. A newer internal
-Contacts API had been partly built the year before but was not
-production-ready, and nobody had proven it matched the legacy behaviour
-field for field.
+The first decomposition Matt worked end to end as a contributing engineer,
+not as its lead, two years before the merge service. Contacts lived entirely
+inside the core monolith and were read through two different legacy paths: a
+servlet API used by the web front end and a front-facing controller used by
+the mobile app. A newer internal Contacts API had been partly built the year
+before but was not production-ready, and nobody had proven it matched the
+legacy behaviour field for field.
 
 The trigger was a decision to make it real. Two tickets opened the same day
 in March 2019: one to review unit, integration, and end-to-end coverage and
@@ -27,7 +27,8 @@ routing internal calls through the monolith.
 
 ## The numbers
 
-**75 ticket-linked pull requests** between February and September 2019,
+**75 ticket-linked pull requests of Matt's own** between February and
+September 2019,
 adding about 17,200 lines and removing about 2,800, across the monolith
 (47), the mobile app (14), the web backend-for-frontend (7), and the web
 app (7). Six epics; five closed Done in 2019. Matt was a Software Engineer
@@ -41,8 +42,7 @@ production), ran a formal production-readiness audit that he split into
 "stable and reliable" and "observable" sections and wrote up himself, and
 interviewed the product managers and engineers on the consuming teams,
 recording the notes in a shared findings document. He repeated that
-interview-and-write-up pattern at every major decision point in the
-project.
+interview-and-write-up pattern at the decision points he worked on.
 
 ## Parity work before any traffic switch
 
@@ -101,9 +101,10 @@ pagination flow using page tokens instead of offsets, then a circuit
 breaker modelled on the web backend's own implementation and scoped to trip
 only on server errors so client errors would not false-positive it, plus an
 end-to-end test for the whole path. Two mobile engineers did substantial
-implementation alongside him; this was a genuine team effort. The seventeen
-mobile-app pull requests are the first production consumer of the new API,
-and they are absent from every earlier career document.
+implementation alongside him; this was a genuine team effort. The mobile
+app's pull requests (seventeen across its epic, fourteen of them in the
+ticket-linked total above) are the first production consumer of the new
+API, and they are absent from every earlier career document.
 
 **Web in parallel.** The web backend-for-frontend and web app moved their
 contact-load actions off the legacy servlet one call at a time: a new
