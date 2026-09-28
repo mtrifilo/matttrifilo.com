@@ -30,7 +30,7 @@ const GUARD_TESTS = [
 ].map(file => `.${path.sep}${file}`)
 
 const corpus = buildKnowledgeCorpus()
-const { index, documents, unanswered, droppedDocuments } = corpus
+const { index, documents, unanswered, droppedDocuments, droppedIntros } = corpus
 
 console.log('--- the index, as the model sees it ---\n')
 console.log(index.text)
@@ -45,10 +45,26 @@ for (const document of documents) {
 // The faq drops its unanswered questions, and a drop that prints nothing
 // is indistinguishable from a file that was never read. Say what is
 // missing, every run.
-if (unanswered.length > 0 || droppedDocuments.length > 0) {
+if (
+  unanswered.length > 0 ||
+  droppedDocuments.length > 0 ||
+  droppedIntros.length > 0
+) {
   console.log('\n--- dropped: unanswered, so not sent to the model ---\n')
-  for (const question of unanswered) {
-    console.log(`  ${question.file}  ## ${question.heading}`)
+  // A file's introduction first, then its questions: the order they are
+  // written in. The sort is stable and the labels sort in build order.
+  const dropped = [
+    ...droppedIntros.map(file => ({
+      file,
+      what: '(the introduction, before the first ##)',
+    })),
+    ...unanswered.map(question => ({
+      file: question.file,
+      what: `## ${question.heading}`,
+    })),
+  ].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
+  for (const { file, what } of dropped) {
+    console.log(`  ${file}  ${what}`)
   }
   for (const file of droppedDocuments) {
     console.log(`  ${file}  (whole document: nothing in it is answered yet)`)

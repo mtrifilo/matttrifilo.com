@@ -128,6 +128,12 @@ export interface KnowledgeCorpus {
   unanswered: UnansweredQuestion[]
   /** faq files dropped whole, for the same reason. */
   droppedDocuments: string[]
+  /**
+   * faq files whose introduction (the text before the first `##`) was
+   * dropped for holding a placeholder, so a build can say so as it does
+   * for a question.
+   */
+  droppedIntros: string[]
 }
 
 /**
@@ -784,22 +790,25 @@ function isAnswered(block: Block): boolean {
  * The faq's text: every `##` section whose answer is missing, or whose
  * heading or answer is a placeholder, is dropped, and the headings that
  * were dropped are reported so `bun run knowledge:check` can print them
- * rather than leaving the deletion invisible. A file that had sections and
- * has none left contributes no document at all, so an FAQ Matt has not
- * written yet is simply absent from the index rather than present and
- * empty.
+ * rather than leaving the deletion invisible. An introduction dropped for
+ * a placeholder is reported the same way (introDropped); one with nothing
+ * in it is not a drop. A file that had sections and has none left
+ * contributes no document at all, so an FAQ Matt has not written yet is
+ * simply absent from the index rather than present and empty.
  */
 function readAnsweredBlocks(
   body: string,
   label: string
-): { text: string; unanswered: UnansweredQuestion[] } {
+): { text: string; unanswered: UnansweredQuestion[]; introDropped: boolean } {
   const { intro, sections } = splitBlocks(sourceLines(body))
   const answered = sections.filter(isAnswered)
   const unanswered = sections
     .filter(section => !isAnswered(section))
     .map(section => ({ file: label, heading: headingTitle(section.heading) }))
+  const introDropped =
+    blockBody(intro).trim() !== '' && findBlockPlaceholder(intro) !== null
   if (sections.length > 0 && answered.length === 0) {
-    return { text: '', unanswered }
+    return { text: '', unanswered, introDropped }
   }
 
   // Each surviving section keeps the spacing it was written with; only the
@@ -810,7 +819,11 @@ function readAnsweredBlocks(
       section => `${section.heading.text}\n${trimEnd(blockBody(section))}`
     ),
   ]
-  return { text: parts.filter(part => part !== '').join('\n\n'), unanswered }
+  return {
+    text: parts.filter(part => part !== '').join('\n\n'),
+    unanswered,
+    introDropped,
+  }
 }
 
 /**
@@ -822,7 +835,11 @@ function readDocument(
   filePath: string,
   topic: KnowledgeSource,
   label: string
-): { document: KnowledgeDocument | null; unanswered: UnansweredQuestion[] } {
+): {
+  document: KnowledgeDocument | null
+  unanswered: UnansweredQuestion[]
+  introDropped: boolean
+} {
   const contents = fs.readFileSync(filePath, 'utf8')
   const match = FRONTMATTER_BLOCK.exec(contents)
   if (!match) {
@@ -848,11 +865,12 @@ function readDocument(
   // the reassembly happening to round-trip.
   let text: string
   let unanswered: UnansweredQuestion[] = []
+  let introDropped = false
   if (topic === UNANSWERED_TOPIC) {
-    ;({ text, unanswered } = readAnsweredBlocks(body, label))
+    ;({ text, unanswered, introDropped } = readAnsweredBlocks(body, label))
     // The documented drop: an faq with nothing answered yet is absent
     // rather than present and empty.
-    if (text === '') return { document: null, unanswered }
+    if (text === '') return { document: null, unanswered, introDropped }
   } else {
     assertNoPlaceholder(lines, label)
     text = body.trim()
@@ -889,6 +907,7 @@ function readDocument(
       updated: frontmatter.updated,
     },
     unanswered,
+    introDropped,
   }
 }
 
@@ -1009,10 +1028,12 @@ export function buildKnowledgeCorpus(
   const documents: KnowledgeDocument[] = []
   const unanswered: UnansweredQuestion[] = []
   const droppedDocuments: string[] = []
+  const droppedIntros: string[] = []
   for (const { file, topic } of files) {
     const label = path.join('content', 'knowledge', topic, path.basename(file))
     const read = readDocument(file, topic, label)
     unanswered.push(...read.unanswered)
+    if (read.introDropped) droppedIntros.push(label)
     if (read.document) documents.push(read.document)
     else droppedDocuments.push(label)
   }
@@ -1063,5 +1084,6 @@ export function buildKnowledgeCorpus(
     documents: ordered,
     unanswered,
     droppedDocuments,
+    droppedIntros,
   }
 }

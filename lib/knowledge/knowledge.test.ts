@@ -1580,6 +1580,7 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
       { topic: 'career', name: 'a-role.md' },
       { topic: 'faq', name: 'faq.md', body },
     ])
+  const faqLabel = path.join('content', 'knowledge', 'faq', 'faq.md')
 
   test('a backslash escapes punctuation only, so `\\TODO (Matt)` is a placeholder', () => {
     // `\T` is not an escape: the backslash is text, and the marker is
@@ -1728,6 +1729,33 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
     expect(built.documents.find(d => d.id === 'faq')?.text).toBe(answer)
     expect(built.unanswered).toEqual([])
     expect(career(answer).documents[0].text).toBe(answer)
+  })
+
+  test('an faq introduction dropped for a placeholder is listed, as a question is', () => {
+    const withNote = faq(
+      ['# FAQ', '', 'TODO (Matt)', '', '## A question?', '', 'An answer.'].join(
+        '\n'
+      )
+    )
+    expect(withNote.documents.find(d => d.id === 'faq')?.text).toBe(
+      ['## A question?', '', 'An answer.'].join('\n')
+    )
+    expect(withNote.droppedIntros).toEqual([faqLabel])
+    expect(withNote.unanswered).toEqual([])
+
+    // Listed when the whole file goes too, alongside its questions.
+    const whole = faq(['TODO (Matt)', '', '## One?', '', 'TODO'].join('\n'))
+    expect(whole.droppedDocuments).toEqual([faqLabel])
+    expect(whole.droppedIntros).toEqual([faqLabel])
+    expect(whole.unanswered.map(q => q.heading)).toEqual(['One?'])
+
+    // A finished introduction, or none at all, is not a drop.
+    for (const body of [
+      ['# FAQ', '', 'Written.', '', '## A question?', '', 'An answer.'],
+      ['## A question?', '', 'An answer.'],
+    ]) {
+      expect(faq(body.join('\n')).droppedIntros).toEqual([])
+    }
   })
 })
 
