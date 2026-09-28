@@ -1,0 +1,28 @@
+data: {"type":"start"}
+
+data: {"type":"start-step"}
+
+data: {"type":"data-progress","id":"progress","data":{"steps":[{"id":"resume","title":"Résumé","topic":"resume","headings":["Experience","Skills"]}],"phase":"reading"}}
+
+data: {"type":"finish-step"}
+
+data: {"type":"start-step"}
+
+data: {"type":"data-progress","id":"progress","data":{"steps":[{"id":"resume","title":"Résumé","topic":"resume","headings":["Experience","Skills"]}],"phase":"writing"}}
+
+data: {"type":"text-start","id":"answer"}
+
+data: {"type":"text-delta","id":"answer","delta":"This is a recorded answer used by the browser checks."}
+
+data: {"type":"text-delta","id":"answer","delta":"\n\nIt stands in for a briefing so the page can be tested without a model.\n\nSources: resume\nFollow-ups:\n- What else does the recorded fixture cover?\n- Which document would a second question read?\n"}
+
+data: {"type":"text-end","id":"answer"}
+
+data: {"type":"finish-step"}
+
+data: {"type":"data-progress","id":"progress","data":{"steps":[{"id":"resume","title":"Résumé","topic":"resume","headings":["Experience","Skills"]}],"phase":"done","ms":3200}}
+
+data: {"type":"finish","finishReason":"stop","messageMetadata":{"followUps":["What else does the recorded fixture cover?","Which document would a second question read?"]}}
+
+data: [DONE]
+

@@ -13,6 +13,12 @@
 # testing
 /coverage
 
+# Playwright's output (MTC-86): the HTML report, and the traces and
+# screenshots of failed browser checks. CI uploads them as an artifact.
+/playwright-report/
+/test-results/
+/blob-report/
+
 # next.js
 /.next/
 /out/
