@@ -56,7 +56,7 @@ const answers: FetchLike = async () => new Response('ok')
 /**
  * Headers at once and then silence: the shape of the stall the wrapper was
  * written for, on a streaming route. Deliberately not wired to the abort
- * signal — the deadline has to end this wait on its own, whatever the
+ * signal: the deadline has to end this wait on its own, whatever the
  * transport does.
  */
 function headersThenSilence(): FetchLike {
@@ -459,7 +459,7 @@ describe('createBoundedFetch', () => {
   })
 
   test('a zero-length first chunk is not a first byte', async () => {
-    // A transport can open a stream with an empty frame — a keep-alive, a
+    // A transport can open a stream with an empty frame: a keep-alive, a
     // flushed-but-empty write. Letting that clear the deadline would hand the
     // stall a way to look like an answer: the connection has said nothing.
     let calls = 0
@@ -489,7 +489,7 @@ describe('createBoundedFetch', () => {
 
   test('a non-2xx with a slow error body is handed back, not retried', async () => {
     // The SDK reads response.ok only once it has the response, so a 429 held
-    // back here would be abandoned as a stall and retried — burning a second
+    // back here would be abandoned as a stall and retried, burning a second
     // connection on a rate limit and hiding it from the layer that knows how
     // to back off.
     let calls = 0
@@ -776,7 +776,7 @@ describe('the constants the 300 s function limit allows', () => {
 
   test('the SDK can still wrap the wrapper, and that is not bounded here', () => {
     // retryWithExponentialBackoff (maxRetries = 2) rethrows abort-named
-    // errors, so our stall path is never multiplied — but a retryable API
+    // errors, so our stall path is never multiplied, but a retryable API
     // error above us re-enters this wrapper with a fresh budget. Three of
     // those is over the limit, and nothing here prevents it: the lever is
     // `maxRetries` on the streamText call, left at its default deliberately

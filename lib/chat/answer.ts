@@ -22,8 +22,8 @@ import type { ChatErrorCode } from './validate'
 /**
  * Prefix of the citation line the policy asks the model to end an answer with.
  *
- * It lives here rather than in prompt.ts — where the rest of the model-facing
- * vocabulary lives — because the browser is the other half of this contract:
+ * It lives here rather than in prompt.ts, where the rest of the model-facing
+ * vocabulary lives, because the browser is the other half of this contract:
  * it is what has to recognise the line and take it back out again. prompt.ts
  * re-exports it so the policy prose still reads from a single constant.
  */
@@ -440,9 +440,9 @@ export type AnswerNotice = 'truncated' | 'incomplete'
 
 /**
  * A cut-short answer is still an answer, so it gets the notice that says to
- * ask something narrower. Every other run that did not end cleanly — no text
+ * ask something narrower. Every other run that did not end cleanly (no text
  * at all, or text that stopped on something other than the output cap, such
- * as a safety filter — gets the one that says to try again. `truncated`
+ * as a safety filter) gets the one that says to try again. `truncated`
  * without text falls into that second group: there is nothing to have been
  * cut short.
  */
@@ -541,7 +541,7 @@ export interface ChatErrorView {
  * Copy for anything that is not a refusal the server named.
  *
  * A dropped connection and a request that never reached the route arrive as
- * an `Error` with a message written by somewhere other than this route — the
+ * an `Error` with a message written by somewhere other than this route: the
  * AI SDK's transport, or the browser's fetch. Neither is copy to show a
  * visitor, and they cannot be told apart with any certainty, so they share
  * one true sentence.
@@ -590,8 +590,8 @@ export function discardsQuestion(code: ChatErrorCode): boolean {
  * sitting in `error.message` as JSON. A model that fails once the stream is
  * open arrives the same way: the route writes the envelope into the stream's
  * error text. Parsing it is what lets the UI render the sentence the server
- * chose — the limits, the kill switch and the too-long question each explain
- * themselves — instead of one flat "something went wrong" for eight
+ * chose (the limits, the kill switch and the too-long question each explain
+ * themselves) instead of one flat "something went wrong" for eight
  * different situations.
  *
  * Anything that is not that exact shape is treated as unknown rather than

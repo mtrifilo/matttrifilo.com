@@ -2,11 +2,15 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { buildKnowledgeCorpus } from '@/lib/knowledge/build'
+import {
+  buildKnowledgeCorpus,
+  INDEX_TITLE_SEPARATOR,
+} from '@/lib/knowledge/build'
 import {
   buildKnowledgeTwin,
   buildPostFile,
   draftSummary,
+  draftSummaryProblem,
   frontmatterProblem,
   postSlug,
   STARTER_BODY,
@@ -17,7 +21,7 @@ import {
  * A new post and its knowledge twin are written together, and the sync
  * guard in lib/knowledge/knowledge.test.ts fails the suite if they ever
  * drift. These cases check the scaffold produces a twin the loader
- * actually accepts — otherwise the first thing a new post does is turn the
+ * actually accepts: otherwise the first thing a new post does is turn the
  * suite red, which is what this scaffold exists to prevent.
  */
 
@@ -71,19 +75,35 @@ describe('new-blog-post scaffold', () => {
     }
   })
 
-  test('an em dash is refused at the prompt, not at the next build', () => {
-    // The index renders `- [id] title — summary (…)`, so the loader throws
-    // on an em dash in either. Without this the scaffold writes a twin
-    // that turns the suite red the moment it lands — exactly the failure
-    // the scaffold exists to prevent.
-    expect(frontmatterProblem('title', 'Shipping — a note')).toMatch(
+  test('what the loader refuses is refused at the prompt, not at the next build', () => {
+    // The loader throws on a title or summary its index line cannot carry.
+    // Without this the scaffold writes a twin that turns the suite red the
+    // moment it lands, exactly the failure the scaffold exists to prevent.
+    // Dashes are built from code points so this file carries none.
+    const emDash = String.fromCodePoint(0x2014)
+    const separator = INDEX_TITLE_SEPARATOR.trim()
+    expect(frontmatterProblem('title', `Shipping ${emDash} a note`)).toMatch(
+      /The title may not contain an em dash/
+    )
+    expect(
+      frontmatterProblem('description', `A note ${emDash} on shipping`)
+    ).toMatch(/The description may not contain an em dash/)
+    expect(frontmatterProblem('title', 'Shipping &mdash; a note')).toMatch(
       /may not contain an em dash/
     )
-    expect(frontmatterProblem('description', 'A note — on shipping')).toMatch(
-      /may not contain an em dash/
+    // A spaced en dash between words is a sentence dash; a range is not.
+    const enDash = String.fromCodePoint(0x2013)
+    expect(frontmatterProblem('title', `Shipping ${enDash} a note`)).toMatch(
+      /or an en dash used as one/
+    )
+    expect(
+      frontmatterProblem('title', `Shipping, 2019 ${enDash} 2025`)
+    ).toBeNull()
+    expect(frontmatterProblem('title', `Part 1 ${separator} Intro`)).toMatch(
+      /or a character that looks like it/
     )
     expect(frontmatterProblem('title', 'Two\nlines')).toMatch(
-      /must be a single line/
+      /must be one line/
     )
     expect(frontmatterProblem('title', draft.title)).toBeNull()
     expect(frontmatterProblem('description', draft.description!)).toBeNull()
@@ -92,7 +112,10 @@ describe('new-blog-post scaffold', () => {
   test('a twin built from a rejected title would not load', () => {
     // Proves the guard above is guarding something real, through the same
     // loader the site uses.
-    const bad = { ...draft, title: 'Shipping — a note' }
+    const bad = {
+      ...draft,
+      title: `Shipping ${String.fromCodePoint(0x2014)} a note`,
+    }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-post-'))
     try {
       fs.mkdirSync(path.join(dir, 'blog'))
@@ -117,5 +140,17 @@ describe('new-blog-post scaffold', () => {
     const long = draftSummary({ ...draft, description: 'word '.repeat(60) })
     expect(long.length).toBeLessThanOrEqual(160)
     expect(long.endsWith('…')).toBe(true)
+  })
+
+  test('a summary the cut would break is refused at the prompt', () => {
+    // The description passes as typed, but the cut at 160 characters
+    // leaves the range's left end and dash without its right end.
+    const enDash = String.fromCodePoint(0x2013)
+    const description = `${'a'.repeat(150)} 2019 ${enDash} present, and it kept going.`
+    expect(frontmatterProblem('description', description)).toBeNull()
+    expect(draftSummaryProblem({ ...draft, description })).toMatch(
+      /^The summary drafted from the description, cut to 160 characters, may not contain an em dash, or an en dash used as one/
+    )
+    expect(draftSummaryProblem(draft)).toBeNull()
   })
 })

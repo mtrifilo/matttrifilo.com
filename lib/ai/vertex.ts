@@ -147,7 +147,7 @@ export function getAuthClient() {
 
 export interface VertexClientOptions {
   /**
-   * Told about every retry the bounded fetch makes on this client's calls —
+   * Told about every retry the bounded fetch makes on this client's calls:
    * `VertexCallCounter.observeRetry` at the call sites here. A retry is
    * invisible to the visitor and would otherwise be invisible in the logs of
    * the request that was billed for it, so a request that wants to report its
@@ -155,7 +155,7 @@ export interface VertexClientOptions {
    */
   onRetry?: (retry: BoundedFetchRetry) => void
   /**
-   * Told how long each model call waited for its first response byte —
+   * Told how long each model call waited for its first response byte:
    * `VertexCallCounter.observeFirstByte`. The two deadlines in bounded-fetch
    * are checked against this number, and it is the only thing that can move
    * them, so every caller that can report it should.
@@ -168,8 +168,8 @@ export interface VertexClientOptions {
  * build time.
  *
  * With either callback, the client is built per call rather than shared: it
- * closes over that request's counter. The cost is an object and a closure —
- * the token cache that matters lives in the shared auth client either way.
+ * closes over that request's counter. The cost is an object and a closure.
+ * The token cache that matters lives in the shared auth client either way.
  *
  * The shared singleton is therefore the no-callback path, and since MTC-38
  * nothing in production takes it: both callers (the chat route and the health

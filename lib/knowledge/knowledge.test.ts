@@ -10,6 +10,8 @@ import {
   documentHeadings,
   estimateTokens,
   findPlaceholder,
+  INDEX_TITLE_SEPARATOR,
+  indexFieldProblem,
   KNOWLEDGE_DIR,
   KNOWLEDGE_DOCUMENT_TOKEN_CEILING,
   KNOWLEDGE_INDEX_TOKEN_CEILING,
@@ -22,9 +24,9 @@ import { KNOWLEDGE_READ_BUDGET } from './index'
  * The mechanical guard on what the career assistant is allowed to read.
  *
  * content/knowledge is the assistant's only source, and it is written for
- * the public. The corpus has two surfaces now — the index, which is in
- * every prompt, and the documents, which the model fetches one at a time —
- * and a leak in either is a leak. So every content guard below runs over
+ * the public. The corpus has two surfaces now: the index, which is in
+ * every prompt, and the documents, which the model fetches one at a time.
+ * A leak in either is a leak. So every content guard below runs over
  * the same list: the rendered index text, plus each document's body as the
  * build produces it. Asserting against the built output rather than the
  * files means a leak cannot slip in through a summary, the ordering, or
@@ -102,7 +104,7 @@ function prose(text: string): string {
  * Adding an entry is a deliberate, reviewable act: it must be a literal
  * phrase, and the comment must say which published page it comes from and
  * why it is not what the guard is looking for. Never add a bare guard word
- * here — that would disable the guard everywhere.
+ * here: that would disable the guard everywhere.
  */
 const REVIEWED_PUBLIC_PHRASES: readonly string[] = [
   // blog/from-typing-code-to-agent-factories: startup runway, about AI
@@ -254,7 +256,7 @@ describe('knowledge corpus content guards', () => {
 
   test('no surface contains a TODO placeholder', () => {
     // The backstop for the build-time refusal, run over the text as it
-    // actually ships — which is the only place it can catch the faq, whose
+    // actually ships, which is the only place it can catch the faq, whose
     // placeholders are dropped rather than refused.
     //
     // It looks for a placeholder's shape, not the word: findPlaceholder is
@@ -327,7 +329,7 @@ describe('knowledge corpus content guards', () => {
 
   test('drops the unanswered FAQ questions entirely', () => {
     // faq/faq.md ships eight questions with `TODO (Matt)` bodies. Until
-    // Matt answers one, the document must not exist at all — not exist and
+    // Matt answers one, the document must not exist at all: not exist and
     // be empty, and certainly not carry the placeholders into the index.
     const faqSource = fs.readFileSync(
       path.join(KNOWLEDGE_DIR, 'faq', 'faq.md'),
@@ -436,7 +438,7 @@ describe('knowledge corpus structure', () => {
     expect(lines.length).toBe(index.entries.length)
     for (const entry of index.entries) {
       expect(index.text).toContain(
-        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+        `- [${entry.id}] ${entry.title}${INDEX_TITLE_SEPARATOR}${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
       )
     }
     // Topic headings come before the entries they group, and each topic
@@ -557,7 +559,7 @@ describe('the section titles the progress view shows (MTC-50)', () => {
     const lines = index.text.split('\n').filter(line => line.startsWith('- '))
     const catalogue = index.entries.map(
       entry =>
-        `- [${entry.id}] ${entry.title} — ${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
+        `- [${entry.id}] ${entry.title}${INDEX_TITLE_SEPARATOR}${entry.summary} (tags: ${entry.tags.join(', ')}; ~${entry.tokenEstimate} tokens)`
     )
     expect(new Set(lines)).toEqual(new Set(catalogue))
   })
@@ -565,7 +567,7 @@ describe('the section titles the progress view shows (MTC-50)', () => {
 
 /**
  * What to do when a post has no knowledge twin. scripts/new-blog-post.ts
- * writes both files, so this only fires for a post added by hand — and
+ * writes both files, so this only fires for a post added by hand, and
  * then the fix is a copy-paste rather than a hunt through the loader.
  */
 function missingTwinMessage(slug: string): string {
@@ -723,6 +725,119 @@ describe('knowledge corpus build', () => {
         },
       ])
     ).toThrow(/keep it to 160/)
+  })
+
+  test('separates title and summary with a middle dot, not a dash', () => {
+    // Pinned so a change is deliberate: the model imitates the punctuation
+    // it reads, and this is the one mark it sees on every index line.
+    expect(INDEX_TITLE_SEPARATOR).toBe(' \u00B7 ')
+    const { index } = buildFixture([
+      {
+        topic: 'career',
+        name: 'shaped.md',
+        title: 'A title',
+        summary: 'A summary.',
+      },
+    ])
+    expect(index.text).toContain('- [shaped] A title \u00B7 A summary. (tags:')
+  })
+
+  test('refuses the separator mark anywhere in a title or summary', () => {
+    // Read from the constant first, so a new separator is refused inside
+    // titles and summaries the moment it is chosen. A dot at either edge
+    // joins the separator's spaces and reads as a second separator; the
+    // look-alikes render as the same dot.
+    for (const dot of [
+      INDEX_TITLE_SEPARATOR.trim(),
+      '\u00B7',
+      '\u0387',
+      '\u16EB',
+      '\u2022',
+      '\u2027',
+      '\u2219',
+      '\u22C5',
+      '\u2E31',
+      '\u2E33',
+      '\u30FB',
+      '\uA78F',
+      '\uFF65',
+    ]) {
+      for (const field of [
+        { title: `Before ${dot} after` },
+        { title: `Ends on ${dot}` },
+        { title: `Dot${dot}inside` },
+        { summary: `${dot} starts the summary.` },
+        { summary: `Before ${dot} after.` },
+      ]) {
+        expect(
+          () =>
+            buildFixture([{ topic: 'career', name: 'dotted.md', ...field }]),
+          JSON.stringify(field)
+        ).toThrow(/or a character that looks like it/)
+      }
+    }
+  })
+
+  test('refuses an em dash in a title or summary, as the model would read it', () => {
+    // Built from code points and entities so this file carries no dash. A
+    // spaced en dash or figure dash between words is a sentence dash, which
+    // the check over the whole model context in lib/site-copy.test.ts
+    // refuses too, so the build refuses it here, where the error names the
+    // file.
+    for (const dash of [
+      String.fromCodePoint(0x2014),
+      String.fromCodePoint(0x2015),
+      '&mdash;',
+      '&#8212;',
+      String.fromCodePoint(0x2013),
+      String.fromCodePoint(0x2012),
+      '&ndash;',
+    ]) {
+      for (const field of [
+        { title: `Before ${dash} after` },
+        { summary: `Before ${dash} after.` },
+      ]) {
+        expect(
+          () =>
+            buildFixture([{ topic: 'career', name: 'dashed.md', ...field }]),
+          JSON.stringify(field)
+        ).toThrow(/may not contain an em dash/)
+      }
+    }
+  })
+
+  test('accepts an en dash in a range', () => {
+    const enDash = String.fromCodePoint(0x2013)
+    const { index } = buildFixture([
+      {
+        topic: 'career',
+        name: 'ranged.md',
+        title: `Seasons 2019 ${enDash} 2025`,
+        summary: `From Jul 2017 ${enDash} present, and 2019${enDash}2021.`,
+      },
+    ])
+    expect(index.entries).toHaveLength(1)
+  })
+
+  test('a title or summary is one line by any line break', () => {
+    // Checked on the rule itself, which the blog scaffold runs on whatever
+    // was typed. In a document, the frontmatter reader refuses a field line
+    // broken by CR, LF, U+2028 or U+2029 before the rule sees it.
+    for (const lineBreak of [
+      '\n',
+      '\r',
+      '\v',
+      '\f',
+      '\u0085',
+      '\u2028',
+      '\u2029',
+    ]) {
+      expect(
+        indexFieldProblem(`Two${lineBreak}lines`),
+        JSON.stringify(lineBreak)
+      ).toBe('must be one line')
+    }
+    expect(indexFieldProblem('One line')).toBeNull()
   })
 
   test('refuses a document with no tags', () => {
@@ -1018,8 +1133,8 @@ describe('knowledge corpus build', () => {
   })
 
   test('an escaped backtick does not hide a placeholder', () => {
-    // `\`TODO (Matt)\`` is not a code span — the backticks are literal
-    // text — so the placeholder inside it is a real placeholder.
+    // `\`TODO (Matt)\`` is not a code span: the backticks are literal
+    // text, so the placeholder inside it is a real placeholder.
     expect(() =>
       buildFixture([
         { topic: 'career', name: 'a-role.md', body: '\\`TODO (Matt)\\`' },
@@ -1088,7 +1203,7 @@ describe('knowledge corpus build', () => {
   test('the three largest documents fit in one turn', () => {
     // The gate that matters, and the reason it lives here rather than only
     // in `bun run knowledge:check`: CI runs lint, typecheck, `bun test`
-    // and build — not the script. The per-document ceiling cannot promise
+    // and build, not the script. The per-document ceiling cannot promise
     // this on its own (three at the ceiling would be over budget), so the
     // real sum has to be asserted somewhere CI actually looks.
     const sorted = [...corpus.documents].sort(
@@ -1287,7 +1402,7 @@ describe('documents must survive being compiled as MDX', () => {
 
   test('says so when an over-indented fence is the likely cause', () => {
     // A fence indented four or more spaces is valid CommonMark inside a
-    // nested list, and this check does not recognise it — recognising it
+    // nested list, and this check does not recognise it: recognising it
     // means tracking list context, which is a Markdown parser. It is not
     // silent about it: when something does fail, the message names it.
     const body = [
@@ -1329,7 +1444,7 @@ describe('the loaders the site and the chat route use', () => {
     ]) {
       expect(readKnowledgeDocument(id), id).toBeUndefined()
     }
-    // Not a string at all — a malformed tool call, which must not throw.
+    // Not a string at all: a malformed tool call, which must not throw.
     expect(
       readKnowledgeDocument(undefined as unknown as string)
     ).toBeUndefined()
@@ -1347,6 +1462,7 @@ interface Fixture {
   topic: string
   name: string
   id?: string
+  title?: string
   summary?: string
   tags?: string
   canonical?: string
@@ -1368,7 +1484,7 @@ function buildFixture(files: Fixture[]) {
       const frontmatter = [
         '---',
         `id: '${id}'`,
-        `title: 'Fixture'`,
+        `title: '${file.title ?? 'Fixture'}'`,
         `summary: '${file.summary ?? 'What a reader would learn from it.'}'`,
         `tags: ${file.tags ?? '[fixture]'}`,
         `updated: '2026-09-14'`,

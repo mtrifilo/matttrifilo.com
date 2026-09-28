@@ -83,11 +83,12 @@ export function IncompleteNotice() {
  * questions needs somewhere to go, so the notice hands them the two pages that
  * answer most of what they were asking and Matt's address for the rest.
  *
- * Three refusals are about the conversation rather than the assistant —
+ * Three refusals are about the conversation rather than the assistant:
  * the turn limit, the token budget, and a body the route could not read,
- * which can be the replayed history rather than the question — so those
- * carry the control that starts a new one, when there is one to leave. The
- * rest are about the assistant, and a retry is the right next step.
+ * which can be the replayed history rather than the question. So those
+ * carry the control that starts a new conversation, when there is one to
+ * leave. The rest are about the assistant, and a retry is the right next
+ * step.
  *
  * The status region announces only "Error"; `role="alert"` here is what reads
  * the sentence itself to a screen reader.
