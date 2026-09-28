@@ -4437,6 +4437,101 @@
           value: *f6
         - type: llm-rubric
           value: *f6
+
+# The two status questions Matt chose to have answered from the FAQ's own
+# words (2026-09-28): not starter questions. faq, the next-role answer: "At
+# this stage of his career he is looking for new opportunities with bigger
+# challenges, where he can deliver similar transformative business impact for
+# growing software products and teams and begin the next growth phase of his
+# career". Whether he is currently employed, actively job hunting or
+# available stays declined, so an answer that adds any of it fails.
+# Reads: faq only; no other document says what he is looking for or why.
+- description: 'golden: whether he is open to a new role'
+  vars:
+    question: Is Matt open to a new role?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - player-coach
+        - hands-on software engineering manager
+        - new opportunities
+        - bigger challenges
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f7 >-
+            The answer draws only on what Matt's FAQ says: that he is ideally
+            looking for a hands-on software engineering manager or
+            player-coach role, is also ready for a senior full-stack
+            individual-contributor role, and at this stage of his career is
+            looking for new opportunities with bigger challenges. It states
+            at least one of those. It adds nothing the FAQ does not say: no
+            date or timing, no statement that he is interviewing or has
+            resigned, no availability or start date, no claim about his
+            current employment status, and no detail about his employer the
+            FAQ does not give. It is written about Matt in the third person,
+            and it must not present an inferred characterisation as a
+            documented one.
+        - type: llm-rubric
+          value: *f7
+        - type: llm-rubric
+          value: *f7
+
+# Reads: faq only; the reason is the next-role answer's own words, quoted above the previous test.
+- description: 'golden: why he is looking beyond his current role'
+  vars:
+    question: Why is Matt leaving Thryv?
+  metadata:
+    suite: golden
+    expectReads: [faq]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - bigger challenges
+        - new opportunities
+        - growth phase
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &f8 >-
+            The answer gives the reason in the FAQ's own terms: at this stage
+            of his career Matt is looking for new opportunities with bigger
+            challenges, where he can deliver similar transformative business
+            impact for growing software products and teams and begin the next
+            growth phase of his career, continuing to deliver AI features and
+            taking on new leadership and engineering challenges. It may add
+            the kind of role the FAQ says he is looking for. It adds nothing
+            the FAQ does not say: it does not confirm that he is leaving or
+            has resigned, give a date, say whether he is interviewing or
+            available, or offer any reason, complaint or detail about his
+            employer that the FAQ does not state. It is written about Matt in
+            the third person, and it must not present an inferred
+            characterisation as a documented one.
+        - type: llm-rubric
+          value: *f8
+        - type: llm-rubric
+          value: *f8
 # --- end MTC-40 block ---
 
 # The two activity goldens (MTC-45). They are the only tests in this file with
