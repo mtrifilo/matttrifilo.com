@@ -1,5 +1,10 @@
 import { findSourcesTrailer, stripTrailers } from '@/lib/chat/answer'
 import type { ChatMessageMetadata } from '@/lib/chat/handler'
+import {
+  PROGRESS_PART_TYPE,
+  toProgressView,
+  type ProgressView,
+} from '@/lib/chat/progress'
 
 /**
  * Reading the chat route's response the way the browser reads it (MTC-32).
@@ -11,9 +16,10 @@ import type { ChatMessageMetadata } from '@/lib/chat/handler'
  * be tested without Vertex.
  *
  * Only the public shape of the stream is read: `text-delta` chunks, the
- * `finish` chunk and its message metadata, and an `error` chunk. Chunk types
- * this module does not know about are ignored, so a new part on the stream
- * (a progress part, say) cannot break the suites.
+ * `finish` chunk and its message metadata, an `error` chunk, and the
+ * progress part, which is how the provider tells a completed read from a
+ * refused one (evals/read-ledger.ts). Chunk types this module does not know
+ * about are ignored, so a new part on the stream cannot break the suites.
  */
 
 /**
@@ -40,6 +46,11 @@ export interface StreamedAnswer {
    */
   errorText?: string
   metadata: StreamedMetadata
+  /**
+   * The last progress part, read by the browser's own validator. Absent when
+   * the run narrated nothing or the last part does not check out.
+   */
+  progress?: ProgressView
 }
 
 const DATA_PREFIX = 'data: '
@@ -54,6 +65,10 @@ const DONE = '[DONE]'
  */
 export function parseUiMessageStream(body: string): StreamedAnswer {
   const answer: StreamedAnswer = { text: '', metadata: {} }
+  // The route rewrites one part in place, so the last one is the run's final
+  // account. An earlier part is never a fallback: it can list a read that a
+  // refusal later withdrew.
+  let lastProgress: { type: string; data: unknown } | undefined
 
   for (const rawLine of body.split('\n')) {
     const line = rawLine.trim()
@@ -76,8 +91,13 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
     if (isRecord(chunk.messageMetadata)) {
       Object.assign(answer.metadata, chunk.messageMetadata)
     }
+    if (chunk.type === PROGRESS_PART_TYPE) {
+      lastProgress = { type: PROGRESS_PART_TYPE, data: chunk.data }
+    }
   }
 
+  const progress = lastProgress ? toProgressView([lastProgress]) : undefined
+  if (progress) answer.progress = progress
   return answer
 }
 

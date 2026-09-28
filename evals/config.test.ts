@@ -295,6 +295,106 @@ describe('JUDGES_THE_ANSWER', () => {
   )
 })
 
+describe('the read ledger split, on every test that judges reads', () => {
+  // The provider reports completed reads in `readIds` and documents the route
+  // found and then refused in `refusedIds`. Each test below is run on its own
+  // metadata against a ledger of one completed read and one refused read,
+  // both ways round, so a refused document satisfying any read check a suite
+  // actually uses is a red row here rather than a green row in a live run.
+  const indexed = loadKnowledgeIndex().entries.map(entry => entry.id)
+  const judges = assertions as unknown as Record<
+    string,
+    (output: string, context: AssertionContext) => AssertionResult
+  >
+  const READ_CHECKS = [
+    'assertReadsExpected',
+    'assertReadsAnyOf',
+    'assertReadsAnySet',
+  ] as const
+  const ANSWER = 'He led the migration in 2024.'
+
+  /** Every id the test accepts, and the fewest reads that satisfy it. */
+  function named(item: SuiteTest): { all: string[]; enough: string[] } {
+    const reads = toArray(item.metadata?.expectReads)
+    const any = toArray(item.metadata?.expectReadsAny)
+    const sets = readSets(item)
+    return {
+      all: [...new Set([...reads, ...any, ...sets.flat()])],
+      enough: [...new Set([...reads, ...any.slice(0, 1), ...(sets[0] ?? [])])],
+    }
+  }
+
+  test('a refused document satisfies no read check in any suite', () => {
+    const verdicts: unknown[] = []
+    for (const item of SUITES.flatMap(name => suites[name])) {
+      const names = assertionNames([item])
+      const checks = READ_CHECKS.filter(check => names.includes(check))
+      const cites = names.includes('assertCites')
+      if (checks.length === 0 && !cites) continue
+
+      const { all, enough } = named(item)
+      const other = indexed.find(id => !all.includes(id))
+      if (other === undefined) throw new Error('no unrelated document')
+      const context = (readIds: string[], refusedIds: string[]) => ({
+        test: { metadata: item.metadata },
+        metadata: { readIds, refusedIds },
+      })
+      // Everything the test names refused, one unrelated document read.
+      const refused = context([other], all)
+      // What the test needs read, the unrelated document refused.
+      const completed = context(enough, [other])
+
+      for (const check of checks) {
+        verdicts.push({
+          description: item.description,
+          check,
+          refused: judges[check]('', refused).pass,
+          completed: judges[check]('', completed).pass,
+        })
+      }
+      // The missing-trailer tolerance is a read check too: it may rest
+      // only on a document the answer was handed.
+      if (cites) {
+        verdicts.push({
+          description: item.description,
+          check: 'assertCites',
+          refused: judges.assertCites(ANSWER, refused).pass,
+          completed: judges.assertCites(ANSWER, completed).pass,
+        })
+      }
+    }
+    expect(verdicts.length).toBeGreaterThan(0)
+    expect(
+      verdicts.filter(
+        verdict =>
+          (verdict as { refused: boolean }).refused ||
+          !(verdict as { completed: boolean }).completed
+      )
+    ).toEqual([])
+  })
+
+  test('a trailer citing the refused document fails the citation check', () => {
+    // One completed read and one refused: citing the first passes, citing
+    // the second fails, whatever the suite.
+    const [completed, refused] = indexed
+    const ledger = {
+      metadata: { readIds: [completed], refusedIds: [refused] },
+    }
+    expect(
+      judges.assertCitesOnlyWhatItRead(
+        `${ANSWER}\n\nSources: ${completed}`,
+        ledger
+      ).pass
+    ).toBe(true)
+    expect(
+      judges.assertCitesOnlyWhatItRead(
+        `${ANSWER}\n\nSources: ${completed}, ${refused}`,
+        ledger
+      ).pass
+    ).toBe(false)
+  })
+})
+
 describe('starter questions', () => {
   /**
    * The pool is the only copy a visitor is invited to click, so a pool entry

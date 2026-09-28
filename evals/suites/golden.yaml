@@ -19,20 +19,21 @@
 #
 # Adding a document to the corpus means adding goldens for it here.
 
+# Reads any of: owned-systems-and-operations or resume; both say the team owns email sending end to end and name deliverability and compliance, as the golden 'the Email Reliability charter' accepts either.
 - description: 'golden: what the team owns'
   vars:
     question: What does Matt's team own?
   metadata:
     suite: golden
     smoke: true
-    expectReads: [owned-systems-and-operations]
+    expectReadsAny: [owned-systems-and-operations, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -621,19 +622,20 @@
         - type: llm-rubric
           value: *r18
 
+# Reads any of: open-source or resume; both call decant a CLI that turns clipboard content into Markdown for LLM context and give github.com/mtrifilo/decant, as the golden 'decant as the open-sourced CLI' accepts either.
 - description: 'golden: what decant does'
   vars:
     question: What is decant?
   metadata:
     suite: golden
-    expectReads: [open-source]
+    expectReadsAny: [open-source, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -860,7 +862,7 @@
         - type: llm-rubric
           value: *r25
 
-# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go.
+# Reads any of: resume or technical-expertise; both name Java, Python, TypeScript and Go, as the golden 'the stacks he actually works in' accepts either.
 - description: 'golden: languages and stacks'
   vars:
     question: Which languages and frameworks does Matt work in?
@@ -1006,6 +1008,7 @@
         - type: llm-rubric
           value: *r29
 
+# Reads: owned-systems-and-operations, the document about how the team runs on-call. The résumé names the programme, Matt's shifts, his escalation role and the on-call plugin, but not the standing rule that every alert gets a permanent runbook, which the rubric grades. The golden 'running a 24/7 rotation for an ESP' pins the same document.
 - description: 'golden: how on-call runs'
   vars:
     question: How does Matt run on-call for his team?
@@ -1571,7 +1574,13 @@
 # platform for the company's marketing-automation product: the sending path
 # from the core monolith through the sending API to the mail transfer
 # agents, the gateway fleet itself, engagement tracking ... the compliance
-# case system, mailbox sync ... the AI email health features".
+# case system, mailbox sync ... the AI email health features"; resume:
+# "owns email sending end to end for all Keap products", and, spread over
+# its roles and skills, parts the rubric lists: "Hardened the
+# engagement-tracking service", "the content-risk and spam-scoring
+# services", "DKIM/SPF", "MTA operations", and the AI Email Engagement
+# Summary.
+# Reads any of: owned-systems-and-operations or resume, as the golden 'what the team owns' accepts either.
 - description: 'golden: the Email Reliability charter'
   vars:
     question: What does Matt's Email Reliability team own at Thryv?
@@ -1825,19 +1834,20 @@
 # contributor years ... and he stayed in it as a manager."; "under a
 # standing rule that every alert, including a one-off, gets a permanent
 # runbook"; resume: "serve as escalation lead for unacknowledged alerts".
+# Reads: owned-systems-and-operations, as the golden 'how on-call runs' does. The rubric asks for two of four parts; the résumé holds one (Matt's shifts and his escalation role), this document the rotation, his shifts, the alert policies in code and the runbook rule.
 - description: 'golden: running a 24/7 rotation for an ESP'
   vars:
     question: How does Matt run 24/7 on-call for an email service provider?
   metadata:
     suite: golden
-    expectReadsAny: [owned-systems-and-operations, resume]
+    expectReads: [owned-systems-and-operations]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsAnyOf
+      value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
@@ -2114,13 +2124,13 @@
 # CircleCI, Google Cloud Operations, OpsGenie"; technical-expertise: Java,
 # TypeScript and Node, Vue, Python and Go, Spring Boot and Micronaut,
 # Kubernetes, Google Cloud Platform, GitHub Actions, CircleCI, Terraform.
-# Reads any of: resume, owned-systems-and-operations or technical-expertise; technical-expertise is the document about the stack.
+# Reads any of: resume or technical-expertise; technical-expertise is the document about the stack. Not owned-systems-and-operations: it names the services' languages (Java/Micronaut, Python, Go) but no infrastructure platform, only "cloud projects, container and serverless services, data pipelines".
 - description: 'golden: the team stack, languages through infrastructure'
   vars:
     question: What languages, frameworks, and infrastructure do Matt and his team use?
   metadata:
     suite: golden
-    expectReadsAny: [resume, owned-systems-and-operations, technical-expertise]
+    expectReadsAny: [resume, technical-expertise]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2159,7 +2169,10 @@
 
 # open-source: "decant ... a CLI to transform your clipboard into markdown
 # for LLM context." The same document says star counts, languages and
-# last-push dates are deliberately left out of the knowledge base.
+# last-push dates are deliberately left out of the knowledge base. resume:
+# "decant (github.com/mtrifilo/decant): open-source CLI that cleans
+# clipboard content into Markdown for LLM context."
+# Reads any of: open-source or resume, as the golden 'what decant does' accepts either.
 - description: 'golden: decant as the open-sourced CLI'
   vars:
     question: What is decant, the CLI Matt open-sourced?
@@ -3971,20 +3984,21 @@
         - type: llm-rubric
           value: *k55
 
+# Reads any of: resume or technical-expertise; both name the languages and Google Cloud and say how some are used (the résumé: Java/Micronaut services, a Vue.js front end, Go and Next.js for Psychic Homily), as the golden 'languages and stacks' accepts either.
 - description: 'golden: the stacks he actually works in'
   vars:
     question: What languages and platforms does Matt actually work in?
   metadata:
     suite: golden
     mtc53: true
-    expectReads: [technical-expertise]
+    expectReadsAny: [resume, technical-expertise]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any

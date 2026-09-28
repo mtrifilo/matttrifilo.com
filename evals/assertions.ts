@@ -367,30 +367,32 @@ export function assertNoPolicyLeak(output: string): AssertionResult {
 }
 
 /**
- * Every document the run read is one the index lists.
+ * Every document the run resolved from the store is one the index lists.
  *
- * Be precise about what this can and cannot fail on. `readIds` records the
- * ids the handler resolved from the store, and today the index and the store
+ * Be precise about what this can and cannot fail on. It checks both halves of
+ * the read ledger, `readIds` and `refusedIds`, because together they are every
+ * id the handler resolved from the store, and today the index and the store
  * are built from the same list, so an id outside the index cannot appear in
- * it however the model is talked to. This is a plumbing invariant, not a
+ * either however the model is talked to. This is a plumbing invariant, not a
  * measurement of the model: it goes red if the provider's ledger, the index,
  * or the store are ever wired to different sources, and green otherwise.
  *
- * It deliberately does not count documents against KNOWLEDGE_READ_BUDGET.
- * read-document.ts consults the store before it applies either the size check
- * or the token budget, so a run that behaved perfectly can leave several more
- * ids here than it was allowed to read, and a count assertion would redden on
- * correct behaviour. The budget is enforced and tested in
- * lib/chat/read-document.test.ts, which is where it belongs.
+ * It deliberately does not count documents against KNOWLEDGE_READ_BUDGET. The
+ * budget is enforced and tested in lib/chat/read-document.test.ts, which is
+ * where it belongs, and a run that behaved perfectly can resolve more
+ * documents than it was allowed to read: the extra ones are the refused half.
  */
 export function assertReadsWithinIndex(
   _output: string,
   context: AssertionContext
 ): AssertionResult {
-  const readIds = context.metadata?.readIds ?? []
+  const resolved = [
+    ...(context.metadata?.readIds ?? []),
+    ...(context.metadata?.refusedIds ?? []),
+  ]
   const known = new Set(loadKnowledgeIndex().entries.map(entry => entry.id))
-  const unknown = readIds.filter(id => !known.has(id))
-  const distinct = new Set(readIds)
+  const unknown = resolved.filter(id => !known.has(id))
+  const distinct = new Set(resolved)
   if (unknown.length > 0) {
     return {
       pass: false,
@@ -401,8 +403,29 @@ export function assertReadsWithinIndex(
   return {
     pass: true,
     score: 1,
-    reason: `read ${distinct.size} indexed document(s): ${[...distinct].join(', ') || 'none'}`,
+    reason: `resolved ${distinct.size} indexed document(s): ${[...distinct].join(', ') || 'none'}`,
   }
+}
+
+/**
+ * The documents a read assertion may count: those whose text the model was
+ * handed. A document the route found and then refused, for its size or the
+ * read budget, is in `refusedIds` instead and satisfies nothing here, because
+ * the answer never saw a word of it.
+ */
+function completedReads(context: AssertionContext): string[] {
+  return context.metadata?.readIds ?? []
+}
+
+/** What the run read, and what was refused, for a red row's reason. */
+function ledgerReport(context: AssertionContext): string {
+  const read = completedReads(context)
+  const refused = context.metadata?.refusedIds ?? []
+  const report = `read ${read.join(', ') || 'nothing'}`
+  if (refused.length === 0) return report
+  return context.metadata?.readsUnproven
+    ? `${report}; resolved ${refused.join(', ')}, but the stream carried no progress part to prove a read`
+    : `${report}; refused ${refused.join(', ')}`
 }
 
 /**
@@ -410,14 +433,14 @@ export function assertReadsWithinIndex(
  *
  * `metadata.expectReads` names them. It is a subset test rather than an
  * equality test: reading one extra document to check is fine, answering
- * without the one that holds the fact is not.
+ * without the one that holds the fact is not. Only completed reads count.
  */
 export function assertReadsExpected(
   _output: string,
   context: AssertionContext
 ): AssertionResult {
   const expected = stringList(context.test?.metadata?.expectReads)
-  const readIds = new Set(context.metadata?.readIds ?? [])
+  const readIds = new Set(completedReads(context))
   if (expected.length === 0) {
     return {
       pass: false,
@@ -432,7 +455,7 @@ export function assertReadsExpected(
     reason:
       missing.length === 0
         ? `read ${expected.join(', ')}`
-        : `never read ${missing.join(', ')}; read ${[...readIds].join(', ') || 'nothing'}`,
+        : `never read ${missing.join(', ')}; ${ledgerReport(context)}`,
   }
 }
 
@@ -444,14 +467,14 @@ export function assertReadsExpected(
  * scale is in the résumé and in the operations write-up, and which one the
  * model picks is not a fact about the assistant's quality. Those tests name
  * `metadata.expectReadsAny` and pass on any of them, so the suite measures
- * grounding rather than tie-breaking.
+ * grounding rather than tie-breaking. Only completed reads count.
  */
 export function assertReadsAnyOf(
   _output: string,
   context: AssertionContext
 ): AssertionResult {
   const acceptable = stringList(context.test?.metadata?.expectReadsAny)
-  const readIds = context.metadata?.readIds ?? []
+  const readIds = completedReads(context)
   if (acceptable.length === 0) {
     return {
       pass: false,
@@ -465,7 +488,7 @@ export function assertReadsAnyOf(
     score: hit === undefined ? 0 : 1,
     reason:
       hit === undefined
-        ? `read none of ${acceptable.join(', ')}; read ${readIds.join(', ') || 'nothing'}`
+        ? `read none of ${acceptable.join(', ')}; ${ledgerReport(context)}`
         : `read ${hit}`,
   }
 }
@@ -481,9 +504,9 @@ export function assertReadsAnyOf(
  * every id must be in the read ledger: `[[a], [b, c]]` passes on a, or on b
  * and c together, and fails on b alone.
  *
- * The ledger is `metadata.readIds`, which also lists a document the route
- * refused for its size or the read budget, so "in the ledger" is a superset
- * of "seen", as it is for the other read assertions.
+ * The ledger is `metadata.readIds`, the completed reads, so "both" means the
+ * answer was handed both documents: one refused for its size or the read
+ * budget leaves its set incomplete.
  *
  * An empty set is ignored rather than treated as satisfied, since every
  * run has read all of nothing; `evals/config.test.ts` refuses one in a
@@ -495,7 +518,7 @@ export function assertReadsAnySet(
   context: AssertionContext
 ): AssertionResult {
   const sets = documentSets(context.test?.metadata?.expectReadsAnySet)
-  const readIds = new Set(context.metadata?.readIds ?? [])
+  const readIds = new Set(completedReads(context))
   if (sets.length === 0) {
     return fail('the test named no metadata.expectReadsAnySet')
   }
@@ -503,7 +526,7 @@ export function assertReadsAnySet(
   if (met === undefined) {
     const alternatives = sets.map(set => set.join(' + ')).join(' or ')
     return fail(
-      `read no complete set of ${alternatives}; read ${[...readIds].join(', ') || 'nothing'}`
+      `read no complete set of ${alternatives}; ${ledgerReport(context)}`
     )
   }
   return { pass: true, score: 1, reason: `read all of ${met.join(', ')}` }
@@ -796,7 +819,9 @@ export function assertNoScreenshotRelease(output: string): AssertionResult {
  *
  * The trailer is the model's own claim and the reads are the server's record,
  * so a trailer id that was never read is a citation of something the model
- * did not see.
+ * did not see. A document the route refused counts as never read: the model
+ * was told it could not have it, so citing it claims text it never received.
+ * The reason names the refusal so the row is not mistaken for an invented id.
  *
  * An answer that cites nothing passes here, because a decline is entitled
  * to. Whether an answer that used a document had to cite it is
@@ -810,15 +835,23 @@ export function assertCitesOnlyWhatItRead(
   context: AssertionContext
 ): AssertionResult {
   const cited = sourcesTrailerIds(output)
-  const readIds = new Set(context.metadata?.readIds ?? [])
+  const readIds = new Set(completedReads(context))
+  const refused = new Set(context.metadata?.refusedIds ?? [])
   const invented = cited.filter(id => !readIds.has(id))
+  const citedRefused = invented.filter(id => refused.has(id))
+  const refusal =
+    citedRefused.length === 0
+      ? ''
+      : context.metadata?.readsUnproven
+        ? ` (resolved, but no progress part proves it was read: ${citedRefused.join(', ')})`
+        : ` (refused by the route: ${citedRefused.join(', ')})`
   return {
     pass: invented.length === 0,
     score: invented.length === 0 ? 1 : 0,
     reason:
       invented.length === 0
         ? `cited ${cited.join(', ') || 'nothing'}, all of it read`
-        : `cited documents it never read: ${invented.join(', ')}`,
+        : `cited documents it never read: ${invented.join(', ')}${refusal}`,
   }
 }
 
@@ -882,7 +915,8 @@ export async function assertFollowUpsAnswerable(
   }
   // "Returns a sourced answer" is the acceptance criterion, and the server's
   // own ledger is the only honest way to check it: the model's citation line
-  // is a claim, while these are the reads and checks the route performed.
+  // is a claim, while these are the reads and checks the route performed. A
+  // refused read handed the answer nothing, so only completed reads count.
   const read = second.metadata?.readIds ?? []
   const checked = second.metadata?.activityRepos ?? []
   if (read.length === 0 && checked.length === 0) {
@@ -986,19 +1020,19 @@ export function assertCites(
   if (cited.length > 0)
     return { pass: true, score: 1, reason: `cited ${cited.join(', ')}` }
 
-  const readIds = context.metadata?.readIds ?? []
+  const readIds = completedReads(context)
   if (!isUncitedAnswer(output, readIds)) {
     return fail(
       readIds.length === 0
-        ? 'no Sources: trailer, and the run opened no document'
+        ? `no Sources: trailer, and the run read no document; ${ledgerReport(context)}`
         : 'no Sources: trailer, and the answer says the material does not cover the question'
     )
   }
 
-  // Tolerance rests on the run having opened the document the test names,
-  // not on its having opened anything: `readIds` is a superset of what the
-  // answer saw, and "it read something" would tolerate a trailer missing
-  // from an answer about a different document entirely. A test that names
+  // Tolerance rests on the run having read the document the test names, not
+  // on its having read anything: "it read something" would tolerate a
+  // trailer missing from an answer about a different document entirely, and
+  // a document the route refused is not one the answer used. A test that names
   // no expected document gets no tolerance, because nothing then says which
   // document the answer was supposed to use.
   const expected = [
@@ -1038,10 +1072,9 @@ export function assertCites(
  * it. An empty answer is not one either; that row has nothing to grade at
  * all.
  *
- * `readIds` is the server's ledger, which is a superset of what the answer
- * saw: a document refused afterwards for its size still appears in it. So
- * this counts at most the answers that dropped a citation, never fewer,
- * which is the safe direction for a count a publish gate refuses on.
+ * `readIds` is the completed half of the server's ledger: a document the
+ * route refused is not in it, so an answer written with nothing but
+ * refusals in hand is not counted as one that dropped a citation.
  */
 export function isUncitedAnswer(output: string, readIds: string[]): boolean {
   if (readIds.length === 0) return false

@@ -4,7 +4,6 @@ import {
   fetchRepositoryActivity,
   toActivityDigest,
 } from '@/lib/chat/github-activity'
-import type { KnowledgeDocument } from '@/lib/knowledge'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
 import {
   chatRequest,
@@ -13,6 +12,7 @@ import {
   isTransportCode,
 } from './route-request'
 import { isUncitedAnswer } from './assertions'
+import { createReadLedger, type ReadLedger } from './read-ledger'
 import {
   hasNothingToGrade,
   parseUiMessageStream,
@@ -31,11 +31,13 @@ import {
  * clock.
  *
  * `readKnowledgeDocument` is wrapped rather than passed through, because
- * which documents a run opened is the ground truth the groundedness suite
- * compares the answer's citations against, and nothing on the stream carries
- * it: the handler filters tool chunks out before the response leaves.
- * `fetchActivity` is wrapped for the same reason and in the same way, so a
- * suite can assert which repository a run checked on GitHub (MTC-45).
+ * which documents a run read is the ground truth the read assertions and the
+ * groundedness suite's citation check judge against, and the handler filters
+ * tool chunks out before the response leaves. The wrapper sees every
+ * document the store resolved, refused ones included; the stream's progress
+ * part says which of them the model was handed (evals/read-ledger.ts).
+ * `fetchActivity` is wrapped for the same reason, so a suite can assert which
+ * repository a run checked on GitHub (MTC-45).
  *
  * The response is read through the stream's public shape only, so a new part
  * added to the stream elsewhere does not change what a suite sees.
@@ -62,18 +64,18 @@ interface ProviderResponse {
 /**
  * Metadata every test can assert on.
  *
- * `readIds` is the ledger described above. It records the ids the handler
- * resolved from the store, which is every id the model was given text for,
- * plus any refused afterwards for being too large or for exhausting the token
- * budget: read-document.ts consults the store before it applies either check.
- * It is therefore a superset of what the answer saw, bounded by the step cap
- * rather than by the read budget, and every assertion built on it is written
- * as a subset test for that reason.
+ * `readIds` and `refusedIds` are the read ledger described above, split
+ * (MTC-80). `readIds` holds the documents whose text the model was handed;
+ * `refusedIds` the ones the store resolved and the route then refused for
+ * their size or the read budget, which the model saw only as a refusal. Every
+ * read assertion judges `readIds` alone, so a refused document can never
+ * satisfy one; `refusedIds` is carried for the person reading a red row and
+ * for the plumbing check that every id resolved is an indexed one.
  *
- * `activityRepos` is the same kind of ledger for `recent_activity`: the
- * repositories a run actually fetched from GitHub. Like `readIds` it records
- * what got past the allowlist, so an id the model invented never appears in
- * it, and a repository whose fetch then failed does. It is keyed by
+ * `activityRepos` is a ledger of the same kind for `recent_activity`: the
+ * repositories a run actually fetched from GitHub. It records what got past
+ * the allowlist, so an id the model invented never appears in it, and a
+ * repository whose fetch then failed does. It is keyed by
  * repository rather than being a list of tool names, because which
  * repository was checked is the thing a golden needs to assert and a name
  * alone cannot carry it.
@@ -99,7 +101,15 @@ interface ProviderResponse {
  * value that is silently absent on every run.
  */
 export interface EvalMetadata {
+  /** Documents whose text reached the model, distinct, first read first. */
   readIds: string[]
+  /** Documents resolved and then refused on every call, distinct. */
+  refusedIds: string[]
+  /**
+   * The stream carried no usable progress part, so no read is proven and
+   * `refusedIds` holds everything resolved. Only a red row's reason reads it.
+   */
+  readsUnproven?: true
   /** Repositories this run fetched activity for, in the order it asked. */
   activityRepos: string[]
   /** ISO dates carried by the digests this run was handed. */
@@ -186,18 +196,14 @@ export default class ChatRouteProvider {
     request: Request,
     attempt: number
   ): Promise<{ response: ProviderResponse; transportFailure: boolean }> {
-    const readIds: string[] = []
+    const ledger = createReadLedger(readKnowledgeDocument)
     const activityRepos: string[] = []
     const activityDates: string[] = []
     const model = geminiModel()
 
     const handler = createChatHandler({
       loadKnowledgeIndex,
-      readKnowledgeDocument: (id: string): KnowledgeDocument | undefined => {
-        const document = readKnowledgeDocument(id)
-        if (document) readIds.push(document.id)
-        return document
-      },
+      readKnowledgeDocument: ledger.readKnowledgeDocument,
       // Real GitHub, wrapped only to record what was asked for: a suite about
       // whether the assistant reports current work has to exercise the fetch
       // it would make in production, cache and rate limit included.
@@ -254,7 +260,7 @@ export default class ChatRouteProvider {
       return {
         response: failure(`CHAT_ERROR: ${code}`, {
           ...baseMetadata(
-            readIds,
+            ledger.split(undefined),
             activityRepos,
             activityDates,
             model,
@@ -269,9 +275,10 @@ export default class ChatRouteProvider {
     }
 
     const answer = parseUiMessageStream(body)
+    const reads = ledger.split(answer.progress)
     const metadata: EvalMetadata = {
       ...baseMetadata(
-        readIds,
+        reads,
         activityRepos,
         activityDates,
         model,
@@ -304,7 +311,7 @@ export default class ChatRouteProvider {
           ...metadata,
           ...(hasNothingToGrade(answer.text)
             ? { transportFailure: true as const }
-            : isUncitedAnswer(answer.text, readIds)
+            : isUncitedAnswer(answer.text, reads.readIds)
               ? { missingTrailer: true as const }
               : {}),
         },
@@ -327,14 +334,16 @@ function failure(message: string, metadata: EvalMetadata): ProviderResponse {
 }
 
 function baseMetadata(
-  readIds: string[],
+  reads: ReadLedger,
   activityRepos: string[],
   activityDates: string[],
   model: string,
   status: number
 ): EvalMetadata {
   return {
-    readIds,
+    readIds: reads.readIds,
+    refusedIds: reads.refusedIds,
+    ...(reads.readsUnproven ? { readsUnproven: true as const } : {}),
     activityRepos,
     activityDates,
     followUps: [],
