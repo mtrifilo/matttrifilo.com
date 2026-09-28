@@ -1,7 +1,4 @@
-import {
-  SOURCES_TRAILER_PREFIX,
-  stripFollowUpsTrailer,
-} from '@/lib/chat/answer'
+import { findSourcesTrailer, stripTrailers } from '@/lib/chat/answer'
 import type { ChatMessageMetadata } from '@/lib/chat/handler'
 
 /**
@@ -90,42 +87,26 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
  *
  * This is the model's claim about what it used, which is exactly why the
  * groundedness suite checks it against the reads the server actually
- * performed. Only a final line opening with the literal prefix counts, which
- * matches how the browser finds the line in lib/chat/answer.ts.
+ * performed. The line is found by the browser's own parser,
+ * `findSourcesTrailer` in lib/chat/answer.ts, so a suite checks the line the
+ * page hides and no other: a line the page would leave on screen as prose
+ * (bold, lower case, or not the last line) carries no ids here either.
  */
 export function sourcesTrailerIds(text: string): string[] {
-  // The follow-ups block comes after the citation line (MTC-41), so the
-  // "final line" this reads is only final once that block is off the end.
-  const trimmed = stripFollowUpsTrailer(text).trimEnd()
-  const lastLine = trimmed.slice(trimmed.lastIndexOf('\n') + 1).trimStart()
-  if (!lastLine.startsWith(SOURCES_TRAILER_PREFIX.trimEnd())) return []
-  return lastLine
-    .slice(lastLine.indexOf(':') + 1)
-    .split(',')
-    .map(id => id.trim().replace(/[.;]+$/, ''))
-    .filter(id => id.length > 0)
+  return findSourcesTrailer(text)?.ids ?? []
 }
 
 /**
  * The answer without either trailer, for assertions that read the prose.
  *
- * The citation half is deliberately a separate function from the browser's
- * `stripSourcesTrailer`: that one is client copy handling and may one day
- * keep a partial trailer on screen, while this one only has to hand a suite
- * the sentences. The follow-ups half is shared, because a suite reading past
- * that marker would judge the model's proposed questions as part of the
- * answer: a probe's forbidden phrase inside a suggestion would read as an
- * invented fact.
+ * Exactly the text the transcript renders, less trailing whitespace, because
+ * that is what a visitor reads. Taking the follow-ups block off matters as
+ * much as the citation line: a suite reading past that marker would judge
+ * the model's proposed questions as part of the answer, and a probe's
+ * forbidden phrase inside a suggestion would read as an invented fact.
  */
 export function answerProse(text: string): string {
-  const trimmed = stripFollowUpsTrailer(text).trimEnd()
-  const lastBreak = trimmed.lastIndexOf('\n')
-  const lastLine = trimmed.slice(lastBreak + 1).trimStart()
-  // `trimmed`, not `text`: an answer with follow-ups and no citation line
-  // has already had the block taken off it, and handing the raw text back
-  // would put the questions into the prose every assertion reads.
-  if (!lastLine.startsWith(SOURCES_TRAILER_PREFIX.trimEnd())) return trimmed
-  return trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd()
+  return stripTrailers(text).trimEnd()
 }
 
 /**

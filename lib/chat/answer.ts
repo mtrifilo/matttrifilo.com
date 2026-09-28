@@ -136,14 +136,48 @@ export function joinTextParts(
  * of a real answer is mistaken for it. A half-written trailer stays on screen
  * for the tokens it takes to finish the word, which is the cost of not
  * guessing at prefixes like "So".
+ *
+ * It reads the final line of the text it is given, so it expects text the
+ * follow-ups block is already off; `stripTrailers` and `findSourcesTrailer`
+ * take the whole answer.
  */
 export function stripSourcesTrailer(text: string): string {
-  // Models routinely end with a newline; without this the "final line" would
-  // be the empty string after it, and the trailer would stay on screen.
-  const trimmed = text.trimEnd()
-  const lastBreak = trimmed.lastIndexOf('\n')
-  if (!TRAILER_LINE.test(trimmed.slice(lastBreak + 1))) return text
-  return trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd()
+  return citationLineAtEnd(text)?.prose ?? text
+}
+
+/** An answer's citation line, split from the prose above it. */
+export interface SourcesTrailer {
+  /** Everything above the citation line, trailing whitespace removed. */
+  prose: string
+  /**
+   * The ids the line names, in the order written, each trimmed of whitespace
+   * and of the full stop or semicolon a model ends a list with. Empty when
+   * the line names none, as a line still being streamed does.
+   */
+  ids: string[]
+}
+
+/**
+ * The citation line of a whole answer, found by exactly the steps
+ * `stripTrailers` takes to hide it, or `undefined` when there is none.
+ *
+ * The evals read the model's citations through this rather than through a
+ * parser of their own, so the line the transcript hides and the line a suite
+ * checks against the server's reads are the same line by construction: a
+ * form the page leaves on screen as prose is a form the suites count as no
+ * trailer at all.
+ */
+export function findSourcesTrailer(text: string): SourcesTrailer | undefined {
+  const found = citationLineAtEnd(withoutFollowUps(text))
+  if (!found) return undefined
+  return {
+    prose: found.prose,
+    ids: found.line
+      .slice(found.line.indexOf(':') + 1)
+      .split(',')
+      .map(id => id.trim().replace(/[.;]+$/, ''))
+      .filter(id => id.length > 0),
+  }
 }
 
 /**
@@ -173,9 +207,28 @@ export function stripFollowUpsTrailer(text: string): string {
  * it the raw document ids show for those frames.
  */
 export function stripTrailers(text: string): string {
-  return stripSourcesTrailer(
-    stripPartialFollowUpsMarker(stripFollowUpsTrailer(text))
-  )
+  return stripSourcesTrailer(withoutFollowUps(text))
+}
+
+/** The answer with the follow-ups block, whole or half written, taken off. */
+function withoutFollowUps(text: string): string {
+  return stripPartialFollowUpsMarker(stripFollowUpsTrailer(text))
+}
+
+/**
+ * The final line, when it is the citation line.
+ *
+ * Models routinely end with a newline; without the trim the "final line"
+ * would be the empty string after it, and the trailer would stay on screen.
+ */
+function citationLineAtEnd(
+  text: string
+): { prose: string; line: string } | undefined {
+  const trimmed = text.trimEnd()
+  const lastBreak = trimmed.lastIndexOf('\n')
+  const line = trimmed.slice(lastBreak + 1)
+  if (!TRAILER_LINE.test(line)) return undefined
+  return { prose: trimmed.slice(0, Math.max(lastBreak, 0)).trimEnd(), line }
 }
 
 /**

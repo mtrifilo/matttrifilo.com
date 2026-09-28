@@ -56,7 +56,7 @@ interface CallContext {
 interface ProviderResponse {
   output: string
   error?: string
-  metadata?: Record<string, unknown>
+  metadata?: EvalMetadata
 }
 
 /**
@@ -93,8 +93,12 @@ interface ProviderResponse {
 
  * `finishReason` is carried for the person reading a red row, not for an
  * assertion. `incomplete` and `truncated` are what assertAnswered judges.
+ *
+ * Closed, with no index signature: the assertions read this type, so a key
+ * nothing here declares is a type error where it is read rather than a
+ * value that is silently absent on every run.
  */
-export interface EvalMetadata extends Record<string, unknown> {
+export interface EvalMetadata {
   readIds: string[]
   /** Repositories this run fetched activity for, in the order it asked. */
   activityRepos: string[]
@@ -318,10 +322,7 @@ export default class ChatRouteProvider {
  * empty string. An error result cannot be mistaken for a pass, and the run
  * summary counts it against the suite.
  */
-function failure(
-  message: string,
-  metadata: Record<string, unknown>
-): ProviderResponse {
+function failure(message: string, metadata: EvalMetadata): ProviderResponse {
   return { output: message, error: message, metadata }
 }
 

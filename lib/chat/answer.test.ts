@@ -6,6 +6,7 @@ import {
   SOURCES_TRAILER_PREFIX,
   announcementFor,
   discardsQuestion,
+  findSourcesTrailer,
   joinTextParts,
   noticeFor,
   parseFollowUps,
@@ -89,6 +90,50 @@ describe('stripSourcesTrailer', () => {
       expect(stripSourcesTrailer(text)).toBe('Matt shipped it.')
     }
   )
+})
+
+describe('findSourcesTrailer', () => {
+  test('splits the prose from the ids the line names, in order', () => {
+    expect(
+      findSourcesTrailer(
+        `Matt shipped it.\n\n${SOURCES_TRAILER_PREFIX}resume, blog-agents`
+      )
+    ).toEqual({ prose: 'Matt shipped it.', ids: ['resume', 'blog-agents'] })
+  })
+
+  test('trims each id of whitespace and a closing full stop or semicolon', () => {
+    expect(
+      findSourcesTrailer('Text.\nSources:  resume; ,  faq. \n')?.ids
+    ).toEqual(['resume', 'faq'])
+  })
+
+  test('finds the line under the follow-ups block, as stripTrailers does', () => {
+    const text = `Matt shipped it.\n${SOURCES_TRAILER_PREFIX}resume\nFollow-ups:\nWhat does his team own?`
+    expect(findSourcesTrailer(text)).toEqual({
+      prose: 'Matt shipped it.',
+      ids: ['resume'],
+    })
+    expect(stripTrailers(text)).toBe('Matt shipped it.')
+  })
+
+  test('a line with no ids yet is still the citation line', () => {
+    expect(findSourcesTrailer('Matt shipped it.\nSources:')).toEqual({
+      prose: 'Matt shipped it.',
+      ids: [],
+    })
+  })
+
+  test('is undefined wherever stripTrailers leaves the text on screen', () => {
+    for (const text of [
+      'Matt shipped it.',
+      'Matt shipped it.\n**Sources:** resume',
+      'Matt shipped it.\nsources: resume',
+      `${SOURCES_TRAILER_PREFIX}resume\n\nAnd then he shipped it.`,
+    ]) {
+      expect(findSourcesTrailer(text)).toBeUndefined()
+      expect(stripTrailers(text)).toBe(text)
+    }
+  })
 })
 
 const followUpsBlock = (...questions: string[]) =>

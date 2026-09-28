@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { stripTrailers } from '@/lib/chat/answer'
 import {
   answerProse,
   hasNothingToGrade,
@@ -103,6 +104,92 @@ describe('sourcesTrailerIds', () => {
     expect(sourcesTrailerIds('Sources: resume\nand then more prose')).toEqual(
       []
     )
+  })
+})
+
+describe('the page and the suites agree on what a citation line is', () => {
+  // Read from outside, as behaviour: the page hides the line when
+  // `stripTrailers` takes it off, and a suite reads it when it yields ids and
+  // leaves the line out of the prose it judges. A form on which the two
+  // disagree is either raw ids on screen that no suite compared with the
+  // reads, or a citation a suite checked that the visitor never saw hidden.
+  const line = 'Sources: resume'
+  const cases: [
+    label: string,
+    text: string,
+    citation: string,
+    read: boolean,
+  ][] = [
+    ['the canonical line', `He led it.\n\n${line}`, line, true],
+    ['a line ending in a newline', `He led it.\n${line}\n\n`, line, true],
+    ['a line indented by a space', `He led it.\n  ${line}`, line, true],
+    [
+      'a line with text after the ids',
+      'He led it.\nSources: resume. See the dates there.',
+      'Sources: resume. See the dates there.',
+      true,
+    ],
+    [
+      'a line above the follow-ups block',
+      `He led it.\n${line}\nFollow-ups:\nWhat does his team own?`,
+      line,
+      true,
+    ],
+    [
+      'a line above a half-written follow-ups marker',
+      `He led it.\n${line}\nFollow`,
+      line,
+      true,
+    ],
+    [
+      'a bold label',
+      'He led it.\n**Sources:** resume',
+      '**Sources:** resume',
+      false,
+    ],
+    [
+      'a lower-case label',
+      'He led it.\nsources: resume',
+      'sources: resume',
+      false,
+    ],
+    [
+      'an upper-case label',
+      'He led it.\nSOURCES: resume',
+      'SOURCES: resume',
+      false,
+    ],
+    [
+      'a heading',
+      'He led it.\n## Sources: resume',
+      '## Sources: resume',
+      false,
+    ],
+    ['a singular label', 'He led it.\nSource: resume', 'Source: resume', false],
+    [
+      'a line that is not the last',
+      `${line}\nAnd then more prose.`,
+      line,
+      false,
+    ],
+    [
+      'a sentence that opens with the word',
+      'He led it.\nSources of truth matter.',
+      'Sources of truth matter.',
+      false,
+    ],
+  ]
+
+  test.each(cases)('%s', (_label, text, citation, read) => {
+    expect({
+      pageShows: stripTrailers(text).includes(citation),
+      suiteReadsIds: sourcesTrailerIds(text).length > 0,
+      suiteProseShows: answerProse(text).includes(citation),
+    }).toEqual({
+      pageShows: !read,
+      suiteReadsIds: read,
+      suiteProseShows: !read,
+    })
   })
 })
 
