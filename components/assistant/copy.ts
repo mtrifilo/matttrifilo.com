@@ -118,11 +118,8 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
  *
- * These tags also group the "see all" list (starter-groups.ts): a tagged
- * question is listed under its theme and every other question under
- * STARTER_UNTAGGED_HEADING. Retagging a head question moves it in the list
- * too, and since only head questions can be tagged, no question outside the
- * head can be listed under a theme.
+ * These tags decide only what the ticker's head opens on. The "see all"
+ * list is grouped by STARTER_LIST_THEMES, which covers the whole pool.
  */
 export const STARTER_HEAD_THEMES: Partial<
   Record<StarterQuestion, FeaturedThemeKey>
@@ -175,6 +172,66 @@ export const STARTER_THEME_HEADINGS: Record<FeaturedThemeKey, string> = {
  * claims, which the list shows last (MTC-85).
  */
 export const STARTER_UNTAGGED_HEADING = 'More'
+
+/**
+ * Matt's to change: which featured theme each starter question is listed
+ * under in the "see all" list (Matt, 2026-09-28, MTC-85). `null` lists a
+ * question under STARTER_UNTAGGED_HEADING.
+ *
+ * It covers the whole pool and is separate from STARTER_HEAD_THEMES, which
+ * tags only the head and decides only what the ticker opens on (MTC-76); a
+ * question can sit in a theme here without being in the head. A question
+ * added to the pool and not placed here is listed under
+ * STARTER_UNTAGGED_HEADING until Matt places it, so a new pill needs no
+ * entry to appear. Within a group the list keeps the pool's order.
+ */
+export const STARTER_LIST_THEMES: Partial<
+  Record<StarterQuestion, FeaturedThemeKey | null>
+> = {
+  "What measurable results did Matt's team get from adopting AI coding agents?":
+    'measuredDelivery',
+  'How does Matt keep quality high when AI agents write most of the code?':
+    'measuredDelivery',
+  "How did Matt's team move to independent deploys, and how long did it take?":
+    'measuredDelivery',
+
+  'What is the AI Email Engagement Summary feature Matt built?':
+    'productOutcomes',
+  'What is Symphony, and what did Matt do with it?': 'productOutcomes',
+  "What was Matt's part in breaking the Keap monolith into services?":
+    'productOutcomes',
+
+  "What does Matt's Email Reliability team own at Thryv?":
+    'operationalOwnership',
+  'How does Matt run 24/7 on-call for an email service provider?':
+    'operationalOwnership',
+  'How does Matt prepare email sending for Black Friday and Cyber Monday?':
+    'operationalOwnership',
+  'How did Matt handle the February 2024 cloud-provider outage?':
+    'operationalOwnership',
+  'What languages, frameworks, and infrastructure do Matt and his team use?':
+    'operationalOwnership',
+
+  "How did Matt roll out AI tooling and best practices across Thryv's engineering org?":
+    'orgAiAdoption',
+  'How does Matt use AI coding agents?': 'orgAiAdoption',
+  "How does Matt think the engineer's job changes when agents write the code?":
+    'orgAiAdoption',
+  'How does Matt manage the cost of AI tooling?': 'orgAiAdoption',
+  'How did Matt handle resistance to AI tools on the team?': 'orgAiAdoption',
+
+  'How much code does Matt ship himself as an engineering manager?': null,
+  'What did Matt ship recently?': null,
+  "What is Matt's advice to junior engineers in 2026?": null,
+  'What is decant, the CLI Matt open-sourced?': null,
+  'What is Psychic Homily, and what is it built with?': null,
+  'What awards and recognition has Matt received?': null,
+  'Where is Matt based, and is he open to relocating?': null,
+  'What did Matt do before software engineering?': null,
+  'How has Matt led a team through an acquisition?': null,
+  'What does Matt think good engineering leadership looks like?': null,
+  'How does Matt build a team that keeps running without him?': null,
+}
 
 /**
  * The control that empties the transcript. Two of the route's refusals tell

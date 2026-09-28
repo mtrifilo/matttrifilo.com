@@ -13,7 +13,7 @@ import { setTouchDevice } from '@/test/touch-device'
 import {
   seeAllQuestionsLabel,
   SHOW_FEWER_LABEL,
-  STARTER_HEAD_THEMES,
+  STARTER_LIST_THEMES,
   STARTER_QUESTIONS,
   STARTER_THEME_HEADINGS,
   STARTER_UNTAGGED_HEADING,
@@ -1334,7 +1334,8 @@ describe('every question at once, as a list (MTC-85)', () => {
    * than from starterGroups, so a grouping bug cannot agree with itself.
    */
   function expectedSequence(): string[] {
-    const tags: Partial<Record<string, string>> = STARTER_HEAD_THEMES
+    const tags: Partial<Record<string, string | null>> = STARTER_LIST_THEMES
+    const themeOf = (question: string) => tags[question] ?? null
     const pool: readonly string[] = STARTER_QUESTIONS
     const headed = (heading: string, questions: readonly string[]) =>
       questions.length > 0 ? [`# ${heading}`, ...questions] : []
@@ -1342,12 +1343,12 @@ describe('every question at once, as a list (MTC-85)', () => {
       ...FEATURED_THEMES.flatMap(theme =>
         headed(
           STARTER_THEME_HEADINGS[theme.key],
-          pool.filter(question => tags[question] === theme.key)
+          pool.filter(question => themeOf(question) === theme.key)
         )
       ),
       ...headed(
         STARTER_UNTAGGED_HEADING,
-        pool.filter(question => tags[question] === undefined)
+        pool.filter(question => themeOf(question) === null)
       ),
     ]
   }
@@ -1410,6 +1411,25 @@ describe('every question at once, as a list (MTC-85)', () => {
     expect(new Set(announced)).toEqual(new Set(STARTER_QUESTIONS))
     // Still the one named group, now holding the list.
     expect(screen.getAllByRole('group')).toHaveLength(1)
+  })
+
+  test("draws Matt's groups: 3, 3, 5 and 5 under the themes, then 11 under More", () => {
+    render(<StarterTicker onPick={() => {}} />)
+    fireEvent.click(listToggle())
+
+    // Each heading, with the number of pills drawn under it before the next.
+    const counts: [string, number][] = []
+    for (const entry of listSequence()) {
+      if (entry.startsWith('# ')) counts.push([entry.slice(2), 0])
+      else counts[counts.length - 1][1] += 1
+    }
+    expect(counts).toEqual([
+      ...FEATURED_THEMES.map((theme, index): [string, number] => [
+        STARTER_THEME_HEADINGS[theme.key],
+        [3, 3, 5, 5][index],
+      ]),
+      [STARTER_UNTAGGED_HEADING, 11],
+    ])
   })
 
   test('hides the rows while the list is open, and shows them again after', () => {
