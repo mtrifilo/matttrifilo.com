@@ -131,6 +131,18 @@ export function draftSummary(draft: PostDraft): string {
 }
 
 /**
+ * Refuses a drafted summary the knowledge loader would reject, although
+ * what was typed passed: cutting at SUMMARY_MAX_LENGTH can split a range
+ * ("2019 – present") into a dash the loader refuses ("2019 – p…").
+ */
+export function draftSummaryProblem(draft: PostDraft): string | null {
+  const problem = indexFieldProblem(draftSummary(draft))
+  if (problem === null) return null
+  const source = draft.description?.trim() ? 'description' : 'title'
+  return `The summary drafted from the ${source}, cut to ${SUMMARY_MAX_LENGTH} characters, ${problem}. Shorten the ${source}.`
+}
+
+/**
  * The knowledge twin: the same body under the frontmatter contract in
  * lib/knowledge/build.ts, so a new post is answerable the day it lands.
  *
@@ -188,6 +200,11 @@ async function main() {
 
   const today = new Date().toISOString().split('T')[0]
   const draft: PostDraft = { title, date: today, categories, description }
+  const summaryProblem = draftSummaryProblem(draft)
+  if (summaryProblem) {
+    console.error(summaryProblem)
+    process.exit(1)
+  }
   const slug = postSlug(title, today)
   const filepath = path.join(BLOG_DIR, `${slug}.md`)
   const knowledgePath = path.join(KNOWLEDGE_BLOG_DIR, `${slug}.md`)

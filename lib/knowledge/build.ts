@@ -239,9 +239,9 @@ const LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/
  * the prompt, so the scaffold and the loader refuse the same values.
  *
  * Dashes are judged by findPunctuationDashes, the check lib/site-copy.test.ts
- * runs over the whole model context, so a value this accepts cannot fail
- * that test: an em dash is refused, and so is an en dash used as one ("A –
- * B"), while a range ("2019 – 2021") passes.
+ * runs over the rendered messages, the index among them, so a value this
+ * accepts cannot fail that test: an em dash is refused, and so is an en
+ * dash used as one ("A – B"), while a range ("2019 – 2021") passes.
  */
 export function indexFieldProblem(value: string): string | null {
   if (LINE_BREAK.test(value)) return 'must be one line'

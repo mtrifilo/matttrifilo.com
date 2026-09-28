@@ -10,6 +10,7 @@ import {
   buildKnowledgeTwin,
   buildPostFile,
   draftSummary,
+  draftSummaryProblem,
   frontmatterProblem,
   postSlug,
   STARTER_BODY,
@@ -139,5 +140,17 @@ describe('new-blog-post scaffold', () => {
     const long = draftSummary({ ...draft, description: 'word '.repeat(60) })
     expect(long.length).toBeLessThanOrEqual(160)
     expect(long.endsWith('…')).toBe(true)
+  })
+
+  test('a summary the cut would break is refused at the prompt', () => {
+    // The description passes as typed, but the cut at 160 characters
+    // leaves the range's left end and dash without its right end.
+    const enDash = String.fromCodePoint(0x2013)
+    const description = `${'a'.repeat(150)} 2019 ${enDash} present, and it kept going.`
+    expect(frontmatterProblem('description', description)).toBeNull()
+    expect(draftSummaryProblem({ ...draft, description })).toMatch(
+      /^The summary drafted from the description, cut to 160 characters, may not contain an em dash, or an en dash used as one/
+    )
+    expect(draftSummaryProblem(draft)).toBeNull()
   })
 })
