@@ -2838,8 +2838,8 @@
 # 2026. Two hires in 2025, both of whom became high performers quickly."
 # faq, the hiring answer's last sentence: "In 2025 he hired two engineers who
 # became high performers within months, with zero voluntary attrition as
-# manager." The rubric also accepts its interviewing, ramp and growth
-# practices as added detail.
+# manager." The rubric also accepts the interviewing, ramp and growth
+# practices the FAQ and the résumé set out, as added detail.
 # Reads any of: resume, recognition-and-programs or faq; each states both outcomes in its own words.
 - description: 'golden: hiring and retention outcomes'
   vars:
@@ -2878,9 +2878,9 @@
             treat them as mandatory, and expects demonstrable
             agentic-engineering skill to be where emerging potential shows
             next. It may also describe the hiring, ramp and growth practices
-            the FAQ sets out, such as the tailored 30/60/90-day plan aimed at
-            a first pull request within the first few days, or the first
-            one-on-one centered on a new hire's long-term goals. It does not
+            the FAQ and the résumé set out, such as the 30/60/90-day plan aimed
+            at a first merged pull request within days, or one-on-ones that
+            start from a report's long-term goals. It does not
             invent an interview format, a number of rounds, or any other
             practice the published material does not give. It is written about
             Matt in the third person, and it must not present an inferred
@@ -4087,10 +4087,12 @@
 #
 # Each question is the exact pill text in STARTER_QUESTIONS. Each rubric
 # requires two of its facts, and every pair includes one that only the FAQ
-# document it pins states, so each test pins that document alone. The résumé
-# covers location, languages and the 2025 hires, which the rubrics accept
-# but do not grade, and names the player-coach title and DORA metrics only
-# as past role and skill, not as what he wants next.
+# document it pins states, so each test pins that document alone, except the
+# hiring golden: the résumé states two of its three practices, so it accepts
+# either. The résumé also covers location, languages and the 2025 hires,
+# which the rubrics accept but do not grade, and names the player-coach
+# title and DORA metrics only as past role and skill, not as what he wants
+# next.
 
 # faq, "What is he looking for in his next role?": "a hands-on software
 # engineering manager role, or a player-coach role"; "He is also ready to
@@ -4164,21 +4166,23 @@
 # experience or high potential related to the role", then "signals of high
 # agency and strong autonomy"; "For software engineers, the goal is to merge
 # their first pull request within the first few days"; "his first one-on-one
-# with a new hire always centers on their long-term goals".
-# Reads: faq only; the résumé and recognition-and-programs give the hiring outcomes but none of the process graded here.
+# with a new hire always centers on their long-term goals". resume: "Coach
+# through regular 1:1s, starting from each report's long-term goals" and
+# "onboard on a 30/60/90 plan that aims for a first merged PR within days".
+# Reads any of: faq or resume; each states two of the three practices the rubric grades.
 - description: 'golden: how he hires and grows engineers'
   vars:
     question: How does Matt hire and grow engineers?
   metadata:
     suite: golden
-    expectReads: [faq]
+    expectReadsAny: [faq, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsExpected
+      value: file://assertions.ts:assertReadsAnyOf
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -4196,19 +4200,20 @@
             interviews Matt looks first for demonstrated experience or high
             potential for the role and then for signals of high agency and
             strong autonomy in what candidates have owned and delivered; he
-            ramps a new hire by updating and tailoring the team's
-            30/60/90-day plan, with the goal that a new software engineer
-            merges their first pull request within the first few days; and his
-            first one-on-one with a new hire centers on their long-term goals,
-            which he uses to find projects aligned with their growth. It may
-            add his deal-breakers, his support for skip-level one-on-ones so
-            that he is never a bottleneck, the books he names, or the
-            documented outcomes of two hires in 2025 who became high
-            performers and zero voluntary attrition. It does not invent an
-            interview format, a number of rounds, a take-home exercise, or a
-            metric the published material does not give. It is written about
-            Matt in the third person, and it must not present an inferred
-            characterization as a documented one.
+            ramps a new hire on a 30/60/90-day plan tailored to the person,
+            aimed at a first merged pull request within the first few days;
+            and his one-on-ones with a report start from their long-term
+            goals, which he uses to find projects aligned with their growth.
+            The last two are in both the FAQ and the résumé, so either is
+            enough. It may add his deal-breakers, his support for skip-level
+            one-on-ones so that he is never a bottleneck, the books he names,
+            the promotion case he wrote in 2026, or the documented outcomes of
+            two hires in 2025 who became high performers and zero voluntary
+            attrition. It does not invent an interview format, a number of
+            rounds, a take-home exercise, or a metric the published material
+            does not give. It is written about Matt in the third person, and
+            it must not present an inferred characterization as a documented
+            one.
         - type: llm-rubric
           value: *f2
         - type: llm-rubric
