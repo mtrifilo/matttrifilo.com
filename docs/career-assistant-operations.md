@@ -128,6 +128,38 @@ Outcomes: 22 of the 514 recorded `vertexRetries` above zero; 12 of those answere
 
 **Re-measure when any of these change**, because each one moves the distribution and leaves the figures above quietly false: the default thinking level (`DEFAULT_CHAT_REASONING`, `lib/chat/validate.ts`), the model (`DEFAULT_GEMINI_MODEL`, `lib/ai/vertex.ts`, overridable by `GEMINI_MODEL` and not pinned by the workflow, so record which model a run used), the prompt or corpus size, or `CHAT_MAX_STEPS`. Update the table here, the two constants in `lib/ai/bounded-fetch.test.ts`, and the figures on `vertexFirstByteMs` in `lib/chat/handler.ts` together. Note also that GitHub deletes workflow logs on its retention window, so the run ids above stop being checkable after roughly 90 days from their dates.
 
+### Time to the first useful sentence (MTC-87)
+
+`evals/measure-first-sentence.ts` sends ten starter questions at `CHAT_REASONING=low` and `medium`, three times each (60 requests, concurrency 2, no retries), through the eval provider's own handler (`createEvalChatSession` in `evals/provider.ts`), in process, with no server. It reads the stream as it arrives and records, per request, the time from the handler call to the first progress part, the first answer token, and the first complete sentence (`evals/first-sentence.ts`: the first `.`, `?` or `!` followed by whitespace, or the first line break, at or past 40 characters; the whole answer when neither comes), the total, each model call's first byte in order, the documents read, and whether the answer passed its golden's deterministic assertions (the rubrics and the live follow-up check are skipped). It stops starting requests at the first `CHAT_ERROR`. It costs about $1.20 at the list prices under "Cost of a run".
+
+```
+GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals/measure-first-sentence.ts
+```
+
+Measured 2026-09-28, 23:31 to 23:40 UTC, from Matt's machine with Application Default Credentials, `gemini-3.8-flash`, at commit f150256. Nearest-rank, all in ms:
+
+| level  | first progress part p50 / p90 | first complete sentence p50 / p90 | sentence within 8 s | answer step's first byte p50 / p90 | documents read p50 | golden, deterministic |
+| ------ | ----------------------------- | --------------------------------- | ------------------- | ---------------------------------- | ------------------ | --------------------- |
+| low    | 1,485 / 5,411                 | 7,832 / 15,377                    | 18 of 30            | 1,276 / 5,134                      | 1                  | 26 of 30              |
+| medium | 3,204 / 7,121                 | 22,967 / 54,154 (n = 29)          | 0 of 30             | 10,411 / 20,341                    | 2                  | 29 of 30              |
+
+**The first sentence arrives with the whole answer.** `onlyAnswerText` in `lib/chat/handler.ts` holds a step's text until that step ends, so tool-call narration never reaches the bubble (MTC-49). In every request that answered, the first token, the first sentence and the end of the stream fell within 10 ms of each other. What decides the wait is how long the answer step takes to finish, and at `medium` most of that is the silent thinking before its first byte. A policy that asks for the lead sentence first changes nothing a visitor sees while the hold stands.
+
+How the first-byte figure compares (`vertexFirstByteMs`, the slowest call of a request):
+
+| sample                                                     | n   | p50    | p90    | p95    | max    |
+| ---------------------------------------------------------- | --- | ------ | ------ | ------ | ------ |
+| MTC-47, GitHub runners, concurrency 2, 2026-09-22          | 514 | 5,288  | 17,013 | 22,051 | 35,970 |
+| two full runs on Matt's machine, concurrency 8, 2026-09-28 | 358 | 8,019  | 14,051 | 17,193 | 27,223 |
+| this measurement, `low`                                    | 30  | 1,565  | 6,401  | 17,572 | 23,670 |
+| this measurement, `medium`                                 | 30  | 10,905 | 20,855 | 23,233 | 28,517 |
+
+The full-run row is extracted with the recipe above from the `[chat]` lines of the two 2026-09-28 `bun run evals` logs (180 and 178 requests, every one with a value; the first log also has two `TimeoutError` failure lines, which carry none and are counted nowhere in the row). Neither command line sets `CHAT_REASONING`, so both ran at the default `medium` unless the shell exported it, which a log cannot show.
+
+**What these numbers cannot tell you.** They are not Vercel: no egress, no cold start, and a local request pays a fresh ADC token exchange (415 and 709 ms measured) that a deployment's shared federated client mostly does not. They are 30 requests per level in one nine-minute window, so a busy hour can move them a long way. They carry the survivor bias described above: three `medium` calls were cut at the 30 s probe and retried, and their abandoned waits are in the progress and sentence times but not in any first byte. One `medium` request read three documents, checked GitHub, and ended `incomplete` with no text at all; it has no sentence time and is outside the `n = 29`. The deterministic grade is not the golden pass rate: the rubrics are the judgment. `bun run evals:compare` passed the smoke subset 12 of 12 at all three levels the same evening.
+
+**Re-measure** with this script whenever the thinking level changes, for the whole request or for one step, and whenever the hold in `onlyAnswerText`, the model, the prompt or `CHAT_MAX_STEPS` changes, and update this section with the date and the commit. The Vercel-side reading from a browser on a preview is still owed (MTC-87).
+
 ## Runbook: something is wrong
 
 1. Spend or request rate is climbing and it is not visitors: set `CHAT_DISABLED=1` on production and redeploy. The assistant disappears from the site on that deploy (panel, nav entry, résumé button, sitemap entries; `/ask` becomes a 404) and the route refuses. Nothing else on the site changes.
