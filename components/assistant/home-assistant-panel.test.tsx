@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { setTouchDevice } from '@/test/touch-device'
-import { seeAllQuestionsLabel, STARTER_QUESTIONS } from './copy'
+import {
+  ASSISTANT_NAME,
+  seeAllQuestionsLabel,
+  STARTER_QUESTIONS,
+  STARTER_UNTAGGED_HEADING,
+} from './copy'
 import {
   RoutedHomeAssistantPanel,
   type PanelRouter,
@@ -135,6 +140,25 @@ describe('the list of every question on the homepage (MTC-85)', () => {
   test('offers the control that opens it, closed', () => {
     renderPanel()
     expect(listControl().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test("labels its themes one level under the panel's h2 (MTC-97)", () => {
+    // The page's outline: h1, the panel's h2 naming the assistant, then a
+    // heading per theme once the list is open. An h2 here would make each
+    // theme a sibling of the panel instead of a part of it.
+    renderPanel()
+    fireEvent.click(listControl())
+    const panel = screen.getByRole('region', { name: ASSISTANT_NAME })
+    expect(
+      within(panel)
+        .getAllByRole('heading', { level: 2 })
+        .map(heading => heading.textContent)
+    ).toEqual([ASSISTANT_NAME])
+    const themes = within(panel).getAllByRole('heading', { level: 3 })
+    expect(themes.length).toBeGreaterThan(1)
+    expect(themes.map(heading => heading.textContent)).toContain(
+      STARTER_UNTAGGED_HEADING
+    )
   })
 
   test('a pick from the list hands the question over, and how it was picked', () => {
