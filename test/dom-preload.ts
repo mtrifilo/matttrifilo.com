@@ -32,6 +32,11 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
  * `cleanup` unmounts what a test rendered and empties the container. Without
  * it a later query would match an earlier test's markup, and both tests
  * would pass or fail depending on file order.
+ *
+ * **An error a DOM callback throws fails the test.** Happy DOM catches what
+ * a listener throws, as a browser does, so without the hook at the bottom of
+ * this file a component could crash in a handler while every test stayed
+ * green.
  */
 
 /**
@@ -112,8 +117,94 @@ function isReplaced(current: PropertyDescriptor, bun: PropertyDescriptor) {
   return current.get !== bun.get || current.set !== bun.set
 }
 
+/**
+ * The errors Happy DOM caught from DOM callbacks since the last test ended,
+ * in the order they were thrown.
+ *
+ * Happy DOM runs each listener inside its own try/catch: it prints the error,
+ * dispatches it on `window` as an `ErrorEvent`, and carries on, so
+ * `dispatchEvent` returns normally to whoever fired the event. That is why
+ * this listens on `window` rather than wrapping `dispatchEvent`: the catch is
+ * inside Happy DOM's dispatch, around every listener at every node on the
+ * event's path, so a wrapper never sees anything thrown. The `error` event is
+ * the one place every caught error passes through, including a listener's
+ * rejected promise and a `requestAnimationFrame` callback that throws.
+ *
+ * React's own handlers (`onClick` and the rest) take another route. React
+ * catches what they throw and hands it to the global `reportError`, which
+ * the restore above leaves Bun's, and Bun fails the running test on it; an
+ * `async` handler's rejection is an unhandled rejection, which Bun fails the
+ * running test on too. What this hook adds is everything a component
+ * registers with `addEventListener`.
+ *
+ * An error is charged to whichever test is running when Happy DOM catches
+ * it, so a frame callback that fires after its test ended fails a later test;
+ * its stack still names the callback.
+ */
+const caughtDomErrors: unknown[] = []
+
+window.addEventListener(
+  'error',
+  event => {
+    // Happy DOM reports a caught error only as an `ErrorEvent`; an `error`
+    // event of any other kind is not one of them.
+    if (!('error' in event)) return
+    const { error, message } = event as ErrorEvent
+    caughtDomErrors.push(error ?? new Error(message))
+  },
+  // Capture on `window` runs before any listener a component or test adds
+  // there, so one that stops propagation cannot hide the error.
+  { capture: true }
+)
+
+/**
+ * Hands over the errors caught since the last test ended and forgets them,
+ * so they are not rethrown when the test ends. For a test whose premise is
+ * that a listener throws: it asserts on what it takes.
+ */
+export function takeCaughtDomErrors(): unknown[] {
+  return caughtDomErrors.splice(0)
+}
+
 // Imported after registration: React Testing Library reads `document` while
 // its own module evaluates.
 const { cleanup } = await import('@testing-library/react')
 
-afterEach(cleanup)
+afterEach(() => {
+  // Unmounting can fire listeners of its own, so the errors are read after
+  // it; and a cleanup that throws still has to leave nothing recorded for the
+  // next test.
+  let cleanupFailure: { error: unknown } | undefined
+  try {
+    cleanup()
+  } catch (error) {
+    cleanupFailure = { error }
+  }
+  const caught = takeCaughtDomErrors()
+  if (caught.length === 0 && cleanupFailure === undefined) return
+
+  // A new error rather than the caught one rethrown: Bun's reporter prints
+  // where an error was last thrown, which would be this line, not the
+  // listener. The original stacks travel in the message, and the originals
+  // in `cause`.
+  const reports = caught.map(
+    (error, index) =>
+      `${index + 1}. A DOM callback threw and Happy DOM caught it:\n${stackOf(error)}`
+  )
+  if (cleanupFailure) {
+    reports.push(
+      `${reports.length + 1}. React Testing Library's cleanup threw:\n${stackOf(cleanupFailure.error)}`
+    )
+  }
+  throw new Error(
+    `After this test ended, test/dom-preload.ts found ${reports.length === 1 ? 'an error' : `${reports.length} errors`}:\n\n${reports.join('\n\n')}`,
+    {
+      cause: cleanupFailure ? [...caught, cleanupFailure.error] : caught,
+    }
+  )
+})
+
+function stackOf(error: unknown): string {
+  if (error instanceof Error) return error.stack ?? String(error)
+  return String(error)
+}
