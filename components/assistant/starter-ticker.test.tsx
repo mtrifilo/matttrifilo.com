@@ -118,7 +118,9 @@ describe('the questions the ticker offers', () => {
   test('lays the pool out as two rows, each repeated TICKER_COPIES times', () => {
     // The keyframe travels 100 / TICKER_COPIES percent of a track, which is
     // one copy only while each row renders exactly that many.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const { rows } = tickerOf(container)
 
     expect(rows).toHaveLength(2)
@@ -130,7 +132,9 @@ describe('the questions the ticker offers', () => {
   })
 
   test('puts the odd questions in the first row and the even ones in the second', () => {
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const [first, second] = tickerOf(container).rows
 
     const copiesOf = (row: readonly string[]) =>
@@ -140,7 +144,7 @@ describe('the questions the ticker offers', () => {
   })
 
   test('announces every question in the pool exactly once', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
 
     // By role, so this counts what a screen reader and the tab key reach:
     // the trailing copies are aria-hidden and are not in the tree. A copy
@@ -152,7 +156,7 @@ describe('the questions the ticker offers', () => {
   })
 
   test('every announced pill is a real, focusable button', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
 
     for (const pill of questionPills()) {
       expect(pill.tagName).toBe('BUTTON')
@@ -166,7 +170,9 @@ describe('the questions the ticker offers', () => {
   test('silences every copy of a row but the first', () => {
     // One that were focusable would double the tab stops before the
     // composer.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
 
     for (const { track } of tickerOf(container).rows) {
       const copies = [...track.querySelectorAll('.starter-ticker-copy')]
@@ -185,7 +191,9 @@ describe('the questions the ticker offers', () => {
     // under the cursor for much of every loop. Hidden from assistive tech,
     // never dead to a click.
     const picked: string[] = []
-    const { container } = render(<StarterTicker onPick={q => picked.push(q)} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={q => picked.push(q)} />
+    )
     const [first] = tickerOf(container).rows
 
     const pill = first.track
@@ -198,7 +206,7 @@ describe('the questions the ticker offers', () => {
   })
 
   test('names the rows once, as one group', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
 
     // One group in all: a row wrapped in a group of its own would be one
     // more landmark for a screen reader to announce before the questions.
@@ -211,7 +219,9 @@ describe('the questions the ticker offers', () => {
   test('each row wears the class that carries the shared edge fade', () => {
     // Without it a row loses its gradient and parks a focused pill under the
     // edge, and no other check here would notice.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
 
     for (const { viewport } of tickerOf(container).rows) {
       expect(viewport.classList.contains('edge-faded-row')).toBe(true)
@@ -262,7 +272,9 @@ function renderMovingRows({
     const width = typeof copyWidth === 'number' ? copyWidth : copyWidth(this)
     return { ...rect.toJSON(), width } as DOMRect
   }
-  const { container } = render(<StarterTicker onPick={() => {}} />)
+  const { container } = render(
+    <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+  )
   const { rows } = tickerOf(container)
   rows.forEach(({ track }, index) => {
     const rowProgress =
@@ -288,7 +300,9 @@ describe('a moving row, while a pill has focus', () => {
     // into a scroll offset; freezing anyway would move the row wrongly. The
     // width is left at Happy DOM's zero on purpose: this is the width
     // guard, not the no-loop guard tested below.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const { rows } = tickerOf(container)
     for (const { track } of rows)
       track.getAnimations = () => [runningLoop(0.25)]
@@ -553,7 +567,9 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       if (!this.classList.contains('starter-ticker-copy')) return rect
       return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
     }
-    const { container } = render(<StarterTicker onPick={q => picked.push(q)} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={q => picked.push(q)} />
+    )
     const { rows } = tickerOf(container)
     for (const { track } of rows)
       track.getAnimations = () => [runningLoop(0.25)]
@@ -1152,7 +1168,7 @@ describe('a row handed over to the visitor by touch or wheel', () => {
    */
   function scrollThenPlace(scrolledTo: number, secondScrolledTo = 0) {
     const { container, rerender } = render(
-      <StarterTicker onPick={() => {}} startAt={0} />
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} startAt={0} />
     )
     const [first, second] = tickerOf(container).rows
     first.viewport.scrollLeft = scrolledTo
@@ -1162,7 +1178,9 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       if (!this.classList.contains('starter-ticker-copy')) return rect
       return { ...rect.toJSON(), width: COPY_WIDTH_MEASURED } as DOMRect
     }
-    rerender(<StarterTicker onPick={() => {}} startAt={1} />)
+    rerender(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} startAt={1} />
+    )
     return [first, second] as const
   }
 
@@ -1193,7 +1211,9 @@ describe('a row handed over to the visitor by touch or wheel', () => {
 
   test('a row whose width is not measured yet is left moving', () => {
     // Converting the loop by a zero width would park the row at its start.
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const { rows } = tickerOf(container)
     for (const { track } of rows) track.getAnimations = () => [runningLoop(0.4)]
 
@@ -1321,8 +1341,8 @@ describe('every question at once, as a list (MTC-85)', () => {
       child => !child.hasAttribute('hidden')
     )
     return shown.flatMap(child =>
-      [...child.querySelectorAll('p, button')].map(element =>
-        element.tagName === 'P'
+      [...child.querySelectorAll('h2, h3, button')].map(element =>
+        element.tagName !== 'BUTTON'
           ? `# ${element.textContent}`
           : (element.textContent ?? '')
       )
@@ -1354,7 +1374,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   }
 
   test('the control counts the whole pool and starts closed', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
     const control = listToggle()
 
     expect(control.tagName).toBe('BUTTON')
@@ -1366,7 +1386,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   })
 
   test('opens and closes the list, keeping focus on the control', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
     const control = listToggle()
     control.focus()
 
@@ -1384,7 +1404,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   })
 
   test('is reached before the pills, is drawn under them, and names what it controls', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
     const control = listToggle()
     const group = starterGroup()
 
@@ -1402,7 +1422,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   })
 
   test('shows every question once, grouped by theme in the featuring order, the untagged last', () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
     fireEvent.click(listToggle())
 
     expect(listSequence()).toEqual(expectedSequence())
@@ -1414,7 +1434,7 @@ describe('every question at once, as a list (MTC-85)', () => {
   })
 
   test("draws Matt's groups: 3, 3, 5 and 5 under the themes, then 11 under More", () => {
-    render(<StarterTicker onPick={() => {}} />)
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
     fireEvent.click(listToggle())
 
     // Each heading, with the number of pills drawn under it before the next.
@@ -1440,8 +1460,82 @@ describe('every question at once, as a list (MTC-85)', () => {
     ])
   })
 
+  /** The headings the open list shows, in the order it shows them. */
+  function expectedHeadings(): string[] {
+    return expectedSequence()
+      .filter(entry => entry.startsWith('# '))
+      .map(entry => entry.slice(2))
+  }
+
+  test.each([2, 3] as const)(
+    'each theme is labelled by a real heading, at the level the surface passes (%i)',
+    level => {
+      // MTC-97: a screen-reader visitor jumps between themes by heading.
+      // The level is one below the surface's own heading for the
+      // assistant, which is why the surface passes it.
+      render(<StarterTicker listHeadingLevel={level} onPick={() => {}} />)
+      fireEvent.click(listToggle())
+
+      const headings = within(starterGroup()).getAllByRole('heading')
+      expect(headings.map(heading => heading.textContent)).toEqual(
+        expectedHeadings()
+      )
+      for (const heading of headings) {
+        expect(heading.tagName).toBe(`H${level}`)
+      }
+      // Headings take no focus, so the tab order is still the pills'.
+      expect(headings.every(heading => heading.tabIndex < 0)).toBe(true)
+      expect(screen.getAllByRole('group')).toHaveLength(1)
+    }
+  )
+
+  test("labels in Matt's style: 14 px, semibold, sentence case, the foreground color", () => {
+    // Matt, 2026-09-28 (MTC-97): at the pills' scale and in the main text
+    // color, not 11 px muted capitals.
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
+    fireEvent.click(listToggle())
+
+    for (const heading of within(starterGroup()).getAllByRole('heading')) {
+      const classes = [...heading.classList]
+      expect(classes).toEqual(
+        expect.arrayContaining([
+          'text-sm',
+          'leading-[1.3]',
+          'font-semibold',
+          'text-foreground',
+        ])
+      )
+      expect(classes).not.toContain('uppercase')
+      expect(classes).not.toContain('text-muted-foreground')
+      expect(classes.some(name => name.startsWith('tracking-'))).toBe(false)
+      expect(classes.some(name => name.startsWith('text-['))).toBe(false)
+      // Sentence case comes from the strings themselves.
+      const text = heading.textContent ?? ''
+      expect(text.charAt(0)).toBe(text.charAt(0).toUpperCase())
+      expect(text).not.toBe(text.toUpperCase())
+    }
+  })
+
+  test('spaces the groups by proximity: more above a label than below it', () => {
+    // 1.5 rem between groups, 0.5 rem from a label to its pills, so a label
+    // belongs to the questions under it. The first label has no extra space
+    // of its own: it opens the list where the rows began.
+    render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
+    fireEvent.click(listToggle())
+
+    const headings = within(starterGroup()).getAllByRole('heading')
+    const list = headings[0]?.parentElement?.parentElement
+    expect(list?.classList.contains('gap-6')).toBe(true)
+    for (const heading of headings) {
+      expect(heading.parentElement?.classList.contains('gap-2')).toBe(true)
+      expect(heading.className).not.toMatch(/\b-?[mp][xytblrse]?-/)
+    }
+  })
+
   test('hides the rows while the list is open, and shows them again after', () => {
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const wrapper = rowsWrapper(container)
     expect(wrapper.querySelectorAll('.starter-ticker-row')).toHaveLength(2)
 
@@ -1455,7 +1549,12 @@ describe('every question at once, as a list (MTC-85)', () => {
 
   test('a pick from the list asks its question', () => {
     const picked: string[] = []
-    render(<StarterTicker onPick={question => picked.push(question)} />)
+    render(
+      <StarterTicker
+        listHeadingLevel={2}
+        onPick={question => picked.push(question)}
+      />
+    )
     fireEvent.click(listToggle())
 
     const last = STARTER_QUESTIONS[STARTER_QUESTIONS.length - 1]
@@ -1473,6 +1572,7 @@ describe('every question at once, as a list (MTC-85)', () => {
       return (
         <div {...pressHandlers}>
           <StarterTicker
+            listHeadingLevel={2}
             onPick={question =>
               picks.push({ question, touch: activatedByTouch() })
             }
@@ -1565,7 +1665,9 @@ describe('every question at once, as a list (MTC-85)', () => {
     // as anywhere; what reduced motion changes is that the rows are strips
     // with their own scroll positions to keep.
     setReducedMotion(true)
-    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { container } = render(
+      <StarterTicker listHeadingLevel={2} onPick={() => {}} />
+    )
     const { rows } = tickerOf(container)
     rows[0].viewport.scrollLeft = 90
     rows[1].viewport.scrollLeft = 30
@@ -1590,7 +1692,7 @@ describe('every question at once, as a list (MTC-85)', () => {
       scrolled.push(this)
     }
     try {
-      render(<StarterTicker onPick={() => {}} />)
+      render(<StarterTicker listHeadingLevel={2} onPick={() => {}} />)
       const control = listToggle()
       expect(scrolled).toEqual([])
 
