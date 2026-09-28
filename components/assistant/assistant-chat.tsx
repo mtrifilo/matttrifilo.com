@@ -88,6 +88,7 @@ export function AssistantChat() {
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const statusRef = useRef<HTMLParagraphElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   // True when the visitor stopped the most recent run. The SDK reports an
   // abort as an ordinary `ready` with no error and no metadata, so nothing
@@ -224,14 +225,31 @@ export function AssistantChat() {
   // Empties the transcript, not the composer: what is typed there is the
   // next question (or the refused one, just handed back), and "new
   // conversation" is where it is about to be asked.
+  //
+  // The control that started it is about to go, so focus moves, by the same
+  // rule as a pick. A mouse, pen or key puts the caret in the composer. A
+  // touch must not raise the keyboard over the fresh page, so focus goes to
+  // its heading instead: the status region has nothing to say once the
+  // transcript is gone, and the heading is where the new conversation
+  // starts, with the intro and the questions right after it. The heading
+  // only exists once the empty state is drawn, so it takes focus in the
+  // commit that draws it.
+  const focusHeadingOnceEmpty = useRef(false)
   const reset = useCallback(() => {
     stop()
     clearError()
     setMessages([])
     setStopped(false)
     askedRef.current = null
-    textareaRef.current?.focus()
-  }, [clearError, setMessages, stop])
+    focusStatusOnceRunning.current = false
+    if (activatedByTouch()) focusHeadingOnceEmpty.current = true
+    else textareaRef.current?.focus()
+  }, [activatedByTouch, clearError, setMessages, stop])
+  useLayoutEffect(() => {
+    if (!focusHeadingOnceEmpty.current || !headingRef.current) return
+    focusHeadingOnceEmpty.current = false
+    headingRef.current.focus()
+  })
 
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
@@ -398,7 +416,7 @@ export function AssistantChat() {
           <ConversationScrollButton />
         </Conversation>
       ) : (
-        <AssistantEmptyState onPick={askPicked} />
+        <AssistantEmptyState headingRef={headingRef} onPick={askPicked} />
       )}
 
       <div className="space-y-2">
