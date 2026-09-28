@@ -1,8 +1,23 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
+import { FEATURED_THEMES } from '@/lib/chat/featuring'
 import { cssBlock } from '@/test/css-block'
-import { STARTER_QUESTIONS } from './copy'
+import {
+  seeAllQuestionsLabel,
+  SHOW_FEWER_LABEL,
+  STARTER_HEAD_THEMES,
+  STARTER_QUESTIONS,
+  STARTER_THEME_HEADINGS,
+  STARTER_UNTAGGED_HEADING,
+} from './copy'
+import { usePickPointer } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import {
   EDGE_FADE_PROPERTY,
@@ -73,6 +88,23 @@ function tickerOf(container: HTMLElement) {
   return { group, rows }
 }
 
+/**
+ * The question pills a screen reader and the tab key reach, which are the
+ * named group's buttons: the control that opens the list sits outside it.
+ */
+function questionPills(): HTMLElement[] {
+  return within(
+    screen.getByRole('group', { name: 'Starter questions' })
+  ).getAllByRole('button')
+}
+
+/** The control that opens and closes the list of every question. */
+function listToggle(): HTMLElement {
+  const control = document.querySelector<HTMLElement>('button[aria-expanded]')
+  if (!control) throw new Error('the ticker rendered no list control')
+  return control
+}
+
 /** The pill labels of one row, every copy, in the order the markup has them. */
 function pillTexts(viewport: HTMLElement): string[] {
   return [...viewport.querySelectorAll('button')].map(
@@ -112,9 +144,7 @@ describe('the questions the ticker offers', () => {
     // the trailing copies are aria-hidden and are not in the tree. A copy
     // that lost its aria-hidden would read as the pool said twice, which is
     // the failure no other test here would notice.
-    const announced = screen
-      .getAllByRole('button')
-      .map(pill => pill.textContent)
+    const announced = questionPills().map(pill => pill.textContent)
     expect(announced).toEqual([...FIRST_ROW, ...SECOND_ROW])
     expect(new Set(announced)).toEqual(new Set(STARTER_QUESTIONS))
   })
@@ -122,7 +152,7 @@ describe('the questions the ticker offers', () => {
   test('every announced pill is a real, focusable button', () => {
     render(<StarterTicker onPick={() => {}} />)
 
-    for (const pill of screen.getAllByRole('button')) {
+    for (const pill of questionPills()) {
       expect(pill.tagName).toBe('BUTTON')
       expect(pill.hasAttribute('disabled')).toBe(false)
       // The trailing copies carry tabIndex -1; an announced pill must not,
@@ -261,7 +291,7 @@ describe('a moving row, while a pill has focus', () => {
     for (const { track } of rows)
       track.getAnimations = () => [runningLoop(0.25)]
 
-    screen.getAllByRole('button')[0].focus()
+    announcedPills(rows[0].viewport)[0].focus()
     expect(rows[0].track.dataset.frozen).toBeUndefined()
   })
 
@@ -1059,6 +1089,39 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       expect(second.track.dataset.frozen).toBeUndefined()
       expect(second.viewport.scrollLeft).toBe(0)
     })
+
+    test('rows handed over before the list opened come back where the visitor left them, still one strip', () => {
+      const { rows } = renderLaidOutRows([0.27, 0.61])
+      const [first, second] = rows
+      fireEvent.touchStart(announcedPills(first.viewport)[0])
+      scrollBy(first.viewport, 40)
+      const leftAt = rows.map(({ viewport }) => viewport.scrollLeft)
+      const trimOf = ({ track }: { track: HTMLElement }) => [
+        track.style.getPropertyValue(SHARED_CUT_PROPERTY),
+        track.style.getPropertyValue(SHARED_WIDTH_PROPERTY),
+      ]
+      const trims = rows.map(trimOf)
+      expect(leftAt[0]).toBe(leftAt[1])
+      expect(leftAt[0]).toBeGreaterThan(0)
+
+      fireEvent.click(listToggle())
+      // A hidden box has no scroll position, which Happy DOM does not
+      // model: the browser's reset, and its report, are stated here.
+      for (const { viewport } of rows) {
+        viewport.scrollLeft = 0
+        fireEvent.scroll(viewport)
+      }
+      fireEvent.click(listToggle())
+
+      rows.forEach((row, index) => {
+        expect(isHandedOver(row.viewport)).toBe(true)
+        expect(row.track.dataset.frozen).toBe('true')
+        expect(row.viewport.scrollLeft).toBe(leftAt[index])
+        expect(trimOf(row)).toEqual(trims[index])
+      })
+      scrollBy(second.viewport, 30)
+      expect(first.viewport.scrollLeft).toBe(leftAt[0] + 30)
+    })
   })
 
   /**
@@ -1208,6 +1271,238 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       expect(isHandedOver(viewport)).toBe(false)
       expect(track.dataset.frozen).toBeUndefined()
       expect(viewport.scrollLeft).toBe(0)
+    }
+  })
+})
+
+describe('every question at once, as a list (MTC-85)', () => {
+  const GROUP_NAME = 'Starter questions'
+
+  function starterGroup(): HTMLElement {
+    return screen.getByRole('group', { name: GROUP_NAME })
+  }
+
+  /** The wrapper that holds both rows, hidden while the list is open. */
+  function rowsWrapper(container: HTMLElement): HTMLElement {
+    const wrapper = container.querySelector<HTMLElement>(
+      '.starter-ticker-row'
+    )?.parentElement
+    if (!wrapper) throw new Error('the ticker rendered no rows')
+    return wrapper
+  }
+
+  /**
+   * The open list as a reader meets it: each heading, marked, followed by
+   * its questions, in document order.
+   */
+  function listSequence(): string[] {
+    const shown = [...starterGroup().children].filter(
+      child => !child.hasAttribute('hidden')
+    )
+    return shown.flatMap(child =>
+      [...child.querySelectorAll('p, button')].map(element =>
+        element.tagName === 'P'
+          ? `# ${element.textContent}`
+          : (element.textContent ?? '')
+      )
+    )
+  }
+
+  /** What the list should read, worked out from the tags themselves. */
+  function expectedSequence(): string[] {
+    const tags: Partial<Record<string, string>> = STARTER_HEAD_THEMES
+    const pool: readonly string[] = STARTER_QUESTIONS
+    const themed = FEATURED_THEMES.flatMap(theme => {
+      const questions = pool.filter(question => tags[question] === theme.key)
+      return questions.length > 0
+        ? [`# ${STARTER_THEME_HEADINGS[theme.key]}`, ...questions]
+        : []
+    })
+    return [
+      ...themed,
+      `# ${STARTER_UNTAGGED_HEADING}`,
+      ...pool.filter(question => tags[question] === undefined),
+    ]
+  }
+
+  test('the control counts the whole pool and starts closed', () => {
+    render(<StarterTicker onPick={() => {}} />)
+    const control = listToggle()
+
+    expect(control.tagName).toBe('BUTTON')
+    expect(control.textContent).toBe(
+      seeAllQuestionsLabel(STARTER_QUESTIONS.length)
+    )
+    expect(control.textContent).toContain(String(STARTER_QUESTIONS.length))
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('opens and closes the list, keeping focus on the control', () => {
+    render(<StarterTicker onPick={() => {}} />)
+    const control = listToggle()
+    control.focus()
+
+    fireEvent.click(control)
+    expect(document.activeElement).toBe(control)
+    expect(control.getAttribute('aria-expanded')).toBe('true')
+    expect(control.textContent).toBe(SHOW_FEWER_LABEL)
+
+    fireEvent.click(control)
+    expect(document.activeElement).toBe(control)
+    expect(control.getAttribute('aria-expanded')).toBe('false')
+    expect(control.textContent).toBe(
+      seeAllQuestionsLabel(STARTER_QUESTIONS.length)
+    )
+  })
+
+  test('is reached before the pills, is drawn under them, and names what it controls', () => {
+    render(<StarterTicker onPick={() => {}} />)
+    const control = listToggle()
+    const group = starterGroup()
+
+    expect(
+      control.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(control.classList.contains('order-last')).toBe(true)
+    expect(control.getAttribute('aria-controls')).toBe(group.id)
+    // Outside the group: the stylesheet pauses the rows while focus is
+    // anywhere inside it, and a focused control would hold them still.
+    expect(group.contains(control)).toBe(false)
+  })
+
+  test('shows every question once, grouped by theme in the featuring order, the untagged last', () => {
+    render(<StarterTicker onPick={() => {}} />)
+    fireEvent.click(listToggle())
+
+    expect(listSequence()).toEqual(expectedSequence())
+    const announced = questionPills().map(pill => pill.textContent)
+    expect(announced).toHaveLength(STARTER_QUESTIONS.length)
+    expect(new Set(announced)).toEqual(new Set(STARTER_QUESTIONS))
+    // Still the one named group, now holding the list.
+    expect(screen.getAllByRole('group')).toHaveLength(1)
+  })
+
+  test('hides the rows while the list is open, and shows them again after', () => {
+    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const wrapper = rowsWrapper(container)
+    expect(wrapper.querySelectorAll('.starter-ticker-row')).toHaveLength(2)
+
+    fireEvent.click(listToggle())
+    expect(wrapper.hidden).toBe(true)
+
+    fireEvent.click(listToggle())
+    expect(wrapper.hidden).toBe(false)
+    expect(listSequence()).not.toContain(`# ${STARTER_UNTAGGED_HEADING}`)
+  })
+
+  test('a pick from the list asks its question', () => {
+    const picked: string[] = []
+    render(<StarterTicker onPick={question => picked.push(question)} />)
+    fireEvent.click(listToggle())
+
+    const last = STARTER_QUESTIONS[STARTER_QUESTIONS.length - 1]
+    fireEvent.click(within(starterGroup()).getByRole('button', { name: last }))
+    expect(picked).toEqual([last])
+  })
+
+  test('a pick from the list is told apart by touch, as a pick from the rows is', () => {
+    // The surfaces read how a question was picked off the region around
+    // the ticker (pointer.ts, MTC-74), so the list has to sit inside it.
+    const picks: { question: string; touch: boolean }[] = []
+    function Surface() {
+      const { pressHandlers, pickedByTouch } = usePickPointer()
+      return (
+        <div {...pressHandlers}>
+          <StarterTicker
+            onPick={question =>
+              picks.push({ question, touch: pickedByTouch() })
+            }
+          />
+        </div>
+      )
+    }
+    render(<Surface />)
+    fireEvent.click(listToggle())
+    const pill = within(starterGroup()).getByRole('button', {
+      name: STARTER_QUESTIONS[0],
+    })
+
+    fireEvent.pointerDown(pill, { pointerType: 'touch' })
+    fireEvent.click(pill)
+    fireEvent.pointerDown(pill, { pointerType: 'mouse' })
+    fireEvent.click(pill)
+    expect(picks).toEqual([
+      { question: STARTER_QUESTIONS[0], touch: true },
+      { question: STARTER_QUESTIONS[0], touch: false },
+    ])
+  })
+
+  test('rows that were moving stop while the list is open and move again from where they were', () => {
+    const progress = [0.37, 0.71] as const
+    const rows = renderMovingRows({ progress })
+    const offsetOf = (track: HTMLElement) =>
+      track.style.getPropertyValue('--ticker-offset')
+    for (const { track } of rows) {
+      expect(offsetOf(track)).not.toBe(String(progress[0]))
+      expect(offsetOf(track)).not.toBe(String(progress[1]))
+    }
+
+    fireEvent.click(listToggle())
+    // The offset a hidden row's animation restarts from is where its loop
+    // had got to when the list opened.
+    rows.forEach(({ track }, index) => {
+      expect(offsetOf(track)).toBe(String(progress[index]))
+    })
+    // Hidden, a track runs no animation.
+    for (const { track } of rows) track.getAnimations = () => []
+
+    fireEvent.click(listToggle())
+    rows.forEach(({ viewport, track }, index) => {
+      expect(track.dataset.frozen).toBeUndefined()
+      expect(viewport.dataset.handedOver).toBeUndefined()
+      expect(offsetOf(track)).toBe(String(progress[index]))
+    })
+  })
+
+  test('under reduced motion the list opens at once and the strips keep their scroll', () => {
+    setReducedMotion(true)
+    const { container } = render(<StarterTicker onPick={() => {}} />)
+    const { rows } = tickerOf(container)
+    rows[0].viewport.scrollLeft = 90
+    rows[1].viewport.scrollLeft = 30
+
+    fireEvent.click(listToggle())
+    // In the commit the click makes: nothing waits on a transition.
+    expect(rowsWrapper(container).hidden).toBe(true)
+    expect(listSequence()).toEqual(expectedSequence())
+    for (const { viewport } of rows) viewport.scrollLeft = 0
+
+    fireEvent.click(listToggle())
+    expect(rows[0].viewport.scrollLeft).toBe(90)
+    expect(rows[1].viewport.scrollLeft).toBe(30)
+    for (const { track } of rows) {
+      expect(track.dataset.frozen).toBeUndefined()
+    }
+  })
+
+  test('closing the list keeps the control on screen, opening it scrolls nothing', () => {
+    const scrolled: Element[] = []
+    const realScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this)
+    }
+    try {
+      render(<StarterTicker onPick={() => {}} />)
+      const control = listToggle()
+      expect(scrolled).toEqual([])
+
+      fireEvent.click(control)
+      expect(scrolled).toEqual([])
+
+      fireEvent.click(control)
+      expect(scrolled).toEqual([control])
+    } finally {
+      Element.prototype.scrollIntoView = realScrollIntoView
     }
   })
 })

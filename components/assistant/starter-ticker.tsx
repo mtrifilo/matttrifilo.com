@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -12,7 +13,12 @@ import {
 } from 'react'
 import { Suggestion } from '@/components/ai-elements/suggestion'
 import { cn } from '@/lib/utils'
-import { STARTER_QUESTIONS } from './copy'
+import {
+  seeAllQuestionsLabel,
+  SHOW_FEWER_LABEL,
+  STARTER_QUESTIONS,
+} from './copy'
+import { StarterQuestionList } from './starter-question-list'
 import {
   EDGE_FADE_PROPERTY,
   followPosition,
@@ -44,7 +50,7 @@ import {
  * frame that ends the loop is the frame that starts it. Nothing here runs per
  * frame; the browser owns the motion, and app/globals.css owns the rules.
  *
- * Five things are worth reading twice.
+ * Six things are worth reading twice.
  *
  * **Both rows travel right to left**, the reading direction, so a question
  * arrives first word first. A row moving the other way shows its last words
@@ -87,6 +93,15 @@ import {
  * their loops, so each is trimmed to the window both can scroll through,
  * after which one scrollLeft is the position of both and the browser's own
  * edge is where both stop.
+ *
+ * **The whole pool can be opened as a list** (MTC-85), for a visitor who
+ * would rather read every question than wait for the one they want. The
+ * list takes the rows' place inside the same named group, and the rows stop
+ * while it is open: hidden, so the browser drops their animation. Closing
+ * it puts each row back as it was, a moving row at the point its loop had
+ * reached and a handed-over pair at the position the visitor left them,
+ * because hiding a box loses its scroll position and a restarted animation
+ * would otherwise open at the wrong pill.
  */
 
 /**
@@ -121,21 +136,74 @@ export function StarterTicker({
   // One per ticker, for its whole life: both rows' handlers must reach
   // the same window, and a new one would forget how the rows are trimmed.
   const [sharedScroll] = useState(createSharedScroll)
+  const [listOpen, setListOpen] = useState(false)
+  // What puts the rows back as they were, from the click that opens the
+  // list until the commit that shows the rows again.
+  const unparkRef = useRef<(() => void) | null>(null)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const groupId = useId()
+
+  const toggleList = useCallback(() => {
+    // Read while the rows are still laid out: hidden, a row has no
+    // animation to ask where it was and no scroll position to keep.
+    if (!listOpen) unparkRef.current = sharedScroll.park()
+    setListOpen(!listOpen)
+  }, [listOpen, sharedScroll])
+
+  // Before the paint that shows the rows again, so they never appear for a
+  // frame at scroll zero or at the start of their loop.
+  useLayoutEffect(() => {
+    if (listOpen) return
+    const unpark = unparkRef.current
+    if (!unpark) return
+    unparkRef.current = null
+    unpark()
+    // The list collapsing takes the control up the page with it. Where the
+    // browser does not anchor the scroll position, the control holding
+    // focus would be left above the screen.
+    toggleRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [listOpen])
+
   return (
-    <div
-      aria-label={TICKER_LABEL}
-      className={cn('starter-ticker flex w-full flex-col gap-2', className)}
-      role="group"
-    >
-      {ROWS.map((questions, index) => (
-        <TickerRow
-          key={index}
-          onPick={onPick}
-          questions={questions}
-          sharedScroll={sharedScroll}
-          startAt={startAt}
-        />
-      ))}
+    <div className={cn('flex w-full flex-col gap-6', className)}>
+      {/* First in the tab order, drawn under the questions (order-last) as
+          the approved frames place it. A keyboard or screen-reader visitor
+          reaches it before the pills, so the list is one key away rather
+          than one pill after the whole pool, and after it opens the next
+          Tab lands on the first question of the first theme. */}
+      <button
+        aria-controls={groupId}
+        aria-expanded={listOpen}
+        className="order-last self-start rounded-sm py-1.5 text-[13px] leading-[1.3] font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        onClick={toggleList}
+        ref={toggleRef}
+        type="button"
+      >
+        {listOpen
+          ? SHOW_FEWER_LABEL
+          : seeAllQuestionsLabel(STARTER_QUESTIONS.length)}
+      </button>
+      <div
+        aria-label={TICKER_LABEL}
+        className="starter-ticker flex w-full flex-col gap-2"
+        id={groupId}
+        role="group"
+      >
+        {/* Hidden rather than unmounted: the rows keep their hand-over,
+            their trim and their registration while the list is open. */}
+        <div className="flex w-full flex-col gap-2" hidden={listOpen}>
+          {ROWS.map((questions, index) => (
+            <TickerRow
+              key={index}
+              onPick={onPick}
+              questions={questions}
+              sharedScroll={sharedScroll}
+              startAt={startAt}
+            />
+          ))}
+        </div>
+        {listOpen && <StarterQuestionList onPick={onPick} />}
+      </div>
     </div>
   )
 }
@@ -629,6 +697,12 @@ interface SharedScroll {
    * end up. False, doing nothing, when the row is not handed over.
    */
   reveal(viewport: HTMLElement, pill: HTMLElement): boolean
+  /**
+   * Stops every row where it is, just before the rows are hidden, and
+   * returns what puts each back as it was once they are shown again. Only
+   * the "see all" list calls it, while the rows are still laid out.
+   */
+  park(): () => void
 }
 
 /** A handed-over row, with its trim and the width it had untrimmed. */
@@ -792,6 +866,38 @@ function createSharedScroll(): SharedScroll {
       trimTo(placed)
       return true
     },
+
+    park() {
+      // A finger on a row that is about to be hidden never lifts from it.
+      touched = null
+      const unparks = [...rows].map(parkRow)
+      return () => {
+        for (const unpark of unparks) unpark()
+      }
+    },
+  }
+
+  /**
+   * Hiding a row drops its animation and its scroll position, so what it
+   * showed is kept in the one form that survives: a moving row's progress
+   * becomes the offset its animation restarts from when it is shown again,
+   * and any other row (handed over, held still for focus, or a static strip
+   * under reduced motion) keeps its scrollLeft to be given back.
+   */
+  function parkRow(row: SharedRow): () => void {
+    const { viewport, track } = row
+    const scrollLeft = viewport.scrollLeft
+    // Through settle, so the scroll event the write causes is taken for
+    // the echo it is and carries nothing to the other row.
+    if (members.has(viewport)) return () => settle(viewport, scrollLeft)
+    const progress = animationProgress(track)
+    if (progress === null) {
+      return () => {
+        viewport.scrollLeft = scrollLeft
+      }
+    }
+    track.style.setProperty('--ticker-offset', String(progress))
+    return () => {}
   }
 }
 
