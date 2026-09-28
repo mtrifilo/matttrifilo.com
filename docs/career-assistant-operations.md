@@ -235,6 +235,8 @@ Rendered behaviour is testable under `bun test`: no browser, no dev server, no r
 
 **A touch device.** `(pointer: coarse)`, `(pointer: fine)` and `(hover: none)` are answered from `window.happyDOM.settings.navigator.maxTouchPoints`, which `setTouchDevice` in `test/touch-device.ts` sets. The settings are shared by every file in the run, so a test that sets it resets it with `setTouchDevice(false)` in an `afterEach`.
 
+**The list of every question** (MTC-85). "See all N questions" under the rows replaces them in place with every question, grouped by featured theme in the featuring order, the untagged questions last under "More"; "Show fewer" brings the rows back. The rows are hidden rather than unmounted, so their hand-over, trim and registration survive, and `park` in `starter-ticker.tsx` keeps what hiding loses: a moving row's loop position, or the position of a row held still for focus, becomes the offset its animation restarts from, and a handed-over pair or a static strip gets its `scrollLeft` back once shown. Happy DOM keeps `scrollLeft` on a hidden box where a browser drops it, so the tests that prove the rows come back as they were set it to zero themselves while the list is open. The control comes before the group in the DOM, so the tab order reaches it before the pills, and is drawn under the questions with `order-last`. The control is excluded from scroll anchoring (`overflow-anchor: none`), and closing the list scrolls the ticker into view clear of the sticky nav. What only the preview shows: both surfaces at 390 and 1440 in both states, the group and the composer growing and shrinking with the list, and the rows and the control staying on screen when a long list closes.
+
 **Running them.** `bun test components/assistant/starter-ticker.test.tsx` for one file, `bun test -t 'folds the steps away'` for one test. Cost of the whole setup, measured 2026-09-22 with runs interleaved on a quiet machine, with and without `TZ=America/Phoenix`: about 0.2 seconds, 1.7 to 1.9 seconds for the suite before it and 1.9 to 2.2 seconds after (1,108 tests before, 1,131 after).
 
 ## Copy rules
@@ -465,6 +467,8 @@ A question's position in the pool decides when a visitor sees it: the homepage p
 4. Find the sentence in `content/knowledge/**` that answers it, cite the document and that sentence in a comment above the test, and write the rubric to those facts. A rubric must never reward an inferred characterisation presented as documented.
 5. If the facts the rubric names live in different documents, say in the rubric that any one of them is enough. `assertReadsAnyOf` only requires the run to have opened one, so a conjunctive rubric over several documents is a flaky test, not a strict one.
 6. `bun test` catches a missing golden, a bad document id, a duplicate question and a duplicated YAML anchor before anything is spent.
+
+The "see all" list needs nothing extra: its count is the pool's length, and it groups by the tags in `STARTER_HEAD_THEMES` (`components/assistant/starter-groups.ts`). Only head questions can carry a tag (`copy.test.ts` fails otherwise), so a new question outside the head is listed under "More".
 
 If the corpus cannot answer the question, it does not get a golden that expects a decline. It goes on [MTC-40](https://linear.app/psychic-homily/issue/MTC-40), which collects the answers only Matt can write.
 

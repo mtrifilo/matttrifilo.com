@@ -117,6 +117,12 @@ type StarterQuestion = (typeof STARTER_QUESTIONS)[number]
  * use of AI coding agents, quality with agents, the code he ships himself,
  * what he shipped recently) belong to a theme is Matt's taxonomy to decide,
  * so they are left out rather than guessed.
+ *
+ * These tags also group the "see all" list (starter-groups.ts): a tagged
+ * question is listed under its theme and every other question under
+ * STARTER_UNTAGGED_HEADING. Retagging a head question moves it in the list
+ * too, and since only head questions can be tagged, no question outside the
+ * head can be listed under a theme.
  */
 export const STARTER_HEAD_THEMES: Partial<
   Record<StarterQuestion, FeaturedThemeKey>
@@ -140,6 +146,35 @@ export const STARTER_HEAD_THEMES: Partial<
  */
 export const STARTER_TABLE_STAKES_QUESTION: StarterQuestion =
   "How did Matt's team move to independent deploys, and how long did it take?"
+
+/**
+ * The control under the starter rows that opens every question as one list,
+ * and closes it again (Matt, 2026-09-23, MTC-85). The ticker passes the
+ * pool's own length, so the label counts exactly the questions the list
+ * shows.
+ */
+export const seeAllQuestionsLabel = (count: number) =>
+  `See all ${count} questions`
+export const SHOW_FEWER_LABEL = 'Show fewer'
+
+/**
+ * Matt's to change: the small heading over each featured theme's questions
+ * in that list, as the approved frames draft them (MTC-85). Keyed by theme,
+ * so a theme added to lib/chat/featuring.ts without a heading here fails
+ * typecheck; the order of the groups is FEATURED_THEMES' own.
+ */
+export const STARTER_THEME_HEADINGS: Record<FeaturedThemeKey, string> = {
+  measuredDelivery: 'Measured delivery change from AI adoption',
+  productOutcomes: 'Product and platform outcomes',
+  operationalOwnership: 'Operational ownership at scale',
+  orgAiAdoption: 'Org-wide AI adoption',
+}
+
+/**
+ * Matt's to change: the heading over the questions no featured theme
+ * claims, which the list shows last (MTC-85).
+ */
+export const STARTER_UNTAGGED_HEADING = 'More'
 
 /**
  * The control that empties the transcript. Two of the route's refusals tell

@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AssistantEmptyState } from './assistant-empty-state'
-import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
+import {
+  ASSISTANT_INTRO,
+  ASSISTANT_NAME,
+  seeAllQuestionsLabel,
+  STARTER_QUESTIONS,
+} from './copy'
 
 /**
  * The order of the centred group /ask opens on (MTC-55).
@@ -48,6 +53,12 @@ describe('the /ask empty state', () => {
 
   test('offers both ticker rows', () => {
     expect(html.match(/starter-ticker-row/g) ?? []).toHaveLength(2)
+  })
+
+  test('offers the control that opens every question, closed', () => {
+    // MTC-85: on both surfaces, because both render the ticker.
+    expect(html).toContain(seeAllQuestionsLabel(STARTER_QUESTIONS.length))
+    expect(html).toContain('aria-expanded="false"')
   })
 
   test('claims no more of the column than its own content', () => {
