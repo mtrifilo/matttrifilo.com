@@ -104,13 +104,16 @@ jobs:
       # Non-fatal on purpose: promptfoo exits 100 when a test fails, and the
       # summarise step below is the gate. Letting this step fail the job would
       # skip the summary and the artifact for exactly the runs that need them.
+      # `evals:run` rather than `evals`, which summarises too: the step below
+      # is the one summary, so the job summary carries the table once. The
+      # script carries the grader queue timeout, so CI runs with it as well.
       - name: Run the eval suites
         id: suites
         continue-on-error: true
         run: |
           set -euo pipefail
           mkdir -p evals/out
-          bun run evals --output evals/out/results.json
+          bun run evals:run
         env:
           # The client the provider builds reads this.
           GCP_PROJECT_ID: ${{ steps.project.outputs.id }}
