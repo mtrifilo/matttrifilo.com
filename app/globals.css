@@ -65,7 +65,10 @@
   --destructive: #e7000b;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #90a1b9;
+  /* A focus ring is part of the control it marks, so it clears 3:1 against
+     the page and the card (WCAG 1.4.11); lib/theme-contrast.test.ts holds
+     both themes to it. */
+  --ring: #62748e;
   --chart-1: #2563eb;
   --chart-2: #0ea5e9;
   --chart-3: #0d9488;
