@@ -65,9 +65,17 @@ export const ConversationContent = ({
   />
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {
+  /**
+   * Called once the scroll has been asked for. The button is about to go
+   * (it only shows while the transcript is away from its end), so this is
+   * where the caller moves focus that would otherwise fall to the page.
+   */
+  afterScroll?: () => void;
+};
 
 export const ConversationScrollButton = ({
+  afterScroll,
   className,
   children,
   ...props
@@ -79,7 +87,8 @@ export const ConversationScrollButton = ({
   // transcript's own setting says.
   const handleScrollToBottom = useCallback(() => {
     scrollToBottom(scroll);
-  }, [scroll, scrollToBottom]);
+    afterScroll?.();
+  }, [afterScroll, scroll, scrollToBottom]);
 
   if (isAtBottom) return null;
 

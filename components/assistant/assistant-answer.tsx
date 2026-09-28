@@ -103,13 +103,13 @@ function FollowUpRow({
   if (questions.length === 0) return null
 
   return (
-    // The negative margin sits out here so the reveal animates the row's own
+    // The negative margins sit out here so the reveal animates the row's own
     // box; the padding inside the row is room for a focus ring it would
-    // otherwise clip.
-    <div className="follow-up-reveal -my-1">
+    // otherwise clip, above, below and before the first pill.
+    <div className="follow-up-reveal -mx-1 -my-1">
       <div
         aria-label={FOLLOW_UPS_LABEL}
-        className="edge-faded-row follow-up-row w-full py-1"
+        className="edge-faded-row follow-up-row w-full px-1 py-1"
         role="group"
       >
         <Suggestions className="w-max flex-nowrap">

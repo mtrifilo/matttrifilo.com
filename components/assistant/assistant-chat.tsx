@@ -252,11 +252,22 @@ export function AssistantChat() {
     headingRef.current.focus()
   })
 
+  // Regenerate goes as the run starts (the actions are offered only on a
+  // finished answer), so its focus moves by the rule a pick follows.
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
     setStopped(false)
     void regenerate()
-  }, [regenerate])
+    if (activatedByTouch()) focusStatusOnceRunning.current = true
+    else textareaRef.current?.focus()
+  }, [activatedByTouch, regenerate])
+
+  // "Jump to latest" goes once the transcript reaches its end. By keyboard,
+  // mouse or pen the caret goes to the composer, under the newest line; a
+  // touch leaves focus alone, so the keyboard stays down.
+  const focusAfterJump = useCallback(() => {
+    if (!activatedByTouch()) textareaRef.current?.focus()
+  }, [activatedByTouch])
 
   // The homepage panel hands its question over through sessionStorage; asking
   // it here is what makes submitting from the homepage feel like one action.
@@ -358,8 +369,10 @@ export function AssistantChat() {
       {!docked && <div aria-hidden="true" className="flex-1" />}
 
       {docked ? (
-        <Conversation className="min-h-0">
-          <ConversationContent className="pb-2">
+        // Widened by 4 px a side and padded back, so a focus ring on a
+        // control at the transcript's edge is not cut by its scroll box.
+        <Conversation className="-mx-1 min-h-0">
+          <ConversationContent className="px-1 pb-2">
             {messages.map((message, index) => {
               const isLast = index === messages.length - 1
               if (message.role === 'user') {
@@ -417,7 +430,7 @@ export function AssistantChat() {
               </Message>
             )}
           </ConversationContent>
-          <ConversationScrollButton />
+          <ConversationScrollButton afterScroll={focusAfterJump} />
         </Conversation>
       ) : (
         <AssistantEmptyState headingRef={headingRef} onPick={askPicked} />

@@ -107,6 +107,27 @@ describe.each(THEMES)('the %s theme', (_theme, block) => {
   )
 })
 
+describe('the focus indicators draw the ring token at full strength', () => {
+  // The pairs above measure the token. These hold the places that draw it
+  // to the token as it is: at half strength the base outline and the
+  // Button's halo were 1.5:1 to 2.2:1, and on the dark theme the halo is a
+  // pill's whole indicator, because `dark:border-border` outranks the
+  // focused border.
+  test('the outline every element falls back to', () => {
+    const base = cssBlock(css, '@layer base {')
+    expect(base).toMatch(/@apply border-border outline-ring;/)
+  })
+
+  test("the Button's 3 px ring", () => {
+    const button = readFileSync(
+      new URL('../components/ui/button.tsx', import.meta.url),
+      'utf8'
+    )
+    expect(button).toContain('focus-visible:ring-ring ')
+    expect(button).not.toMatch(/focus-visible:ring-ring\/\d+/)
+  })
+})
+
 describe('text over the honeycomb canvas, where nothing veils it', () => {
   // Below 56rem the canvas is full-bleed under the text of /ask, with no
   // mask. At rest (no pointer, no entrance wave) the only thing that moves

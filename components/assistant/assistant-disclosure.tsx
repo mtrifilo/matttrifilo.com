@@ -51,7 +51,12 @@ export function AssistantDisclosure({ className }: { className?: string }) {
       <p>Conversations aren&rsquo;t saved.</p>
       {evalsPublished && (
         <p>
-          <Link className={LINK_CLASS} href="/ask/evals">
+          {/* On a line of its own, so not a link inside a sentence: it
+              takes the 44 px hit area the other small controls have. */}
+          <Link
+            className={cn(LINK_CLASS, 'touch-target relative')}
+            href="/ask/evals"
+          >
             {ASSISTANT_EVALS_TITLE}
           </Link>
         </p>

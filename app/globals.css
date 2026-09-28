@@ -110,8 +110,11 @@
 }
 
 @layer base {
+  /* The outline every focusable element falls back to is the ring token at
+     full strength: at half strength it was under 3:1 on both themes (WCAG
+     1.4.11), and lib/theme-contrast.test.ts holds the token to 3:1. */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html {
     @apply bg-background text-foreground;

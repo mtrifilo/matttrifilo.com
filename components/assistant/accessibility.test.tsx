@@ -4,8 +4,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AnswerView } from '@/lib/chat/answer'
 import { answered, openStream } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
+import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantProgress } from './assistant-progress'
+import { EvalsPublishedProvider } from './evals-published'
 import {
+  ASSISTANT_EVALS_TITLE,
   progressHeadings,
   progressSummary,
   RESET_LABEL,
@@ -162,5 +165,21 @@ describe('controls drawn under 44 px', () => {
       'utf8'
     )
     expect(source).toContain('"touch-target absolute ')
+  })
+
+  test('carry it on the eval results link, which stands on a line of its own', () => {
+    render(
+      <EvalsPublishedProvider published>
+        <AssistantDisclosure />
+      </EvalsPublishedProvider>
+    )
+    expect(
+      hasTouchTarget(screen.getByRole('link', { name: ASSISTANT_EVALS_TITLE }))
+    ).toBe(true)
+    // "Matt himself" sits inside a sentence: exempt, and a grown area there
+    // would reach the line below.
+    expect(
+      hasTouchTarget(screen.getByRole('link', { name: 'Matt himself' }))
+    ).toBe(false)
   })
 })

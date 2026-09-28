@@ -6,8 +6,10 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
 import { FOCUS_RING } from '@/lib/focus-ring'
 import { answered } from '@/test/chat-stream'
+import { setTouchDevice } from '@/test/touch-device'
 import { AssistantChat } from './assistant-chat'
 import {
   progressSummary,
@@ -107,19 +109,23 @@ function nameOf(element: HTMLElement): string {
  * where one is drawn for it.
  */
 function focusIndicatorOf(element: HTMLElement): string | null {
-  const classes = element.className
+  const classes = element.className.split(/\s+/)
   if (FOCUS_RING.split(' ').every(name => classes.includes(name)))
     return 'outline'
-  // components/ui/button.tsx: a border in the ring token plus a halo.
+  // components/ui/button.tsx: a 3 px ring in the ring token. At full
+  // strength only: `ring-ring/50` was 2.1:1 on the dark theme, where
+  // `dark:border-border` also outranks the focused border, so the halo is
+  // the whole indicator there.
   if (
-    classes.includes('focus-visible:border-ring') &&
-    classes.includes('focus-visible:ring-')
+    classes.includes('focus-visible:ring-ring') &&
+    classes.includes('focus-visible:ring-[3px]')
   )
     return 'button ring'
   // The composer's field: its form draws the ring token on focus within.
   if (element.tagName === 'TEXTAREA') {
     const form = element.closest('form')
-    if (form?.className.includes('focus-within:border-ring')) return 'form'
+    if (form?.className.split(/\s+/).includes('focus-within:border-ring'))
+      return 'form'
   }
   // A link inside an answer: the answer's wrapper styles it.
   if (element.dataset.streamdown === 'link') {
@@ -242,6 +248,62 @@ describe('/ask after an answer', () => {
         !keepsKey(stop, { key: 'Escape' })
     )
     expect(kept.map(nameOf)).toEqual([])
+  })
+})
+
+describe('Regenerate, which goes as the new run starts', () => {
+  // The actions are offered on a finished answer only, so the button that
+  // had focus is gone a render later. Where focus goes follows the pick
+  // rule in pointer.ts (MTC-74, MTC-81).
+  afterEach(() => {
+    setTouchDevice(false)
+  })
+
+  test('hands focus to the composer when pressed with a key', async () => {
+    await renderAnswered()
+    const regenerate = screen.getByRole('button', { name: 'Regenerate' })
+    regenerate.focus()
+    fireEvent.keyDown(regenerate, { key: 'Enter' })
+    fireEvent.click(regenerate)
+    expect(document.activeElement).toBe(
+      screen.getByRole('textbox', { name: COMPOSER })
+    )
+    // The regenerated answer arrives; the caret stays where it was put.
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }))
+    expect(document.activeElement).toBe(
+      screen.getByRole('textbox', { name: COMPOSER })
+    )
+  })
+
+  test('hands focus to the status region, not the composer, after a touch', async () => {
+    setTouchDevice(true)
+    await renderAnswered()
+    const regenerate = screen.getByRole('button', { name: 'Regenerate' })
+    fireEvent.pointerDown(regenerate, { pointerType: 'touch' })
+    fireEvent.click(regenerate)
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('status'))
+    )
+    await waitFor(() => screen.getByRole('button', { name: 'Regenerate' }))
+  })
+})
+
+describe('"Jump to latest", which goes once the transcript reaches its end', () => {
+  test('hands focus on through the page, which applies the pick rule', () => {
+    // It shows only while the transcript is scrolled away from its end,
+    // which Happy DOM cannot lay out, so the wiring is read from source.
+    const read = (path: string) =>
+      readFileSync(new URL(path, import.meta.url), 'utf8')
+    expect(read('../ai-elements/conversation.tsx')).toContain(
+      'afterScroll?.();'
+    )
+    const chat = read('./assistant-chat.tsx')
+    expect(chat).toContain(
+      '<ConversationScrollButton afterScroll={focusAfterJump} />'
+    )
+    expect(chat).toMatch(
+      /focusAfterJump = useCallback\(\(\) => \{\s*if \(!activatedByTouch\(\)\) textareaRef\.current\?\.focus\(\)/
+    )
   })
 })
 
