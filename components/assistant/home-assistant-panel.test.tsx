@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { setTouchDevice } from '@/test/touch-device'
-import { STARTER_QUESTIONS } from './copy'
+import { seeAllQuestionsLabel, STARTER_QUESTIONS } from './copy'
 import {
   RoutedHomeAssistantPanel,
   type PanelRouter,
@@ -122,5 +122,43 @@ describe('a question handed over from the homepage', () => {
       question: 'What did Matt ship?',
       askedBy: 'typing',
     })
+  })
+})
+
+describe('the list of every question on the homepage (MTC-85)', () => {
+  function listControl(): HTMLElement {
+    return screen.getByRole('button', {
+      name: seeAllQuestionsLabel(STARTER_QUESTIONS.length),
+    })
+  }
+
+  test('offers the control that opens it, closed', () => {
+    renderPanel()
+    expect(listControl().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('a pick from the list hands the question over, and how it was picked', () => {
+    // The list sits inside the panel's region, so the press decides as it
+    // does for the rows: a tap is a touch, a mouse is not, on any device.
+    setTouchDevice(true)
+    renderPanel()
+    fireEvent.click(listControl())
+    const last = STARTER_QUESTIONS[STARTER_QUESTIONS.length - 1]
+    const pill = screen.getByRole('button', { name: last })
+
+    fireEvent.pointerDown(pill, { pointerType: 'touch' })
+    fireEvent.click(pill)
+    expect(takePendingQuestion()).toEqual({
+      question: last,
+      askedBy: 'touch-pick',
+    })
+
+    fireEvent.pointerDown(pill, { pointerType: 'mouse' })
+    fireEvent.click(pill)
+    expect(takePendingQuestion()).toEqual({
+      question: last,
+      askedBy: 'other-pick',
+    })
+    expect(pushed).toEqual(['/ask', '/ask'])
   })
 })

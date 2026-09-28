@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react'
 import { FEATURED_THEMES } from '@/lib/chat/featuring'
 import { cssBlock } from '@/test/css-block'
+import { setTouchDevice } from '@/test/touch-device'
 import {
   seeAllQuestionsLabel,
   SHOW_FEWER_LABEL,
@@ -17,7 +18,7 @@ import {
   STARTER_THEME_HEADINGS,
   STARTER_UNTAGGED_HEADING,
 } from './copy'
-import { usePickPointer } from './pointer'
+import { useActivationPress } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import {
   EDGE_FADE_PROPERTY,
@@ -1436,34 +1437,42 @@ describe('every question at once, as a list (MTC-85)', () => {
 
   test('a pick from the list is told apart by touch, as a pick from the rows is', () => {
     // The surfaces read how a question was picked off the region around
-    // the ticker (pointer.ts, MTC-74), so the list has to sit inside it.
+    // the ticker (pointer.ts, MTC-74 and MTC-81), so the list has to sit
+    // inside it: the press decides, and the device only when none was seen.
     const picks: { question: string; touch: boolean }[] = []
     function Surface() {
-      const { pressHandlers, pickedByTouch } = usePickPointer()
+      const { pressHandlers, activatedByTouch } = useActivationPress()
       return (
         <div {...pressHandlers}>
           <StarterTicker
             onPick={question =>
-              picks.push({ question, touch: pickedByTouch() })
+              picks.push({ question, touch: activatedByTouch() })
             }
           />
         </div>
       )
     }
-    render(<Surface />)
-    fireEvent.click(listToggle())
-    const pill = within(starterGroup()).getByRole('button', {
-      name: STARTER_QUESTIONS[0],
-    })
+    setTouchDevice(true)
+    try {
+      render(<Surface />)
+      fireEvent.click(listToggle())
+      const pill = within(starterGroup()).getByRole('button', {
+        name: STARTER_QUESTIONS[0],
+      })
 
-    fireEvent.pointerDown(pill, { pointerType: 'touch' })
-    fireEvent.click(pill)
-    fireEvent.pointerDown(pill, { pointerType: 'mouse' })
-    fireEvent.click(pill)
-    expect(picks).toEqual([
-      { question: STARTER_QUESTIONS[0], touch: true },
-      { question: STARTER_QUESTIONS[0], touch: false },
-    ])
+      fireEvent.pointerDown(pill, { pointerType: 'touch' })
+      fireEvent.click(pill)
+      fireEvent.pointerDown(pill, { pointerType: 'mouse' })
+      fireEvent.click(pill)
+      // A bare click, as a screen reader sends it: the device decides.
+      fireEvent.click(pill)
+      expect(picks.map(pick => pick.touch)).toEqual([true, false, true])
+      expect(new Set(picks.map(pick => pick.question))).toEqual(
+        new Set([STARTER_QUESTIONS[0]])
+      )
+    } finally {
+      setTouchDevice(false)
+    }
   })
 
   test('rows that were moving stop while the list is open and move again from where they were', () => {
