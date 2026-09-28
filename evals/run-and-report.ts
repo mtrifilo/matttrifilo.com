@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, rmSync, statSync } from 'node:fs'
 
 /**
  * Run the eval suites, then summarise them whatever the run's exit status.
@@ -64,6 +64,8 @@ export type StepStatus = number | null
  * `report` is null when the report was skipped because the run wrote no
  * results, and that is never a pass, even when promptfoo exited 0: an
  * evaluation paused with Ctrl+C returns before promptfoo writes its output.
+ * A signal that killed the runner itself exits with the shell's code for it
+ * instead, which is non-zero as well.
  */
 export function composeExitCode(run: StepStatus, report: StepStatus): number {
   if (run !== 0) return run ?? 1
@@ -91,6 +93,8 @@ export interface RunAndReportSteps {
   run: readonly string[]
   report: readonly string[]
   results: string
+  /** Where `report` writes; removed before the run, so it is always this run's. */
+  summary: string
 }
 
 function runStep(argv: readonly string[]): StepStatus {
@@ -106,13 +110,21 @@ function runStep(argv: readonly string[]): StepStatus {
 /**
  * Run `run`, then `report` if `run` wrote `results`, and return the composed
  * exit code. Commands are argv arrays, so a test can substitute a fake step.
+ *
+ * The previous summary is removed first. `evals:publish` reads whatever
+ * summary is on disk and names it after the current HEAD, so an earlier
+ * run's summary left behind by a run that wrote nothing would be published
+ * as this commit's record. With it gone, publishing refuses for want of a
+ * summary. The earlier results file is left alone: it is the evidence, and
+ * a successful run overwrites it anyway.
  */
 export function runAndReport(steps: RunAndReportSteps): number {
+  rmSync(steps.summary, { force: true })
   const before = modifiedAt(steps.results)
   const run = runStep(steps.run)
   if (!writtenSince(steps.results, before)) {
     console.error(
-      `the eval run wrote no results to ${steps.results}, so there is nothing to summarise; any summary already on disk is from an earlier run`
+      `the eval run wrote no results to ${steps.results}, so there is nothing to summarise and no summary was written`
     )
     return composeExitCode(run, null)
   }
@@ -127,6 +139,7 @@ export function stepsFor(mode: EvalRunMode): RunAndReportSteps {
     run: [bun, 'run', plan.runScript],
     report: [bun, 'run', 'evals/summarize.ts', plan.results, plan.summary],
     results: plan.results,
+    summary: plan.summary,
   }
 }
 
@@ -146,5 +159,9 @@ if (import.meta.main) {
     )
     process.exit(2)
   }
+  // Ctrl+C reaches the whole process group. Without a listener it would kill
+  // this runner at once, before it can say the run wrote no results; with
+  // one, the steps decide how to stop and the runner still reports on them.
+  process.on('SIGINT', () => {})
   process.exit(runAndReport(stepsFor(mode)))
 }

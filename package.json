@@ -16,7 +16,7 @@
     "evals:publish": "bun run evals/publish.ts",
     "evals:smoke": "bun run evals/run-and-report.ts smoke",
     "evals:smoke:run": "mkdir -p evals/out && PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000 PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 8 --filter-metadata smoke=true --output evals/out/smoke-results.json",
-    "evals:compare": "bun run evals/compare-reasoning.ts"
+    "evals:compare": "PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000 bun run evals/compare-reasoning.ts"
   },
   "dependencies": {
     "@ai-sdk/google-vertex": "^5.0.81",

@@ -46,12 +46,12 @@ describe('composeExitCode', () => {
 describe('runAndReport with fake steps', () => {
   let dir: string
   let results: string
-  let reported: string
+  let summary: string
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'mtc61-run-and-report-'))
     results = join(dir, 'results.json')
-    reported = join(dir, 'reported')
+    summary = join(dir, 'summary.json')
   })
 
   afterEach(() => {
@@ -62,34 +62,44 @@ describe('runAndReport with fake steps', () => {
   const sh = (script: string) => ['/bin/sh', '-c', script, 'step', results]
   const writesResults = (code: number) => sh(`echo '{}' > "$1"; exit ${code}`)
   const report = (code: number) =>
-    ['/bin/sh', '-c', `touch "$1"; exit ${code}`, 'report', reported] as const
+    ['/bin/sh', '-c', `touch "$1"; exit ${code}`, 'report', summary] as const
 
-  test('a green run is reported and exits 0', () => {
+  test('a green run is summarised and exits 0', () => {
     expect(
-      runAndReport({ run: writesResults(0), report: report(0), results })
+      runAndReport({
+        run: writesResults(0),
+        report: report(0),
+        results,
+        summary,
+      })
     ).toBe(0)
-    expect(existsSync(reported)).toBe(true)
+    expect(existsSync(summary)).toBe(true)
   })
 
-  test('a red run is still reported, and exits with the run code', () => {
+  test('a red run is still summarised, and exits with the run code', () => {
     expect(
-      runAndReport({ run: writesResults(100), report: report(1), results })
+      runAndReport({
+        run: writesResults(100),
+        report: report(1),
+        results,
+        summary,
+      })
     ).toBe(100)
-    expect(existsSync(reported)).toBe(true)
+    expect(existsSync(summary)).toBe(true)
   })
 
-  test('a run that wrote no results is not reported and exits non-zero', () => {
+  test('a run that wrote no results is not summarised and exits non-zero', () => {
     expect(
-      runAndReport({ run: sh('exit 1'), report: report(0), results })
+      runAndReport({ run: sh('exit 1'), report: report(0), results, summary })
     ).toBe(1)
-    expect(existsSync(reported)).toBe(false)
+    expect(existsSync(summary)).toBe(false)
   })
 
   test('a run that exited 0 without writing results is not a pass', () => {
     expect(
-      runAndReport({ run: sh('exit 0'), report: report(0), results })
+      runAndReport({ run: sh('exit 0'), report: report(0), results, summary })
     ).toBe(1)
-    expect(existsSync(reported)).toBe(false)
+    expect(existsSync(summary)).toBe(false)
   })
 
   test("an earlier run's results file is not summarised as this run's", () => {
@@ -98,25 +108,55 @@ describe('runAndReport with fake steps', () => {
     utimesSync(results, anHourAgo, anHourAgo)
 
     expect(
-      runAndReport({ run: sh('exit 100'), report: report(0), results })
+      runAndReport({ run: sh('exit 100'), report: report(0), results, summary })
     ).toBe(100)
-    expect(existsSync(reported)).toBe(false)
+    expect(existsSync(summary)).toBe(false)
   })
 
-  test('a run that rewrites an earlier results file is reported', () => {
+  test('a run that rewrites an earlier results file is summarised', () => {
     writeFileSync(results, '{}')
     const anHourAgo = new Date(Date.now() - 3_600_000)
     utimesSync(results, anHourAgo, anHourAgo)
 
     expect(
-      runAndReport({ run: writesResults(100), report: report(0), results })
+      runAndReport({
+        run: writesResults(100),
+        report: report(0),
+        results,
+        summary,
+      })
     ).toBe(100)
-    expect(existsSync(reported)).toBe(true)
+    expect(existsSync(summary)).toBe(true)
   })
 
   test('a run killed by a signal after writing results exits non-zero', () => {
     const killed = sh(`echo '{}' > "$1"; kill -TERM $$`)
-    expect(runAndReport({ run: killed, report: report(0), results })).toBe(1)
+    expect(
+      runAndReport({ run: killed, report: report(0), results, summary })
+    ).toBe(1)
+  })
+
+  test("a run that writes nothing leaves no earlier run's summary behind", () => {
+    writeFileSync(summary, '{"ranAt":"an earlier run"}')
+
+    expect(
+      runAndReport({ run: sh('exit 1'), report: report(0), results, summary })
+    ).toBe(1)
+    expect(existsSync(summary)).toBe(false)
+  })
+
+  test("a red run replaces an earlier run's summary with its own", () => {
+    writeFileSync(summary, '{"ranAt":"an earlier run"}')
+
+    expect(
+      runAndReport({
+        run: writesResults(100),
+        report: report(1),
+        results,
+        summary,
+      })
+    ).toBe(100)
+    expect(readFileSync(summary, 'utf8')).toBe('')
   })
 
   test('a step that cannot start is a failure, not a crash', () => {
@@ -125,6 +165,7 @@ describe('runAndReport with fake steps', () => {
         run: [join(dir, 'no-such-command')],
         report: report(0),
         results,
+        summary,
       })
     ).toBe(1)
   })
@@ -168,11 +209,21 @@ describe('the plans and package.json agree', () => {
     })
 
     test(`${mode}: the report reads and writes the plan's files`, () => {
-      expect(
-        stepsFor(mode as keyof typeof EVAL_RUN_PLANS).report.slice(2)
-      ).toEqual(['evals/summarize.ts', plan.results, plan.summary])
+      const steps = stepsFor(mode as keyof typeof EVAL_RUN_PLANS)
+      expect(steps.report.slice(2)).toEqual([
+        'evals/summarize.ts',
+        plan.results,
+        plan.summary,
+      ])
+      expect(steps.summary).toBe(plan.summary)
     })
   }
+
+  test('evals:compare lets a queued grader wait fifteen minutes too', () => {
+    expect(scripts['evals:compare']).toContain(
+      'PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000'
+    )
+  })
 
   test('evals:report summarises the same files as a full run', () => {
     const { results, summary } = EVAL_RUN_PLANS.full
