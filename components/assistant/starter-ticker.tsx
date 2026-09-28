@@ -18,7 +18,10 @@ import {
   SHOW_FEWER_LABEL,
   STARTER_QUESTIONS,
 } from './copy'
-import { StarterQuestionList } from './starter-question-list'
+import {
+  StarterQuestionList,
+  type StarterListHeadingLevel,
+} from './starter-question-list'
 import {
   EDGE_FADE_PROPERTY,
   followPosition,
@@ -111,6 +114,12 @@ import {
 const ROWS = tickerRows(STARTER_QUESTIONS)
 
 export interface StarterTickerProps {
+  /**
+   * The level of the theme headings in the "see all" list: one below the
+   * heading that names the assistant on this surface, so the page outline
+   * stays whole. Required, because only the surface knows its own outline.
+   */
+  listHeadingLevel: StarterListHeadingLevel
   onPick: (question: string) => void
   /**
    * Which pill each row opens on, as an index into the row. Each surface
@@ -129,6 +138,7 @@ export interface StarterTickerProps {
 const TICKER_LABEL = 'Starter questions'
 
 export function StarterTicker({
+  listHeadingLevel,
   onPick,
   startAt = 0,
   className,
@@ -213,7 +223,12 @@ export function StarterTicker({
             />
           ))}
         </div>
-        {listOpen && <StarterQuestionList onPick={onPick} />}
+        {listOpen && (
+          <StarterQuestionList
+            headingLevel={listHeadingLevel}
+            onPick={onPick}
+          />
+        )}
       </div>
     </div>
   )

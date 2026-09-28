@@ -43,7 +43,12 @@ export function AssistantEmptyState({
           {ASSISTANT_INTRO}
         </p>
       </div>
-      <StarterTicker onPick={onPick} startAt={ASK_START_AT} />
+      <StarterTicker
+        // The page's h1 above names the assistant.
+        listHeadingLevel={2}
+        onPick={onPick}
+        startAt={ASK_START_AT}
+      />
     </div>
   )
 }

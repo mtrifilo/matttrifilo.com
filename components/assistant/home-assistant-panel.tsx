@@ -80,7 +80,12 @@ export function RoutedHomeAssistantPanel({ router }: { router: PanelRouter }) {
         {ASSISTANT_NAME}
       </h2>
       <p className="leading-relaxed text-muted-foreground">{ASSISTANT_INTRO}</p>
-      <StarterTicker onPick={pick} startAt={HOME_START_AT} />
+      <StarterTicker
+        // The panel's h2 above names the assistant.
+        listHeadingLevel={3}
+        onPick={pick}
+        startAt={HOME_START_AT}
+      />
       <AssistantComposer
         onSubmit={submit}
         onValueChange={setInput}

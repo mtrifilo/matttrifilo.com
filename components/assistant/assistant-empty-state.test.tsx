@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AssistantEmptyState } from './assistant-empty-state'
 import {
@@ -7,6 +8,7 @@ import {
   ASSISTANT_NAME,
   seeAllQuestionsLabel,
   STARTER_QUESTIONS,
+  STARTER_UNTAGGED_HEADING,
 } from './copy'
 
 /**
@@ -67,6 +69,31 @@ describe('the /ask empty state', () => {
     // and push the composer away.
     const root = html.slice(0, html.indexOf('>'))
     expect(root).not.toMatch(/\b(flex-1|grow|h-full|min-h-)/)
+  })
+})
+
+describe('the /ask outline with every question open (MTC-97)', () => {
+  test("labels the themes one level under the page's h1", () => {
+    // The h1 names the assistant; each theme of the open list is an h2, so
+    // a screen-reader visitor can jump between themes and the outline has
+    // no gap.
+    render(<AssistantEmptyState onPick={() => {}} />)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: seeAllQuestionsLabel(STARTER_QUESTIONS.length),
+      })
+    )
+    expect(
+      screen
+        .getAllByRole('heading', { level: 1 })
+        .map(heading => heading.textContent)
+    ).toEqual([ASSISTANT_NAME])
+    const themes = screen.getAllByRole('heading', { level: 2 })
+    expect(themes.length).toBeGreaterThan(1)
+    expect(themes.map(heading => heading.textContent)).toContain(
+      STARTER_UNTAGGED_HEADING
+    )
+    expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0)
   })
 })
 
