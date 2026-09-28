@@ -3,8 +3,10 @@ import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import { createChatHandler } from '@/lib/chat/handler'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import type { ProgressView } from '@/lib/chat/progress'
+import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
 import {
   KNOWLEDGE_READ_BUDGET,
+  loadKnowledgeIndex,
   type KnowledgeDocument,
   type KnowledgeEntry,
   type KnowledgeIndex,
@@ -61,10 +63,23 @@ describe('splitReadLedger', () => {
     ).toEqual({ readIds: ['resume'], refusedIds: [] })
   })
 
-  test('with no progress part, nothing counts as read', () => {
+  test('with no progress part, nothing counts as read, and says why', () => {
     // The safe direction: a run that proves no read reddens a read
     // assertion rather than passing one on a document it may not have seen.
+    // The flag keeps a red row from blaming a refusal.
     expect(splitReadLedger(['resume'], undefined)).toEqual({
+      readIds: [],
+      refusedIds: ['resume'],
+      readsUnproven: true,
+    })
+    expect(splitReadLedger([], undefined)).toEqual({
+      readIds: [],
+      refusedIds: [],
+    })
+  })
+
+  test('a progress part with no steps proves the reads were refused', () => {
+    expect(splitReadLedger(['resume'], progressOf())).toEqual({
       readIds: [],
       refusedIds: ['resume'],
     })
@@ -138,18 +153,22 @@ function streamOf(parts: unknown[]) {
   }
 }
 
-/** One model call asking for every id at once, then one that answers. */
-function modelReading(...ids: string[]) {
+/**
+ * A model that asks for each group of ids in its own step, all of a group at
+ * once, then answers.
+ */
+function modelReadingSteps(...steps: string[][]) {
   let call = 0
   return new MockLanguageModelV4({
     doStream: async () => {
       call += 1
-      if (call === 1) {
+      const ids = steps[call - 1]
+      if (ids !== undefined) {
         return streamOf([
           { type: 'stream-start', warnings: [] },
           ...ids.map((id, at) => ({
             type: 'tool-call',
-            toolCallId: `call-${at}-${id}`,
+            toolCallId: `call-${call}-${at}-${id}`,
             toolName: READ_DOCUMENT_TOOL_NAME,
             input: JSON.stringify({ id }),
           })),
@@ -175,12 +194,17 @@ function modelReading(...ids: string[]) {
   })
 }
 
+/** The ledger after one step that asks for every id at once. */
 async function ledgerAfter(...ids: string[]) {
+  return ledgerAfterSteps(ids)
+}
+
+async function ledgerAfterSteps(...steps: string[][]) {
   const ledger = createReadLedger(id => store.find(doc => doc.id === id))
   const handler = createChatHandler({
     loadKnowledgeIndex: () => index,
     readKnowledgeDocument: ledger.readKnowledgeDocument,
-    model: () => modelReading(...ids),
+    model: () => modelReadingSteps(...steps),
     verifyVisitor: () =>
       Promise.resolve({ isBot: false, isVerifiedBot: false, bypassed: true }),
     env: {},
@@ -221,6 +245,22 @@ describe('the read ledger, against the route', () => {
     })
   })
 
+  test('a document read and then refused on a repeat in a later step was read', async () => {
+    // The repeat is charged again and no longer fits. Its refusal must not
+    // withdraw the row the first read earned, or a correct run goes red.
+    expect(await ledgerAfterSteps(['first-large'], ['first-large'])).toEqual({
+      readIds: ['first-large'],
+      refusedIds: [],
+    })
+  })
+
+  test('a document read and refused in the same step was read', async () => {
+    expect(await ledgerAfter('first-large', 'first-large')).toEqual({
+      readIds: ['first-large'],
+      refusedIds: [],
+    })
+  })
+
   test('a read past the document cap never reaches the store', async () => {
     const past = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
     const ids = Array.from({ length: past }, () => 'small')
@@ -230,5 +270,21 @@ describe('the read ledger, against the route', () => {
       readIds: ['small'],
       refusedIds: [],
     })
+  })
+})
+
+describe('what the split relies on', () => {
+  test('no document id is also a repository id', () => {
+    // The route's progress stage keys its rows by id alone, so a document
+    // sharing an id with a repository checked first would earn no row of
+    // its own, and a completed read would land in the refused list.
+    const documents = new Set(
+      loadKnowledgeIndex().entries.map(entry => entry.id)
+    )
+    expect(
+      ASSISTANT_REPOSITORIES.map(repository => repository.id).filter(id =>
+        documents.has(id)
+      )
+    ).toEqual([])
   })
 })

@@ -105,6 +105,11 @@ export interface EvalMetadata {
   readIds: string[]
   /** Documents resolved and then refused on every call, distinct. */
   refusedIds: string[]
+  /**
+   * The stream carried no usable progress part, so no read is proven and
+   * `refusedIds` holds everything resolved. Only a red row's reason reads it.
+   */
+  readsUnproven?: true
   /** Repositories this run fetched activity for, in the order it asked. */
   activityRepos: string[]
   /** ISO dates carried by the digests this run was handed. */
@@ -338,6 +343,7 @@ function baseMetadata(
   return {
     readIds: reads.readIds,
     refusedIds: reads.refusedIds,
+    ...(reads.readsUnproven ? { readsUnproven: true as const } : {}),
     activityRepos,
     activityDates,
     followUps: [],

@@ -1575,8 +1575,11 @@
 # from the core monolith through the sending API to the mail transfer
 # agents, the gateway fleet itself, engagement tracking ... the compliance
 # case system, mailbox sync ... the AI email health features"; resume:
-# "owns email sending end to end for all Keap products: user-facing
-# features, compliance operations, and 24/7 on-call".
+# "owns email sending end to end for all Keap products", and, spread over
+# its roles and skills, parts the rubric lists: "Hardened the
+# engagement-tracking service", "the content-risk and spam-scoring
+# services", "DKIM/SPF", "MTA operations", and the AI Email Engagement
+# Summary.
 # Reads any of: owned-systems-and-operations or resume, as the golden 'what the team owns' accepts either.
 - description: 'golden: the Email Reliability charter'
   vars:

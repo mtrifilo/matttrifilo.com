@@ -422,8 +422,9 @@ function ledgerReport(context: AssertionContext): string {
   const read = completedReads(context)
   const refused = context.metadata?.refusedIds ?? []
   const report = `read ${read.join(', ') || 'nothing'}`
-  return refused.length === 0
-    ? report
+  if (refused.length === 0) return report
+  return context.metadata?.readsUnproven
+    ? `${report}; resolved ${refused.join(', ')}, but the stream carried no progress part to prove a read`
     : `${report}; refused ${refused.join(', ')}`
 }
 
@@ -839,9 +840,11 @@ export function assertCitesOnlyWhatItRead(
   const invented = cited.filter(id => !readIds.has(id))
   const citedRefused = invented.filter(id => refused.has(id))
   const refusal =
-    citedRefused.length > 0
-      ? ` (refused by the route: ${citedRefused.join(', ')})`
-      : ''
+    citedRefused.length === 0
+      ? ''
+      : context.metadata?.readsUnproven
+        ? ` (resolved, but no progress part proves it was read: ${citedRefused.join(', ')})`
+        : ` (refused by the route: ${citedRefused.join(', ')})`
   return {
     pass: invented.length === 0,
     score: invented.length === 0 ? 1 : 0,
@@ -1021,7 +1024,7 @@ export function assertCites(
   if (!isUncitedAnswer(output, readIds)) {
     return fail(
       readIds.length === 0
-        ? 'no Sources: trailer, and the run opened no document'
+        ? `no Sources: trailer, and the run read no document; ${ledgerReport(context)}`
         : 'no Sources: trailer, and the answer says the material does not cover the question'
     )
   }

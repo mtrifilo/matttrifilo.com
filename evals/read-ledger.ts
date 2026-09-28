@@ -32,8 +32,16 @@ export interface ReadLedger {
   /**
    * Documents the store resolved and the route then refused on every call,
    * for their size or the read budget. The model saw only the refusal.
+   * When `readsUnproven` is set, this holds every id resolved instead,
+   * because nothing on the stream says which of them were read.
    */
   refusedIds: string[]
+  /**
+   * The store resolved something and the stream carried no usable progress
+   * part, so no read is proven. Set so a red row blames the missing account
+   * rather than a refusal that may never have happened.
+   */
+  readsUnproven?: true
 }
 
 /**
@@ -87,5 +95,8 @@ export function splitReadLedger(
   return {
     readIds: distinct.filter(id => completed.has(id)),
     refusedIds: distinct.filter(id => !completed.has(id)),
+    ...(progress === undefined && distinct.length > 0
+      ? { readsUnproven: true as const }
+      : {}),
   }
 }

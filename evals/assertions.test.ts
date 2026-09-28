@@ -726,8 +726,8 @@ describe('assertCites', () => {
 
   test('still fails an answer on a run that read nothing', () => {
     expect(assertCites(answer, readNothing).pass).toBe(false)
-    expect(assertCites(answer, readNothing).reason).toContain(
-      'opened no document'
+    expect(assertCites(answer, readNothing).reason).toBe(
+      'no Sources: trailer, and the run read no document; read nothing'
     )
   })
 
@@ -908,7 +908,34 @@ describe('read assertions, on one completed and one refused read', () => {
       ctx({ expectReadsAny: ['open-source'] }, onlyRefused)
     )
     expect(result.pass).toBe(false)
-    expect(result.reason).toContain('opened no document')
+    expect(result.reason).toBe(
+      'no Sources: trailer, and the run read no document; read nothing; refused open-source'
+    )
+  })
+
+  test('a run with no progress part blames the missing account, not a refusal', () => {
+    // Nothing on the stream proved a read, so the resolved ids are unproven
+    // rather than refused, and the reason must not send the reader looking
+    // for a budget refusal that may never have happened.
+    const unproven = {
+      readIds: [],
+      refusedIds: ['open-source'],
+      readsUnproven: true as const,
+    }
+    expect(
+      assertReadsAnyOf('', ctx({ expectReadsAny: ['open-source'] }, unproven))
+        .reason
+    ).toBe(
+      'read none of open-source; read nothing; resolved open-source, but the stream carried no progress part to prove a read'
+    )
+    expect(
+      assertCitesOnlyWhatItRead(
+        'He led it.\n\nSources: open-source',
+        ctx(undefined, unproven)
+      ).reason
+    ).toBe(
+      'cited documents it never read: open-source (resolved, but no progress part proves it was read: open-source)'
+    )
   })
 
   test('assertReadsWithinIndex checks both halves', () => {
