@@ -56,14 +56,14 @@
     - type: javascript
       value: file://assertions.ts:assertNoNarration
 
-# Reads any of: team-throughput-study-2025-2026 or resume; both give the 2026 weekly figure.
+# Reads: team-throughput-study-2025-2026; it alone gives the 2026 weekly figure (the résumé gives only a ratio), as the golden 'throughput after agent adoption' pins it.
 - description: 'groundedness: cites the throughput figures'
   vars:
     question: How many merged pull requests a week did the team reach in 2026?
   metadata:
     suite: groundedness
     smoke: true
-    expectReadsAny: [team-throughput-study-2025-2026, resume]
+    expectReadsAny: [team-throughput-study-2025-2026]
   assert:
     - type: javascript
       value: file://assertions.ts:assertCites

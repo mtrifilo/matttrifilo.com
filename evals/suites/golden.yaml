@@ -19,7 +19,7 @@
 #
 # Adding a document to the corpus means adding goldens for it here.
 
-# Reads any of: owned-systems-and-operations or resume; both say the team owns email sending end to end and name deliverability and compliance, as the golden 'the Email Reliability charter' accepts either.
+# Reads any of: owned-systems-and-operations or resume; the first says the team owns the outbound email platform, the résumé that Matt, as the team's manager, is accountable for sending and compliance, as the golden 'the Email Reliability charter' accepts either.
 - description: 'golden: what the team owns'
   vars:
     question: What does Matt's team own?
@@ -45,8 +45,9 @@
       assert:
         - type: llm-rubric
           value: &r1 >-
-            The answer says Matt's team owns email sending or the outbound
-            email platform, and names at least one concrete part of it such as
+            The answer says Matt's team owns, or he as its manager is
+            accountable for, email sending or the outbound email platform, and
+            names at least one concrete part of it such as
             deliverability, compliance, engagement tracking, or the mail
             gateway. It is written about Matt in the third person.
         - type: llm-rubric
@@ -150,7 +151,11 @@
           value: &r4 >-
             The answer reports that merged pull requests per week rose from
             about 10 to about 28 (roughly 2.7 times) across 2025 to 2026, and
-            does not present the change as a proven causal result.
+            does not present the change as a proven causal result. It may add
+            the résumé's narrower figure, that the rest of the team's merged
+            pull requests per week rose 2.9 times from 2025 Q1 to 2026 Q3, as
+            long as it does not present the two as one measure: the study's
+            2.7 times compares the 2025 full year with 2026 to September 12.
         - type: llm-rubric
           value: *r4
         - type: llm-rubric
@@ -179,7 +184,9 @@
         - type: llm-rubric
           value: &r5 >-
             The answer says median cycle time or lead time to production fell
-            to about 2.3 days, from a band of roughly seven to nine days.
+            to about 2.3 days, from a band of roughly seven to nine days as the
+            study gives it, or from over a week as the résumé puts it; either
+            starting point is correct.
         - type: llm-rubric
           value: *r5
         - type: llm-rubric
@@ -211,7 +218,8 @@
           value: &r6 >-
             The answer says customer-reported defects fell and the open backlog
             went from 28 to 12, or otherwise reports that quality held while
-            output rose, without inventing a metric the study does not give.
+            output rose, without inventing a metric the published material
+            does not give.
         - type: llm-rubric
           value: *r6
         - type: llm-rubric
@@ -856,7 +864,9 @@
             and does not invent an award. Calling them the company's award and
             program without naming Thryv is correct, and so is adding the
             documented promotions or the peer recognition posted in company
-            channels; those are recorded, not invented.
+            channels; those are recorded, not invented. It may also add that
+            an Intel branded film recognized with a 2011 Intercom Gold Plaque
+            sits in his earlier sound work.
         - type: llm-rubric
           value: *r25
         - type: llm-rubric
@@ -989,7 +999,7 @@
     - type: icontains-any
       value:
         - Email Engagement Summary
-        - deliverability
+        - Vertex
     - type: assert-set
       threshold: 0.6
       assert:
@@ -999,8 +1009,9 @@
             Summary on Gemini on Vertex AI with retrieval over help content,
             and that it explains a sender's email-engagement results and what
             to do about them. Either document's framing of that is correct:
-            how recent sending practice affects deliverability, as the résumé
-            puts it, or what the bounce, complaint and engagement figures mean
+            diagnosing a user's last 30 days of sending practice and
+            recommending fixes, as the résumé puts it, or what the bounce,
+            complaint and engagement figures mean
             and what to do next, as the feature's own document puts it. Saying
             he also designed it is correct but not required.
         - type: llm-rubric
@@ -1470,7 +1481,8 @@
             The answer gives at least two of the measured figures: merged
             pull requests per week for five engineers rising from about 10 to
             about 28, median cycle time to production falling from a seven to
-            nine day band to about 2.3 days, or the open customer-defect
+            nine day band (or from over a week, as the résumé puts it) to
+            about 2.3 days, or the open customer-defect
             backlog falling from 28 to 12. It carries the study's own framing
             that this is a correlation and not a controlled experiment, or at
             least does not assert the agents caused the change. It is written
@@ -1486,7 +1498,10 @@
 # contract, load, and benchmark gates is just faster breakage.";
 # team-throughput-study-2025-2026: "Automated adversarial review as a
 # repository workflow, added in August, is the mechanism for keeping that
-# true as volume grows."
+# true as volume grows."; resume: "human-reviewed AI coding agents" and
+# "independent, gated production deploys" once "end-to-end, contract, load,
+# and manual readiness tests pass".
+# Reads any of: engineering-philosophy, team-throughput-study-2025-2026 or resume; the résumé names two of the three mechanisms the rubric lists, the human-reviewed agents and the tests that gate each deploy.
 - description: 'golden: holding quality with agent-written code'
   vars:
     question: How does Matt keep quality high when AI agents write most of the code?
@@ -1509,15 +1524,19 @@
       value:
         - merge button
         - human review
+        - human-reviewed
         - adversarial review
         - gates
+        - gated
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r41 >-
             The answer names at least two documented mechanisms: human review
-            on every change with a person on the merge button, automated
+            of agent-written changes (a person on the merge button for every
+            change, as the philosophy document puts it, or human-reviewed AI
+            coding agents, as the résumé does), automated
             adversarial review as a repository workflow added in August 2026,
             or the end-to-end, contract, load and manual readiness tests that
             gate every independent deploy. It may add the measured result
@@ -1574,11 +1593,10 @@
 # from the core monolith through the sending API to the mail transfer
 # agents, the gateway fleet itself, engagement tracking ... the compliance
 # case system, mailbox sync ... the AI email health features"; resume:
-# "owns email sending end to end for all Keap products", and, spread over
-# its roles and skills, parts the rubric lists: "Hardened the
-# engagement-tracking service", "the content-risk and spam-scoring
-# services", "DKIM/SPF", "MTA operations", and the AI Email Engagement
-# Summary.
+# "Accountable for sending, compliance, and 24/7 on-call as an Email
+# Service Provider", and, spread over its roles and skills, parts the rubric
+# lists: "Hardened the engagement-tracking service", "DKIM/SPF", "MTA
+# operations", and the AI Email Engagement Summary.
 # Reads any of: owned-systems-and-operations or resume, as the golden 'what the team owns' accepts either.
 - description: 'golden: the Email Reliability charter'
   vars:
@@ -1605,12 +1623,14 @@
       assert:
         - type: llm-rubric
           value: &r43 >-
-            The answer says the team owns the outbound email platform end to
-            end and names at least two documented parts of it, such as the
+            The answer says the team owns, or is accountable for, the outbound
+            email platform or email sending, and names at least two documented
+            parts of it, such as the
             sending path and the mail transfer agent fleet, engagement
             tracking, bounce and feedback-loop intake, recipient or content
             risk scoring, domain authentication, the email data warehouse,
-            the compliance case system, mailbox sync, or the AI email health
+            the compliance case system or compliance, mailbox sync, or the AI
+            email health
             features. It is written about Matt in the third person, and it
             must not present an inferred characterization as a documented one.
         - type: llm-rubric
@@ -1674,10 +1694,10 @@
 # do was explain what those numbers meant or what to do next." Stack:
 # "Gemini Flash Lite on Vertex AI, a Cloud Run service, and Vector Search";
 # production retrieval runs over "an automated daily sync of help-center
-# articles". The résumé's one-line version words it differently (the last 30
-# days of sending practice, deliverability); a run that read both may use
-# that wording, so the rubric accepts it. Vertex is in both, and the rubric
-# requires it.
+# articles". The résumé's one-line version words it differently (it
+# diagnoses the last 30 days of sending practice and recommends fixes); a
+# run that read both may use that wording, so the rubric accepts it. Vertex
+# is in both, and the rubric requires it.
 # Reads: ai-email-engagement-summary, the document about this feature; the résumé gives it one line.
 - description: 'golden: the engagement summary feature in detail'
   vars:
@@ -1698,7 +1718,6 @@
       value: file://assertions.ts:assertFollowUpsAnswerable
     - type: icontains-any
       value:
-        - deliverability
         - Vertex
         - 30 days
     - type: assert-set
@@ -1712,9 +1731,10 @@
             Gemini on Vertex AI with retrieval over the product's help-center
             content, and that it explains a sender's engagement figures, such
             as bounce rate, complaint rate and how recently contacts engaged,
-            and recommends what to do next. Describing that instead as how the
-            last 30 days of sending practice help or hurt deliverability, as
-            the résumé does, is equally correct. Naming the proof of concept in
+            and recommends what to do next. Describing that instead as
+            diagnosing the last 30 days of sending practice and recommending
+            fixes, as the résumé does, is equally correct. Naming the proof of
+            concept in
             one week, the production beta about five weeks after build kickoff,
             and every user two months after kickoff, or the Promptfoo evals
             behind its model changes, is correct but not required; a different
@@ -1832,7 +1852,7 @@
 # cloud projects ... Matt has been in the rotation since his individual-
 # contributor years ... and he stayed in it as a manager."; "under a
 # standing rule that every alert, including a one-off, gets a permanent
-# runbook"; resume: "serve as escalation lead for unacknowledged alerts".
+# runbook"; resume: "escalation lead for unacknowledged alerts".
 # Reads: owned-systems-and-operations, as the golden 'how on-call runs' does. The rubric asks for two of four parts; the résumé holds one (Matt's shifts and his escalation role), this document the rotation, his shifts, the alert policies in code and the runbook rule.
 - description: 'golden: running a 24/7 rotation for an ESP'
   vars:
@@ -1917,7 +1937,7 @@
             service before Black Friday 2022, the 2023 sending-limit
             hardening, the 2023 load tests across the services in the sending
             path, or the resilience library built for the 2019 season (which
-            the résumé says removed thousands of failed sends; a different
+            the résumé says mitigated thousands of failed sends; a different
             figure is wrong). It may add that Matt owned readiness four years
             running from 2022 to 2025
             with zero major incidents, and that 27.7 million emails went out
@@ -1979,7 +1999,7 @@
         - type: llm-rubric
           value: *r50
 
-# resume: "Led the Merge API decomposition effort ... moved Liquid template
+# resume: "Led the Merge API decomposition ... moved email template
 # rendering out of the monolith into a standalone Java service"; "On the
 # Platform team (2019): helped decompose the Contacts domain out of the Core
 # monolith, moving Mobile's and Web's contact reads onto the new Contacts
@@ -2021,8 +2041,9 @@
             Contacts document credits him with, such as the readiness audit,
             the parity fixes or the shadow-comparison harness), and from 2020
             to 2021 he led
-            the Merge API decomposition as a tour of duty, moving Liquid
-            template rendering into a standalone service, which the résumé
+            the Merge API decomposition as a tour of duty, moving email
+            template rendering (Liquid template merging, as the Merge API
+            document names it) into a standalone service, which the résumé
             calls a Java service and the Merge API document a Micronaut one.
             It does not claim he led the Contacts decomposition or was its
             lead engineer, which no document states. It is written
@@ -2119,8 +2140,8 @@
 
 # resume, Skills: "Java, Python, TypeScript, Go · Spring Boot, Micronaut,
 # Flask, FastAPI · Vue.js, React, GraphQL" and "Google Cloud (GKE, Cloud
-# Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, GitHub Actions,
-# CircleCI, Google Cloud Operations, OpsGenie"; technical-expertise: Java,
+# Run, Pub/Sub, BigQuery, Vertex AI), Kubernetes, Terraform, CI/CD (GitHub
+# Actions, CircleCI)"; technical-expertise: Java,
 # TypeScript and Node, Vue, Python and Go, Spring Boot and Micronaut,
 # Kubernetes, Google Cloud Platform, GitHub Actions, CircleCI, Terraform.
 # Reads any of: resume or technical-expertise; technical-expertise is the document about the stack. Not owned-systems-and-operations: it names the services' languages (Java/Micronaut, Python, Go) but no infrastructure platform, only "cloud projects, container and serverless services, data pipelines".
@@ -2288,8 +2309,9 @@
             Program of 2025, and the Keap Better Together Award of December
             2019. It does not invent an award or a year. Calling them the
             company's award and program without naming Thryv is correct. It
-            may add that an award-winning branded film for Intel sits in his
-            earlier sound work, or the documented promotions and peer
+            may add that an Intel branded film recognized with a 2011
+            Intercom Gold Plaque sits in his earlier sound work, or the
+            documented promotions and peer
             recognition posted in company channels, which are recorded rather
             than invented. It is written about Matt in the third person, and it
             must not present an inferred characterization as a documented one.
@@ -2339,7 +2361,8 @@
           value: *r58
 
 # resume: "Earlier: Freelance sound design and post-production, Chicago
-# (2009-2015), including an award-winning branded film for Intel."
+# (2009-2015), including an Intel branded film (2011 Intercom Gold
+# Plaque)."
 - description: 'golden: the pre-software career, in the pool wording'
   vars:
     question: What did Matt do before software engineering?
@@ -2367,8 +2390,9 @@
         - type: llm-rubric
           value: &r59 >-
             The answer says Matt worked in freelance sound design and
-            post-production in Chicago from 2009 to 2015, including an
-            award-winning branded film for Intel. It may add that he was
+            post-production in Chicago from 2009 to 2015, including an Intel
+            branded film recognized with a 2011 Intercom Gold Plaque. It may
+            add that he was
             working as a barista when he took his first engineering offer, and
             that he has a degree in Audio Arts and Acoustics rather than
             computer science. It is written about Matt in the third person,
@@ -2428,10 +2452,13 @@
         - type: llm-rubric
           value: *r60
 
-# resume: "Software Engineer III / Tech Lead (player-coach), Email
-# Reliability · Jul 2022 - May 2025 - Half coding, half management for a
-# team of 5 through the Keap-to-Thryv acquisition."
-# Reads: resume only; recognition-and-programs lacks the Tech Lead title, team of five and acquisition graded here.
+# resume: "Software Engineer III, player-coach, Email Reliability · Jul
+# 2022 - May 2025 - Player-coach with an engineering manager's
+# accountability for the team, its people, delivery and operations, while
+# coding roughly half the time." Matt was not the team's tech lead (Matt,
+# 2026-09-28, MTC-96), so a Tech Lead title fails the rubric.
+# "player-coach" is not a distinctive phrase here: the question supplies it.
+# Reads: resume only; recognition-and-programs dates the July 2022 start and the roughly even split, but not the engineering manager's accountability graded here.
 - description: 'golden: the player-coach years'
   vars:
     question: Has Matt worked as a player-coach, and how did he split his time?
@@ -2449,29 +2476,34 @@
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
       value:
-        - player-coach
+        - Software Engineer III
+        - accountability
+        - half the time
+        - half his time
+        - half of his time
         - half coding
-        - Tech Lead
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r61 >-
-            The answer says Matt was Software Engineer III and Tech Lead as a
-            player-coach on Email Reliability from July 2022 to May 2025, half
-            coding and half management for a team of five, through the Keap to
-            Thryv acquisition. It is written about Matt in the third person,
-            and it must not present an inferred characterization as a
-            documented one.
+            The answer says that from July 2022 to May 2025 Matt was a
+            Software Engineer III working as a player-coach on Email
+            Reliability, carrying an engineering manager's accountability for
+            the team, its people, delivery and operations, while coding
+            roughly half the time. It FAILS if it says Matt was the team's tech
+            lead or held a Tech Lead title, which the published material does
+            not state. It is written about Matt in the third person, and it
+            must not present an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r61
         - type: llm-rubric
           value: *r61
 
 # ai-tooling-leadership: the forum, the skills library, the proposals, the
-# interview panels; resume: "Wrote the governance for Thryv's Claude Code
-# plugin marketplace; the team's marketplace ... became the company
-# template."
+# interview panels; resume: "Wrote the governance and architecture
+# decisions for Thryv's Claude Code plugin marketplace; the team's
+# marketplace ... became the company template."
 - description: 'golden: influence beyond his own team'
   vars:
     question: Has Matt led AI adoption beyond his own team, or only within it?
@@ -2687,10 +2719,10 @@
         - type: llm-rubric
           value: *r66
 
-# resume: "serve as escalation lead for unacknowledged alerts. Separately,
-# in the Engineering Manager rotation, back up the org's Incident Commander
-# on P0/P1s."; "Incident lead for a 30-minute cloud-provider outage (Feb
-# 2024)". He backs the Incident Commander up; he is not the org's IC.
+# resume: "escalation lead for unacknowledged alerts; backup Incident
+# Commander for org-wide P0/P1s in the Engineering Manager rotation.";
+# "Incident lead for a 30-minute cloud-provider outage (Feb 2024)". He backs
+# the Incident Commander up; he is not the org's IC.
 # Reads: resume only; it alone states the three roles together.
 - description: 'golden: his incident command responsibilities, stated exactly'
   vars:
@@ -2734,10 +2766,11 @@
         - type: llm-rubric
           value: *r67
 
-# resume: "Forecast monthly sending volume through 2026 for the annual MTA
-# license renewal (quoted at +48%); matched the vendor's own reporting
-# within ~1% and closed at my recommended tier, roughly flat year over
-# year." The published material states no dollar amount anywhere.
+# resume: "Forecast 2026 sending volume for the annual mail-transfer (MTA)
+# software license renewal, quoted at +48%; matched the vendor's own
+# reporting within ~1%, and the renewal closed at the recommended tier,
+# roughly flat year over year." The published material states no dollar
+# amount anywhere.
 # Reads: resume only; the quoted increase and the flat outcome are in no other document.
 - description: 'golden: vendor negotiation and license cost'
   vars:
@@ -2769,10 +2802,11 @@
         - type: llm-rubric
           value: &r68 >-
             The answer says yes and gives the documented case: Matt forecast
-            monthly sending volume through 2026 for the annual mail transfer
+            2026 sending volume for the annual mail transfer
             agent license renewal, which the vendor had quoted at plus 48
             percent, matched the vendor's own reporting within about one
-            percent, and closed at his recommended tier roughly flat year over
+            percent, and the renewal closed at the recommended tier, roughly
+            flat year over
             year. It may add that he owns his organization's AI tooling access
             and spend. It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
