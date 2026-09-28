@@ -383,10 +383,11 @@
  * one being read is the distraction the pause exists to remove. That is why
  * both conditions are read off the group rather than off a single row.
  *
- * A touch is not a pause: it hands the touched row over for good (below)
- * and leaves the other one moving. Hover is therefore read only where a
- * pointer can hover, because a touch browser keeps `:hover` on whatever was
- * last tapped, which would stop the other row as well.
+ * A touch is not a pause: it hands both rows over for good (below). Hover
+ * is still read only where a pointer can hover, because a touch browser
+ * keeps `:hover` on whatever was last tapped, and a row the touch could not
+ * hand over yet (its loop not yet measured) would be held by that instead
+ * of moving until the next touch hands it over.
  */
 .starter-ticker:focus-within .starter-ticker-track {
   animation-play-state: paused;
@@ -423,11 +424,13 @@
 }
 
 /*
- * A row the visitor has touched, or pushed sideways with a wheel or a
- * trackpad, is theirs for the rest of the visit. starter-ticker.tsx freezes
- * it at the point its loop had reached, as focus does, and this makes it a
- * strip they scroll: the same window with the same fades, now moved by hand
- * and never again by the loop.
+ * Once the visitor touches either row, or pushes one sideways with a wheel
+ * or a trackpad, both rows are theirs for the rest of the visit.
+ * starter-ticker.tsx freezes each at the point its own loop had reached, as
+ * focus does, and this makes each a strip they scroll: the same window with
+ * the same fades, now moved by hand and never again by the loop. The
+ * component keeps the two strips at one shared scroll position; each is
+ * still its own scroll box, which is what keeps its fades and its lead.
  *
  * `overscroll-behavior-x` keeps a drag that reaches the start of the row
  * from becoming the browser's back gesture, which on a phone would leave the

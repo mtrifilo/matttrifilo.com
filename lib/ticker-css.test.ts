@@ -298,9 +298,9 @@ describe('the state flags the component writes', () => {
   })
 
   test('hover pauses only where a pointer can hover', () => {
-    // A touch hands the touched row over and leaves the other moving. A
-    // touch browser keeps :hover on the last thing tapped, so an unscoped
-    // hover pause would stop the other row too.
+    // A touch hands both rows over, but a row whose loop is not measured
+    // yet is left moving. A touch browser keeps :hover on the last thing
+    // tapped, so an unscoped hover pause would hold that row instead.
     expect(
       blockAround('.starter-ticker:hover .starter-ticker-track {')
     ).toContain('@media (hover: hover)')
