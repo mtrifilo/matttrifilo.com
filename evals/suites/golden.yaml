@@ -2836,16 +2836,17 @@
 # voluntary attrition as manager." recognition-and-programs: "100 percent
 # team retention in his first year as Technical Manager, May 2025 to May
 # 2026. Two hires in 2025, both of whom became high performers quickly."
-# The faq sets out his interviewing, ramp and growth practices but states
-# neither outcome, so it is not an alternative read here; the rubric accepts
-# those practices as added detail.
-# Reads any of: resume or recognition-and-programs; each states both outcomes in its own words.
+# faq, the hiring answer's last sentence: "In 2025 he hired two engineers who
+# became high performers within months, with zero voluntary attrition as
+# manager." The rubric also accepts its interviewing, ramp and growth
+# practices as added detail.
+# Reads any of: resume, recognition-and-programs or faq; each states both outcomes in its own words.
 - description: 'golden: hiring and retention outcomes'
   vars:
     question: What is Matt's track record hiring and keeping engineers?
   metadata:
     suite: golden
-    expectReadsAny: [resume, recognition-and-programs]
+    expectReadsAny: [resume, recognition-and-programs, faq]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
