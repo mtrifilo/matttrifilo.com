@@ -173,7 +173,7 @@ describe('a starter question picked on /ask', () => {
   })
 
   test('returns focus to the composer after a mouse, pen or keyboard pick on a touch device', async () => {
-    // A tablet with a hardware keyboard, a mouse or a stylus: the press
+    // A tablet with a hardware keyboard or a mouse, or a pen: the press
     // wins over the device.
     setTouchDevice(true)
     for (const press of ['mouse', 'pen', 'keyboard'] as const) {
@@ -326,6 +326,16 @@ describe('a new conversation', () => {
     )
   }
 
+  /**
+   * Gives the control focus, as a browser does when it is clicked or reached
+   * by Tab, so the composer holds focus afterwards only if the reset put it
+   * there: asking a typed question leaves it in the composer.
+   */
+  function focusOn(control: HTMLElement): void {
+    act(() => control.focus())
+    expect(focused()).toBe('another element (button)')
+  }
+
   /** Resolves once the transcript is gone and the empty state is back. */
   async function emptied(): Promise<void> {
     await waitFor(() =>
@@ -337,6 +347,7 @@ describe('a new conversation', () => {
     test('focuses the composer after a mouse press, even on a touch device', async () => {
       setTouchDevice(true)
       await renderAnswered()
+      focusOn(headerReset())
       fireEvent.pointerDown(headerReset(), { pointerType: 'mouse' })
       fireEvent.click(headerReset())
       await emptied()
@@ -346,6 +357,7 @@ describe('a new conversation', () => {
     test('focuses the composer after a key, even on a touch device', async () => {
       setTouchDevice(true)
       await renderAnswered()
+      focusOn(headerReset())
       fireEvent.keyDown(headerReset(), { key: 'Enter' })
       fireEvent.click(headerReset())
       await emptied()
@@ -355,7 +367,6 @@ describe('a new conversation', () => {
     test('moves focus to the heading after a touch, so the keyboard stays down', async () => {
       setTouchDevice(true)
       await renderAnswered()
-      act(() => composer().focus())
       fireEvent.pointerDown(headerReset(), { pointerType: 'touch' })
       fireEvent.click(headerReset())
       await emptied()
@@ -373,6 +384,7 @@ describe('a new conversation', () => {
 
     test('focuses the composer after a click with no press on a fine-pointer device', async () => {
       await renderAnswered()
+      focusOn(headerReset())
       fireEvent.click(headerReset())
       await emptied()
       expect(focused()).toBe('composer')
@@ -384,6 +396,7 @@ describe('a new conversation', () => {
       setTouchDevice(true)
       await renderRefused()
       const reset = await noticeReset()
+      focusOn(reset)
       fireEvent.pointerDown(reset, { pointerType: 'mouse' })
       fireEvent.click(reset)
       await emptied()
@@ -394,6 +407,7 @@ describe('a new conversation', () => {
       setTouchDevice(true)
       await renderRefused()
       const reset = await noticeReset()
+      focusOn(reset)
       fireEvent.keyDown(reset, { key: 'Enter' })
       fireEvent.click(reset)
       await emptied()

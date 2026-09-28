@@ -59,8 +59,8 @@ describe('an activation', () => {
   })
 
   test('is not a touch when a mouse, a pen or a key pressed it, even on a touch device', () => {
-    // A tablet with a hardware keyboard, a mouse or a stylus raises no
-    // on-screen keyboard for a focused field (Matt, 2026-09-23, MTC-81).
+    // The press wins over the device (Matt, 2026-09-23, MTC-81): only a
+    // touch counts as one, so a pen does not either.
     setTouchDevice(true)
     expect(isTouchActivation('mouse')).toBe(false)
     expect(isTouchActivation('pen')).toBe(false)
@@ -170,6 +170,20 @@ describe('the press an activation came from', () => {
     fireEvent.keyDown(composer, { key: 'Enter' })
     fireEvent.click(pill)
     expect(picks).toEqual([true])
+  })
+
+  test('is decided by the device when a click with no press follows a cancelled touch', () => {
+    // A touch that became a scroll produces no click, so it must not stand
+    // in for the press of a later bare click.
+    const { pill, picks } = renderRegion()
+    fireEvent.pointerDown(pill, { pointerType: 'touch' })
+    fireEvent.pointerCancel(pill, { pointerType: 'touch' })
+    fireEvent.click(pill)
+    setTouchDevice(true)
+    fireEvent.pointerDown(pill, { pointerType: 'pen' })
+    fireEvent.pointerCancel(pill, { pointerType: 'pen' })
+    fireEvent.click(pill)
+    expect(picks).toEqual([false, true])
   })
 
   test('is decided by the device when a key other than Enter or Space came last', () => {

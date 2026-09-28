@@ -61,6 +61,7 @@ export interface ActivationPress {
   /** Spread on the element that contains every control that asks. */
   pressHandlers: {
     onPointerDownCapture: (event: PointerEvent) => void
+    onPointerCancelCapture: (event: PointerEvent) => void
     onKeyDownCapture: (event: KeyboardEvent) => void
     onClickCapture: (event: MouseEvent) => void
     onClick: (event: MouseEvent) => void
@@ -76,12 +77,14 @@ const ACTIVATION_KEYS = new Set(['Enter', ' '])
  * that is only handed a question can still tell a tap from a click or a key.
  *
  * The capture phase sees a press before a control's own handlers can stop
- * it. A press counts only for the click it produced: the click's bubble,
- * which reaches the region after the control has read it, forgets it. A key
- * counts only for a click on the element it was pressed on, so Enter in the
- * composer is not taken for the keyboard pick of a pill a screen reader
- * activates later. Any other key forgets the press, so a pick made with
- * Enter after an earlier tap is not taken for a touch.
+ * it. A press is forgotten once it can no longer produce a click: the
+ * click's bubble, which reaches the region after the control has read it,
+ * forgets it, and so does a cancelled pointer (a touch that became a scroll
+ * of the ticker or the transcript). A key counts only for a click on the
+ * element it was pressed on, so Enter in the composer is not taken for the
+ * keyboard pick of a pill a screen reader activates later. Any other key
+ * forgets the press, so a pick made with Enter after an earlier tap is not
+ * taken for a touch.
  *
  * The click's own `pointerType` is not read. Browsers differ on what a click
  * that no pointer produced reports there, and the one thing that must not
@@ -121,6 +124,7 @@ export function useActivationPress(): ActivationPress {
     () => ({
       pressHandlers: {
         onPointerDownCapture,
+        onPointerCancelCapture: forgetPress,
         onKeyDownCapture,
         onClickCapture,
         onClick: forgetPress,
