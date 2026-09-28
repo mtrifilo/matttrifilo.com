@@ -219,6 +219,42 @@ export function revealScrollLeft({
   return clamp(next, 0, maxScrollLeft)
 }
 
+/**
+ * Where a handed-over row sits in the one scroll position both rows share.
+ *
+ * Every row stops at its own loop position, so the rows start the shared
+ * position at different scroll offsets: `origin` is the offset a row had
+ * when the shared travel was zero, and the row is at `origin + travel` from
+ * then on. `maxScrollLeft` is the furthest the row itself can scroll.
+ */
+export interface StripSpan {
+  origin: number
+  maxScrollLeft: number
+}
+
+/**
+ * The travel every row can follow, as close to the asked-for travel as
+ * that allows.
+ *
+ * The rows hold different questions and so run different lengths, and each
+ * starts from its own offset, so each one runs out at a different travel.
+ * The rows stop together at the first of those ends, whichever row and
+ * whichever edge it is: a row that kept going alone would put the two rows
+ * out of step for the rest of the visit.
+ */
+export function clampSharedTravel(
+  travel: number,
+  strips: readonly StripSpan[]
+): number {
+  let low = Number.NEGATIVE_INFINITY
+  let high = Number.POSITIVE_INFINITY
+  for (const { origin, maxScrollLeft } of strips) {
+    low = Math.max(low, -origin)
+    high = Math.min(high, maxScrollLeft - origin)
+  }
+  return clamp(travel, low, high)
+}
+
 function clamp(value: number, low: number, high: number): number {
   if (high < low) return low
   return Math.min(Math.max(value, low), high)

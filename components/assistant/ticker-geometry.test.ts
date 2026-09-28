@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { STARTER_QUESTIONS } from './copy'
 import {
   ASK_START_AT,
+  clampSharedTravel,
   HOME_START_AT,
   loopSeconds,
   openingProgress,
@@ -368,5 +369,36 @@ describe('how far a wheel event moves a handed-over row', () => {
     expect(
       sidewaysWheelPixels(motion(1, 0, { deltaMode: 2 }), LINE, PAGE)
     ).toBe(PAGE)
+  })
+})
+
+describe('the one scroll position both handed-over rows share', () => {
+  // Two rows stopped at different points of their loops, the second one
+  // shorter: it can travel 600 to the right and 300 to the left, the first
+  // 1_900 and 1_200.
+  const first = { origin: 1_200, maxScrollLeft: 3_100 }
+  const second = { origin: 300, maxScrollLeft: 900 }
+
+  test('a travel both rows can follow is left as it is', () => {
+    expect(clampSharedTravel(250, [first, second])).toBe(250)
+    expect(clampSharedTravel(-250, [first, second])).toBe(-250)
+  })
+
+  test('both rows stop where the first of them runs out, whichever end', () => {
+    expect(clampSharedTravel(5_000, [first, second])).toBe(600)
+    expect(clampSharedTravel(-5_000, [first, second])).toBe(-300)
+  })
+
+  test('the row that runs out first is found, not assumed', () => {
+    // The same rows the other way round, and a first row that is now the
+    // one with less room to the right.
+    const tight = { origin: 2_900, maxScrollLeft: 3_100 }
+    expect(clampSharedTravel(5_000, [second, tight])).toBe(200)
+    expect(clampSharedTravel(-5_000, [second, tight])).toBe(-300)
+  })
+
+  test('a single row travels as far as it alone can', () => {
+    expect(clampSharedTravel(5_000, [first])).toBe(1_900)
+    expect(clampSharedTravel(-5_000, [first])).toBe(-1_200)
   })
 })
