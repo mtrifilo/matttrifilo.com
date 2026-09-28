@@ -334,12 +334,13 @@ describe("the rows' scrollbar", () => {
     ['light', ':root {'],
     ['dark', '.dark {'],
   ])(
-    'the %s theme sets its own thumb, visible against its page and its card',
+    'the %s theme sets its own thumb, at 3:1 against its page and its card',
     (_theme, selector) => {
       // WCAG 1.4.11 asks 3:1 of a control's parts. The rows sit on the page
       // on /ask and on a card on the homepage, so the thumb has to clear
       // both, and a theme that stopped setting the token would inherit the
-      // other theme's.
+      // other theme's. This is the token's color; within a fade's width of
+      // a row's end the mask paints it fainter, which only the preview shows.
       const block = ruleFor(selector)
       const thumb = hexOf(block, THUMB)
       for (const surface of ['--background', '--card']) {

@@ -252,8 +252,9 @@
    * text token, which each theme sets and which clears 3:1 against both
    * themes' page and card, over no track at all. Declared on this class,
    * which only the horizontal rows wear, so the transcript's vertical bar
-   * keeps the browser's default. The mask above fades the bar at the ends
-   * along with the pills.
+   * keeps the browser's default. The mask above covers the bar too: within
+   * a fade's width of an end the thumb fades with the pills and is fainter
+   * than that 3:1.
    */
   scrollbar-width: thin;
   scrollbar-color: var(--muted-foreground) transparent;
@@ -268,11 +269,12 @@
 /*
  * The same bar for a browser that predates `scrollbar-color` (Safari before
  * 26.2, Chrome before 121). A browser that has it ignores these rules on any
- * element whose `scrollbar-color` is not `auto`, and forced colors resets
- * that property to `auto`, which would bring these colors back over the
- * system's: the query keeps them to the older browsers only. Sizing the bar
- * is what makes an overlay bar draw at all times there, so the height is
- * the thin bar's and no more.
+ * element whose `scrollbar-color` is not `auto` (MDN, `scrollbar-color`),
+ * and forced colors resets that property to `auto`, which would bring these
+ * colors back over the system's: the query keeps them to the older browsers
+ * only. Sizing the bar is what makes an overlay bar draw at all times in
+ * those browsers, a Mac's default included, so the height is the thin bar's
+ * and no more.
  */
 @supports not (scrollbar-color: auto) {
   .edge-faded-row::-webkit-scrollbar {
