@@ -9,13 +9,13 @@ import {
 
 /**
  * How the visitor is pointing, for the one decision that depends on it:
- * where focus goes after a question is asked for them.
+ * where focus goes after a control asks a question for them or starts a new
+ * conversation.
  *
- * Focusing the composer parks the caret for a follow-up, which is what a
- * mouse or keyboard visitor wants. On a touch device the same call raises the
- * on-screen keyboard over the answer that is about to stream in, so a pick
- * made by touch leaves the composer alone, and so does /ask when it loads on
- * a touch device.
+ * Focusing the composer parks the caret for the next question, which is what
+ * a mouse or keyboard visitor wants. On a touch device the same call raises
+ * the on-screen keyboard over the page, so an activation made by touch leaves
+ * the composer alone, and so does /ask when it loads on a touch device.
  */
 
 const COARSE_POINTER_QUERY = '(pointer: coarse)'
@@ -35,64 +35,104 @@ export function hasCoarsePointer(): boolean {
 }
 
 /**
- * Whether a pick should be treated as a touch.
- *
- * The device's primary pointer decides first. The press that led to the pick
- * is the fallback, because a touchscreen laptop reports a fine pointer and
- * still raises an on-screen keyboard for a tapped field.
- *
- * @param pressType The `pointerType` of the last press before the pick, or
- *   null when the pick came from the keyboard or no press was seen.
+ * What pressed a control: a pointer's `pointerType` (`touch`, `mouse`, `pen`,
+ * or whatever else a browser reports), `keyboard` for Enter or Space on the
+ * focused control, or null when nothing was seen.
  */
-export function isTouchPick(pressType: string | null): boolean {
-  return hasCoarsePointer() || pressType === 'touch'
+export type Press = string | null
+
+/**
+ * Whether an activation should be treated as a touch.
+ *
+ * The press decides (Matt, 2026-09-23, MTC-81): a finger is a touch; a mouse,
+ * a pen or a key is not, even on a device whose primary pointer is a finger,
+ * because a tablet with a hardware keyboard raises no on-screen keyboard for
+ * a focused field. The device's primary pointer decides only when no press
+ * was seen, which is how a screen reader or voice control activates a
+ * control: with a click and nothing before it.
+ */
+export function isTouchActivation(press: Press): boolean {
+  if (press === 'touch') return true
+  if (press !== null) return false
+  return hasCoarsePointer()
 }
 
-export interface PickPointer {
-  /** Spread on the element that contains every pickable question. */
+export interface ActivationPress {
+  /** Spread on the element that contains every control that asks. */
   pressHandlers: {
     onPointerDownCapture: (event: PointerEvent) => void
     onKeyDownCapture: (event: KeyboardEvent) => void
+    onClickCapture: (event: MouseEvent) => void
     onClick: (event: MouseEvent) => void
   }
-  /** Read inside a pick handler: whether that pick was a touch. */
-  pickedByTouch: () => boolean
+  /** Read inside a click handler: whether that click was a touch. */
+  activatedByTouch: () => boolean
 }
 
+const ACTIVATION_KEYS = new Set(['Enter', ' '])
+
 /**
- * Remembers how the visitor last pressed inside a region, so a pick handler
- * that is only handed the question can still tell a tap from a click or a
- * key.
+ * Remembers how the visitor last pressed inside a region, so a click handler
+ * that is only handed a question can still tell a tap from a click or a key.
  *
- * The capture phase sees the press before the pill's own handlers can stop
+ * The capture phase sees a press before a control's own handlers can stop
  * it. A press counts only for the click it produced: the click's bubble,
- * which reaches the region after the pill has read it, forgets it, and so
- * does a key press. So a pick made with Enter after an earlier tap, or a
- * click a screen reader or voice control sends with no press at all, is not
- * taken for a touch because of a finger that landed somewhere else first.
+ * which reaches the region after the control has read it, forgets it. A key
+ * counts only for a click on the element it was pressed on, so Enter in the
+ * composer is not taken for the keyboard pick of a pill a screen reader
+ * activates later. Any other key forgets the press, so a pick made with
+ * Enter after an earlier tap is not taken for a touch.
+ *
+ * The click's own `pointerType` is not read. Browsers differ on what a click
+ * that no pointer produced reports there, and the one thing that must not
+ * happen, a screen reader's activation on a phone read as a mouse, is safest
+ * decided by the device.
  */
-export function usePickPointer(): PickPointer {
-  const pressType = useRef<string | null>(null)
+export function useActivationPress(): ActivationPress {
+  // Set only for a key: a key counts only for a click on the element it was
+  // pressed on.
+  const press = useRef<{ type: string; keyTarget?: EventTarget } | null>(null)
 
   const onPointerDownCapture = useCallback((event: PointerEvent) => {
-    pressType.current = event.pointerType || null
+    press.current = event.pointerType ? { type: event.pointerType } : null
+  }, [])
+
+  const onKeyDownCapture = useCallback((event: KeyboardEvent) => {
+    press.current = ACTIVATION_KEYS.has(event.key)
+      ? { type: 'keyboard', keyTarget: event.target }
+      : null
+  }, [])
+
+  const onClickCapture = useCallback((event: MouseEvent) => {
+    const keyTarget = press.current?.keyTarget
+    if (keyTarget && keyTarget !== event.target) press.current = null
   }, [])
 
   const forgetPress = useCallback(() => {
-    pressType.current = null
+    press.current = null
   }, [])
 
-  const pickedByTouch = useCallback(() => isTouchPick(pressType.current), [])
+  const activatedByTouch = useCallback(
+    () => isTouchActivation(press.current?.type ?? null),
+    []
+  )
 
   return useMemo(
     () => ({
       pressHandlers: {
         onPointerDownCapture,
-        onKeyDownCapture: forgetPress,
+        onKeyDownCapture,
+        onClickCapture,
         onClick: forgetPress,
       },
-      pickedByTouch,
+      activatedByTouch,
     }),
-    [forgetPress, onPointerDownCapture, pickedByTouch]
+    [
+      activatedByTouch,
+      forgetPress,
+      onClickCapture,
+      onKeyDownCapture,
+      onPointerDownCapture,
+    ]
   )
 }

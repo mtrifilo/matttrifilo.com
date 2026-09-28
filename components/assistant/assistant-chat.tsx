@@ -39,7 +39,7 @@ import { ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { hasPendingQuestion, takePendingQuestion } from './pending-question'
-import { hasCoarsePointer, usePickPointer } from './pointer'
+import { hasCoarsePointer, useActivationPress } from './pointer'
 import { useElapsed } from './use-elapsed'
 
 // One transport for the page's life. `fetch` is looked up at call time so
@@ -191,26 +191,27 @@ export function AssistantChat() {
   )
 
   // A picked question also has to take focus somewhere, because the pill
-  // that had it is about to go. A mouse or keyboard pick puts the caret in
-  // the composer, as a typed one does. A touch pick must not: focusing the
-  // composer raises the on-screen keyboard over the answer as it streams.
-  // Focus goes to the status region instead, which is also where a screen
-  // reader hears the answer begin.
+  // that had it is about to go. A mouse, pen or keyboard pick puts the caret
+  // in the composer, as a typed one does, even on a touch device. A touch
+  // pick must not: focusing the composer raises the on-screen keyboard over
+  // the answer as it streams. Focus goes to the status region instead, which
+  // is also where a screen reader hears the answer begin. How a pick counts
+  // as a touch is `isTouchActivation` in pointer.ts.
   //
   // It moves there once the run has started, not in the click: a screen
   // reader reads a region as it takes focus, and until the SDK reports the
   // send (a few microtasks later, still before the browser paints) this one
   // still holds the last run's "Response complete". A run that fails before
   // it starts reports that too, and "Error" is worth hearing.
-  const { pressHandlers, pickedByTouch } = usePickPointer()
+  const { pressHandlers, activatedByTouch } = useActivationPress()
   const focusStatusOnceRunning = useRef(false)
   const askPicked = useCallback(
     (question: string) => {
       ask(question)
-      if (pickedByTouch()) focusStatusOnceRunning.current = true
+      if (activatedByTouch()) focusStatusOnceRunning.current = true
       else textareaRef.current?.focus()
     },
-    [ask, pickedByTouch]
+    [ask, activatedByTouch]
   )
   useLayoutEffect(() => {
     if (!focusStatusOnceRunning.current || status === 'ready') return
@@ -244,11 +245,12 @@ export function AssistantChat() {
   // effects twice in development. A layout effect, so the question is taken
   // and sent in the same frame the docked layout is first drawn in.
   //
-  // It also decides where focus starts. A question picked by touch on the
-  // homepage lands as a pick made here would: on the status region, keyboard
-  // down. Otherwise the composer is the page's focal point and is focused,
-  // except on a touch device, where that would raise the keyboard over the
-  // page before the visitor has touched anything.
+  // It also decides where focus starts. A question picked on the homepage
+  // lands as a pick made here would: on the status region after a touch,
+  // keyboard down, and on the composer after any other pick. Otherwise the
+  // composer is the page's focal point and is focused, except on a touch
+  // device, where that would raise the keyboard over the page before the
+  // visitor has touched anything.
   const handedOff = useRef(false)
   useLayoutEffect(() => {
     if (handedOff.current) return
@@ -258,8 +260,9 @@ export function AssistantChat() {
       askedRef.current = pending.question
       void sendMessage({ text: pending.question })
     }
-    if (pending?.pickedByTouch) focusStatusOnceRunning.current = true
-    else if (!hasCoarsePointer()) textareaRef.current?.focus()
+    if (pending?.askedBy === 'touch-pick') focusStatusOnceRunning.current = true
+    else if (pending?.askedBy === 'other-pick' || !hasCoarsePointer())
+      textareaRef.current?.focus()
   }, [sendMessage])
 
   const lastMessage = messages.at(-1)

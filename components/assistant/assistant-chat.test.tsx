@@ -10,9 +10,11 @@ import { handOffQuestion } from './pending-question'
  * a question is asked.
  *
  * A focused composer is a raised keyboard on a phone, so every path that
- * focuses it has a touch counterpart that does not. What a phone then draws
- * (the keyboard staying down, the answer visible while it streams) is a
- * preview check; what is asserted here is which element holds focus.
+ * focuses it has a touch counterpart that does not. The press decides, not
+ * the device: a mouse, pen or key focuses the composer even on a touch
+ * device (Matt, 2026-09-23, MTC-81). What a phone then draws (the keyboard
+ * staying down, the answer visible while it streams) is a preview check;
+ * what is asserted here is which element holds focus.
  *
  * A touch device is stated through Happy DOM's settings (test/touch-device.ts).
  */
@@ -142,6 +144,22 @@ describe('a starter question picked on /ask', () => {
     await answered()
   })
 
+  test('returns focus to the composer after a mouse, pen or keyboard pick on a touch device', async () => {
+    // A tablet with a hardware keyboard, a mouse or a stylus: the press
+    // wins over the device.
+    setTouchDevice(true)
+    for (const press of ['mouse', 'pen', 'keyboard'] as const) {
+      const { unmount } = render(<AssistantChat />)
+      if (press === 'keyboard') fireEvent.keyDown(starterPill(), { key: ' ' })
+      else fireEvent.pointerDown(starterPill(), { pointerType: press })
+      fireEvent.click(starterPill())
+      expect(`${press}: ${focused()}`).toBe(`${press}: composer`)
+      await answered()
+      unmount()
+    }
+    expect(asked).toHaveLength(3)
+  })
+
   test('moves focus to the status region after a touch pick', async () => {
     setTouchDevice(true)
     render(<AssistantChat />)
@@ -262,7 +280,7 @@ describe('a typed question', () => {
 describe('a question handed over from the homepage', () => {
   test('lands on the status region when it was picked by touch', async () => {
     setTouchDevice(true)
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'touch-pick' })
     render(<AssistantChat />)
     await statusFocused()
     await answered()
@@ -270,14 +288,29 @@ describe('a question handed over from the homepage', () => {
   })
 
   test('lands on the status region after a tap on a fine-pointer touchscreen', async () => {
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: true })
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'touch-pick' })
     render(<AssistantChat />)
     await statusFocused()
     await answered()
   })
 
-  test('lands on the composer when it was picked with a mouse or a key', async () => {
-    handOffQuestion({ question: STARTER_QUESTIONS[0], pickedByTouch: false })
+  test('lands on the composer when it was picked with a mouse, a pen or a key', async () => {
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'other-pick' })
+    render(<AssistantChat />)
+    expect(focused()).toBe('composer')
+    await answered()
+  })
+
+  test('lands on the composer on a touch device when it was picked with a mouse, a pen or a key', async () => {
+    setTouchDevice(true)
+    handOffQuestion({ question: STARTER_QUESTIONS[0], askedBy: 'other-pick' })
+    render(<AssistantChat />)
+    expect(focused()).toBe('composer')
+    await answered()
+  })
+
+  test('lands on the composer with a fine pointer when it was typed', async () => {
+    handOffQuestion({ question: 'What did Matt ship?', askedBy: 'typing' })
     render(<AssistantChat />)
     expect(focused()).toBe('composer')
     await answered()
@@ -285,7 +318,7 @@ describe('a question handed over from the homepage', () => {
 
   test('focuses nothing on a touch device when it was typed', async () => {
     setTouchDevice(true)
-    handOffQuestion({ question: 'What did Matt ship?', pickedByTouch: false })
+    handOffQuestion({ question: 'What did Matt ship?', askedBy: 'typing' })
     render(<AssistantChat />)
     expect(focused()).toBe('nothing')
     await answered()

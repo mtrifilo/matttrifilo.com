@@ -25,25 +25,33 @@ const PENDING_QUESTION_TTL_MS = 60_000
  * act of reading, and the cost of that is retyping a sentence, not a crash.
  */
 
+/**
+ * How a handed-off question was asked, which is what /ask needs to decide
+ * where focus starts: typed into the homepage composer, a starter question
+ * picked by touch, or one picked any other way (a mouse, a pen, a key).
+ */
+export type AskedBy = 'typing' | 'touch-pick' | 'other-pick'
+
+const ASKED_BY: ReadonlySet<string> = new Set<AskedBy>([
+  'typing',
+  'touch-pick',
+  'other-pick',
+])
+
 /** A question on its way from the homepage to /ask. */
 export interface PendingQuestion {
   question: string
-  /**
-   * True when it was a starter question picked by touch, which /ask answers
-   * by leaving the composer unfocused so the on-screen keyboard stays down.
-   * False for a typed question and for any other pick.
-   */
-  pickedByTouch: boolean
+  askedBy: AskedBy
 }
 
 export function handOffQuestion(
-  { question, pickedByTouch }: PendingQuestion,
+  { question, askedBy }: PendingQuestion,
   now = Date.now()
 ): void {
   try {
     sessionStorage.setItem(
       PENDING_QUESTION_KEY,
-      JSON.stringify({ question, pickedByTouch, at: now })
+      JSON.stringify({ question, askedBy, at: now })
     )
   } catch {
     // Storage disabled or full. /ask opens empty and the visitor retypes.
@@ -80,14 +88,14 @@ export function hasPendingQuestion(now = Date.now()): boolean {
 }
 
 /**
- * The stored question, or null when it is malformed or has gone stale. Only
- * an explicit `true` counts as a touch pick: anything else there is read as
- * a question asked some other way.
+ * The stored question, or null when it is malformed or has gone stale. A
+ * missing or unknown `askedBy` reads as typed, which leaves /ask to decide
+ * focus as it does on any load.
  */
 function askableQuestion(raw: string, now: number): PendingQuestion | null {
   const pending = JSON.parse(raw) as {
     question?: unknown
-    pickedByTouch?: unknown
+    askedBy?: unknown
     at?: unknown
   }
   if (typeof pending.question !== 'string' || typeof pending.at !== 'number')
@@ -95,6 +103,9 @@ function askableQuestion(raw: string, now: number): PendingQuestion | null {
   if (now - pending.at > PENDING_QUESTION_TTL_MS) return null
   return {
     question: pending.question,
-    pickedByTouch: pending.pickedByTouch === true,
+    askedBy:
+      typeof pending.askedBy === 'string' && ASKED_BY.has(pending.askedBy)
+        ? (pending.askedBy as AskedBy)
+        : 'typing',
   }
 }
