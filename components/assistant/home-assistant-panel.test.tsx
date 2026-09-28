@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen } from '@testing-library/react'
-import {
-  AppRouterContext,
-  type AppRouterInstance,
-} from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import { setTouchDevice } from '@/test/touch-device'
 import { STARTER_QUESTIONS } from './copy'
-import { HomeAssistantPanel } from './home-assistant-panel'
+import {
+  RoutedHomeAssistantPanel,
+  type PanelRouter,
+} from './home-assistant-panel'
 import { takePendingQuestion } from './pending-question'
 
 /**
@@ -21,12 +20,12 @@ import { takePendingQuestion } from './pending-question'
 let pushed: string[] = []
 
 /** The app router, reduced to what the panel calls. */
-const router = {
+const router: PanelRouter = {
   push: (href: string) => {
     pushed.push(href)
   },
   prefetch: () => {},
-} as unknown as AppRouterInstance
+}
 
 beforeEach(() => {
   pushed = []
@@ -39,11 +38,7 @@ afterEach(() => {
 })
 
 function renderPanel(): void {
-  render(
-    <AppRouterContext.Provider value={router}>
-      <HomeAssistantPanel />
-    </AppRouterContext.Provider>
-  )
+  render(<RoutedHomeAssistantPanel router={router} />)
 }
 
 /** The announced copy of a starter pill; the decorative copies are hidden. */
