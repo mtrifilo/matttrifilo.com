@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { ChevronDownIcon, DotIcon, type LucideIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, memo, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 /**
  * Vercel AI Elements `chain-of-thought` (Apache-2.0), trimmed and adapted to
@@ -47,13 +47,17 @@ import { createContext, memo, useContext, useMemo } from "react";
  *   empty if need be, and disable the trigger instead.
  * - Animation and transition alike are paired with their `motion-reduce`
  *   counterparts, so nothing moves for a visitor who asked for less.
- * - `ChainOfThoughtStep` is a plain component, not a `memo`. Its caller,
- *   `components/assistant/assistant-progress.tsx`, builds a read row's
- *   `description` element on every render from a view re-derived from the
- *   message each time, so a shallow comparison never matches it. The rows
- *   it could match (a GitHub check, the writing row) are a line of text
- *   each, so a memo would cost a prop walk per row and save nothing worth
- *   keeping.
+ * - Every part is a plain component, not a `memo`. Their one caller,
+ *   `components/assistant/assistant-progress.tsx`, re-derives its view from
+ *   the message on every render and passes fresh elements each time: the
+ *   header's `icon`, the steps as `ChainOfThoughtContent`'s children, the
+ *   header and content as `ChainOfThought`'s, and a read row's
+ *   `description`. A shallow comparison never matches any of them, so each
+ *   memo cost a prop walk per render and skipped nothing. Measured under
+ *   Happy DOM, all three memoised parts rendered on 10 of 10 re-renders
+ *   that changed nothing on screen. Making the props stable would mean
+ *   memoising elements in the caller for panels that hold a handful of
+ *   lines of text.
  *
  * `@radix-ui/react-use-controllable-state` is a direct dependency pinned to
  * the exact version `radix-ui` itself depends on, so the tree holds one copy
@@ -87,40 +91,38 @@ export type ChainOfThoughtProps = ComponentProps<"div"> & {
   onOpenChange?: (open: boolean) => void;
 };
 
-export const ChainOfThought = memo(
-  ({
-    className,
-    open,
-    defaultOpen = false,
-    onOpenChange,
-    children,
-    ...props
-  }: ChainOfThoughtProps) => {
-    const [isOpen, setIsOpen] = useControllableState({
-      prop: open,
-      defaultProp: defaultOpen,
-      onChange: onOpenChange,
-    });
+export const ChainOfThought = ({
+  className,
+  open,
+  defaultOpen = false,
+  onOpenChange,
+  children,
+  ...props
+}: ChainOfThoughtProps) => {
+  const [isOpen, setIsOpen] = useControllableState({
+    prop: open,
+    defaultProp: defaultOpen,
+    onChange: onOpenChange,
+  });
 
-    const chainOfThoughtContext = useMemo(
-      () => ({ isOpen, setIsOpen }),
-      [isOpen, setIsOpen]
-    );
+  const chainOfThoughtContext = useMemo(
+    () => ({ isOpen, setIsOpen }),
+    [isOpen, setIsOpen]
+  );
 
-    return (
-      <ChainOfThoughtContext.Provider value={chainOfThoughtContext}>
-        <Collapsible onOpenChange={setIsOpen} open={isOpen}>
-          <div
-            className={cn("not-prose max-w-prose space-y-4", className)}
-            {...props}
-          >
-            {children}
-          </div>
-        </Collapsible>
-      </ChainOfThoughtContext.Provider>
-    );
-  }
-);
+  return (
+    <ChainOfThoughtContext.Provider value={chainOfThoughtContext}>
+      <Collapsible onOpenChange={setIsOpen} open={isOpen}>
+        <div
+          className={cn("not-prose max-w-prose space-y-4", className)}
+          {...props}
+        >
+          {children}
+        </div>
+      </Collapsible>
+    </ChainOfThoughtContext.Provider>
+  );
+};
 
 export type ChainOfThoughtHeaderProps = ComponentProps<
   typeof CollapsibleTrigger
@@ -131,35 +133,39 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
   timer?: ReactNode;
 };
 
-export const ChainOfThoughtHeader = memo(
-  ({ className, children, icon, timer, ...props }: ChainOfThoughtHeaderProps) => {
-    const { isOpen } = useChainOfThought();
+export const ChainOfThoughtHeader = ({
+  className,
+  children,
+  icon,
+  timer,
+  ...props
+}: ChainOfThoughtHeaderProps) => {
+  const { isOpen } = useChainOfThought();
 
-    return (
-      <CollapsibleTrigger
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground motion-reduce:transition-none",
+        className
+      )}
+      {...props}
+    >
+      {icon}
+      <span className="min-w-0 flex-1 truncate text-left">{children}</span>
+      {timer !== undefined && (
+        <span aria-hidden="true" className="shrink-0 tabular-nums">
+          {timer}
+        </span>
+      )}
+      <ChevronDownIcon
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground motion-reduce:transition-none",
-          className
+          "size-4 shrink-0 transition-transform motion-reduce:transition-none",
+          isOpen ? "rotate-180" : "rotate-0"
         )}
-        {...props}
-      >
-        {icon}
-        <span className="min-w-0 flex-1 truncate text-left">{children}</span>
-        {timer !== undefined && (
-          <span aria-hidden="true" className="shrink-0 tabular-nums">
-            {timer}
-          </span>
-        )}
-        <ChevronDownIcon
-          className={cn(
-            "size-4 shrink-0 transition-transform motion-reduce:transition-none",
-            isOpen ? "rotate-180" : "rotate-0"
-          )}
-        />
-      </CollapsibleTrigger>
-    );
-  }
-);
+      />
+    </CollapsibleTrigger>
+  );
+};
 
 export type ChainOfThoughtStepProps = ComponentProps<"div"> & {
   icon?: LucideIcon;
@@ -229,17 +235,18 @@ export type ChainOfThoughtContentProps = ComponentProps<
   typeof CollapsibleContent
 >;
 
-export const ChainOfThoughtContent = memo(
-  ({ className, ...props }: ChainOfThoughtContentProps) => (
-    <CollapsibleContent
-      className={cn(
-        "mt-2 space-y-3",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
-        className
-      )}
-      {...props}
-    />
-  )
+export const ChainOfThoughtContent = ({
+  className,
+  ...props
+}: ChainOfThoughtContentProps) => (
+  <CollapsibleContent
+    className={cn(
+      "mt-2 space-y-3",
+      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
+      className
+    )}
+    {...props}
+  />
 );
 
 ChainOfThought.displayName = "ChainOfThought";
