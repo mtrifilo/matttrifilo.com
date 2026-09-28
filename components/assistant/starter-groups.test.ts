@@ -63,6 +63,15 @@ const APPROVED_GROUPS: Readonly<Record<string, readonly string[]>> = {
 
 const APPROVED_QUESTIONS = Object.values(APPROVED_GROUPS).flat()
 
+/**
+ * Pool questions added after the assignment and not yet placed by Matt.
+ * They belong under More (his binding, 2026-09-28), so these tests expect
+ * them there rather than failing the change that adds them.
+ */
+const UNPLACED = (STARTER_QUESTIONS as readonly string[]).filter(
+  question => !Object.hasOwn(STARTER_LIST_THEMES, question)
+)
+
 /** The map as plain strings, for lookups by any question. */
 const listThemes: Partial<Record<string, string | null>> = STARTER_LIST_THEMES
 
@@ -91,7 +100,7 @@ describe("Matt's whole-pool assignment", () => {
   test('maps every question in the pool it was approved for, and nothing else', () => {
     // A key that is not a pool question is a typo or a retired question,
     // and would silently list nothing. A pool question missing from the map
-    // is allowed only once the pool has grown past the approved 27.
+    // is one added since, and is listed under More (tested below).
     const pool: readonly string[] = STARTER_QUESTIONS
     for (const question of Object.keys(STARTER_LIST_THEMES)) {
       expect(pool, 'a mapped question is in the pool').toContain(question)
@@ -118,16 +127,23 @@ describe('the pool, grouped for the list', () => {
       ...FEATURED_THEMES.map(theme => theme.key),
       'untagged',
     ])
+    // More also carries any question added since, until Matt places it.
     expect(groups.map(group => group.questions.length)).toEqual([
-      3, 3, 5, 5, 11,
+      3,
+      3,
+      5,
+      5,
+      11 + UNPLACED.length,
     ])
   })
 
   test('puts each question in the group Matt placed it in', () => {
     for (const group of groups) {
-      expect(new Set(group.questions)).toEqual(
-        new Set(APPROVED_GROUPS[group.key])
-      )
+      const expected =
+        group.key === 'untagged'
+          ? [...APPROVED_GROUPS.untagged, ...UNPLACED]
+          : APPROVED_GROUPS[group.key]
+      expect(new Set(group.questions)).toEqual(new Set(expected))
     }
   })
 

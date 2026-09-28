@@ -1428,7 +1428,15 @@ describe('every question at once, as a list (MTC-85)', () => {
         STARTER_THEME_HEADINGS[theme.key],
         [3, 3, 5, 5][index],
       ]),
-      [STARTER_UNTAGGED_HEADING, 11],
+      // Plus any question added since and not yet placed, which Matt's
+      // decision lists under More until he places it.
+      [
+        STARTER_UNTAGGED_HEADING,
+        11 +
+          STARTER_QUESTIONS.filter(
+            question => !Object.hasOwn(STARTER_LIST_THEMES, question)
+          ).length,
+      ],
     ])
   })
 
