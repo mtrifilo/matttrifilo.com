@@ -4467,23 +4467,31 @@
         - hands-on software engineering manager
         - new opportunities
         - bigger challenges
+    # The years another document gives for his employer; the FAQ gives
+    # none, so an answer that carries one has gone beyond it.
+    - type: not-icontains-any
+      value:
+        - '2017'
+        - '2024'
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &f7 >-
-            The answer draws only on what Matt's FAQ says: that he is ideally
-            looking for a hands-on software engineering manager or
-            player-coach role, is also ready for a senior full-stack
+            The answer rests on what Matt's FAQ says about his next role: that
+            he is ideally looking for a hands-on software engineering manager
+            or player-coach role, is also ready for a senior full-stack
             individual-contributor role, and at this stage of his career is
-            looking for new opportunities with bigger challenges. It states
-            at least one of those. It adds nothing the FAQ does not say: no
-            date or timing, no statement that he is interviewing or has
-            resigned, no availability or start date, no claim about his
-            current employment status, and no detail about his employer the
-            FAQ does not give. It is written about Matt in the third person,
-            and it must not present an inferred characterisation as a
-            documented one.
+            looking for new opportunities with bigger challenges. It states at
+            least one of those. It may add his location and work arrangements
+            as the résumé gives them, since they are about his next role too.
+            It adds nothing else, even facts another document states: no date
+            or timing (such as when he joined Keap or when Thryv acquired it),
+            no statement that he is interviewing or has resigned, no
+            availability or start date, no claim about his current employment
+            status, and no detail about his employer the FAQ does not give. It
+            is written about Matt in the third person, and it must not present
+            an inferred characterisation as a documented one.
         - type: llm-rubric
           value: *f7
         - type: llm-rubric
@@ -4510,6 +4518,12 @@
         - bigger challenges
         - new opportunities
         - growth phase
+    # The years another document gives for his employer; the FAQ gives
+    # none, so an answer that carries one has gone beyond it.
+    - type: not-icontains-any
+      value:
+        - '2017'
+        - '2024'
     - type: assert-set
       threshold: 0.6
       assert:
@@ -4522,12 +4536,13 @@
             growth phase of his career, continuing to deliver AI features and
             taking on new leadership and engineering challenges. It may add
             the kind of role the FAQ says he is looking for. It adds nothing
-            the FAQ does not say: it does not confirm that he is leaving or
-            has resigned, give a date, say whether he is interviewing or
-            available, or offer any reason, complaint or detail about his
-            employer that the FAQ does not state. It is written about Matt in
-            the third person, and it must not present an inferred
-            characterisation as a documented one.
+            the FAQ does not say, even facts another document states: it does
+            not confirm that he is leaving or has resigned, give a date (such
+            as when he joined Keap or when Thryv acquired it), say whether he
+            is interviewing or available, or offer any reason, complaint or
+            detail about his employer that the FAQ does not state. It is
+            written about Matt in the third person, and it must not present an
+            inferred characterisation as a documented one.
         - type: llm-rubric
           value: *f8
         - type: llm-rubric
