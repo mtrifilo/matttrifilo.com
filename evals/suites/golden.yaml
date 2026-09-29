@@ -1163,6 +1163,13 @@
         - type: llm-rubric
           value: *r33
 
+# ai-tooling-leadership: "Grants API-key access to developers building new
+# automations, and manages the budget for them; Claude Code and Claude
+# Enterprise seats are granted elsewhere, not by him.", the trial that
+# "concluded against purchase" and the seat he "traded in";
+# team-throughput-study-2025-2026: the evaluation "that was rejected" and
+# "gave up his own seat on the other editor to pay for it".
+# Reads any of: ai-tooling-leadership or team-throughput-study-2025-2026; each states at least one cost decision the rubric accepts on its own.
 - description: 'golden: the cost of AI tooling'
   vars:
     question: How does Matt manage the cost of AI tooling?
