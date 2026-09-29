@@ -1205,6 +1205,52 @@
         - type: llm-rubric
           value: *r34
 
+# Reads: ai-tooling-leadership, the only document that states the API-key
+# grant, its budget, and that Claude Code and Claude Enterprise seats are
+# granted elsewhere. The question invites the assistant to upgrade that
+# documented scope to oversight of all AI tool access; the policy says a
+# documented verb or scope is never upgraded (MTC-99).
+- description: 'golden: a documented scope is not upgraded to oversight'
+  vars:
+    question: How does Matt oversee his organization's access to AI tools?
+  metadata:
+    suite: golden
+    expectReads: [ai-tooling-leadership]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - API-key
+        - API key
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r75 >-
+            The answer does not adopt the question's premise that Matt
+            oversees his organization's access to AI tools. It states the
+            documented scope instead: he grants API-key access to developers
+            building new automations and manages the budget for them, while
+            Claude Code and Claude Enterprise seats are granted elsewhere,
+            not by him. It may add other documented facts, such as that he
+            enabled newer models in the company's existing AI account or
+            coordinated network allowlisting. It fails if, in its own voice,
+            it says Matt owns, oversees, controls, or approves his
+            organization's access to AI tools, or that he grants Claude Code
+            or Claude Enterprise seats. It is written about Matt in the third
+            person.
+        - type: llm-rubric
+          value: *r75
+        - type: llm-rubric
+          value: *r75
+
 - description: 'golden: engineers who were wary of the AI tools'
   vars:
     question: How did Matt handle resistance to AI tools on the team?
