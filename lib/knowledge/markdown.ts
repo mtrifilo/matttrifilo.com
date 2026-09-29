@@ -9,14 +9,15 @@
  * needs three answers per line, a dependency would put a Markdown library's
  * release cycle between Matt and his corpus, and a small set of rules is
  * one a reader can hold in their head. What that costs is written next to
- * the rule it affects.
+ * the rule it affects, and every cost is chosen to make a check read more
+ * of a line as prose, never less.
  *
  * Nothing here tracks container blocks (list items, block quotes). So a
  * line is read as if it stood at the top level: a fence or heading indented
  * four or more columns is not one here, although CommonMark accepts it
  * inside a list item and MDX, which turns off indented code, accepts it
- * anywhere. lib/knowledge/build.ts says so in the MDX-safety error when
- * such a fence is in the document.
+ * anywhere. lib/knowledge/build.ts refuses such a fence (isOverIndentedFence)
+ * because the two readings disagree about everything after it.
  */
 
 /** Where the indentation of a line ends, and how many columns it spans. */
@@ -76,7 +77,9 @@ function fenceOpener(line: string): string | null {
 /**
  * Whether a line closes the fence `opener` opened: the same character, a
  * run at least as long, and nothing after it but spaces and tabs. So a
- * ``` inside a ~~~ or ```` block is content, and so is "```js".
+ * ``` inside a ~~~ or ```` block is content, and so is "```js". Only
+ * spaces and tabs: a no-break space after the run makes the line content,
+ * as CommonMark says, where String.prototype.trim would close the fence.
  */
 function closesFence(line: string, opener: string): boolean {
   const marker = fenceMarker(line)
@@ -85,13 +88,13 @@ function closesFence(line: string, opener: string): boolean {
     marker.indent <= MAX_BLOCK_INDENT &&
     marker.run[0] === opener[0] &&
     marker.run.length >= opener.length &&
-    marker.info.trim() === ''
+    /^[ \t]*$/.test(marker.info)
   )
 }
 
 /**
- * A line that would open a fence if it were indented three columns or
- * fewer. Only used to explain a failure: see the module comment.
+ * A fence line indented four or more columns: an indented code block to
+ * CommonMark at the top level, a fence to MDX. See the module comment.
  */
 export function isOverIndentedFence(line: string): boolean {
   const marker = fenceMarker(line)
@@ -214,11 +217,16 @@ function findCloser(line: string, from: number, length: number): number {
  * so "```TODO (Matt)`" is all text. Inside a span a backslash is only a
  * backslash. An escaped backtick opens nothing, so "\`<b>\`" is text.
  *
- * Line by line: a code span that continues onto the next line reads as
- * literal backticks on both, which only ever makes a check see more prose.
+ * With `codeSpans` false every backtick is text; LineReader uses that for
+ * the rest of a paragraph once a span may have wrapped onto a new line.
+ * `unmatchedRun` says whether a run found no closer on this line.
  */
-function inlinePieces(line: string): InlinePiece[] {
+function inlinePieces(
+  line: string,
+  codeSpans = true
+): { pieces: InlinePiece[]; unmatchedRun: boolean } {
   const pieces: InlinePiece[] = []
+  let unmatchedRun = false
   let text = ''
   const flush = () => {
     if (text !== '') pieces.push({ kind: 'text', value: text })
@@ -245,8 +253,9 @@ function inlinePieces(line: string): InlinePiece[] {
     // length: two runs of one length always pair up. So a line of n
     // characters costs at most n times its number of distinct run lengths,
     // which is under the square root of 2n.
-    const closer = findCloser(line, runEnd, length)
+    const closer = codeSpans ? findCloser(line, runEnd, length) : -1
     if (closer === -1) {
+      unmatchedRun = true
       text += line.slice(i, runEnd)
       i = runEnd
       continue
@@ -256,7 +265,23 @@ function inlinePieces(line: string): InlinePiece[] {
     i = closer + length
   }
   flush()
+  return { pieces, unmatchedRun }
+}
+
+/** Escapes resolved to their character, code spans removed. */
+function readerText(pieces: InlinePiece[]): string {
   return pieces
+    .filter(piece => piece.kind !== 'code')
+    .map(piece => piece.value)
+    .join('')
+}
+
+/** Text outside code spans, escaped characters removed. */
+function mdxText(pieces: InlinePiece[]): string {
+  return pieces
+    .filter(piece => piece.kind === 'text')
+    .map(piece => piece.value)
+    .join('')
 }
 
 /**
@@ -266,10 +291,7 @@ function inlinePieces(line: string): InlinePiece[] {
  * still contains it, and `` `TODO (Matt)` `` is code.
  */
 export function proseText(line: string): string {
-  return inlinePieces(line)
-    .filter(piece => piece.kind !== 'code')
-    .map(piece => piece.value)
-    .join('')
+  return readerText(inlinePieces(line).pieces)
 }
 
 /**
@@ -279,8 +301,73 @@ export function proseText(line: string): string {
  * check reads.
  */
 export function mdxSyntaxText(line: string): string {
-  return inlinePieces(line)
-    .filter(piece => piece.kind === 'text')
-    .map(piece => piece.value)
-    .join('')
+  return mdxText(inlinePieces(line).pieces)
+}
+
+/** One line of a document, read in order with the lines before it. */
+export interface ReadLine {
+  /** Inside a fenced code block, or one of its fence lines. */
+  code: boolean
+  /** What a reader sees: a heading's title or the line (see proseText). */
+  prose: string
+  /** What MDX parses as syntax (see mdxSyntaxText). */
+  mdxText: string
+  /**
+   * True when an earlier line of the same paragraph left a backtick run
+   * unmatched, so this line's backticks were all read as text.
+   */
+  afterUnmatchedRun: boolean
+}
+
+/** A blank line: nothing but spaces and tabs. It ends a paragraph. */
+const BLANK = /^[ \t]*$/
+
+/**
+ * Reads the lines of one document, or of one block of it, in order: which
+ * are fenced code, and what the rest say.
+ *
+ * A code span may wrap onto the next line of its paragraph, and pairing
+ * backticks one line at a time would then pair the wrong ones and hide
+ * prose between them as code. Telling where a paragraph really ends needs
+ * the container blocks this module does not track (a list item or a table
+ * row ends one too). So once a line leaves a backtick run unmatched, every
+ * backtick in the rest of the paragraph, up to a blank line, a heading or
+ * a fence, is read as text. That can only show a check more prose: a
+ * wrapped code span's own contents are checked as prose, which fails loud,
+ * and keeping each code span on one line is the fix.
+ */
+export class LineReader {
+  private readonly fence = new FenceTracker()
+  private unmatchedRunInParagraph = false
+
+  read(line: string): ReadLine {
+    if (this.fence.consume(line)) {
+      this.unmatchedRunInParagraph = false
+      return { code: true, prose: '', mdxText: '', afterUnmatchedRun: false }
+    }
+    const heading = atxHeading(line)
+    if (heading || BLANK.test(line)) {
+      this.unmatchedRunInParagraph = false
+      return {
+        code: false,
+        prose: heading ? proseText(heading.title) : '',
+        mdxText: heading ? mdxSyntaxText(line) : '',
+        afterUnmatchedRun: false,
+      }
+    }
+    const afterUnmatchedRun = this.unmatchedRunInParagraph
+    const { pieces, unmatchedRun } = inlinePieces(line, !afterUnmatchedRun)
+    if (unmatchedRun) this.unmatchedRunInParagraph = true
+    return {
+      code: false,
+      prose: readerText(pieces),
+      mdxText: mdxText(pieces),
+      afterUnmatchedRun,
+    }
+  }
+
+  /** True while a fence is open. */
+  get fenceOpen(): boolean {
+    return this.fence.open
+  }
 }

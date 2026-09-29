@@ -19,6 +19,7 @@ import {
   sourceLines,
   SUMMARY_MAX_LENGTH,
 } from './build'
+import { droppedReport } from './dropped-report'
 import { KNOWLEDGE_READ_BUDGET } from './index'
 
 /**
@@ -329,16 +330,13 @@ describe('knowledge corpus content guards', () => {
   })
 
   /**
-   * The `## ` questions in a text, read from the lines the build reads:
-   * sourceLines blanks HTML comments, so an example in the editing notes is
-   * not a question. Read off the text rather than `headings`, which is capped
-   * for the progress view.
+   * The `## ` questions in a text, split the way the build splits them
+   * (sectionTitles): HTML comments blanked, so an example in the editing
+   * notes is not a question, and fences, heading forms and closing hashes
+   * read by the same rules. Read off the text rather than `headings`, which
+   * is capped for the progress view.
    */
-  const faqQuestions = (text: string) =>
-    sourceLines(text)
-      .map(line => line.text)
-      .filter(line => /^## (?!#)/.test(line))
-      .map(line => line.slice(3).trim())
+  const faqQuestions = (text: string) => sectionTitles(text)
   const faqFiles = fs
     .readdirSync(path.join(KNOWLEDGE_DIR, 'faq'))
     .filter(name => name.endsWith('.md'))
@@ -1510,9 +1508,9 @@ describe('documents must survive being compiled as MDX', () => {
 
   test('says so when an over-indented fence is the likely cause', () => {
     // A fence indented four or more spaces is valid CommonMark inside a
-    // nested list, and this check does not recognise it: recognising it
-    // means tracking list context, which is a Markdown parser. It is not
-    // silent about it: when something does fail, the message names it.
+    // nested list, and a fence anywhere to MDX, and this check does not
+    // recognise it: recognising it means tracking list context, which is a
+    // Markdown parser. It is refused by name rather than misread.
     const body = [
       '# Title',
       '',
@@ -1651,12 +1649,80 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
     expect(career(fenced).documents[0].text).toBe(fenced)
   })
 
-  test('a fence indented with a tab is not code at the top level', () => {
+  test('a fence indented with a tab is not code to the placeholder rule, and the MDX check refuses it', () => {
     // CommonMark reads the tab as four columns: an indented code block
     // holding the ```, then prose. So the line under it is checked.
     expect(placeholder('\t```\nTODO (Matt)\n\t```')).toBe(true)
-    expect(() => career('\t```\nconst x = <Thing />\n\t```')).toThrow(
-      /"<" outside code.*a tab counts as four/
+    // MDX turns off indented code and reads the same line as a fence, so
+    // the two disagree about everything after it. The check refuses the
+    // line rather than pick one, whether it opens a block or would close
+    // one: here MDX closes at the tab and reads the tag as prose.
+    const refused =
+      /a-role\.md:\d+: a ``` fence indented four or more spaces.*a tab counts as four/
+    expect(() => career('\t```\nplain text\n\t```')).toThrow(refused)
+    expect(() =>
+      career(
+        [
+          'Intro.',
+          '',
+          '```',
+          'code',
+          '\t```',
+          '',
+          '<Widget> here',
+          '',
+          '```',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+  })
+
+  test('a closing fence takes only spaces and tabs after its run', () => {
+    // A no-break space after ``` makes the line content: the fence stays
+    // open, so the real closer below closes it and the prose is checked.
+    expect(() =>
+      career(
+        [
+          'Intro.',
+          '',
+          '```',
+          'a',
+          '``` ',
+          '',
+          'prose',
+          '```',
+          '',
+          '<Widget>',
+        ].join('\n')
+      )
+    ).toThrow(/"<" outside code/)
+  })
+
+  test('a code span wrapped onto the next line hides nothing', () => {
+    // CommonMark pairs the backtick at the end of the first line with the
+    // first one on the second, so the tag and the marker are prose. Once a
+    // line leaves a backtick unmatched the rest of its paragraph is read
+    // with every backtick as text.
+    expect(() =>
+      career(
+        [
+          'The check is run with `bun run',
+          'knowledge:check` and prints the <Index> `text` field.',
+        ].join('\n')
+      )
+    ).toThrow(/"<" outside code.*keep each code span on one line/)
+    expect(
+      placeholder('Run `rg\nTODO` then TODO (Matt) `x` and move on.')
+    ).toBe(true)
+    // A blank line ends the paragraph, and pairing starts again.
+    expect(placeholder('A lone ` here.\n\nThen `TODO (Matt)` in code.')).toBe(
+      false
+    )
+  })
+
+  test('an unclosed fence is reported at the line that opened it', () => {
+    expect(() => career('Intro.\n\n```ts\nconst x = 1')).toThrow(
+      /a-role\.md:11: a fenced code block opened here is never closed/
     )
   })
 
@@ -1680,8 +1746,9 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
     )
     expect(dropped.unanswered.map(q => q.heading)).toEqual(['A question?'])
 
-    // A section starts at `##` with up to three spaces before it or a tab
-    // after it; four columns in is indented code, not a section.
+    // A section starts at a `##` at the start of a line, followed by a
+    // space or a tab; its closing hashes are not part of its title. An
+    // indented one does not start a section (see the next test).
     expect(
       documentHeadings(
         [
@@ -1700,11 +1767,42 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
           '## Closed ##',
         ].join('\n')
       )
-    ).toEqual(['Indented', 'Tabbed', 'Closed'])
+    ).toEqual(['Tabbed', 'Closed'])
+    // The guard over the real faq files splits the same way.
+    expect(
+      sectionTitles('## A\n\n##\tB\n\n   ## C\n\n## D ##\n\n```\n## E\n```')
+    ).toEqual(['A', 'B', 'D'])
+  })
+
+  test('an indented `##` is read for placeholders but does not start a section', () => {
+    // Inside a list item it is a heading within the item. Splitting there
+    // would ship "Point A" as the whole answer and drop the rest, so the
+    // question stays whole, and the note in its heading drops all of it.
+    const nested = faq(
+      [
+        '## Question one',
+        '',
+        '- Point A',
+        '',
+        '  ## TODO',
+        '',
+        '  More of the answer.',
+        '',
+        '## Question two',
+        '',
+        'Done.',
+      ].join('\n')
+    )
+    expect(nested.unanswered.map(q => q.heading)).toEqual(['Question one'])
+    expect(nested.documents.find(d => d.id === 'faq')?.text).toBe(
+      '## Question two\n\nDone.'
+    )
+    // At the top level the same heading is part of the introduction.
     const indented = faq(
       ['   ## TODO (Matt)', '', 'A finished answer.'].join('\n')
     )
-    expect(indented.unanswered.map(q => q.heading)).toEqual(['TODO (Matt)'])
+    expect(indented.droppedIntros).toEqual([faqLabel])
+    expect(indented.unanswered).toEqual([])
   })
 
   test('accepted gap (Matt, 2026-09-23, MTC-71): a TODO inside inline code or a fence ships', () => {
@@ -1748,6 +1846,32 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
     expect(whole.droppedDocuments).toEqual([faqLabel])
     expect(whole.droppedIntros).toEqual([faqLabel])
     expect(whole.unanswered.map(q => q.heading)).toEqual(['One?'])
+
+    // What knowledge:check prints: per file, the introduction first, then
+    // its questions, then each file dropped whole.
+    const second = path.join('content', 'knowledge', 'faq', 'faq-more.md')
+    expect(
+      droppedReport({
+        droppedIntros: [second, faqLabel],
+        unanswered: [
+          { file: second, heading: 'Two?' },
+          { file: faqLabel, heading: 'One?' },
+        ],
+        droppedDocuments: [faqLabel],
+      })
+    ).toEqual([
+      `${second}  (the introduction, before the first ##)`,
+      `${second}  ## Two?`,
+      `${faqLabel}  (the introduction, before the first ##)`,
+      `${faqLabel}  ## One?`,
+      `${faqLabel}  (whole document: nothing in it is answered yet)`,
+    ])
+    expect(droppedReport(withNote)).toEqual([
+      `${faqLabel}  (the introduction, before the first ##)`,
+    ])
+    expect(
+      droppedReport({ droppedIntros: [], unanswered: [], droppedDocuments: [] })
+    ).toEqual([])
 
     // A finished introduction, or none at all, is not a drop.
     for (const body of [

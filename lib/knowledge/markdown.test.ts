@@ -3,6 +3,7 @@ import {
   atxHeading,
   FenceTracker,
   isOverIndentedFence,
+  LineReader,
   mdxSyntaxText,
   proseText,
 } from './markdown'
@@ -64,6 +65,15 @@ describe('fenced code blocks', () => {
       false,
     ])
     expect(codeLines('```\nx\n```  \t\nafter')).toEqual([
+      true,
+      true,
+      true,
+      false,
+    ])
+    // Only spaces and tabs: a no-break space makes the line content.
+    expect(codeLines('```\nx\n``` \nstill code\n```\nafter')).toEqual([
+      true,
+      true,
       true,
       true,
       true,
@@ -217,6 +227,44 @@ describe('escapes and code spans', () => {
     // The span ends at the backslash's backtick, so the tag after it is
     // prose to MDX.
     expect(mdxSyntaxText('`C:\\` and <b> and `x`')).toBe(' and <b> and ')
+  })
+
+  test('once a line leaves a backtick unmatched, the rest of the paragraph reads backticks as text', () => {
+    const reader = new LineReader()
+    const read = (line: string) => reader.read(line)
+    expect(read('Run `rg').prose).toBe('Run `rg')
+    // CommonMark closes the wrapped span at the first backtick here; the
+    // reader does not pair this line's own backticks either way.
+    const second = read('TODO` then `x` and <b>')
+    expect(second.afterUnmatchedRun).toBe(true)
+    expect(second.prose).toBe('TODO` then `x` and <b>')
+    expect(second.mdxText).toBe('TODO` then `x` and <b>')
+    // A blank line, a heading or a fence ends the paragraph.
+    expect(read('').afterUnmatchedRun).toBe(false)
+    expect(read('a `code` b').prose).toBe('a  b')
+    read('a lone `')
+    expect(read('## `Title` here').prose).toBe(' here')
+    expect(read('then `code` again').prose).toBe('then  again')
+  })
+
+  test('reads a heading by its title and a fenced line as code', () => {
+    const reader = new LineReader()
+    expect(reader.read('### TODO: `x` later')).toEqual({
+      code: false,
+      prose: 'TODO:  later',
+      mdxText: '### TODO:  later',
+      afterUnmatchedRun: false,
+    })
+    expect(reader.read('```').code).toBe(true)
+    expect(reader.read('TODO (Matt)')).toEqual({
+      code: true,
+      prose: '',
+      mdxText: '',
+      afterUnmatchedRun: false,
+    })
+    expect(reader.fenceOpen).toBe(true)
+    expect(reader.read('```').code).toBe(true)
+    expect(reader.fenceOpen).toBe(false)
   })
 
   test('the worst line for the code-span search stays fast', () => {

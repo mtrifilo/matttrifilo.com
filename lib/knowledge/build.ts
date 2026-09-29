@@ -6,7 +6,7 @@ import {
   atxHeading,
   FenceTracker,
   isOverIndentedFence,
-  mdxSyntaxText,
+  LineReader,
   proseText,
 } from './markdown'
 
@@ -474,12 +474,19 @@ interface Section extends Block {
 }
 
 /**
- * A line outside a fence that starts a section: a level-two ATX heading in
- * any form CommonMark accepts ("## Title", "   ## Title", "##\tTitle").
- * `#` and `###` and deeper stay inside a block.
+ * A line outside a fence that starts a section: a level-two ATX heading at
+ * the start of the line ("## Title", "##\tTitle", "## Title ##"). `#` and
+ * `###` and deeper stay inside a block.
+ *
+ * Not an indented one, although CommonMark reads "   ## Title" as a
+ * heading at the top level: inside a list item the same line is a heading
+ * *within* the item, and without tracking lists a split there could ship
+ * the first half of an faq answer and drop the rest. An indented heading is
+ * still read by its title for placeholders (findBlockPlaceholder), so an
+ * editor's note written as one drops or fails the section it sits in.
  */
 function isSectionHeading(line: string): boolean {
-  return atxHeading(line)?.level === 2
+  return !/^[ \t]/.test(line) && atxHeading(line)?.level === 2
 }
 
 /** A section heading's title: without its hashes, trimmed. */
@@ -634,43 +641,47 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * document has to be safe to render whichever of its sections survive,
  * and one rule is easier to hold than two.
  *
- * Lines are read by ./markdown, the same reading the placeholder rule and
- * the section split use. Known limitation, deliberate: that reading is
- * CommonMark's at the top level, so a fence indented four or more columns
- * (a tab counts as four) is not code. CommonMark accepts one inside a
- * nested list item, and MDX, which turns off indented code, accepts one
- * anywhere; honouring that means tracking list context, which is a
- * Markdown parser, for a case the corpus does not have. Such a fence can
- * be misread both ways: its contents checked as prose (a false positive),
- * or a later ``` taken for an opener so the prose after it goes unchecked
- * (a false negative, which the site build still catches for a blog twin).
- * The error names such a fence when one is in the document.
+ * Lines are read by ./markdown (LineReader), the same reading the
+ * placeholder rule uses. That reading is CommonMark's at the top level, and
+ * MDX differs from it in one place that matters here: MDX turns off
+ * indented code, so a fence indented four or more columns (a tab counts as
+ * four) is a fence to MDX and indented code to CommonMark. The two then
+ * disagree about which later ``` opens and which closes, and whichever this
+ * check picked, it could pass prose that MDX rejects. So such a fence line
+ * is refused, inside a fence or out. The cost is a fenced block nested in a
+ * list item deeper than three spaces, which the corpus does not have; a
+ * fence under a bullet or a one-digit numbered item fits within three.
  */
 function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
-  const fence = new FenceTracker()
-  let sawOverIndentedFence = false
+  const reader = new LineReader()
+  let fenceOpenedAt = 0
   for (const line of lines) {
-    if (fence.consume(line.text)) continue
-    if (isOverIndentedFence(line.text)) sawOverIndentedFence = true
-    const offence = /[<{]/.exec(mdxSyntaxText(line.text))
+    if (isOverIndentedFence(line.text)) {
+      throw new Error(
+        `${label}:${line.number}: a \`\`\` fence indented four or more spaces, which this check does not recognise as code (a tab counts as four). CommonMark reads it as indented code and MDX as a fence, so they disagree about everything after it; outdent it to three spaces or fewer. Line: ${line.text.trim()}`
+      )
+    }
+    const wasOpen = reader.fenceOpen
+    const read = reader.read(line.text)
+    if (!wasOpen && reader.fenceOpen) fenceOpenedAt = line.number
+    if (read.code) continue
+    const offence = /[<{]/.exec(read.mdxText)
     if (!offence) continue
     const char = offence[0]
     const advice =
       char === '<'
         ? 'wrap it in backticks, or write &lt; — a bare < starts a JSX tag in MDX, and an autolink <https://…> is an MDX error too'
         : 'wrap it in backticks, or write &#123; — a bare { starts a JavaScript expression that MDX evaluates on the server rather than printing'
-    // Only mentioned when something actually failed: a deeply indented
-    // fence is legal and common, and most of the time it is not the cause.
-    const indentNote = sawOverIndentedFence
-      ? ' (this document also has a ``` fence indented four or more spaces, which this check does not recognise as code; a tab counts as four. Outdent it to three spaces or fewer)'
+    const spanNote = read.afterUnmatchedRun
+      ? ' (an earlier line of this paragraph leaves a backtick unmatched, so this check reads every backtick after it as text; keep each code span on one line)'
       : ''
     throw new Error(
-      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${indentNote}. Line: ${line.text.trim()}`
+      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${spanNote}. Line: ${line.text.trim()}`
     )
   }
-  if (fence.open) {
+  if (reader.fenceOpen) {
     throw new Error(
-      `${label}: a fenced code block is never closed; MDX would swallow the rest of the document`
+      `${label}:${fenceOpenedAt}: a fenced code block opened here is never closed; MDX would swallow the rest of the document`
     )
   }
 }
@@ -714,8 +725,9 @@ export interface FoundPlaceholder {
  * editor's note written as a heading is a placeholder even when the
  * section under it is finished.
  *
- * Reads each line the way CommonMark does (./markdown: fenced blocks
- * skipped, escapes resolved, code spans removed), so `// TODO` inside a
+ * Reads each line the way CommonMark does (./markdown's LineReader: fenced
+ * blocks skipped, escapes resolved, code spans removed, and a paragraph's
+ * backticks read as text once one is left unmatched), so `// TODO` inside a
  * ```` ``` ```` block and a `` `TODO` `` written about in prose are both
  * left alone. That is the accepted gap, by Matt's decision on MTC-71
  * (2026-09-23): a placeholder written inside code ships, because there is
@@ -730,13 +742,10 @@ function findBlockPlaceholder(block: Block): SourceLine | null {
     const title = headingTitle(block.heading)
     if (isPlaceholder(proseText(title))) return block.heading
   }
-  const fence = new FenceTracker()
+  const reader = new LineReader()
   for (const line of block.lines) {
-    if (fence.consume(line.text)) continue
-    const heading = atxHeading(line.text)
-    if (isPlaceholder(proseText(heading ? heading.title : line.text))) {
-      return line
-    }
+    const read = reader.read(line.text)
+    if (!read.code && isPlaceholder(read.prose)) return line
   }
   return null
 }
