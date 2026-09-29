@@ -21,8 +21,7 @@ point, and it helps reduce churn.
 - **2019, as Software Engineer II:** built the resilience4j-based
   fault-tolerance library specifically to prepare for that season's sending
   volume, and raised then restored autoscaling floors across three services
-  around the peak. The library remains the platform's pattern for handling
-  downstream outages.
+  around the peak.
 - **2021, as Software Engineer III:** early email-decomposition work on
   fault tolerance and event-driven flows continued building the foundation.
 - **2022, first season as player-coach:** the first cycle under Matt's
