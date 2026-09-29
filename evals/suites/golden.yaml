@@ -713,7 +713,7 @@
       - role: user
         text: What did the compliance case-system migration involve?
       - role: assistant
-        text: Matt moved the compliance case system's records to the parent company's Salesforce organization after the acquisition, building a per-target configuration toggle, OAuth client-credentials authentication, and a field-parity analysis.
+        text: After the acquisition, Matt owned moving the compliance case system's case handling to the parent company's Salesforce organization. He built a per-target configuration toggle, implemented OAuth client-credentials authentication, and authored the field-parity analysis.
   metadata:
     suite: golden
     expectReads: [post-acquisition-integration]
