@@ -1188,12 +1188,18 @@
       assert:
         - type: llm-rubric
           value: &r34 >-
-            The answer says Matt owns his organization's AI tooling access
-            and spend, and gives at least one concrete decision behind that:
-            a trial that concluded against buying a third-party agent, or
-            giving up his own seat on the other editor to pay for the first
-            enterprise licenses. It is written about Matt in the third
-            person.
+            The answer gives at least one concrete, documented part of how
+            Matt handles the cost of AI tooling: he grants API-key access to
+            developers building new automations and manages the budget for
+            them; a trial that concluded against buying a third-party agent;
+            or giving up his own seat on the other editor to pay for the
+            first enterprise licenses. It fails if it says he owns or
+            oversees his organization's AI tooling access, or that he grants
+            or approves Claude Code or Claude Enterprise seats, which the
+            documents say are granted elsewhere, not by him. Saying, as the
+            documents do, that he secured the first enterprise licenses for
+            his group is not that claim. It is written about Matt in the
+            third person.
         - type: llm-rubric
           value: *r34
         - type: llm-rubric
@@ -2794,8 +2800,8 @@
     suite: golden
     # The +48 percent quote and the flat outcome are résumé-only; two career
     # documents describe the renewal analysis without them. The AI tooling
-    # document carries only the ownership sentence, which the rubric treats
-    # as an addition, so none of them can stand in for the read.
+    # document carries only the API-key budget sentence, which the rubric
+    # treats as an addition, so none of them can stand in for the read.
     expectReads: [resume]
   assert:
     - type: javascript
@@ -2822,8 +2828,11 @@
             percent, matched the vendor's own reporting within about one
             percent, and the renewal closed at the recommended tier, roughly
             flat year over
-            year. It may add that he owns his organization's AI tooling access
-            and spend. It states no dollar amount, which the published
+            year. It may add that he grants API-key access to developers
+            building new automations and manages the budget for them, but it
+            fails if it says he owns or oversees his organization's AI
+            tooling access or grants Claude Code or Claude Enterprise seats.
+            It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
             person, and it must not present an inferred characterization as a
             documented one.
