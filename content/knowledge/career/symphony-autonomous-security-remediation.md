@@ -12,8 +12,9 @@ In August 2026 Matt adapted OpenAI's open-source Symphony orchestration
 harness, via an internal fork developed by two colleagues, to dispatch
 Claude Code agents unattended against Email Reliability's backlog of
 dependency-vulnerability tickets. The agents open pull requests and never
-merge them; people review and merge. Matt's caveat on the results below: a
-pull request opened is not a pull request merged.
+merge them; a person reviews each one and decides whether to merge it.
+Matt's caveat on the results below: a pull request opened is not a pull
+request merged.
 
 ## Timeline
 
