@@ -67,6 +67,16 @@ describe('firstSentenceEnd', () => {
     })
   })
 
+  test('a line break ends the first unit only once the line holds the floor', () => {
+    const short = 'x'.repeat(FIRST_SENTENCE_MIN_CHARS - 1)
+    expect(firstSentenceEnd(`${short}\nmore text`, false)).toBeUndefined()
+    const exact = 'x'.repeat(FIRST_SENTENCE_MIN_CHARS)
+    expect(firstSentenceEnd(`${exact}\nmore`, false)).toEqual({
+      end: FIRST_SENTENCE_MIN_CHARS,
+      rule: 'line',
+    })
+  })
+
   test('a short answer with no boundary is its own first sentence at the end', () => {
     expect(firstSentenceEnd('Five direct reports', false)).toBeUndefined()
     expect(firstSentenceEnd('Five direct reports', true)).toEqual({

@@ -37,6 +37,13 @@ export type SentenceRule = 'punctuation' | 'line' | 'end' | 'none'
  * `finished` says the text is the whole answer, so terminal punctuation at
  * the very end counts; mid-stream it does not, because the next chunk could
  * still be "5 billion" after "1.".
+ *
+ * A heuristic with known limits: it ends early at an abbreviation past the
+ * floor ("e.g. ", "U.S. "), it runs past a stop followed by a closing quote
+ * or bracket, and it takes a heading or bold label of 40 characters as the
+ * sentence. While the route holds a step's text until the step ends, none of
+ * this moves a timing, because the whole answer arrives at once; read the
+ * `rule` and the answer before trusting it once the answer streams.
  */
 export function firstSentenceEnd(
   text: string,
@@ -51,7 +58,13 @@ export function firstSentenceEnd(
         return { end: index + 1, rule: 'punctuation' }
       }
     }
-    if (char === '\n' && text.slice(0, index).trim().length > 0) {
+    // `index >= minChars` rather than the loop's start: a line break ends the
+    // text before it, so the line must already hold the floor's 40 characters.
+    if (
+      char === '\n' &&
+      index >= minChars &&
+      text.slice(0, index).trim().length > 0
+    ) {
       return { end: index, rule: 'line' }
     }
   }
