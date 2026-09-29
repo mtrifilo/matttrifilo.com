@@ -43,9 +43,9 @@ Over the same window, delivered tickets per week rose about 2.3x and
 reviews given per quarter rose roughly 2.5 to 3.9x; the absolute rates
 behind those two ratios are not published here. The pull-request gain
 holds, smaller, over the same window when Matt's own output is excluded.
-A shorter comparison is a different measure from the 2.7x: excluding Matt's
-own output, merged pull requests per week rose 2.9x from 2025 Q1 to 2026 Q3,
-through September 12.
+A quarter-to-quarter comparison is a different measure from the 2.7x:
+excluding Matt's own output, merged pull requests per week rose 2.9x from
+2025 Q1 to 2026 Q3, through September 12.
 
 ## Quality held while throughput rose
 
