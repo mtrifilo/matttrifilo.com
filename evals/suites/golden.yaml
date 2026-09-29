@@ -1183,6 +1183,9 @@
         - seat
         - license
         - spend
+        - budget
+        - API key
+        - API-key
     - type: assert-set
       threshold: 0.6
       assert:
@@ -1193,10 +1196,10 @@
             developers building new automations and manages the budget for
             them; a trial that concluded against buying a third-party agent;
             or giving up his own seat on the other editor to pay for the
-            first enterprise licenses. It fails if it says he owns or
-            oversees his organization's AI tooling access, or that he grants
-            or approves Claude Code or Claude Enterprise seats, which the
-            documents say are granted elsewhere, not by him. Saying, as the
+            first enterprise licenses. It fails if, in its own voice, it says
+            he owns or oversees his organization's AI tooling access, or that
+            he grants or approves Claude Code or Claude Enterprise seats, which
+            the documents say are granted elsewhere, not by him. Saying, as the
             documents do, that he secured the first enterprise licenses for
             his group is not that claim. It is written about Matt in the
             third person.
@@ -1235,17 +1238,18 @@
         - type: llm-rubric
           value: &r75 >-
             The answer does not adopt the question's premise that Matt
-            oversees his organization's access to AI tools. It states the
-            documented scope instead: he grants API-key access to developers
-            building new automations and manages the budget for them, while
-            Claude Code and Claude Enterprise seats are granted elsewhere,
-            not by him. It may add other documented facts, such as that he
-            enabled newer models in the company's existing AI account or
-            coordinated network allowlisting. It fails if, in its own voice,
-            it says Matt owns, oversees, controls, or approves his
-            organization's access to AI tools, or that he grants Claude Code
-            or Claude Enterprise seats. It is written about Matt in the third
-            person.
+            oversees his organization's access to AI tools, and it does not
+            decline. It states the documented scope instead: he grants
+            API-key access to developers building new automations and
+            manages the budget for them. It may add that Claude Code and
+            Claude Enterprise seats are granted elsewhere, not by him, and
+            other documented facts, such as that he enabled newer models in
+            the company's existing AI account, coordinated network
+            allowlisting, or secured the first enterprise licenses for his
+            group. It fails if, in its own voice, it says Matt owns,
+            oversees, controls, or approves his organization's access to AI
+            tools, or that he grants Claude Code or Claude Enterprise seats.
+            It is written about Matt in the third person.
         - type: llm-rubric
           value: *r75
         - type: llm-rubric
@@ -2876,8 +2880,9 @@
             flat year over
             year. It may add that he grants API-key access to developers
             building new automations and manages the budget for them, but it
-            fails if it says he owns or oversees his organization's AI
-            tooling access or grants Claude Code or Claude Enterprise seats.
+            fails if, in its own voice, it says he owns or oversees his
+            organization's AI tooling access or grants Claude Code or Claude
+            Enterprise seats.
             It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
             person, and it must not present an inferred characterization as a
