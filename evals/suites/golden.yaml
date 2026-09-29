@@ -153,10 +153,11 @@
             The answer reports that merged pull requests per week rose from
             about 10 to about 28 (roughly 2.7 times) across 2025 to 2026, and
             does not present the change as a proven causal result. It may add
-            the résumé's narrower figure, that the rest of the team's merged
-            pull requests per week rose 2.9 times from 2025 Q1 to 2026 Q3, as
-            long as it does not present the two as one measure: the study's
-            2.7 times compares the 2025 full year with 2026 to September 12.
+            the narrower figure the study and the résumé both give, that the
+            rest of the team's merged pull requests per week rose 2.9 times
+            from 2025 Q1 to 2026 Q3, as long as it does not present the two
+            as one measure: the study's 2.7 times compares the 2025 full year
+            with 2026 to September 12.
         - type: llm-rubric
           value: *r4
         - type: llm-rubric
