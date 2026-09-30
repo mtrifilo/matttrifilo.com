@@ -513,7 +513,7 @@ Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by pro
 
 ### Cost of a run
 
-182 tests. The route sends the policy (~2,858 tokens), the document index (~2,728) and the repository list (~152) on every model call, plus the frame around them (~51), the two tool definitions (~388) and the question (~14 for a golden), about 6,190 tokens before anything is read, and every later step re-sends everything so far plus the document just read; the corpus averages about 1,780 tokens a document. Each figure is characters divided by four, rounded up: `estimateTokens` in `lib/chat/validate.ts`, the estimate the route budgets with and `bun run knowledge:check` prints for the index (measured 2026-09-30, MTC-103). The rows follow from them: a golden is three calls, the second carrying one document and the third two; an activity golden adds about 1,700 for the digest; a groundedness test is the mean of a golden and two calls that read nothing; a refusal is one call; an injection is one call plus about 650 of replayed history. Vertex counts the same prefix a little lower than the estimate; for its own count, sum `inputTokens` over the `[chat] step` lines of a full run's log.
+182 tests. The route sends the policy (~2,858 tokens), the document index (~2,728) and the repository list (~152) on every model call, plus the frame around them (~51), the two tool definitions (~388) and the visitor's message (~15 for a golden, ~35 for an injection test with its replayed history), about 6,190 tokens before anything is read, and every later step re-sends everything so far plus the document just read; the corpus averages about 1,780 tokens a document. Each figure is characters divided by four, rounded up: `estimateTokens` in `lib/chat/validate.ts`, which the route budgets with, and its twin in `lib/knowledge/build.ts`, which `bun run knowledge:check` prints for the index (measured 2026-09-30, MTC-103). The rows follow from them: a golden is three calls, the second carrying one document and the third two; a groundedness test is taken as the mean of a golden and two calls that read nothing, which reproduces the figure the table first gave (MTC-32); a refusal or an injection test is one call. Two figures were carried forward rather than measured: the activity golden's extra ~1,700 for the digest (MTC-45; `ACTIVITY_MAX_TOKENS` caps the digest at 1,500), and the output column. Vertex counts the same prefix a little lower than the estimate; for its own count, sum `inputTokens` over the `[chat] step` lines of a full run's log.
 
 | Suite                               | Tests | Input tokens each |    Total input | Total output |
 | ----------------------------------- | ----: | ----------------: | -------------: | -----------: |
@@ -521,13 +521,15 @@ Four traps worth knowing. A `.env` written by `vercel env pull` is loaded by pro
 | golden, activity (one GitHub check) |     2 |           ~25,600 |        ~51,200 |         ~600 |
 | groundedness (mixed)                |    23 |           ~18,100 |       ~416,300 |       ~5,750 |
 | refusals (one call, no read)        |    26 |            ~6,200 |       ~161,200 |       ~1,300 |
-| injection (one call, some history)  |    24 |            ~6,850 |       ~164,400 |       ~1,440 |
+| injection (one call, some history)  |    24 |            ~6,200 |       ~148,800 |       ~1,440 |
 | rubric grader (118 × 3 calls)       |   354 |              ~700 |       ~247,800 |      ~28,320 |
-| **total**                           |       |                   | **~3,598,200** |  **~69,510** |
+| **total**                           |       |                   | **~3,582,600** |  **~69,510** |
 
 The grader row is 118 rubric-bearing tests, the 107 rubric-bearing goldens plus the 11 hallucination probes, each graded three times. The two activity goldens carry no rubric, so it does not grow with them.
 
-At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 3.598 × $0.75 = $2.70, plus 0.0695 × $3.75 = $0.26. **About $2.96 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $5.92.
+At Gemini 3.8 Flash's introductory list prices of $0.75 per million input tokens and $3.75 per million output tokens: 3.583 × $0.75 = $2.69, plus 0.0695 × $3.75 = $0.26. **About $2.95 a full run**, before any implicit-cache discount, which only makes it cheaper. From 2027-01-01, when those prices double, about $5.90.
+
+The table's output side is low. Its output column predates thinking at `medium`, whose tokens are billed as output, and was not re-measured. A full run on 2026-09-30 (MTC-103) logged 3,360,269 input and 271,005 output tokens across the 436 `[chat] step` lines of its model calls (the seven tests it sent again and the follow-up checks' own calls included), Vertex's own counts, with reasoning reported as part of the output; the table's route rows say ~3,334,800 and ~41,190. At those counts, with the grader rows as estimated, a full run cost about $3.83, and about $7.66 at the 2027 prices.
 
 Concurrency does not appear in any of this, and that is the point: `--max-concurrency 8` (MTC-54) changes how long a run takes, not what it costs, because the same calls are made either way. What bounds the concurrency is the Vertex requests-per-minute quota for the model on the project (GCP console, IAM & Admin, Quotas, filter on `aiplatform.googleapis.com`), which is the same quota the budget section suggests lowering to cap spend. Raising concurrency past it converts a slow run into a run of quota errors.
 
@@ -575,7 +577,7 @@ If the corpus cannot answer the question, it does not get a golden that expects 
 
 These are Matt's to run. Nothing in the repository can do them, and the workflow fails closed until they exist.
 
-They set up the eval workflow's identity only. The deployment reaches Vertex with no service-account key: it exchanges its Vercel OIDC token through the `vercel` workload identity pool for a short-lived token that impersonates `vercel-chat` (MTC-30), and `lib/ai/vertex.ts` documents that path.
+They add the eval workflow's identity; the deployment's is already in place. The deployment reaches Vertex with no service-account key: it exchanges its Vercel OIDC token through the `vercel` workload identity pool for a short-lived token that impersonates `vercel-chat` (MTC-30), and `lib/ai/vertex.ts` documents that path.
 
 ### 1. A GitHub provider on the existing workload identity pool
 
