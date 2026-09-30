@@ -4,8 +4,9 @@
  * The pool is split across two rows. Each row is one track holding its own
  * half of the pool twice, moved by a CSS `transform` keyframe that travels
  * exactly one copy's width. Two coordinate systems therefore describe the
- * same row, and the component swaps between them whenever a pill takes focus
- * or the visitor takes a row over by touch or wheel:
+ * same row, and the component swaps between them whenever a pill takes
+ * focus, a finger holds the row, or the visitor takes a row over by a drag
+ * or a wheel:
  *
  * - **animation progress**, a fraction of one loop, which is what the CSS
  *   animation and its negative `animation-delay` speak;
@@ -403,4 +404,36 @@ export function sidewaysWheelPixels(
   if (motion.deltaMode === DELTA_LINE) return delta * linePixels
   if (motion.deltaMode === DELTA_PAGE) return delta * pagePixels
   return delta
+}
+
+/**
+ * How far a finger travels on a moving row before its direction says what
+ * the touch is (Matt, 2026-09-28, MTC-79: "about 8 px"). Short enough that
+ * a drag is known within its first few pixels, long enough that a finger
+ * resting on a pill for a tap is not read as going anywhere.
+ */
+export const TOUCH_DIRECTION_THRESHOLD_PX = 8
+
+/**
+ * What a touch on a moving row is, so far: `undecided` until the finger has
+ * traveled the threshold from where it landed, then `sideways` (a drag
+ * along the row, which hands the rows over) or `upright` (the page being
+ * scrolled past, which leaves them moving).
+ */
+export type TouchDirection = 'undecided' | 'sideways' | 'upright'
+
+/**
+ * Reads a touch's direction from how far the finger has moved since it
+ * landed. Sideways only when the movement is more across than up or down,
+ * so a movement exactly diagonal counts as the page scrolling: a row handed
+ * over by mistake stays stopped for the visit, and a row left moving by
+ * mistake is handed over by the next drag.
+ */
+export function touchDirection(
+  deltaX: number,
+  deltaY: number,
+  threshold = TOUCH_DIRECTION_THRESHOLD_PX
+): TouchDirection {
+  if (!(Math.hypot(deltaX, deltaY) >= threshold)) return 'undecided'
+  return Math.abs(deltaX) > Math.abs(deltaY) ? 'sideways' : 'upright'
 }

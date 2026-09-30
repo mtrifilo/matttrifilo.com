@@ -199,6 +199,22 @@ describe('a starter question picked on /ask', () => {
     expect(asked).toEqual([STARTER_QUESTIONS[0]])
   })
 
+  test('a whole tap on a row, touch events included, still keeps the keyboard down', async () => {
+    // The rows read every touch for its direction (MTC-79); a tap goes
+    // nowhere, so it reaches the pick as a touch, as MTC-74 needs.
+    setTouchDevice(true)
+    render(<AssistantChat />)
+    const pill = starterPill()
+    const finger = { identifier: 1, target: pill, clientX: 40, clientY: 40 }
+    fireEvent.pointerDown(pill, { pointerType: 'touch' })
+    fireEvent.touchStart(pill, { touches: [finger], changedTouches: [finger] })
+    fireEvent.touchEnd(pill, { touches: [], changedTouches: [finger] })
+    fireEvent.click(pill)
+    await statusFocused()
+    await answered()
+    expect(asked).toEqual([STARTER_QUESTIONS[0]])
+  })
+
   test('moves focus to the status region on a touch device when a click comes with no press', async () => {
     // A screen reader's activation can be a bare click; the device decides.
     setTouchDevice(true)
