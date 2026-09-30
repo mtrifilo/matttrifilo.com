@@ -200,11 +200,10 @@ export function stripFollowUpsTrailer(text: string): string {
 /**
  * Both trailers, in the order they are written.
  *
- * The middle step is the window between them. Text reaches the browser a step
- * at a time rather than a token at a time, but the chunks of one step still
- * arrive as separate frames, so there is a paint or two in which the marker
- * is half written and the citation line is no longer the last line. Without
- * it the raw document ids show for those frames.
+ * The middle step is the window between them. Text reaches the browser as the
+ * model writes it (MTC-101), so there are paints in which the marker is half
+ * written and the citation line is no longer the last line. Without it the
+ * raw document ids show for those frames.
  */
 export function stripTrailers(text: string): string {
   return stripSourcesTrailer(withoutFollowUps(text))
