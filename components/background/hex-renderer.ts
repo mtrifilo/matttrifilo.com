@@ -107,13 +107,14 @@ export const HEX_RENDER_PALETTES = {
 
 const HEX_RADIUS = 40
 const MOUSE_INFLUENCE_RADIUS = 180
-const WAVE_RING_WIDTH = 50
+export const WAVE_RING_WIDTH = 50
 const WAVE_SPEED = 350 // px per second
 /**
  * Radius at which the wave's contribution has faded to exactly zero for
- * every cell. Past this point the wave is invisible, so it is also the
- * point at which it stops counting as "active" and stops holding the loop
- * awake, worth ~4s of 60 fps per page load, with no pixel changed.
+ * every cell. Past this point the wave is invisible, so it stops counting
+ * as "active" and stops holding the loop awake. On most screens the ring
+ * has already left the grid well before this (see renderFrame), which ends
+ * the wave sooner.
  */
 const WAVE_FADE_DISTANCE = 1500
 const SHIMMER_PERIOD = 10000 // ms
@@ -462,6 +463,9 @@ export function renderFrame(frame: HexFrameInput): void {
   }
 
   const maxOpacity = levels.max
+  // How far the wave's ring has to travel to clear the grid; see the end of
+  // this function.
+  let farthestFromWaveOrigin = 0
 
   for (let i = 0; i < grid.length; i++) {
     const hex = grid[i]
@@ -494,6 +498,7 @@ export function renderFrame(frame: HexFrameInput): void {
       const wdx = hex.cx - wave.originX
       const wdy = hex.cy - wave.originY
       const wdist = Math.sqrt(wdx * wdx + wdy * wdy)
+      if (wdist > farthestFromWaveOrigin) farthestFromWaveOrigin = wdist
       const ringDist = Math.abs(wdist - wave.radius)
       if (ringDist < WAVE_RING_WIDTH) {
         waveInfluence = easeOutQuad(1 - ringDist / WAVE_RING_WIDTH)
@@ -565,5 +570,19 @@ export function renderFrame(frame: HexFrameInput): void {
     }
 
     if (scaled) ctx.restore()
+  }
+
+  // Once the ring's inner edge is past the farthest cell, every cell's
+  // waveInfluence is zero and stays zero, so this frame and every later one
+  // draw exactly what they would with no wave. Ending it here rather than at
+  // WAVE_FADE_DISTANCE releases the loop to the idle cadence as soon as the
+  // ring leaves the screen: about 2 s into the wave on a phone instead of
+  // 4.3 s, which is most of the canvas's start-up cost.
+  if (
+    !reducedMotion &&
+    wave.active &&
+    wave.radius - WAVE_RING_WIDTH >= farthestFromWaveOrigin
+  ) {
+    wave.active = false
   }
 }

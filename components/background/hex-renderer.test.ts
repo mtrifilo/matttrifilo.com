@@ -8,6 +8,7 @@ import {
   IDLE_AFTER_MS,
   IDLE_FRAME_INTERVAL_MS,
   VEIL_QUERY,
+  WAVE_RING_WIDTH,
   createFrameScheduler,
   createRenderPalette,
   generateHexGrid,
@@ -583,5 +584,101 @@ describe('renderFrame canvas work', () => {
     render(mock, { x: 200, y: 150 }, { ...idleWave, active: true, radius: 100 })
     expect(mock.counts.fill).toBeGreaterThan(0)
     expect(mock.ctx.globalAlpha).toBe(1)
+  })
+})
+
+describe('the wave ends once its ring has left the grid (MTC-102)', () => {
+  /** Every call and property write the frame makes, in order. */
+  function recordingContext(width: number, height: number) {
+    const log: string[] = []
+    const target: Record<string, unknown> = { canvas: { width, height } }
+    const ctx = new Proxy(target, {
+      get(obj, key) {
+        if (key === 'canvas') return obj.canvas
+        if (typeof key !== 'string') return undefined
+        if (key in obj) return obj[key]
+        return (...args: unknown[]) => log.push(`${key}(${args.join(',')})`)
+      },
+      set(obj, key, value) {
+        log.push(`${String(key)}=${value}`)
+        obj[key as string] = value
+        return true
+      },
+    })
+    return { ctx: ctx as unknown as CanvasRenderingContext2D, log }
+  }
+
+  const width = 412
+  const height = 823
+  const grid = generateHexGrid(width, height)
+  const origin = { x: width / 2, y: height / 2 }
+  const farthest = Math.max(
+    ...grid.map(cell => Math.hypot(cell.cx - origin.x, cell.cy - origin.y))
+  )
+
+  function frame(wave: HexWaveState, reducedMotion = false) {
+    const recording = recordingContext(width, height)
+    renderFrame({
+      ctx: recording.ctx,
+      grid,
+      mouse: { x: -1000, y: -1000 },
+      time: 1234,
+      palette: HEX_RENDER_PALETTES.light,
+      wave,
+      // Zero, so the radius each test sets is the radius the frame draws.
+      dt: 0,
+      reducedMotion,
+      levels: BRIGHTNESS.fullBleed.light,
+      dpr: 1,
+    })
+    return recording.log
+  }
+
+  function waveAt(radius: number): HexWaveState {
+    return {
+      active: true,
+      originX: origin.x,
+      originY: origin.y,
+      radius,
+      startTime: 0,
+    }
+  }
+
+  test('ends on the frame whose ring has cleared the farthest cell', () => {
+    const wave = waveAt(farthest + WAVE_RING_WIDTH)
+    frame(wave)
+    expect(wave.active).toBe(false)
+  })
+
+  test('keeps going while the ring still reaches a cell', () => {
+    const wave = waveAt(farthest + WAVE_RING_WIDTH - 1)
+    frame(wave)
+    expect(wave.active).toBe(true)
+  })
+
+  test('ends on a phone-sized grid in about 2 s instead of the 4.3 s fade', () => {
+    // 350 px/s is the wave's speed; 1500 px is where it used to end.
+    const seconds = (farthest + WAVE_RING_WIDTH) / 350
+    expect(seconds).toBeLessThan(2.2)
+    expect(1500 / 350).toBeGreaterThan(4.2)
+  })
+
+  test('the frame it ends on draws exactly what a frame with no wave draws', () => {
+    const ending = frame(waveAt(farthest + WAVE_RING_WIDTH))
+    const noWave = frame({ ...waveAt(0), active: false })
+    expect(ending.length).toBeGreaterThan(0)
+    expect(ending).toEqual(noWave)
+  })
+
+  test('a wave still on the grid draws something different, so the check above can fail', () => {
+    const onGrid = frame(waveAt(farthest / 2))
+    const noWave = frame({ ...waveAt(0), active: false })
+    expect(onGrid).not.toEqual(noWave)
+  })
+
+  test('under reduced motion the wave is left alone, as before', () => {
+    const wave = waveAt(farthest + WAVE_RING_WIDTH)
+    frame(wave, true)
+    expect(wave.active).toBe(true)
   })
 })
