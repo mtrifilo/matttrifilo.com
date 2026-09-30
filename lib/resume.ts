@@ -43,7 +43,7 @@ const EMAIL = /\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,})\b/g
  * match would also link things like `next.config.dev` or `v1.net` to domains
  * the owner does not control.
  */
-export const LINKED_HOSTS = [
+const LINKED_HOSTS = [
   'matttrifilo.com',
   'psychichomily.com',
   'github.com',
