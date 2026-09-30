@@ -1,9 +1,9 @@
 ---
 id: symphony-autonomous-security-remediation
 title: Autonomous security-ticket remediation with humans on the merge button
-summary: How Matt dispatched coding agents unattended against the vulnerability backlog, with the governance posture and the honest numbers.
+summary: How Matt adapted OpenAI's Symphony harness, via a fork two colleagues built, to run agents on the vulnerability backlog, with its governance and honest numbers.
 tags: [ai, agents, security, automation, claude-code, governance]
-updated: 2026-09-21
+updated: 2026-09-28
 ---
 
 # Autonomous security-ticket remediation with humans on the merge button
@@ -11,7 +11,10 @@ updated: 2026-09-21
 In August 2026 Matt adapted OpenAI's open-source Symphony orchestration
 harness, via an internal fork developed by two colleagues, to dispatch
 Claude Code agents unattended against Email Reliability's backlog of
-dependency-vulnerability tickets.
+dependency-vulnerability tickets. The agents open pull requests and never
+merge them; a person reviews each one and decides whether to merge it.
+Matt's caveat on the results below: a pull request opened is not a pull
+request merged.
 
 ## Timeline
 
