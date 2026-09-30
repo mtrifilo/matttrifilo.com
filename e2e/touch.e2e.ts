@@ -2,17 +2,20 @@ import type { Page } from '@playwright/test'
 import { expect, test, tickerRows, waitForRows } from './support'
 
 /**
- * A finger on the rows (MTC-75, MTC-84): a drag on either row stops both
- * where their loops had got to and hands them over as one strip, which
- * scrolls together and never moves on its own again.
+ * A finger on the rows (MTC-75, MTC-79, MTC-84): a drag along either row
+ * stops both where their loops had reached and hands them over as one strip,
+ * which scrolls together and never moves on its own again. What makes a
+ * touch a drag is its first movement: past 8 px, and more across than up or
+ * down. A finger that stays within that, or goes up or down, leaves the rows
+ * moving.
  *
  * Chromium is given a real drag, through the same touch input a phone's
  * compositor sends, so the row scrolls natively. Playwright has no touch
- * drag for WebKit, so there the row is touched for real (a tap on its
- * padding, clear of every pill) and then scrolled by script, which is the
- * scroll a drag would have made; the hand-over and the linked scroll are the
- * same code either way. The feel of the drag on a real phone is still a
- * device check.
+ * drag for WebKit, so there the touch events are dispatched on the row (the
+ * same events, with the finger's coordinates) and the row is then scrolled
+ * by script, which is the scroll the drag would have made; the direction
+ * rule, the hand-over and the linked scroll are the same code either way.
+ * The feel of the drag on a real phone is still a device check.
  */
 
 test.skip(({ hasTouch }) => !hasTouch, 'touch is the mobile projects')
@@ -81,12 +84,53 @@ async function dragFirstRow(
     return
   }
 
-  // The row's own padding, above the pills, so the tap asks nothing.
-  await page.touchscreen.tap(startX, box.y + 1)
+  await dispatchTouch(page, [
+    [0, 0],
+    [-distance / 4, 0],
+    [-distance, 0],
+  ])
   await page.evaluate(pixels => {
     const viewport = document.querySelector('.starter-ticker-row')
     if (viewport) viewport.scrollLeft += pixels
   }, distance)
+}
+
+/**
+ * Dispatches one finger's touch on the first row: a touchstart at the row's
+ * middle, a touchmove to each later offset (in px from where it landed), and
+ * a touchend. Dispatched events never scroll anything or produce a click, so
+ * this reads only the component's direction rule.
+ */
+async function dispatchTouch(
+  page: Page,
+  offsets: readonly (readonly [number, number])[]
+): Promise<void> {
+  const row = tickerRows(page).first()
+  const box = await row.boundingBox()
+  if (!box) throw new Error('the first row is not laid out')
+  const x = box.x + box.width * 0.75
+  const y = box.y + box.height / 2
+  const at = ([dx, dy]: readonly [number, number]) => ({
+    identifier: 1,
+    clientX: x + dx,
+    clientY: y + dy,
+  })
+  const [first, ...rest] = offsets
+  await row.dispatchEvent('touchstart', {
+    touches: [at(first)],
+    changedTouches: [at(first)],
+  })
+  for (const offset of rest) {
+    await row.dispatchEvent('touchmove', {
+      touches: [at(offset)],
+      changedTouches: [at(offset)],
+    })
+  }
+  const last = offsets[offsets.length - 1]
+  await row.dispatchEvent('touchend', {
+    touches: [],
+    changedTouches: [at(last)],
+  })
 }
 
 test('a drag on one row hands both over, stopped, scrolling as one', async ({
@@ -152,3 +196,36 @@ test('a drag on one row hands both over, stopped, scrolling as one', async ({
     expect(row.looping).toBe(false)
   })
 })
+
+for (const [name, offsets] of [
+  [
+    'a touch that stays within the threshold',
+    [
+      [0, 0],
+      [4, 3],
+    ],
+  ],
+  [
+    'a touch that moves up the page',
+    [
+      [0, 0],
+      [3, -20],
+    ],
+  ],
+] as const) {
+  test(`${name} leaves both rows moving`, async ({ page }) => {
+    await page.goto('/ask')
+    await waitForRows(page)
+
+    await dispatchTouch(page, offsets)
+
+    // The hold a touch puts on the rows ends with it, and neither row was
+    // handed over.
+    await expect
+      .poll(async () => (await rowStates(page)).map(row => row.looping))
+      .toEqual([true, true])
+    const states = await rowStates(page)
+    expect(states.map(row => row.handedOver)).toEqual([false, false])
+    expect(states.map(row => row.frozen)).toEqual([false, false])
+  })
+}
