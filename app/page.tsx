@@ -2,10 +2,10 @@ import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { EvalsPublishedProvider } from '@/components/assistant/evals-published'
 import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
+import { PostListItem } from '@/components/blog/PostListItem'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { getAllBlogPosts } from '@/lib/blog'
 import { hasPublishedEvalRun } from '@/lib/evals/results'
-import { formatDate } from '@/lib/format-date'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
 
 export default function Home() {
@@ -68,23 +68,13 @@ export default function Home() {
             </h2>
             <div className="space-y-6">
               {recentPosts.map((post, i) => (
-                <article
+                <PostListItem
                   key={post.slug}
-                  className="animate-fade-in-up border-b border-border pb-6 last:border-0"
-                  style={{ '--index': i } as React.CSSProperties}
-                >
-                  <h3 className="text-lg font-medium leading-tight">
-                    <Link
-                      href={`/blog/${post.slug}`}
-                      className="hover:text-muted-foreground transition-colors"
-                    >
-                      {post.title}
-                    </Link>
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {formatDate(post.date)}
-                  </p>
-                </article>
+                  post={post}
+                  headingLevel={3}
+                  index={i}
+                  className="last:border-0"
+                />
               ))}
             </div>
             <Link
