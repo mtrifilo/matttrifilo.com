@@ -33,8 +33,8 @@ describe('the Turbopack build cache switch', () => {
  * directive is pinned to its exact sources, so a new host is a deliberate
  * edit here as well as in next.config.ts, not something a refactor slips in.
  * The policy has two shapes: upgrade-insecure-requests is sent only where
- * VERCEL is set, so plain-http runs (a local `next start`, the browser
- * checks' WebKit) keep their own files.
+ * VERCEL is set, so a build served over plain http (a local `next start`
+ * opened in Safari) keeps its own files.
  */
 const SITE_WIDE = '/(.*)'
 const POLICY_EVERYWHERE: Record<string, string[]> = {

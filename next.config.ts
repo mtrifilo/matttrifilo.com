@@ -73,8 +73,10 @@ const nextConfig: NextConfig = {
            * (self.__next_f) in every page, and next-themes inlines the script
            * that sets the theme class before first paint. A prerendered page
            * cannot carry a per-request nonce, and those scripts differ by page
-           * and by build, so hashes do not fit either. The JSON-LD tag is a
-           * data block the browser never runs, so it needs none of this.
+           * and by build, so hashes do not fit either. Next's experimental
+           * SRI does not help: it hashes the external chunks only, not these
+           * inline scripts. The JSON-LD tag is a data block the browser never
+           * runs, so it needs none of this.
            *
            * Removing it takes a proxy.ts that mints a nonce per request and
            * sets the policy, with 'nonce-...' in script-src, on the forwarded
@@ -90,14 +92,17 @@ const nextConfig: NextConfig = {
            * object-src 'none' refuses plugins outright rather than inheriting
            * default-src. upgrade-insecure-requests has the browser request a
            * page's subresources, frames and form posts over https://, so none
-           * of them travels in the clear. It is sent only where VERCEL is set
-           * (every Vercel build and runtime, the same test app/layout.tsx
-           * uses for the analytics script): on a page served over plain http
-           * the page's own files are upgraded too, and WebKit then loads none
-           * of its scripts, styles or images, which would break a local
-           * `next start` on http://127.0.0.1 and the browser checks that run
-           * WebKit against one. On production it is a second safeguard, since
-           * Vercel already sends Strict-Transport-Security there.
+           * of them travels in the clear. On a page served over plain http
+           * the page's own files are upgraded too, and Safari then loads none
+           * of its scripts, styles or images, so a local `next start` on
+           * http://127.0.0.1 opened in Safari or any WebKit browser would
+           * break. It is therefore sent only where VERCEL is set, the test
+           * app/layout.tsx uses for the analytics script. `next build` fixes
+           * the value in routes-manifest.json (`next dev` reads it live), and
+           * Vercel's builds set VERCEL, as do `vercel dev` and a local
+           * `vercel build`, so those carry it too. On production it is a
+           * second safeguard, since Vercel already sends
+           * Strict-Transport-Security there.
            */
           {
             key: 'Content-Security-Policy',
