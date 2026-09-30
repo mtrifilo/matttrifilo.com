@@ -349,20 +349,25 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // Reads, then one answer. Without a stop condition the SDK would run
         // a single step and never come back for the answer after a tool call.
         stopWhen: stepCountIs(CHAT_MAX_STEPS),
-        // The last step has to produce the answer, so it is told not to call
-        // a tool. Without this a model that spends every step reading ends
-        // the run on 'tool-calls' with no text at all. It is an instruction
-        // the model can ignore, and one run did (MTC-87), so it is not the
-        // whole guard: `StepText` keeps a finished answer from that step
-        // even when a call came with it, the transcript shows the incomplete
-        // notice when there is none, and `refusedOnLastStep` keeps the
-        // stray call from doing any work. A fifth call to recover the answer
-        // is not an option: the Vertex deadlines in lib/ai/bounded-fetch.ts
-        // divide the request's waiting budget by CHAT_MAX_STEPS model calls.
+        // The last step has to produce the answer, so it is offered no tool
+        // at all. Without this a model that spends every step reading ends
+        // the run on 'tool-calls' with no text at all. `toolChoice: 'none'`
+        // alone is an instruction the model can ignore, and one run did
+        // (MTC-87): Vertex was sent `functionCallingConfig.mode: "NONE"`
+        // with the declarations attached and returned a call. With
+        // `activeTools: []` the request declares no function, so there is
+        // nothing to call. The rest of the guard is for a provider or model
+        // that returns a call anyway: the SDK does not run a call for a tool
+        // the step did not offer, `refusedOnLastStep` refuses one if it
+        // ever did, `StepText` keeps a finished answer from the step, and
+        // the transcript shows the incomplete notice when there is none. A
+        // fifth call to recover the answer is not an option: the Vertex
+        // deadlines in lib/ai/bounded-fetch.ts divide the request's waiting
+        // budget by CHAT_MAX_STEPS model calls.
         prepareStep: ({ stepNumber }) => {
           if (stepNumber !== CHAT_MAX_STEPS - 1) return undefined
           lastStep.started = true
-          return { toolChoice: 'none' }
+          return { activeTools: [], toolChoice: 'none' }
         },
         // buildMessages puts the policy and the index at the front as system
         // messages; the Google provider folds them into the single
@@ -511,13 +516,23 @@ export function createChatHandler(deps: ChatHandlerDeps) {
  * with the function declarations still attached), but the model can return
  * a call anyway, and a measured run did (MTC-87, 2026-09-28). No step
  * follows it, so dropping all of its text would leave the visitor nothing.
- * Its text is cut into segments at each call, and each segment is judged on
- * its own: one that reads as a finished answer by the policy's markers (a
- * citation line, a follow-ups block, or the decline sentence, with prose
- * besides the trailers) is kept, and the last such segment is the answer.
- * Narration carries none of those markers, so narration on either side of
- * the call is dropped, and a step that only narrated leaves no answer and
- * the incomplete notice.
+ * The step is now sent no tool declarations at all (`prepareStep`), so this
+ * path is for a model or provider that returns a call regardless.
+ *
+ * Its text is cut into segments at each call, in the order the SDK reports
+ * text and calls, and each segment is judged on its own: one that reads as
+ * a finished answer by the policy's markers (a citation line, a follow-ups
+ * block, or the decline sentence, with prose besides the trailers) is kept,
+ * and the last such segment is the answer. Narration carries none of those
+ * markers, so narration in a segment of its own is dropped, and a step that
+ * only narrated leaves no answer and the incomplete notice.
+ *
+ * That order is not always the order the model wrote in. The Google provider
+ * handles each streamed event's text parts before its function calls, so
+ * narration and an answer that arrive in the same event as the call, or in
+ * events before it with no call between them, fall into one segment, and
+ * that segment is shown whole, narration included. handler.test.ts pins the
+ * three orderings through the real provider.
  *
  * Each request runs two of these: one over the model's parts, for the
  * metadata and the log, and one over the chunks bound for the browser, in
@@ -710,14 +725,16 @@ function endsOnAnswer({
  * A tool that answers every call on the last step with a refusal and does
  * no work.
  *
- * The last step is told not to call a tool, and nothing reads what a call
- * there returns: no step follows it. The SDK still runs a call the model
- * made anyway, and the step does not end until it has, so without this a
- * stray call would spend a read or a GitHub check, hold the answer back for
- * as long as the fetch takes (up to its five-second timeout), and add a row
- * to the progress list for a document the answer never saw. The refusal is
- * the `{ error }` shape both tools use, so `withProgress` withdraws the row
- * it opened for the call.
+ * A backstop. The last step is offered no tool (`activeTools: []`), and the
+ * SDK runs no call for a tool the step did not offer, so today nothing
+ * reaches this on the last step. It is here for the day the step's tools
+ * change: nothing reads what a call there returns, since no step follows
+ * it, and the SDK does run a call to an offered tool, and does not end the
+ * step until it has. Unguarded, such a call would spend a read or a GitHub
+ * check, hold the answer back for as long as the fetch takes (up to its
+ * five-second timeout), and add a row to the progress list for a document
+ * the answer never saw. The refusal is the `{ error }` shape both tools
+ * use, so `withProgress` withdraws the row it opened for the call.
  */
 function refusedOnLastStep(tool: Tool, lastStep: { started: boolean }): Tool {
   const execute = tool.execute
@@ -797,31 +814,55 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
 function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
   const step = new StepText()
   let held: ChatUIChunk[] = []
-  let sentForcedAnswer = false
+  /**
+   * This step's text has reached the browser, by a flush or as the forced
+   * answer. Either way nothing more of it is sent: after an error flushed a
+   * finished answer, a later call would otherwise send it a second time.
+   */
+  let sentText = false
+  /** Text blocks the browser saw open and has not yet seen close. */
+  const open = new Set<string>()
+
+  function send(
+    controller: TransformStreamDefaultController<ChatUIChunk>,
+    part: ChatUIChunk
+  ): void {
+    if (part.type === 'text-start') open.add(part.id)
+    if (part.type === 'text-end') open.delete(part.id)
+    if (part.type === 'text-delta') sentText = true
+    controller.enqueue(part)
+  }
 
   function flushHeld(
     controller: TransformStreamDefaultController<ChatUIChunk>
   ): void {
-    for (const part of held) controller.enqueue(part)
+    for (const part of held) send(controller, part)
     held = []
     const answer = step.forcedAnswer()
-    if (answer === '' || sentForcedAnswer) return
-    sentForcedAnswer = true
-    controller.enqueue({ type: 'text-start', id: FORCED_ANSWER_TEXT_ID })
-    controller.enqueue({
+    if (answer === '' || sentText) return
+    send(controller, { type: 'text-start', id: FORCED_ANSWER_TEXT_ID })
+    send(controller, {
       type: 'text-delta',
       id: FORCED_ANSWER_TEXT_ID,
       delta: answer,
     })
-    controller.enqueue({ type: 'text-end', id: FORCED_ANSWER_TEXT_ID })
+    send(controller, { type: 'text-end', id: FORCED_ANSWER_TEXT_ID })
+  }
+
+  /** Closes any block the browser saw open, so no part is left dangling. */
+  function closeOpen(
+    controller: TransformStreamDefaultController<ChatUIChunk>
+  ): void {
+    for (const id of [...open]) send(controller, { type: 'text-end', id })
   }
 
   return new TransformStream({
     transform(chunk, controller) {
       if (chunk.type === 'start-step') {
         flushHeld(controller)
+        closeOpen(controller)
         step.startStep()
-        sentForcedAnswer = false
+        sentText = false
         controller.enqueue(chunk)
         return
       }
@@ -841,6 +882,11 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
       ) {
         if (chunk.type === 'text-delta') step.write(chunk.delta)
         if (step.passesText()) held.push(chunk)
+        // A block an error flushed before a call came is closed when its
+        // end arrives, although the rest of its text is not sent.
+        else if (chunk.type === 'text-end' && open.has(chunk.id)) {
+          send(controller, chunk)
+        }
         return
       }
       if (chunk.type.startsWith('reasoning')) return
@@ -853,6 +899,7 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
     },
     flush(controller) {
       flushHeld(controller)
+      closeOpen(controller)
     },
   })
 }
@@ -1423,15 +1470,14 @@ function logCompletion({
     vertexFirstByteMs,
     ms,
   }
-  // An answer that stopped on length was cut off mid-word, and any other
-  // finish that did not end on a shown answer (`endsOnAnswer`) left the
-  // visitor no usable answer at all. Both get their own marker rather than
-  // hiding among the ordinary completions.
+  // An answer that stopped on length was cut off mid-word. Any other run
+  // that did not end on a shown answer (`endsOnAnswer`) left the visitor no
+  // usable answer at all, a clean 'stop' with no prose included: this is the
+  // rule the metadata's `incomplete` follows, so this marker and the
+  // visitor's notice describe the same runs. Both get their own marker
+  // rather than hiding among the ordinary completions.
   if (finishReason === 'length') console.warn('[chat] truncated', aggregate)
-  else if (
-    finishReason !== 'stop' &&
-    !endsOnAnswer({ finishReason, answered, finalStepToolCall })
-  ) {
+  else if (!endsOnAnswer({ finishReason, answered, finalStepToolCall })) {
     console.warn('[chat] incomplete', aggregate)
   } else console.info('[chat]', aggregate)
 }

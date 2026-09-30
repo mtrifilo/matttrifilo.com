@@ -1544,38 +1544,57 @@ describe('a tool call on the step forced to answer', () => {
     return { model, body }
   }
 
-  test('Vertex is sent functionCallingConfig NONE on that step, tools still declared', async () => {
-    // The route, the SDK and the real Vertex provider, with only `fetch`
-    // replaced: what the fourth request carries is what Vertex was told. A
-    // model that calls a tool after this is ignoring the option, not missing
-    // it.
-    const bodies: {
-      toolConfig?: { functionCallingConfig?: { mode?: string } }
-      tools?: { functionDeclarations?: { name: string }[] }[]
-    }[] = []
-    const reply = (part: object) =>
-      new Response(
-        `data: ${JSON.stringify({
-          candidates: [
-            {
-              content: { role: 'model', parts: [part] },
-              finishReason: 'STOP',
-            },
-          ],
-          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
-        })}\n\n`,
-        { headers: { 'content-type': 'text/event-stream' } }
-      )
+  /** One Gemini streaming event carrying `parts`, as Vertex sends it. */
+  const vertexEvent = (parts: object[], finishReason?: string) =>
+    `data: ${JSON.stringify({
+      candidates: [
+        {
+          content: { role: 'model', parts },
+          ...(finishReason ? { finishReason } : {}),
+        },
+      ],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    })}\n\n`
+
+  interface VertexRequestBody {
+    toolConfig?: { functionCallingConfig?: { mode?: string } }
+    tools?: { functionDeclarations?: { name: string }[] }[]
+  }
+
+  /**
+   * The route, the SDK and the real Vertex provider, with only `fetch`
+   * replaced. The first three calls each read one document; the fourth
+   * streams `lastEvents`, one Gemini event per entry. Returns what the
+   * browser was sent and every request body Vertex would have received.
+   */
+  async function throughVertex(lastEvents: object[][]) {
+    const bodies: VertexRequestBody[] = []
     const capture = async (_url: unknown, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)))
-      return bodies.length < CHAT_MAX_STEPS
-        ? reply({
-            functionCall: {
-              name: READ_DOCUMENT_TOOL_NAME,
-              args: { id: documents[bodies.length - 1].id },
-            },
-          })
-        : reply({ text: ANSWER })
+      const events =
+        bodies.length < CHAT_MAX_STEPS
+          ? [
+              vertexEvent(
+                [
+                  {
+                    functionCall: {
+                      name: READ_DOCUMENT_TOOL_NAME,
+                      args: { id: documents[bodies.length - 1].id },
+                    },
+                  },
+                ],
+                'STOP'
+              ),
+            ]
+          : lastEvents.map((parts, n) =>
+              vertexEvent(
+                parts,
+                n === lastEvents.length - 1 ? 'STOP' : undefined
+              )
+            )
+      return new Response(events.join(''), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
     }
     const vertex = createVertex({
       apiKey: 'test',
@@ -1592,17 +1611,67 @@ describe('a tool call on the step forced to answer', () => {
     const body = await (
       await handler(post({ messages: [uiMessage('user', QUESTION)] }))
     ).text()
+    return { body, bodies }
+  }
 
-    expect(textFrom(body)).toBe(ANSWER)
+  const strayCall = {
+    functionCall: { name: READ_DOCUMENT_TOOL_NAME, args: { id: 'timeline' } },
+  }
+
+  test('Vertex is sent no tool declarations on that step, so there is nothing to call', async () => {
+    const { body, bodies } = await throughVertex([[{ text: FINISHED }]])
+
+    expect(textFrom(body)).toBe(FINISHED)
     expect(bodies).toHaveLength(CHAT_MAX_STEPS)
-    const modes = bodies.map(b => b.toolConfig?.functionCallingConfig?.mode)
-    expect(modes.slice(0, -1).every(mode => mode !== 'NONE')).toBe(true)
-    expect(modes.at(-1)).toBe('NONE')
-    const declared = bodies
-      .at(-1)
-      ?.tools?.flatMap(t => t.functionDeclarations ?? [])
-      .map(d => d.name)
-    expect(declared).toContain(READ_DOCUMENT_TOOL_NAME)
+    // Every earlier step declares the tools and lets the model choose.
+    for (const earlier of bodies.slice(0, -1)) {
+      expect(earlier.toolConfig?.functionCallingConfig?.mode).not.toBe('NONE')
+      expect(
+        earlier.tools?.flatMap(t => t.functionDeclarations ?? []).length
+      ).toBeGreaterThan(0)
+    }
+    // The last declares none. `toolChoice: 'none'` alone would send
+    // `mode: "NONE"` with the declarations still attached, which a measured
+    // run ignored (MTC-87).
+    expect(bodies.at(-1)?.tools).toBeUndefined()
+    expect(bodies.at(-1)?.toolConfig).toBeUndefined()
+  })
+
+  // A model that returns a call anyway, through the real provider, in the
+  // three orderings its stream can take. The provider handles an event's
+  // text parts before its function calls, so the order the route sees is
+  // not always the order the model wrote in; these pin what the visitor gets
+  // in each, the leak included, so a future fix can be measured.
+  test('narration, a call and an answer in separate events: only the answer is shown', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }],
+      [strayCall],
+      [{ text: FINISHED }],
+    ])
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('narration, then the call and the answer in one event: the narration is shown too (known limit)', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }],
+      [strayCall, { text: FINISHED }],
+    ])
+
+    // The second event's text reaches the route before its call, so the
+    // narration and the answer are one segment.
+    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('narration, the call and the answer in one event: the narration is shown too (known limit)', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }, strayCall, { text: FINISHED }],
+    ])
+
+    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
   test('a forced step that obeys answers as it always did', async () => {
@@ -1751,6 +1820,41 @@ describe('a tool call on the step forced to answer', () => {
     expect(open.size).toBe(0)
   })
 
+  test('an answer an error already flushed is sent once, in a closed block', async () => {
+    // The provider reports an unparseable event as an error part and keeps
+    // streaming, so a finished answer can be flushed by the error before a
+    // stray call arrives. It must not then be sent again as the kept answer.
+    const { body } = await run(() =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '0' },
+        { type: 'text-delta', id: '0', delta: FINISHED },
+        { type: 'error', error: new Error('unparseable event') },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-after-error',
+          toolName: READ_DOCUMENT_TOOL_NAME,
+          input: JSON.stringify({ id: 'projects' }),
+        },
+        { type: 'text-end', id: '0' },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: 'STOP' },
+          usage,
+          providerMetadata: VERTEX_METADATA,
+        },
+      ])
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    const open = new Set<unknown>()
+    for (const chunk of chunksFrom(body)) {
+      if (chunk.type === 'text-start') open.add(chunk.id)
+      if (chunk.type === 'text-end') open.delete(chunk.id)
+    }
+    expect(open.size).toBe(0)
+  })
+
   test('the trailers alone are not an answer', async () => {
     // The transcript takes both trailers off, so a step that wrote only
     // them would be an empty bubble with no notice if it counted.
@@ -1762,7 +1866,10 @@ describe('a tool call on the step forced to answer', () => {
     )
 
     expect(metadataFrom(body).incomplete).toBe(true)
-    expect(completion().fields).toMatchObject({ answered: false })
+    expect(completion()).toEqual({
+      marker: '[chat] incomplete',
+      fields: expect.objectContaining({ answered: false }),
+    })
   })
 
   test('a decline before the call is shown, with no follow-ups', async () => {
@@ -2618,10 +2725,13 @@ describe('logging', () => {
     )(post({ messages: [uiMessage('user', QUESTION)] }))
     const body = await response.text()
     expect(metadataFrom(body).incomplete).toBe(true)
+    // A clean 'stop' that left nothing to read is logged where the notice
+    // is: under the incomplete marker, not on the ordinary line.
     const line = logged.find(
       args => typeof args[1] === 'object' && 'answered' in (args[1] as object)
     )
-    expect(line?.[1]).toMatchObject({ answered: false })
+    expect(line?.[0]).toBe('[chat] incomplete')
+    expect(line?.[1]).toMatchObject({ answered: false, finishReason: 'stop' })
   })
 
   test('a whitespace-only reply is not an answer', async () => {
@@ -2630,6 +2740,11 @@ describe('logging', () => {
     )(post({ messages: [uiMessage('user', QUESTION)] }))
     const body = await response.text()
     expect(metadataFrom(body).incomplete).toBe(true)
+    const line = logged.find(
+      args => typeof args[1] === 'object' && 'answered' in (args[1] as object)
+    )
+    expect(line?.[0]).toBe('[chat] incomplete')
+    expect(line?.[1]).toMatchObject({ answered: false, finishReason: 'stop' })
   })
 
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {
