@@ -408,6 +408,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             finishReason,
             answered: answer.answered(),
             finalStepToolCall: answer.forcedStepCalledTool(),
+            textRetractions: answer.retractions(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
@@ -429,6 +430,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             aborted: true,
             answered: answer.answered(),
             finalStepToolCall: answer.forcedStepCalledTool(),
+            textRetractions: answer.retractions(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
@@ -487,8 +489,11 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             return JSON.stringify(chatErrorBody('interrupted'))
           },
         })
-          .pipeThrough(withProgress({ entries: index.entries, now, started }))
+          // In this order: a withdrawal from `onlyAnswerText` has to reach
+          // the browser before any progress part of the same step, and
+          // `withProgress` has to see which text the browser was sent.
           .pipeThrough(onlyAnswerText())
+          .pipeThrough(withProgress({ entries: index.entries, now, started }))
           .pipeThrough(onlyClientChunks()),
       })
     } catch (error) {
@@ -537,7 +542,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
  * Each request runs two of these: one over the model's parts, for the
  * metadata and the log, and one over the chunks bound for the browser, in
  * `onlyAnswerText`. Both see the same text and the same calls in the same
- * order, so the log's `answered` and what the bubble shows cannot disagree.
+ * order, so the log's `answered` and what the bubble shows cannot disagree,
+ * and neither can the log's `textRetractions` and the withdrawals the
+ * browser was sent.
+ *
+ * A step's text travels as it is written (MTC-101), so the browser may
+ * already hold text that a call later in the step turns into scratchpad.
+ * The first call of such a step withdraws it (`toolCalled` returns true),
+ * which `onlyAnswerText` turns into the SDK's `reset-step` chunk. Text a
+ * step wrote after an `error` part stays: the browser stops reading the
+ * stream at an error, so nothing sent after it could take the text back.
  *
  * Only the end of an ordinary step's text is kept: the trailers are the last
  * thing written, so a fixed-size tail is all the metadata needs. The forced
@@ -554,6 +568,12 @@ class StepText {
   private segment = ''
   /** The forced step's last finished segment before its latest call. */
   private kept = ''
+  /** This step's text reached the browser and has not been withdrawn. */
+  private shown = false
+  /** An `error` part came in this step, so what the browser holds stays. */
+  private stopsReading = false
+  /** Steps whose shown text a call withdrew, over the whole request. */
+  private withdrawals = 0
 
   /** A `start-step` part or chunk. */
   startStep(): void {
@@ -562,37 +582,62 @@ class StepText {
     this.tail = ''
     this.segment = ''
     this.kept = ''
+    this.shown = false
+    this.stopsReading = false
   }
 
   /**
    * The model called a tool: a part or chunk on the call's side
    * (`isToolCallChunk`). On the forced step this closes a segment.
+   *
+   * True when this call withdraws text the browser was already shown.
    */
-  toolCalled(): void {
+  toolCalled(): boolean {
     if (this.isForcedStep() && readsAsFinishedAnswer(this.segment)) {
       this.kept = this.segment
     }
     this.segment = ''
-    this.calledTool = true
+    return this.becomesScratchpad()
   }
 
-  /** Any other tool part or chunk, a result or an error. */
-  toolSettled(): void {
-    this.calledTool = true
+  /**
+   * Any other tool part or chunk, a result or an error. A result follows its
+   * call, so this withdraws nothing on the browser's side; it is here for a
+   * model stream that reports a failed call without the call part, so the
+   * log still counts the withdrawal the browser was sent.
+   */
+  toolSettled(): boolean {
+    return this.becomesScratchpad()
+  }
+
+  /** An `error` part or chunk. */
+  failed(): void {
+    this.stopsReading = true
   }
 
   write(text: string): void {
     this.tail = (this.tail + text).slice(-ANSWER_TAIL_CHARS)
     if (this.isForcedStep()) this.segment += text
+    if (this.passesText() && text !== '') this.shown = true
   }
 
   /**
-   * Whether this step's text travels as the model wrote it. True until the
+   * Whether this step's text travels as the model writes it. True until the
    * step calls a tool; after that an earlier step's text is dropped and the
    * forced step's answer is `forcedAnswer()`, sent as a block of its own.
    */
   passesText(): boolean {
     return !this.calledTool
+  }
+
+  /** The browser holds text from this step that is still on screen. */
+  showing(): boolean {
+    return this.shown
+  }
+
+  /** How many steps had shown text withdrawn by a call. */
+  retractions(): number {
+    return this.withdrawals
   }
 
   /** The forced step's answer once it has called a tool, or ''. */
@@ -621,6 +666,15 @@ class StepText {
 
   private isForcedStep(): boolean {
     return this.step >= CHAT_MAX_STEPS
+  }
+
+  /** The step's text is scratchpad from here on; see `toolCalled`. */
+  private becomesScratchpad(): boolean {
+    this.calledTool = true
+    if (!this.shown || this.stopsReading) return false
+    this.shown = false
+    this.withdrawals += 1
+    return true
   }
 }
 
@@ -666,6 +720,7 @@ function observeModelPart(
   if (part.type === 'start-step') step.startStep()
   else if (isToolCallChunk(part.type)) step.toolCalled()
   else if (part.type.startsWith('tool-')) step.toolSettled()
+  else if (part.type === 'error') step.failed()
   else if (part.type === 'text-delta' && typeof part.text === 'string') {
     step.write(part.text)
   }
@@ -760,6 +815,9 @@ const CLIENT_CHUNK_TYPES: ReadonlySet<string> = new Set([
   'start',
   'start-step',
   'finish-step',
+  // The withdrawal `onlyAnswerText` sends when a step that streamed text
+  // turns out to be calling a tool. It carries nothing but its type.
+  'reset-step',
   'finish',
   'text-start',
   'text-delta',
@@ -787,8 +845,9 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
 }
 
 /**
- * Holds text from a step until that step is known to be the answer, and
- * drops it when it is not (MTC-49); `StepText` is where that is decided.
+ * Streams a step's text as it is written, and withdraws it when a call later
+ * in the same step shows it was scratchpad (MTC-49, MTC-101); `StepText` is
+ * where both are decided.
  *
  * Models routinely narrate before a read ("Let me check his résumé."). That
  * prose is `text-delta`, the same chunk type as the answer, so an allowlist
@@ -799,27 +858,45 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
  * step with no step after it keeps a finished answer even when it also
  * called a tool.
  *
- * That last case is sent as a text block of its own, built from the kept
- * segment, rather than as the model's chunks: the provider can leave one
- * text block open across a call, so forwarding the chunks of one segment and
- * not another would send deltas for a block the browser never saw start.
+ * Whether a step calls a tool is known only when the call arrives, which is
+ * after any text the model wrote first. Holding a step's text until the step
+ * ends would keep narration off the wire, but every answer would then arrive
+ * whole at the end of its step, 23 s at the median at `medium` (MTC-87,
+ * 2026-09-28). So text is forwarded live, and a step's first call sends
+ * `reset-step` if the browser
+ * was shown any of that step's text. `reset-step` is the SDK's own chunk for
+ * this (ai 7, "Reset Step Part" in its stream protocol): `useChat` removes
+ * every part the message gained since the step's `start-step`, so the
+ * withdrawn text leaves the transcript, the copy buffer and the history the
+ * next question replays, with no client code of this route's in the way.
+ * Nothing after the reset may name a text block from before it, because the
+ * browser has forgotten those blocks and a delta or an end for one would
+ * throw; the step's remaining text is scratchpad and is dropped anyway.
  *
- * Held until `finish-step` so a live token cannot race a tool call that
- * arrives later in the same step. The answer therefore appears when that
- * step ends rather than token-by-token; the progress view already covers
- * the wait. An abort or error mid-answer flushes what was held, judged by
- * what the step has done so far, so a partial briefing is not thrown away; a
- * call that arrives after an error cannot take back what the error flushed.
+ * The browser drops its data parts from the step too, so a reset has to
+ * reach the browser before this step's first progress part: this stage runs
+ * ahead of `withProgress`, which writes no part in a step before the step's
+ * first call, and restores one a reset takes (see there).
+ *
+ * The forced step composes with this unchanged: its text streams live like
+ * any other until a stray call withdraws it, and its kept answer
+ * (`forcedAnswer`) is then sent as a text block of its own when the step
+ * ends. It is sent that way rather than as the model's chunks because the
+ * provider can leave one text block open across a call, so forwarding the
+ * chunks of one segment and not another would send deltas for a block the
+ * browser never saw start.
+ *
+ * An abort mid-answer leaves what was streamed, so a partial briefing is not
+ * thrown away. If the step would have gone on to call a tool, that text was
+ * narration and stays too: at the moment of the abort nothing tells it from
+ * the start of an answer. An `error` chunk ends the browser's reading of the
+ * stream, so the text before it stays as well, and no withdrawal is sent
+ * after one.
  */
 function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
   const step = new StepText()
-  let held: ChatUIChunk[] = []
-  /**
-   * This step's text has reached the browser, by a flush or as the forced
-   * answer. Either way nothing more of it is sent: after an error flushed a
-   * finished answer, a later call would otherwise send it a second time.
-   */
-  let sentText = false
+  /** The forced step's kept answer has been sent. It is sent once. */
+  let sentForcedAnswer = false
   /** Text blocks the browser saw open and has not yet seen close. */
   const open = new Set<string>()
 
@@ -829,17 +906,21 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
   ): void {
     if (part.type === 'text-start') open.add(part.id)
     if (part.type === 'text-end') open.delete(part.id)
-    if (part.type === 'text-delta') sentText = true
     controller.enqueue(part)
   }
 
-  function flushHeld(
+  /**
+   * The forced step's kept answer, once it has called a tool. Not while the
+   * step's own streamed text is still on screen: that happens only when an
+   * error stopped the browser reading before a call could withdraw it, and
+   * the answer would then be shown twice.
+   */
+  function sendForcedAnswer(
     controller: TransformStreamDefaultController<ChatUIChunk>
   ): void {
-    for (const part of held) send(controller, part)
-    held = []
     const answer = step.forcedAnswer()
-    if (answer === '' || sentText) return
+    if (answer === '' || sentForcedAnswer || step.showing()) return
+    sentForcedAnswer = true
     send(controller, { type: 'text-start', id: FORCED_ANSWER_TEXT_ID })
     send(controller, {
       type: 'text-delta',
@@ -859,19 +940,21 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
   return new TransformStream({
     transform(chunk, controller) {
       if (chunk.type === 'start-step') {
-        flushHeld(controller)
+        sendForcedAnswer(controller)
         closeOpen(controller)
         step.startStep()
-        sentText = false
+        sentForcedAnswer = false
         controller.enqueue(chunk)
         return
       }
       if (chunk.type.startsWith('tool-')) {
-        if (isToolCallChunk(chunk.type)) step.toolCalled()
-        else step.toolSettled()
-        // Whatever this step wrote so far is scratchpad now, or, on the
-        // forced step, held inside `step` as a segment.
-        held = []
+        const withdraws = isToolCallChunk(chunk.type)
+          ? step.toolCalled()
+          : step.toolSettled()
+        if (withdraws) {
+          open.clear()
+          controller.enqueue({ type: 'reset-step' })
+        }
         controller.enqueue(chunk)
         return
       }
@@ -881,24 +964,31 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
         chunk.type === 'text-end'
       ) {
         if (chunk.type === 'text-delta') step.write(chunk.delta)
-        if (step.passesText()) held.push(chunk)
-        // A block an error flushed before a call came is closed when its
-        // end arrives, although the rest of its text is not sent.
+        if (step.passesText()) send(controller, chunk)
+        // A block the browser still holds open after the call, because it
+        // had shown nothing to withdraw or an error kept it, is closed when
+        // its end arrives, although the rest of its text is not sent.
         else if (chunk.type === 'text-end' && open.has(chunk.id)) {
           send(controller, chunk)
         }
         return
       }
       if (chunk.type.startsWith('reasoning')) return
-      if (chunk.type === 'finish-step' || chunk.type === 'error') {
-        flushHeld(controller)
+      if (chunk.type === 'error') {
+        step.failed()
+        sendForcedAnswer(controller)
+        controller.enqueue(chunk)
+        return
+      }
+      if (chunk.type === 'finish-step') {
+        sendForcedAnswer(controller)
         controller.enqueue(chunk)
         return
       }
       controller.enqueue(chunk)
     },
     flush(controller) {
-      flushHeld(controller)
+      sendForcedAnswer(controller)
       closeOpen(controller)
     },
   })
@@ -990,11 +1080,15 @@ export function withProgress({
   let phase: ChatProgressPhase = 'reading'
   let emitted = false
   let failed = false
+  /** Model steps begun, and the one the browser first got the part in. */
+  let stepNumber = 0
+  let firstEmittedInStep: number | undefined
 
   function emit(
     controller: TransformStreamDefaultController<ChatUIChunk>,
     ms?: number
   ): void {
+    if (!emitted) firstEmittedInStep = stepNumber
     const data: ChatProgress = { steps: [...steps], phase }
     if (ms !== undefined) data.ms = ms
     // The same id every time. The SDK replaces a data part's payload in place
@@ -1127,12 +1221,32 @@ export function withProgress({
           emit(controller)
           break
         }
+        case 'start-step': {
+          stepNumber += 1
+          break
+        }
+        case 'reset-step': {
+          // The browser has just dropped this step's streamed text, and
+          // with it every part the step added. The withdrawn text was not
+          // the answer after all, so the run is reading again, not
+          // writing; and if the progress part was first sent in this step,
+          // the browser no longer holds it and is sent it again. Neither
+          // can wait for the call's own row, which a refused or repeated
+          // call never earns.
+          controller.enqueue(chunk)
+          const wasWriting = phase === 'writing'
+          if (wasWriting) phase = 'reading'
+          if (wasWriting || firstEmittedInStep === stepNumber) {
+            emit(controller)
+          }
+          return
+        }
         case 'text-start': {
           // A run that answers without reading anything needs no progress
           // part: there are no steps to narrate, and an empty one would only
           // put a spinner where the answer is already arriving. A model that
-          // narrates before a tool call hits this first, too, and is ignored
-          // for the same reason.
+          // narrates before its first tool call hits this first, too, and is
+          // ignored for the same reason.
           if ((emitted || steps.length > 0) && phase !== 'writing') {
             phase = 'writing'
             emit(controller)
@@ -1372,6 +1486,8 @@ interface CompletionAggregates {
   answered: boolean
   /** The step sent `toolChoice: 'none'` called a tool anyway. */
   finalStepToolCall: boolean
+  /** Steps whose streamed text a later call withdrew (`StepText`). */
+  textRetractions: number
   documentsRead: number
   readTokens: number
   readsRefused: ReadsRefused
@@ -1400,6 +1516,7 @@ function logCompletion({
   finishReason,
   answered,
   finalStepToolCall,
+  textRetractions,
   documentsRead,
   readTokens,
   readsRefused,
@@ -1437,8 +1554,8 @@ function logCompletion({
     // a counter, and `flatActivityRefusals` says when a line tells them apart.
     ...flatActivityRefusals(activityRefused),
     // False here is the signal that a request burned tokens and gave the
-    // visitor nothing: no text, or only text the route withheld as
-    // narration. It should be rare; if it is not, CHAT_MAX_STEPS is wrong.
+    // visitor nothing: no text, or only text the route dropped or withdrew
+    // as narration. It should be rare; if it is not, CHAT_MAX_STEPS is wrong.
     answered,
     // True when the last step, told not to call a tool, called one anyway
     // (MTC-100); `finishReason` is then 'tool-calls'. With `answered: false`
@@ -1446,6 +1563,12 @@ function logCompletion({
     // With `answered: true` on an ordinary `[chat]` line the step also wrote
     // a finished answer, before or after the call, and the visitor got it.
     finalStepToolCall,
+    // How many times the visitor saw text appear and then leave the bubble:
+    // a step streamed text and then called a tool, so the route withdrew it
+    // (MTC-101). Each is a flash of narration the progress row replaced.
+    // Zero on most requests; the rate across requests is how often a
+    // visitor sees one.
+    textRetractions,
     finishReason,
     aborted: false,
     // Zero on a healthy request. Anything above it means a model call stalled

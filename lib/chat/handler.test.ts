@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createVertex } from '@ai-sdk/google-vertex'
+import {
+  UIMessageStreamError,
+  readUIMessageStream,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import type { BoundedFetchRetry } from '@/lib/ai/bounded-fetch'
 import {
@@ -24,7 +30,7 @@ import {
   type ChatProgress,
 } from './progress'
 import type { ActivityFetchResult } from './github-activity'
-import { FOLLOW_UPS_TRAILER_PREFIX } from './answer'
+import { FOLLOW_UPS_TRAILER_PREFIX, joinTextParts } from './answer'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
@@ -504,12 +510,71 @@ function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
   return chunks
 }
 
-/** The answer text the browser was sent: every text delta, joined. */
-function textFrom(body: string): string {
+/**
+ * The message the browser ends up holding, built by the SDK's own reader,
+ * which is what `useChat` runs: a `reset-step` removes the step's parts, and
+ * an `error` chunk ends the reading, as it does in the browser. A chunk the
+ * reader refuses (a delta for a block it never saw start) throws here.
+ */
+async function browserMessageFrom(body: string): Promise<UIMessage> {
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const chunk of chunksFrom(body)) {
+        controller.enqueue(chunk as UIMessageChunk)
+      }
+      controller.close()
+    },
+  })
+  let message: UIMessage | undefined
+  try {
+    for await (const snapshot of readUIMessageStream({
+      stream,
+      terminateOnError: true,
+    })) {
+      message = snapshot
+    }
+  } catch (error) {
+    // The stream's own `error` chunk ends the reading, as in the browser.
+    // A chunk the reader rejects is a broken stream, and fails the test.
+    if (error instanceof UIMessageStreamError) throw error
+  }
+  return message ?? { id: '', role: 'assistant', parts: [] }
+}
+
+/**
+ * Asserts every text chunk names a block the browser holds open: opened by
+ * a `text-start`, not yet closed, and not dropped by a `reset-step`.
+ */
+function expectWellFormedText(body: string): void {
+  const open = new Set<unknown>()
+  for (const chunk of chunksFrom(body)) {
+    if (chunk.type === 'reset-step') open.clear()
+    if (chunk.type === 'text-start') open.add(chunk.id)
+    if (chunk.type === 'text-delta') expect(open.has(chunk.id)).toBe(true)
+    if (chunk.type === 'text-end') {
+      expect(open.has(chunk.id)).toBe(true)
+      open.delete(chunk.id)
+    }
+  }
+  expect(open.size).toBe(0)
+}
+
+/** The answer text the browser shows: its message's text parts, joined. */
+async function textFrom(body: string): Promise<string> {
+  return joinTextParts((await browserMessageFrom(body)).parts)
+}
+
+/** Every text delta that went over the wire, withdrawn ones included. */
+function wireTextFrom(body: string): string {
   return chunksFrom(body)
     .filter(chunk => chunk.type === 'text-delta')
     .map(chunk => String(chunk.delta))
     .join('')
+}
+
+/** How many withdrawals the browser was sent. */
+function resetsIn(body: string): number {
+  return chunksFrom(body).filter(chunk => chunk.type === 'reset-step').length
 }
 
 /** Each progress payload the route wrote, in the order it wrote them. */
@@ -521,6 +586,15 @@ function textFrom(body: string): string {
 async function progressThroughStage(
   input: readonly unknown[]
 ): Promise<ChatProgress[]> {
+  return (await chunksThroughProgressStage(input))
+    .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
+    .map(chunk => chunk.data as ChatProgress)
+}
+
+/** Every chunk the progress stage passes on for these, in order. */
+async function chunksThroughProgressStage(
+  input: readonly unknown[]
+): Promise<{ type: string; data?: unknown }[]> {
   const stage = withProgress({
     entries: index.entries,
     now: () => 0,
@@ -532,14 +606,12 @@ async function progressThroughStage(
       controller.close()
     },
   }).pipeThrough(stage)
-  const payloads: ChatProgress[] = []
+  const out: { type: string; data?: unknown }[] = []
   const reader = output.getReader()
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    if (next.value.type === PROGRESS_PART_TYPE) {
-      payloads.push(next.value.data as ChatProgress)
-    }
+    out.push(next.value)
   }
-  return payloads
+  return out
 }
 
 function progressFrom(body: string): ChatProgress[] {
@@ -1621,7 +1693,7 @@ describe('a tool call on the step forced to answer', () => {
   test('Vertex is sent no tool declarations on that step, so there is nothing to call', async () => {
     const { body, bodies } = await throughVertex([[{ text: FINISHED }]])
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(bodies).toHaveLength(CHAT_MAX_STEPS)
     // Every earlier step declares the tools and lets the model choose.
     for (const earlier of bodies.slice(0, -1)) {
@@ -1649,7 +1721,7 @@ describe('a tool call on the step forced to answer', () => {
       [{ text: FINISHED }],
     ])
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
@@ -1661,7 +1733,7 @@ describe('a tool call on the step forced to answer', () => {
 
     // The second event's text reaches the route before its call, so the
     // narration and the answer are one segment.
-    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(await textFrom(body)).toBe(NARRATION + FINISHED)
     expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
@@ -1670,14 +1742,14 @@ describe('a tool call on the step forced to answer', () => {
       [{ text: NARRATION }, strayCall, { text: FINISHED }],
     ])
 
-    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(await textFrom(body)).toBe(NARRATION + FINISHED)
     expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
   test('a forced step that obeys answers as it always did', async () => {
     const { body } = await run(answers(FINISHED))
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(metadataFrom(body).incomplete).toBeUndefined()
     expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
     expect(completion()).toEqual({
@@ -1690,13 +1762,15 @@ describe('a tool call on the step forced to answer', () => {
     })
   })
 
-  test('narration before the call stays out, and the run ends on the notice', async () => {
+  test('narration before the call is withdrawn, and the run ends on the notice', async () => {
     const { body } = await run(
       writesAndCalls({ text: NARRATION }, { read: 'projects' })
     )
 
-    expect(textFrom(body)).toBe('')
-    expect(body).not.toContain(NARRATION)
+    expect(await textFrom(body)).toBe('')
+    // It streamed, and the call took it back.
+    expect(wireTextFrom(body)).toBe(NARRATION)
+    expect(resetsIn(body)).toBe(1)
     expect(metadataFrom(body).incomplete).toBe(true)
     expect(metadataFrom(body).followUps).toBeUndefined()
     // The log and the transcript agree: nothing was shown, so nothing was
@@ -1714,7 +1788,7 @@ describe('a tool call on the step forced to answer', () => {
   test('a call with no text at all ends on the notice too', async () => {
     const { body } = await run(writesAndCalls({ read: 'projects' }))
 
-    expect(textFrom(body)).toBe('')
+    expect(await textFrom(body)).toBe('')
     expect(metadataFrom(body).incomplete).toBe(true)
     expect(completion().fields).toMatchObject({
       answered: false,
@@ -1727,7 +1801,7 @@ describe('a tool call on the step forced to answer', () => {
       writesAndCalls({ text: FINISHED }, { read: 'projects' })
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     // Nothing follows this step, so the stray call is the only thing that
     // did not finish; the answer did, and is shown and logged as one.
     expect(metadataFrom(body).incomplete).toBeUndefined()
@@ -1747,7 +1821,7 @@ describe('a tool call on the step forced to answer', () => {
       writesAndCalls({ read: 'projects' }, { text: FINISHED })
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
@@ -1760,8 +1834,8 @@ describe('a tool call on the step forced to answer', () => {
       )
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
-    expect(body).not.toContain(NARRATION)
+    expect(await textFrom(body)).toBe(FINISHED)
+    expect(resetsIn(body)).toBe(1)
     expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
   })
 
@@ -1774,7 +1848,7 @@ describe('a tool call on the step forced to answer', () => {
       )
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(body).not.toContain(NARRATION)
     expect(metadataFrom(body).incomplete).toBeUndefined()
     expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
@@ -1783,8 +1857,10 @@ describe('a tool call on the step forced to answer', () => {
   test('a text block the provider leaves open across the call arrives well formed', async () => {
     // The Google provider opens one text block for a response's text and
     // does not close it at a function call, so the narration and the answer
-    // can share a block id. Only the kept answer may reach the browser, in a
-    // block that opens before its delta and closes after it.
+    // can share a block id. The narration streams and is withdrawn; after
+    // the withdrawal no chunk may name the block the browser dropped, and
+    // the kept answer arrives in a block that opens before its delta and
+    // closes after it.
     const { body } = await run(() =>
       chunks([
         { type: 'stream-start', warnings: [] },
@@ -1807,23 +1883,16 @@ describe('a tool call on the step forced to answer', () => {
       ])
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
-    const open = new Set<unknown>()
-    for (const chunk of chunksFrom(body)) {
-      if (chunk.type === 'text-start') open.add(chunk.id)
-      if (chunk.type === 'text-delta') expect(open.has(chunk.id)).toBe(true)
-      if (chunk.type === 'text-end') {
-        expect(open.has(chunk.id)).toBe(true)
-        open.delete(chunk.id)
-      }
-    }
-    expect(open.size).toBe(0)
+    expect(await textFrom(body)).toBe(FINISHED)
+    expect(resetsIn(body)).toBe(1)
+    expectWellFormedText(body)
   })
 
-  test('an answer an error already flushed is sent once, in a closed block', async () => {
+  test('an answer streamed before an error is sent once, in a closed block', async () => {
     // The provider reports an unparseable event as an error part and keeps
-    // streaming, so a finished answer can be flushed by the error before a
-    // stray call arrives. It must not then be sent again as the kept answer.
+    // streaming, so a finished answer can stream before an error and a stray
+    // call arrive. The browser stops reading at the error, so the call must
+    // not withdraw it, and it must not be sent again as the kept answer.
     const { body } = await run(() =>
       chunks([
         { type: 'stream-start', warnings: [] },
@@ -1846,13 +1915,10 @@ describe('a tool call on the step forced to answer', () => {
       ])
     )
 
-    expect(textFrom(body)).toBe(FINISHED)
-    const open = new Set<unknown>()
-    for (const chunk of chunksFrom(body)) {
-      if (chunk.type === 'text-start') open.add(chunk.id)
-      if (chunk.type === 'text-end') open.delete(chunk.id)
-    }
-    expect(open.size).toBe(0)
+    expect(await textFrom(body)).toBe(FINISHED)
+    expect(wireTextFrom(body)).toBe(FINISHED)
+    expect(resetsIn(body)).toBe(0)
+    expectWellFormedText(body)
   })
 
   test('the trailers alone are not an answer', async () => {
@@ -1877,7 +1943,7 @@ describe('a tool call on the step forced to answer', () => {
       writesAndCalls({ text: DECLINE_SENTENCE }, { read: 'projects' })
     )
 
-    expect(textFrom(body)).toBe(DECLINE_SENTENCE)
+    expect(await textFrom(body)).toBe(DECLINE_SENTENCE)
     expect(metadataFrom(body).incomplete).toBeUndefined()
     expect(metadataFrom(body).followUps).toBeUndefined()
   })
@@ -1911,7 +1977,7 @@ describe('a tool call on the step forced to answer', () => {
     )
 
     expect(fetched).toEqual([REPOSITORY])
-    expect(textFrom(body)).toBe(FINISHED)
+    expect(await textFrom(body)).toBe(FINISHED)
     expect(completion().fields).toMatchObject({ activityCalls: 1 })
     expect(
       progressFrom(body)
@@ -1939,12 +2005,448 @@ describe('a tool call on the step forced to answer', () => {
       )
     ).text()
 
-    expect(body).not.toContain('He may have led the migration.')
-    expect(textFrom(body)).toBe(ANSWER)
+    expect(await textFrom(body)).toBe(ANSWER)
+    expect(resetsIn(body)).toBe(1)
     expect(completion().fields).toMatchObject({
       answered: true,
       finalStepToolCall: false,
       finishReason: 'stop',
+    })
+  })
+})
+
+describe('text streams as it is written, and a call withdraws it (MTC-101)', () => {
+  const NARRATION = 'Let me check his résumé.'
+  const LEAD = 'He led the platform migration.'
+
+  /**
+   * A model call the test lets go of in two halves: `before` streams at
+   * once, `after` only once `release()` is called. What the browser holds
+   * in between is what a visitor sees while the model is still writing.
+   */
+  function heldStep(before: unknown[], after: unknown[]) {
+    let release!: () => void
+    const released = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const step: Step = () => ({
+      stream: new ReadableStream({
+        async start(controller) {
+          for (const part of before) controller.enqueue(part)
+          await released
+          for (const part of after) controller.enqueue(part)
+          controller.close()
+        },
+      }),
+    })
+    return { step, release }
+  }
+
+  const finishOn = (reason: 'stop' | 'tool-calls') => ({
+    type: 'finish',
+    finishReason: { unified: reason, raw: 'STOP' },
+    usage,
+    providerMetadata: VERTEX_METADATA,
+  })
+
+  const readCall = (id: string) => ({
+    type: 'tool-call',
+    toolCallId: `call-held-${id}`,
+    toolName: READ_DOCUMENT_TOOL_NAME,
+    input: JSON.stringify({ id }),
+  })
+
+  /** Reads a response a frame at a time, so a test can stop part way. */
+  function incrementally(response: Response) {
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let body = ''
+    return {
+      body: () => body,
+      /** Reads until `done(body)` holds; fails rather than hanging. */
+      async until(done: (body: string) => boolean): Promise<string> {
+        const deadline = Date.now() + 2_000
+        while (!done(body)) {
+          const next = await Promise.race([
+            reader.read(),
+            Bun.sleep(Math.max(0, deadline - Date.now())).then(
+              () => 'timeout' as const
+            ),
+          ])
+          if (next === 'timeout') throw new Error('the frame never arrived')
+          if (next.done) throw new Error('the stream ended first')
+          body += decoder.decode(next.value, { stream: true })
+        }
+        return body
+      },
+      async rest(): Promise<string> {
+        try {
+          for (let next = await reader.read(); !next.done;) {
+            body += decoder.decode(next.value, { stream: true })
+            next = await reader.read()
+          }
+        } catch {
+          // A cancelled stream may reject; what arrived is what counts.
+        }
+        return body
+      },
+    }
+  }
+
+  /** The route's completion or abort line. */
+  const lineWhere = (aborted: boolean) =>
+    logged.find(
+      args =>
+        typeof args[0] === 'string' &&
+        args[0].startsWith('[chat]') &&
+        typeof args[1] === 'object' &&
+        'textRetractions' in (args[1] as object) &&
+        Boolean((args[1] as { aborted?: boolean }).aborted) === aborted
+    )?.[1] as Record<string, unknown> | undefined
+
+  const ask = (model: MockLanguageModelV4, signal?: AbortSignal) =>
+    handlerWith(model)(
+      post({ messages: [uiMessage('user', QUESTION)] }, signal)
+    )
+
+  test('an answer reaches the browser as it is written, before its step ends', async () => {
+    const held = heldStep(
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: LEAD },
+      ],
+      [
+        { type: 'text-delta', id: '1', delta: '\n\nSources: resume' },
+        { type: 'text-end', id: '1' },
+        finishOn('stop'),
+      ]
+    )
+    const stream = incrementally(await ask(modelOf(held.step)))
+
+    const early = await stream.until(body => body.includes(LEAD))
+    expect(chunksFrom(early).map(chunk => chunk.type)).not.toContain(
+      'finish-step'
+    )
+    expect(await textFrom(early)).toBe(LEAD)
+
+    held.release()
+    const body = await stream.rest()
+    expect(await textFrom(body)).toBe(ANSWER)
+    expect(resetsIn(body)).toBe(0)
+    expect(lineWhere(false)).toMatchObject({ textRetractions: 0 })
+  })
+
+  test('narration streams, then the call withdraws it and the progress row takes its place', async () => {
+    const held = heldStep(
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'p' },
+        { type: 'text-delta', id: 'p', delta: NARRATION },
+      ],
+      [
+        { type: 'text-end', id: 'p' },
+        readCall('resume'),
+        finishOn('tool-calls'),
+      ]
+    )
+    const stream = incrementally(await ask(modelOf(held.step, answers())))
+
+    // The flash: for as long as the model takes to reach its call, the
+    // browser shows the narration as if it were the answer.
+    const early = await stream.until(body => body.includes(NARRATION))
+    expect(await textFrom(early)).toBe(NARRATION)
+    expect(resetsIn(early)).toBe(0)
+
+    held.release()
+    const body = await stream.rest()
+    const types = chunksFrom(body).map(chunk => chunk.type)
+    // Withdrawn before the read's row goes up, so the row is not dropped
+    // with it; then the answer streams in the next step.
+    expect(types.indexOf('reset-step')).toBeLessThan(
+      types.indexOf(PROGRESS_PART_TYPE)
+    )
+    expect(progressFrom(body)[0]).toEqual(
+      expect.objectContaining({ phase: 'reading' })
+    )
+    expect(await textFrom(body)).toBe(ANSWER)
+    expect(resetsIn(body)).toBe(1)
+    expectWellFormedText(body)
+    expect(lineWhere(false)).toMatchObject({
+      answered: true,
+      textRetractions: 1,
+    })
+  })
+
+  test('a withdrawal that drops the progress part is followed by the part again', async () => {
+    // Not an ordering the route produces: a reset comes before the step's
+    // first call, and no part is sent in a step before its first call. The
+    // browser would drop a part first sent in the step being reset, so the
+    // stage sends it again rather than rely on that.
+    const read = {
+      type: 'tool-input-available',
+      toolCallId: 'call-1',
+      toolName: READ_DOCUMENT_TOOL_NAME,
+      input: { id: 'resume' },
+    }
+    const out = await chunksThroughProgressStage([
+      { type: 'start-step' },
+      read,
+      { type: 'reset-step' },
+    ])
+
+    expect(out.map(chunk => chunk.type)).toEqual([
+      'start-step',
+      PROGRESS_PART_TYPE,
+      'tool-input-available',
+      'reset-step',
+      PROGRESS_PART_TYPE,
+    ])
+    expect((out.at(-1)?.data as ChatProgress).steps.map(s => s.id)).toEqual([
+      'resume',
+    ])
+  })
+
+  test('a withdrawal in a later step leaves a part sent earlier alone', async () => {
+    const read = {
+      type: 'tool-input-available',
+      toolCallId: 'call-1',
+      toolName: READ_DOCUMENT_TOOL_NAME,
+      input: { id: 'resume' },
+    }
+    const out = await chunksThroughProgressStage([
+      { type: 'start-step' },
+      read,
+      { type: 'start-step' },
+      { type: 'reset-step' },
+    ])
+
+    expect(out.map(chunk => chunk.type)).toEqual([
+      'start-step',
+      PROGRESS_PART_TYPE,
+      'tool-input-available',
+      'start-step',
+      'reset-step',
+    ])
+  })
+
+  test('a call with nothing written before it withdraws nothing', async () => {
+    const body = await (await ask(readingModel())).text()
+
+    expect(resetsIn(body)).toBe(0)
+    expect(await textFrom(body)).toBe(ANSWER)
+    expect(lineWhere(false)).toMatchObject({ textRetractions: 0 })
+  })
+
+  test('a withdrawal after a read puts the progress back from writing to reading', async () => {
+    const body = await (
+      await ask(
+        modelOf(reads('resume'), readsAfterSaying(NARRATION, 'faq'), answers())
+      )
+    ).text()
+
+    // The narration in the second step opened the writing row; the reset
+    // closes it again before the next read's row goes up.
+    const sequence = chunksFrom(body)
+      .filter(
+        chunk =>
+          chunk.type === 'reset-step' || chunk.type === PROGRESS_PART_TYPE
+      )
+      .map(chunk =>
+        chunk.type === 'reset-step'
+          ? 'reset'
+          : `${(chunk.data as ChatProgress).phase}:${(chunk.data as ChatProgress).steps.length}`
+      )
+    expect(sequence).toEqual([
+      'reading:1',
+      'writing:1',
+      'reset',
+      'reading:1',
+      'reading:2',
+      'writing:2',
+      'done:2',
+    ])
+    expect(await textFrom(body)).toBe(ANSWER)
+  })
+
+  test('a withdrawal before a call that earns no row still leaves the run reading', async () => {
+    const body = await (
+      await ask(
+        modelOf(
+          reads('resume'),
+          readsAfterSaying(NARRATION, 'not-in-the-index'),
+          answers()
+        )
+      )
+    ).text()
+
+    const payloads = progressFrom(body)
+    const afterReset = chunksFrom(body)
+      .slice(
+        chunksFrom(body).findIndex(chunk => chunk.type === 'reset-step') + 1
+      )
+      .find(chunk => chunk.type === PROGRESS_PART_TYPE)
+    expect((afterReset?.data as ChatProgress).phase).toBe('reading')
+    expect(payloads.at(-1)?.steps.map(step => step.id)).toEqual(['resume'])
+    expect(await textFrom(body)).toBe(ANSWER)
+  })
+
+  test('the log counts exactly the withdrawals the browser was sent', async () => {
+    // Two narrating steps, the forced one among them: a stray call there
+    // withdraws its text the same way.
+    const body = await (
+      await ask(
+        modelOf(
+          reads('resume'),
+          readsAfterSaying(NARRATION, 'faq'),
+          reads('projects'),
+          writesAndCalls({ text: NARRATION }, { read: 'timeline' })
+        )
+      )
+    ).text()
+
+    expect(resetsIn(body)).toBe(2)
+    expect(lineWhere(false)).toMatchObject({ textRetractions: 2 })
+    expect(await textFrom(body)).toBe('')
+    expectWellFormedText(body)
+  })
+
+  test('a visitor who stops before the call keeps what streamed, and no withdrawal is counted', async () => {
+    const held = heldStep(
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'p' },
+        { type: 'text-delta', id: 'p', delta: NARRATION },
+      ],
+      [
+        { type: 'text-end', id: 'p' },
+        readCall('resume'),
+        finishOn('tool-calls'),
+      ]
+    )
+    const aborter = new AbortController()
+    const stream = incrementally(
+      await ask(modelOf(held.step, answers()), aborter.signal)
+    )
+
+    const early = await stream.until(body => body.includes(NARRATION))
+    aborter.abort()
+    held.release()
+    const body = await stream.rest()
+
+    // Nothing had yet said the text was narration, so it stays: an abort
+    // never throws away what the visitor was already reading.
+    expect(await textFrom(early)).toBe(NARRATION)
+    expect(resetsIn(body)).toBe(0)
+    expect(lineWhere(true)).toMatchObject({
+      aborted: true,
+      textRetractions: 0,
+    })
+  })
+
+  test('a visitor who stops after a withdrawal has it counted on the abort line', async () => {
+    const held = heldStep(
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: LEAD },
+      ],
+      [{ type: 'text-end', id: '1' }, finishOn('stop')]
+    )
+    const aborter = new AbortController()
+    const stream = incrementally(
+      await ask(
+        modelOf(readsAfterSaying(NARRATION, 'resume'), held.step),
+        aborter.signal
+      )
+    )
+
+    const early = await stream.until(body => body.includes(LEAD))
+    aborter.abort()
+    held.release()
+    await stream.rest()
+
+    expect(resetsIn(early)).toBe(1)
+    expect(await textFrom(early)).toBe(LEAD)
+    expect(lineWhere(true)).toMatchObject({ textRetractions: 1 })
+  })
+
+  describe('through the real Vertex provider', () => {
+    /** One Gemini streaming event carrying `parts`, as Vertex sends it. */
+    const vertexEvent = (parts: object[], last: boolean) =>
+      `data: ${JSON.stringify({
+        candidates: [
+          {
+            content: { role: 'model', parts },
+            ...(last ? { finishReason: 'STOP' } : {}),
+          },
+        ],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      })}\n\n`
+
+    const call = {
+      functionCall: { name: READ_DOCUMENT_TOOL_NAME, args: { id: 'resume' } },
+    }
+
+    /**
+     * The route, the SDK and the real provider, with only `fetch` replaced:
+     * the first model call streams `firstEvents`, one Gemini event per
+     * entry, and the second answers.
+     */
+    async function throughVertex(firstEvents: object[][]) {
+      let calls = 0
+      const capture = async () => {
+        calls += 1
+        const events = calls === 1 ? firstEvents : [[{ text: ANSWER }]]
+        return new Response(
+          events
+            .map((parts, n) => vertexEvent(parts, n === events.length - 1))
+            .join(''),
+          { headers: { 'content-type': 'text/event-stream' } }
+        )
+      }
+      const vertex = createVertex({
+        apiKey: 'test',
+        fetch: capture as unknown as typeof fetch,
+      })
+      const handler = createChatHandler({
+        loadKnowledgeIndex: () => index,
+        readKnowledgeDocument,
+        model: () => vertex('gemini-3.8-flash'),
+        verifyVisitor: () => Promise.resolve(HUMAN),
+        env: {},
+        now: () => 1_000,
+      })
+      return (
+        await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+      ).text()
+    }
+
+    // The provider hands the route each event's text before its function
+    // calls, so narration written after a call in the same event arrives
+    // first and is withdrawn like narration before it.
+    test.each([
+      [
+        'narration and the call in separate events',
+        [[{ text: NARRATION }], [call]],
+      ],
+      ['narration, then the call, in one event', [[{ text: NARRATION }, call]]],
+      ['the call, then narration, in one event', [[call, { text: NARRATION }]]],
+    ])('%s: the narration streams and is withdrawn', async (_, events) => {
+      const body = await throughVertex(events)
+
+      expect(wireTextFrom(body)).toContain(NARRATION)
+      expect(resetsIn(body)).toBe(1)
+      expect(await textFrom(body)).toBe(ANSWER)
+      expectWellFormedText(body)
+    })
+
+    test('narration in an event after the call never streams at all', async () => {
+      const body = await throughVertex([[call], [{ text: NARRATION }]])
+
+      expect(wireTextFrom(body)).toBe(ANSWER)
+      expect(resetsIn(body)).toBe(0)
+      expect(await textFrom(body)).toBe(ANSWER)
     })
   })
 })
@@ -2560,13 +3062,18 @@ describe('progress on the stream', () => {
 
     // The narration is text, not a read: the first progress chunk is the
     // read that follows it, not a "writing" for the preamble. And the
-    // preamble itself must not reach the bubble (MTC-49).
+    // preamble itself does not stay in the bubble (MTC-49): it streams,
+    // and the withdrawal comes before the read's row.
     expect(progressFrom(body)[0]?.phase).toBe('reading')
-    expect(body).not.toContain('Let me check his résumé.')
-    expect(body).toContain('He led the platform migration.')
+    const types = chunksFrom(body).map(chunk => chunk.type)
+    expect(types.indexOf('reset-step')).toBeGreaterThan(-1)
+    expect(types.indexOf('reset-step')).toBeLessThan(
+      types.indexOf(PROGRESS_PART_TYPE)
+    )
+    expect(await textFrom(body)).toBe(ANSWER)
   })
 
-  test('text from a tool-calling step never reaches the browser', async () => {
+  test('text from a tool-calling step never stays in the browser', async () => {
     const model = modelOf(
       readsAfterSaying('I will open the FAQ next.', 'faq'),
       answers()
@@ -2577,8 +3084,8 @@ describe('progress on the stream', () => {
       )
     ).text()
 
-    expect(body).not.toContain('I will open the FAQ next.')
-    expect(body).toContain('He led the platform migration.')
+    expect(await textFrom(body)).toBe(ANSWER)
+    expect(resetsIn(body)).toBe(1)
   })
 
   test('a stream that fails after a read never says it finished', async () => {
