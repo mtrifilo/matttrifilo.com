@@ -26,25 +26,36 @@ test.beforeEach(async ({ page }) => {
 
 /**
  * The CSS animations and transitions running right now that move or
- * resize something. A color easing in under a pressed pill is not motion,
- * and the reduced-motion rules rightly leave it alone, so transitions of a
- * color alone are not counted; every keyframe animation is.
+ * resize something, each named with the element it runs on. Every keyframe
+ * animation counts. A transition of a color or of opacity alone does not:
+ * WCAG 2.2's definition of motion animation (SC 2.3.3) leaves out changes
+ * of color or opacity that do not change an element's perceived size,
+ * shape or position, and the site's reduced-motion rules leave both alone
+ * (a pressed pill easing its color, Send dimming as it becomes disabled).
  */
 function running(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const colorOnly = /(^|-)color$/
+    const notMotion = /(^|-)color$|^opacity$/
     return document
       .getAnimations()
       .filter(animation => animation.playState === 'running')
-      .map(animation => {
+      .flatMap(animation => {
         const named = animation as {
           animationName?: string
           transitionProperty?: string
         }
-        if (named.animationName) return named.animationName
-        return named.transitionProperty ?? 'unnamed'
+        const property = named.transitionProperty
+        if (!named.animationName && property && notMotion.test(property)) {
+          return []
+        }
+        const target = (animation.effect as KeyframeEffect | null)?.target
+        const label =
+          target?.getAttribute('aria-label') ?? target?.getAttribute('class')
+        const on = [target?.localName ?? 'unknown', label].filter(Boolean)
+        return [
+          `${named.animationName || property || 'unnamed'} on ${on.join(' ')}`,
+        ]
       })
-      .filter(name => !colorOnly.test(name))
   })
 }
 
