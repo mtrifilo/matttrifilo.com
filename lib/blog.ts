@@ -6,14 +6,17 @@ import type { BlogPost, BlogPostMeta, BlogPostFrontmatter } from './types/blog'
 const BLOG_CONTENT_PATH = path.join(process.cwd(), 'content', 'blog')
 
 /**
- * Get all blog post slugs for static generation
+ * Get all blog post slugs for static generation.
+ *
+ * `contentDir` on this and the other loaders lets tests read fixture
+ * posts; the site always reads content/blog.
  */
-export function getBlogSlugs(): string[] {
+export function getBlogSlugs(contentDir = BLOG_CONTENT_PATH): string[] {
   // A missing or unreadable content directory is a build misconfiguration,
   // not "no posts yet", so let readdirSync throw (consistent with
   // getBlogPost, which also fails loudly on authoring errors).
   return fs
-    .readdirSync(BLOG_CONTENT_PATH)
+    .readdirSync(contentDir)
     .filter(file => file.endsWith('.md') && !file.startsWith('_'))
     .map(file => file.replace(/\.md$/, ''))
 }
@@ -32,8 +35,12 @@ function extractExcerpt(content: string, maxLength = 200): string {
   return text
 }
 
-const FRONTMATTER_DATE_LINE =
-  /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m
+/** A `key: YYYY-MM-DD` line at the top level, the date optionally quoted. */
+const FRONTMATTER_DATE_LINES = {
+  date: /^date:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m,
+  updated: /^updated:[ \t]*['"]?(\d{4}-\d{2}-\d{2})['"]?[ \t]*$/m,
+} as const
+
 // Tolerates a UTF-8 BOM and trailing whitespace on the opening fence, as
 // gray-matter does, so a valid post is never rejected for either.
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---/
@@ -70,10 +77,22 @@ export function parseFrontmatterDate(
       `${source}: no frontmatter block found (expected --- fences at the top)`
     )
   }
-  const match = FRONTMATTER_DATE_LINE.exec(rawFrontmatter)
+  return readDateLine(rawFrontmatter, 'date', source)
+}
+
+/**
+ * The one rule behind `date` and `updated`: read from the raw line, not
+ * the parsed YAML value, for the reasons parseFrontmatterDate gives.
+ */
+function readDateLine(
+  rawFrontmatter: string,
+  key: keyof typeof FRONTMATTER_DATE_LINES,
+  source: string
+): string {
+  const match = FRONTMATTER_DATE_LINES[key].exec(rawFrontmatter)
   if (!match) {
     throw new Error(
-      `${source}: frontmatter needs a plain "date: YYYY-MM-DD" line (no time, no offset)`
+      `${source}: frontmatter needs a plain "${key}: YYYY-MM-DD" line (no time, no offset)`
     )
   }
   const value = match[1]
@@ -83,33 +102,131 @@ export function parseFrontmatterDate(
     roundTrip.toISOString().slice(0, 10) !== value
   ) {
     throw new Error(
-      `${source}: frontmatter date is not a real calendar date (got ${value})`
+      `${source}: frontmatter ${key} is not a real calendar date (got ${value})`
     )
   }
   return value
 }
 
+/** How a wrong value reads in an error message. */
+function describeValue(value: unknown): string {
+  if (value === null || value === undefined) return 'nothing'
+  if (Array.isArray(value)) return 'a list'
+  if (value instanceof Date) return 'a date'
+  if (typeof value === 'string') return `"${value}"`
+  if (typeof value === 'object') return 'a mapping'
+  return `the ${typeof value} ${String(value)}`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Checks parsed frontmatter against BlogPostFrontmatter and returns only
+ * the fields the site reads. This is where a post file stops being
+ * untrusted input: past it, every field has the type the pages assume, so
+ * a post that would render "undefined" or break a category page fails the
+ * build here instead, with the file name.
+ *
+ * Present means valid: an optional field that is written must hold the
+ * right type, because an empty or mistyped field is an authoring slip,
+ * not a request to leave it out. Keys the site does not read are ignored.
+ */
+function validateFrontmatter(
+  data: unknown,
+  rawFrontmatter: string,
+  source: string
+): BlogPostFrontmatter {
+  const date = parseFrontmatterDate(rawFrontmatter, source)
+  if (!isRecord(data)) {
+    throw new Error(
+      `${source}: frontmatter must be "key: value" lines (got ${describeValue(data)})`
+    )
+  }
+
+  const { title, description, categories } = data
+  if (typeof title !== 'string' || title.trim() === '') {
+    throw new Error(
+      `${source}: frontmatter needs a title, as text (got ${describeValue(title)})`
+    )
+  }
+  const frontmatter: BlogPostFrontmatter = { title, date }
+
+  if ('description' in data) {
+    if (typeof description !== 'string') {
+      throw new Error(
+        `${source}: frontmatter description must be text (got ${describeValue(description)})`
+      )
+    }
+    frontmatter.description = description
+  }
+
+  if ('categories' in data) {
+    if (!Array.isArray(categories)) {
+      throw new Error(
+        `${source}: frontmatter categories must be a list (got ${describeValue(categories)})`
+      )
+    }
+    for (const category of categories) {
+      if (typeof category !== 'string' || category.trim() === '') {
+        throw new Error(
+          `${source}: each category must be text; quote a value YAML would read as a number or a boolean (got ${describeValue(category)})`
+        )
+      }
+    }
+    frontmatter.categories = categories
+  }
+
+  if ('updated' in data) {
+    frontmatter.updated = readDateLine(rawFrontmatter, 'updated', source)
+  }
+
+  return frontmatter
+}
+
+/**
+ * gray-matter, with the file name on a YAML error.
+ *
+ * The empty options object is load-bearing: called without one,
+ * gray-matter caches a file before parsing it, so a second read of a file
+ * whose YAML failed returns empty data instead of throwing again.
+ */
+function parseMatter(fileContents: string, source: string) {
+  try {
+    return matter(fileContents, {})
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`${source}: frontmatter is not valid YAML: ${reason}`, {
+      cause: error,
+    })
+  }
+}
+
 /**
  * Get a single blog post by slug
  */
-export function getBlogPost(slug: string): BlogPost | null {
-  const filePath = path.join(BLOG_CONTENT_PATH, `${slug}.md`)
+export function getBlogPost(
+  slug: string,
+  contentDir = BLOG_CONTENT_PATH
+): BlogPost | null {
+  const filePath = path.join(contentDir, `${slug}.md`)
 
   // A missing file is "no such post" and callers 404. Anything after this
-  // point (unreadable file, bad YAML, bad date) is an authoring error and
-  // is allowed to throw so `next build` fails with the file name.
+  // point (unreadable file, bad YAML, a missing or mistyped field) is an
+  // authoring error and throws so `next build` fails with the file name.
   if (!fs.existsSync(filePath)) {
     return null
   }
 
   const fileContents = fs.readFileSync(filePath, 'utf8')
-  const parsed = matter(fileContents)
   const source = path.relative(process.cwd(), filePath)
-
-  const frontmatter: BlogPostFrontmatter = {
-    ...(parsed.data as Omit<BlogPostFrontmatter, 'date'>),
-    date: parseFrontmatterDate(rawFrontmatterBlock(fileContents), source),
-  }
+  const parsed = parseMatter(fileContents, source)
+  const frontmatter = validateFrontmatter(
+    parsed.data,
+    rawFrontmatterBlock(fileContents),
+    source
+  )
 
   return {
     slug,
@@ -122,12 +239,14 @@ export function getBlogPost(slug: string): BlogPost | null {
 /**
  * Get all blog posts metadata for listing (sorted by date, newest first)
  */
-export function getAllBlogPosts(): BlogPostMeta[] {
-  const slugs = getBlogSlugs()
+export function getAllBlogPosts(
+  contentDir = BLOG_CONTENT_PATH
+): BlogPostMeta[] {
+  const slugs = getBlogSlugs(contentDir)
   const posts: BlogPostMeta[] = []
 
   for (const slug of slugs) {
-    const post = getBlogPost(slug)
+    const post = getBlogPost(slug, contentDir)
     if (!post) continue
 
     posts.push({
