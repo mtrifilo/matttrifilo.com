@@ -2,6 +2,14 @@ import fs from 'fs'
 import path from 'path'
 import { findPunctuationDashes } from '@/lib/dashes'
 import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
+import {
+  atxHeading,
+  FenceTracker,
+  isFenceAfterContainerMarker,
+  isOverIndentedFence,
+  LineReader,
+  proseText,
+} from './markdown'
 
 /**
  * Builds the career assistant's corpus: a small index the model always
@@ -121,6 +129,12 @@ export interface KnowledgeCorpus {
   unanswered: UnansweredQuestion[]
   /** faq files dropped whole, for the same reason. */
   droppedDocuments: string[]
+  /**
+   * faq files whose introduction (the text before the first `##`) was
+   * dropped for holding a placeholder, so a build can say so as it does
+   * for a question.
+   */
+  droppedIntros: string[]
 }
 
 /**
@@ -167,8 +181,6 @@ export const KNOWLEDGE_DIR = path.join(process.cwd(), 'content', 'knowledge')
 const FRONTMATTER_BLOCK = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/
 const FRONTMATTER_FIELD = /^([A-Za-z]+):[ \t]*(.*)$/
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-/** A `##` heading, and only `##`: `###` and deeper stay inside a block. */
-const BLOCK_HEADING = /^## (?!#)/
 /**
  * What a placeholder looks like, as opposed to the word "TODO" appearing
  * in something Matt wrote.
@@ -462,50 +474,37 @@ interface Section extends Block {
   heading: SourceLine
 }
 
-/** A heading's title: the line without its `## `. */
+/**
+ * A line outside a fence that starts a section: a level-two ATX heading at
+ * the start of the line ("## Title", "##\tTitle", "## Title ##"). `#` and
+ * `###` and deeper stay inside a block.
+ *
+ * Not an indented one, although CommonMark reads "   ## Title" as a
+ * heading at the top level: inside a list item the same line is a heading
+ * *within* the item, and without tracking lists a split there could ship
+ * the first half of an faq answer and drop the rest. An indented heading is
+ * still read by its title for placeholders (findBlockPlaceholder), so an
+ * editor's note written as one drops or fails the section it sits in.
+ */
+function isSectionHeading(line: string): boolean {
+  return !/^[ \t]/.test(line) && atxHeading(line)?.level === 2
+}
+
+/** A section heading's title: without its hashes, trimmed. */
 function headingTitle(heading: SourceLine): string {
-  return heading.text.replace(BLOCK_HEADING, '').trim()
+  const parsed = atxHeading(heading.text)
+  // splitBlocks only makes a section at a line isSectionHeading accepts.
+  if (!parsed) {
+    throw new Error(
+      `knowledge: a section heading that is not one: ${heading.text}`
+    )
+  }
+  return parsed.title
 }
 
 /** A block's lines under its heading, joined back into text. */
 function blockBody(block: Block): string {
   return block.lines.map(line => line.text).join('\n')
-}
-
-/** An opening or closing ``` / ~~~ fence, with any indent and info string. */
-const CODE_FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/
-
-/**
- * Tracks whether a line is inside a fenced code block.
- *
- * Markdown closes a fence only with the same character, at least as long
- * as the opener, and with no info string, so a ``` inside a ~~~~ block is
- * content, not a close. Callers feed lines in order and read `inCode`
- * before deciding what a line means.
- */
-class FenceTracker {
-  private fence: string | null = null
-
-  /** True when this line is inside a fence (the fence lines themselves count). */
-  consume(line: string): boolean {
-    const match = CODE_FENCE.exec(line)
-    if (!match) return this.fence !== null
-    const [, marker, info] = match
-    if (this.fence === null) {
-      this.fence = marker
-      return true
-    }
-    const closes =
-      marker[0] === this.fence[0] &&
-      marker.length >= this.fence.length &&
-      info.trim() === ''
-    if (closes) this.fence = null
-    return true
-  }
-
-  get open(): boolean {
-    return this.fence !== null
-  }
 }
 
 /**
@@ -528,7 +527,7 @@ function splitBlocks(lines: readonly SourceLine[]): {
 
   for (const line of lines) {
     const inCode = fence.consume(line.text)
-    if (!inCode && BLOCK_HEADING.test(line.text)) {
+    if (!inCode && isSectionHeading(line.text)) {
       const section: Section = { heading: line, lines: [] }
       sections.push(section)
       current = section
@@ -574,35 +573,6 @@ export function documentHeadings(text: string): string[] {
     .filter(heading => heading.length <= MAX_HEADING_CHARS)
     .slice(0, MAX_HEADINGS)
 }
-
-/** An inline code span: one or more backticks, matching run to close. */
-const INLINE_CODE = /(`+)(?:(?!\1)[\s\S])*?\1/g
-
-/**
- * A Markdown backslash escape. Blanked before anything else looks at a
- * line, for two reasons that point the same way: an escaped backtick does
- * not open a code span (so `` \`a <Thing> b\` `` is prose, and the tag in
- * it is real), and an escaped `\<` is already the correct way to write a
- * literal angle bracket in MDX (so it is not an offence).
- */
-const MD_ESCAPE = /\\[\s\S]/g
-
-/**
- * The part of a line MDX will parse as content: escapes and inline code
- * removed. Both checks below read a line through this, so they agree on
- * what counts as code.
- */
-function visibleProse(line: string): string {
-  return line.replace(MD_ESCAPE, '').replace(INLINE_CODE, '')
-}
-
-/**
- * A fence CommonMark would accept inside a nested list item but this
- * check's 3-space rule does not. Tracked only so an error can say so:
- * recognising it properly means tracking list context, which is a Markdown
- * parser, and the corpus has no nested code blocks to justify one.
- */
-const OVER_INDENTED_FENCE = /^[ \t]{4,}(?:`{3,}|~{3,})/
 
 /** A line of a document, numbered as it is numbered in the file itself. */
 export interface SourceLine {
@@ -672,38 +642,56 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * document has to be safe to render whichever of its sections survive,
  * and one rule is easier to hold than two.
  *
- * Known limitation, deliberate: a fence must be indented at most three
- * spaces to be recognised as code. CommonMark allows a deeper indent
- * inside a nested list item, and honouring that means tracking list
- * context: a Markdown parser, for a case the corpus does not have. The
- * cost is a false positive, never a false negative, and the error says so
- * when an over-indented fence is in the document.
+ * Lines are read by ./markdown (LineReader), the same reading the
+ * placeholder rule uses. That reading is CommonMark's at the top level, and
+ * MDX differs from it in one place that matters here: MDX turns off
+ * indented code, so a fence indented four or more columns (a tab counts as
+ * four) is a fence to MDX and indented code to CommonMark. The two then
+ * disagree about which later ``` opens and which closes, and whichever this
+ * check picked, it could pass prose that MDX rejects. So such a line is
+ * refused when it would open a fence, or when MDX would read it as closing
+ * the open one; any other deep fence line inside a fence is content to
+ * both. The cost is a fenced block nested in a list item deeper than three
+ * spaces, which the corpus does not have; a fence under a bullet or a
+ * one-digit numbered item fits within three. A fence that opens on a list
+ * item or block quote line ("- ```sh") is refused for the same reason:
+ * the reader cannot see it, so it would misread everything after it.
  */
 function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
-  const fence = new FenceTracker()
-  let sawOverIndentedFence = false
+  const reader = new LineReader()
+  let fenceOpenedAt = 0
   for (const line of lines) {
-    if (fence.consume(line.text)) continue
-    if (OVER_INDENTED_FENCE.test(line.text)) sawOverIndentedFence = true
-    const offence = /[<{]/.exec(visibleProse(line.text))
+    if (isOverIndentedFence(line.text, reader.openFenceRun)) {
+      throw new Error(
+        `${label}:${line.number}: a \`\`\` fence indented four or more spaces, which this check does not recognise as code (a tab counts as four). CommonMark reads it as indented code and MDX as a fence, so they disagree about everything after it; outdent it to three spaces or fewer. Line: ${line.text.trim()}`
+      )
+    }
+    if (!reader.fenceOpen && isFenceAfterContainerMarker(line.text)) {
+      throw new Error(
+        `${label}:${line.number}: a \`\`\` fence that opens on a list item or block quote line, which this check does not read as a fence, so it would misread everything after it. Put the fence on its own line, indented under the item by up to three spaces, and keep fenced code out of block quotes. Line: ${line.text.trim()}`
+      )
+    }
+    const wasOpen = reader.fenceOpen
+    const read = reader.read(line.text)
+    if (!wasOpen && reader.fenceOpen) fenceOpenedAt = line.number
+    if (read.code) continue
+    const offence = /[<{]/.exec(read.mdxText)
     if (!offence) continue
     const char = offence[0]
     const advice =
       char === '<'
         ? 'wrap it in backticks, or write &lt; — a bare < starts a JSX tag in MDX, and an autolink <https://…> is an MDX error too'
         : 'wrap it in backticks, or write &#123; — a bare { starts a JavaScript expression that MDX evaluates on the server rather than printing'
-    // Only mentioned when something actually failed: a deeply indented
-    // fence is legal and common, and most of the time it is not the cause.
-    const indentNote = sawOverIndentedFence
-      ? ' (this document also has a ``` fence indented four or more spaces, which this check does not recognise as code — outdent it to three spaces or fewer)'
+    const spanNote = read.afterUnmatchedRun
+      ? ' (an earlier line of this paragraph leaves a backtick unmatched, so this check reads every backtick after it as text; keep each code span on one line, or escape a lone backtick as \\`)'
       : ''
     throw new Error(
-      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${indentNote}. Line: ${line.text.trim()}`
+      `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${spanNote}. Line: ${line.text.trim()}`
     )
   }
-  if (fence.open) {
+  if (reader.fenceOpen) {
     throw new Error(
-      `${label}: a fenced code block is never closed; MDX would swallow the rest of the document`
+      `${label}:${fenceOpenedAt}: a fenced code block opened here is never closed; MDX would swallow the rest of the document`
     )
   }
 }
@@ -747,22 +735,27 @@ export interface FoundPlaceholder {
  * editor's note written as a heading is a placeholder even when the
  * section under it is finished.
  *
- * Reads each line the way MDX will (fenced blocks skipped, escapes and
- * inline code removed), so `// TODO` inside a ```` ``` ```` block and a
- * `` `TODO` `` written about in prose are both left alone. What it looks
- * for is a placeholder's *shape* (isPlaceholder), not the word. A block
- * always starts outside a fence (splitBlocks), so reading one alone sees
- * the same fences as reading the whole document.
+ * Reads each line the way CommonMark does (./markdown's LineReader: fenced
+ * blocks skipped, escapes resolved, code spans removed, and a paragraph's
+ * backticks read as text once one is left unmatched), so `// TODO` inside a
+ * ```` ``` ```` block and a `` `TODO` `` written about in prose are both
+ * left alone. That is the accepted gap, by Matt's decision on MTC-71
+ * (2026-09-23): a placeholder written inside code ships, because there is
+ * one placeholder rule and it reads prose. What it looks for is a
+ * placeholder's *shape* (isPlaceholder), not the word; a heading of any
+ * level is read by its title, so `### TODO` is one as `## TODO` is. A
+ * block always starts outside a fence (splitBlocks), so reading one alone
+ * sees the same fences as reading the whole document.
  */
 function findBlockPlaceholder(block: Block): SourceLine | null {
   if (block.heading) {
     const title = headingTitle(block.heading)
-    if (isPlaceholder(visibleProse(title))) return block.heading
+    if (isPlaceholder(proseText(title))) return block.heading
   }
-  const fence = new FenceTracker()
+  const reader = new LineReader()
   for (const line of block.lines) {
-    if (fence.consume(line.text)) continue
-    if (isPlaceholder(visibleProse(line.text))) return line
+    const read = reader.read(line.text)
+    if (!read.code && isPlaceholder(read.prose)) return line
   }
   return null
 }
@@ -816,22 +809,25 @@ function isAnswered(block: Block): boolean {
  * The faq's text: every `##` section whose answer is missing, or whose
  * heading or answer is a placeholder, is dropped, and the headings that
  * were dropped are reported so `bun run knowledge:check` can print them
- * rather than leaving the deletion invisible. A file that had sections and
- * has none left contributes no document at all, so an FAQ Matt has not
- * written yet is simply absent from the index rather than present and
- * empty.
+ * rather than leaving the deletion invisible. An introduction dropped for
+ * a placeholder is reported the same way (introDropped); one with nothing
+ * in it is not a drop. A file that had sections and has none left
+ * contributes no document at all, so an FAQ Matt has not written yet is
+ * simply absent from the index rather than present and empty.
  */
 function readAnsweredBlocks(
   body: string,
   label: string
-): { text: string; unanswered: UnansweredQuestion[] } {
+): { text: string; unanswered: UnansweredQuestion[]; introDropped: boolean } {
   const { intro, sections } = splitBlocks(sourceLines(body))
   const answered = sections.filter(isAnswered)
   const unanswered = sections
     .filter(section => !isAnswered(section))
     .map(section => ({ file: label, heading: headingTitle(section.heading) }))
+  const introDropped =
+    blockBody(intro).trim() !== '' && findBlockPlaceholder(intro) !== null
   if (sections.length > 0 && answered.length === 0) {
-    return { text: '', unanswered }
+    return { text: '', unanswered, introDropped }
   }
 
   // Each surviving section keeps the spacing it was written with; only the
@@ -842,7 +838,11 @@ function readAnsweredBlocks(
       section => `${section.heading.text}\n${trimEnd(blockBody(section))}`
     ),
   ]
-  return { text: parts.filter(part => part !== '').join('\n\n'), unanswered }
+  return {
+    text: parts.filter(part => part !== '').join('\n\n'),
+    unanswered,
+    introDropped,
+  }
 }
 
 /**
@@ -854,7 +854,11 @@ function readDocument(
   filePath: string,
   topic: KnowledgeSource,
   label: string
-): { document: KnowledgeDocument | null; unanswered: UnansweredQuestion[] } {
+): {
+  document: KnowledgeDocument | null
+  unanswered: UnansweredQuestion[]
+  introDropped: boolean
+} {
   const contents = fs.readFileSync(filePath, 'utf8')
   const match = FRONTMATTER_BLOCK.exec(contents)
   if (!match) {
@@ -880,11 +884,12 @@ function readDocument(
   // the reassembly happening to round-trip.
   let text: string
   let unanswered: UnansweredQuestion[] = []
+  let introDropped = false
   if (topic === UNANSWERED_TOPIC) {
-    ;({ text, unanswered } = readAnsweredBlocks(body, label))
+    ;({ text, unanswered, introDropped } = readAnsweredBlocks(body, label))
     // The documented drop: an faq with nothing answered yet is absent
     // rather than present and empty.
-    if (text === '') return { document: null, unanswered }
+    if (text === '') return { document: null, unanswered, introDropped }
   } else {
     assertNoPlaceholder(lines, label)
     text = body.trim()
@@ -921,6 +926,7 @@ function readDocument(
       updated: frontmatter.updated,
     },
     unanswered,
+    introDropped,
   }
 }
 
@@ -1041,10 +1047,12 @@ export function buildKnowledgeCorpus(
   const documents: KnowledgeDocument[] = []
   const unanswered: UnansweredQuestion[] = []
   const droppedDocuments: string[] = []
+  const droppedIntros: string[] = []
   for (const { file, topic } of files) {
     const label = path.join('content', 'knowledge', topic, path.basename(file))
     const read = readDocument(file, topic, label)
     unanswered.push(...read.unanswered)
+    if (read.introDropped) droppedIntros.push(label)
     if (read.document) documents.push(read.document)
     else droppedDocuments.push(label)
   }
@@ -1095,5 +1103,6 @@ export function buildKnowledgeCorpus(
     documents: ordered,
     unanswered,
     droppedDocuments,
+    droppedIntros,
   }
 }

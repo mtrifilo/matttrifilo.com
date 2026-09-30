@@ -19,6 +19,7 @@ import {
   sourceLines,
   SUMMARY_MAX_LENGTH,
 } from './build'
+import { droppedReport } from './dropped-report'
 import { KNOWLEDGE_READ_BUDGET } from './index'
 
 /**
@@ -329,16 +330,13 @@ describe('knowledge corpus content guards', () => {
   })
 
   /**
-   * The `## ` questions in a text, read from the lines the build reads:
-   * sourceLines blanks HTML comments, so an example in the editing notes is
-   * not a question. Read off the text rather than `headings`, which is capped
-   * for the progress view.
+   * The `## ` questions in a text, split the way the build splits them
+   * (sectionTitles): HTML comments blanked, so an example in the editing
+   * notes is not a question, and fences, heading forms and closing hashes
+   * read by the same rules. Read off the text rather than `headings`, which
+   * is capped for the progress view.
    */
-  const faqQuestions = (text: string) =>
-    sourceLines(text)
-      .map(line => line.text)
-      .filter(line => /^## (?!#)/.test(line))
-      .map(line => line.slice(3).trim())
+  const faqQuestions = (text: string) => sectionTitles(text)
   const faqFiles = fs
     .readdirSync(path.join(KNOWLEDGE_DIR, 'faq'))
     .filter(name => name.endsWith('.md'))
@@ -1508,11 +1506,11 @@ describe('documents must survive being compiled as MDX', () => {
     expect(built.documents[0].text).toContain('\\<100')
   })
 
-  test('says so when an over-indented fence is the likely cause', () => {
+  test('refuses a fence indented four or more spaces, by name', () => {
     // A fence indented four or more spaces is valid CommonMark inside a
-    // nested list, and this check does not recognise it: recognising it
-    // means tracking list context, which is a Markdown parser. It is not
-    // silent about it: when something does fail, the message names it.
+    // nested list, and a fence anywhere to MDX, and this check does not
+    // recognise it: recognising it means tracking list context, which is a
+    // Markdown parser. It is refused by name rather than misread.
     const body = [
       '# Title',
       '',
@@ -1563,6 +1561,401 @@ describe('the loaders the site and the chat route use', () => {
     const { KNOWLEDGE_READ_BUDGET } = await import('./index')
     expect(KNOWLEDGE_READ_BUDGET.maxDocuments).toBe(3)
     expect(KNOWLEDGE_READ_BUDGET.maxTokens).toBe(20_000)
+  })
+})
+
+describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
+  // One reading (./markdown) decides what is code, what is a heading and
+  // what is prose, for the placeholder rule, the section split and the
+  // MDX-safety check alike. lib/knowledge/markdown.test.ts holds the rules
+  // line by line; these hold what the build does with them.
+  const placeholder = (body: string) =>
+    findPlaceholder(sourceLines(body)) !== null
+  const career = (body: string) =>
+    buildFixture([{ topic: 'career', name: 'a-role.md', body }])
+  const faq = (body: string) =>
+    buildFixture([
+      { topic: 'career', name: 'a-role.md' },
+      { topic: 'faq', name: 'faq.md', body },
+    ])
+  const faqLabel = path.join('content', 'knowledge', 'faq', 'faq.md')
+
+  test('a backslash escapes punctuation only, so `\\TODO (Matt)` is a placeholder', () => {
+    // `\T` is not an escape: the backslash is text, and the marker is
+    // still in the line a reader sees.
+    expect(placeholder('\\TODO (Matt)')).toBe(true)
+    expect(() => career('\\TODO (Matt)')).toThrow(/a TODO placeholder/)
+    const dropped = faq(['## A question?', '', '\\TODO (Matt)'].join('\n'))
+    expect(dropped.unanswered.map(q => q.heading)).toEqual(['A question?'])
+    // An escaped parenthesis is the parenthesis.
+    expect(placeholder('TODO \\(Matt\\)')).toBe(true)
+    // And `\TODO` at the start of a line is text that starts with a
+    // backslash, not a line that starts with TODO.
+    expect(placeholder('\\TODO is how the word is written unescaped')).toBe(
+      false
+    )
+  })
+
+  test('a backtick run with no closer of its own length is text, not code', () => {
+    expect(placeholder('```TODO (Matt)`')).toBe(true)
+    expect(() => career('A run of three: ```a <Thing>`')).toThrow(
+      /"<" outside code/
+    )
+    // Inside a code span a backslash is a character, so this span ends
+    // at `C:\` and the tag after it is prose to MDX.
+    expect(() => career('The path `C:\\` and <Thing> and `x`.')).toThrow(
+      /"<" outside code/
+    )
+  })
+
+  test('a fence closes only at a run as long as its opener, with nothing after it', () => {
+    // ```` holds a ``` and a `##` line; neither ends it, and the prose
+    // after the real closer is read again.
+    const nested = [
+      '## Real',
+      '',
+      '````md',
+      '```',
+      '## Not a heading',
+      '```js',
+      '````',
+      '',
+      'TODO (Matt)',
+    ].join('\n')
+    expect(documentHeadings(nested)).toEqual(['Real'])
+    expect(placeholder(nested)).toBe(true)
+    // A ``` inside a ~~~ block is content too.
+    expect(documentHeadings('~~~\n```\n## Not\n~~~\n\n## Real\nx')).toEqual([
+      'Real',
+    ])
+  })
+
+  test('a fence indented up to three spaces is code', () => {
+    const body = [
+      'Setup:',
+      '',
+      '   ```tsx',
+      'const x = <Thing />',
+      '   ```',
+      '',
+      '## TODO (Matt)',
+    ].join('\n')
+    // The fence is code, so the tag passes; and it closed, so the heading
+    // after it is read as one.
+    expect(() => career(body)).toThrow(
+      /a TODO placeholder under "TODO \(Matt\)"/
+    )
+    const fenced = body.replace('## TODO (Matt)', 'Done.')
+    expect(career(fenced).documents[0].text).toBe(fenced)
+  })
+
+  test('a fence indented with a tab is not code to the placeholder rule, and the MDX check refuses it', () => {
+    // CommonMark reads the tab as four columns: an indented code block
+    // holding the ```, then prose. So the line under it is checked.
+    expect(placeholder('\t```\nTODO (Matt)\n\t```')).toBe(true)
+    // MDX turns off indented code and reads the same line as a fence, so
+    // the two disagree about everything after it. The check refuses the
+    // line rather than pick one, whether it opens a block or would close
+    // one: here MDX closes at the tab and reads the tag as prose.
+    const refused =
+      /a-role\.md:\d+: a ``` fence indented four or more spaces.*a tab counts as four/
+    expect(() => career('\t```\nplain text\n\t```')).toThrow(refused)
+    expect(() =>
+      career(
+        [
+          'Intro.',
+          '',
+          '```',
+          'code',
+          '\t```',
+          '',
+          '<Widget> here',
+          '',
+          '```',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+  })
+
+  test('a closing fence takes only spaces and tabs after its run', () => {
+    // A no-break space after ``` makes the line content: the fence stays
+    // open, so the real closer below closes it and the prose is checked.
+    expect(() =>
+      career(
+        [
+          'Intro.',
+          '',
+          '```',
+          'a',
+          '``` ',
+          '',
+          'prose',
+          '```',
+          '',
+          '<Widget>',
+        ].join('\n')
+      )
+    ).toThrow(/"<" outside code/)
+  })
+
+  test('a code span wrapped onto the next line hides nothing', () => {
+    // CommonMark pairs the backtick at the end of the first line with the
+    // first one on the second, so the tag and the marker are prose. Once a
+    // line leaves a backtick unmatched the rest of its paragraph is read
+    // with every backtick as text.
+    expect(() =>
+      career(
+        [
+          'The check is run with `bun run',
+          'knowledge:check` and prints the <Index> `text` field.',
+        ].join('\n')
+      )
+    ).toThrow(
+      /"<" outside code.*keep each code span on one line, or escape a lone backtick/
+    )
+    expect(
+      placeholder('Run `rg\nTODO` then TODO (Matt) `x` and move on.')
+    ).toBe(true)
+    // A blank line ends the paragraph, and pairing starts again.
+    expect(placeholder('A lone ` here.\n\nThen `TODO (Matt)` in code.')).toBe(
+      false
+    )
+  })
+
+  test('an unclosed fence is reported at the line that opened it', () => {
+    expect(() => career('Intro.\n\n```ts\nconst x = 1')).toThrow(
+      /a-role\.md:11: a fenced code block opened here is never closed/
+    )
+  })
+
+  test('refuses a fence that opens on a list item or block quote line', () => {
+    // CommonMark and MDX read "- ```sh" as a fence inside the item; the
+    // line reader cannot see it, so its closer would read as an opener and
+    // everything after it as code, a tag and a placeholder included.
+    const refused =
+      /a ``` fence that opens on a list item or block quote line.*Put the fence on its own line/
+    expect(() =>
+      career(
+        [
+          'Steps:',
+          '',
+          '- ```sh',
+          '  npm run build',
+          '  ```',
+          '',
+          'Then open <b>the preview</b>.',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+    expect(() =>
+      faq(
+        [
+          '## How does he ship?',
+          '',
+          '- ```sh',
+          '  npm run build',
+          '  ```',
+          '',
+          'TODO (Matt)',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+    expect(() => career('> ```\n> code\n> ```\n\nDone.')).toThrow(refused)
+    // The advice works: the fence on its own line under the item builds.
+    const fixed = [
+      'Steps:',
+      '',
+      '- Build it:',
+      '',
+      '  ```sh',
+      '  npm run build',
+      '  ```',
+      '',
+      'Then open the preview.',
+    ].join('\n')
+    expect(career(fixed).documents[0].text).toBe(fixed)
+  })
+
+  test('a nested fence inside a Markdown sample is content, not refused', () => {
+    // Inside the ```` block, MDX reads the indented ``` lines as content:
+    // too short to close it, and "```js" carries an info string.
+    const sample = [
+      'An example:',
+      '',
+      '````md',
+      '1. Run:',
+      '',
+      '    ```js',
+      '    x()',
+      '    ```',
+      '````',
+      '',
+      'Done.',
+    ].join('\n')
+    expect(career(sample).documents[0].text).toBe(sample)
+  })
+
+  test('a heading indented four or more spaces is read by its title for placeholders', () => {
+    expect(placeholder('Intro.\n\n    ## TODO')).toBe(true)
+    expect(() => career('Intro.\n\n    ## TODO')).toThrow(/a TODO placeholder/)
+    // It still does not start a section.
+    expect(documentHeadings('## A\n\n    ## B\n\nx')).toEqual(['A'])
+  })
+
+  test('a backtick fence whose info string holds a backtick is prose', () => {
+    expect(placeholder('```a`b\nTODO (Matt)')).toBe(true)
+    // Its line is prose to MDX too, and it opens nothing, so the check
+    // reports the tag rather than an unclosed fence.
+    expect(() => career('```a`b <Thing>\nDone.')).toThrow(/"<" outside code/)
+  })
+
+  test('every ATX heading form is checked as a heading', () => {
+    // `###` and deeper, and `#`, are read by their title, as `##` is.
+    expect(placeholder('### TODO: confirm the date')).toBe(true)
+    expect(placeholder('# TODO')).toBe(true)
+    expect(placeholder('#### What TODO comments cost')).toBe(false)
+    expect(() =>
+      career(['## What I owned', '', '### TODO: the numbers'].join('\n'))
+    ).toThrow(/a TODO placeholder under "What I owned"/)
+    const dropped = faq(
+      ['## A question?', '', 'An answer.', '', '### TODO add more'].join('\n')
+    )
+    expect(dropped.unanswered.map(q => q.heading)).toEqual(['A question?'])
+
+    // A section starts at a `##` at the start of a line, followed by a
+    // space or a tab; its closing hashes are not part of its title. An
+    // indented one does not start a section (see the next test).
+    expect(
+      documentHeadings(
+        [
+          'Intro.',
+          '',
+          '   ## Indented',
+          'Body.',
+          '',
+          '##\tTabbed',
+          'Body.',
+          '',
+          '    ## Four in',
+          '',
+          '##Glued',
+          '',
+          '## Closed ##',
+        ].join('\n')
+      )
+    ).toEqual(['Tabbed', 'Closed'])
+    // The guard over the real faq files splits the same way.
+    expect(
+      sectionTitles('## A\n\n##\tB\n\n   ## C\n\n## D ##\n\n```\n## E\n```')
+    ).toEqual(['A', 'B', 'D'])
+  })
+
+  test('an indented `##` is read for placeholders but does not start a section', () => {
+    // Inside a list item it is a heading within the item. Splitting there
+    // would ship "Point A" as the whole answer and drop the rest, so the
+    // question stays whole, and the note in its heading drops all of it.
+    const nested = faq(
+      [
+        '## Question one',
+        '',
+        '- Point A',
+        '',
+        '  ## TODO',
+        '',
+        '  More of the answer.',
+        '',
+        '## Question two',
+        '',
+        'Done.',
+      ].join('\n')
+    )
+    expect(nested.unanswered.map(q => q.heading)).toEqual(['Question one'])
+    expect(nested.documents.find(d => d.id === 'faq')?.text).toBe(
+      '## Question two\n\nDone.'
+    )
+    // At the top level the same heading is part of the introduction.
+    const indented = faq(
+      ['   ## TODO (Matt)', '', 'A finished answer.'].join('\n')
+    )
+    expect(indented.droppedIntros).toEqual([faqLabel])
+    expect(indented.unanswered).toEqual([])
+  })
+
+  test('accepted gap (Matt, 2026-09-23, MTC-71): a TODO inside inline code or a fence ships', () => {
+    // One placeholder rule, and it reads prose. A `TODO (Matt)` written
+    // inside a code span or a fenced block is code to that rule, so it
+    // ships, in the faq as everywhere else. Matt accepted that gap rather
+    // than add a second, faq-only rule; do not close it without his word.
+    const answer = [
+      '## How does he review agent output?',
+      '',
+      'We grep for `TODO (Matt)` before every release.',
+      '',
+      '```',
+      'TODO (Matt)',
+      '```',
+      '',
+      '## `TODO (Matt)` in a heading',
+      '',
+      'Also ships.',
+    ].join('\n')
+    const built = faq(answer)
+    expect(built.documents.find(d => d.id === 'faq')?.text).toBe(answer)
+    expect(built.unanswered).toEqual([])
+    expect(career(answer).documents[0].text).toBe(answer)
+  })
+
+  test('an faq introduction dropped for a placeholder is listed, as a question is', () => {
+    const withNote = faq(
+      ['# FAQ', '', 'TODO (Matt)', '', '## A question?', '', 'An answer.'].join(
+        '\n'
+      )
+    )
+    expect(withNote.documents.find(d => d.id === 'faq')?.text).toBe(
+      ['## A question?', '', 'An answer.'].join('\n')
+    )
+    expect(withNote.droppedIntros).toEqual([faqLabel])
+    expect(withNote.unanswered).toEqual([])
+
+    // Listed when the whole file goes too, alongside its questions.
+    const whole = faq(['TODO (Matt)', '', '## One?', '', 'TODO'].join('\n'))
+    expect(whole.droppedDocuments).toEqual([faqLabel])
+    expect(whole.droppedIntros).toEqual([faqLabel])
+    expect(whole.unanswered.map(q => q.heading)).toEqual(['One?'])
+
+    // What knowledge:check prints: per file, the introduction first, then
+    // its questions, then each file dropped whole.
+    const second = path.join('content', 'knowledge', 'faq', 'faq-more.md')
+    expect(
+      droppedReport({
+        droppedIntros: [second, faqLabel],
+        unanswered: [
+          { file: second, heading: 'Two?' },
+          { file: faqLabel, heading: 'One?' },
+        ],
+        droppedDocuments: [faqLabel],
+      })
+    ).toEqual([
+      `${second}  (the introduction, before the first ##)`,
+      `${second}  ## Two?`,
+      `${faqLabel}  (the introduction, before the first ##)`,
+      `${faqLabel}  ## One?`,
+      `${faqLabel}  (whole document: nothing in it is answered yet)`,
+    ])
+    expect(droppedReport(withNote)).toEqual([
+      `${faqLabel}  (the introduction, before the first ##)`,
+    ])
+    expect(
+      droppedReport({ droppedIntros: [], unanswered: [], droppedDocuments: [] })
+    ).toEqual([])
+
+    // A finished introduction, or none at all, is not a drop.
+    for (const body of [
+      ['# FAQ', '', 'Written.', '', '## A question?', '', 'An answer.'],
+      ['## A question?', '', 'An answer.'],
+    ]) {
+      expect(faq(body.join('\n')).droppedIntros).toEqual([])
+    }
   })
 })
 
