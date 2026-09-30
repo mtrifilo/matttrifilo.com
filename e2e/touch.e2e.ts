@@ -13,8 +13,9 @@ import { expect, test, tickerRows, waitForRows } from './support'
  * compositor sends, so the row scrolls natively. Playwright has no touch
  * drag for WebKit, so there the touch events are dispatched on the row (the
  * same events, with the finger's coordinates) and the row is then scrolled
- * by script, which is the scroll the drag would have made; the direction
- * rule, the hand-over and the linked scroll are the same code either way.
+ * by script, the scroll the drag would have made, with the scroll event it
+ * would have sent; the direction rule, the hand-over and the linked scroll
+ * are the same code either way.
  * The feel of the drag on a real phone is still a device check.
  */
 
@@ -135,9 +136,14 @@ async function dragFirstRow(
     [-distance / 4, 0],
     [-distance, 0],
   ])
+  // Playwright's WebKit sends these rows no scroll event for a scroll made
+  // by script, where a phone sends one for a finger's, and the linked scroll
+  // runs from that event; so the event the drag would have sent goes with it.
   await page.evaluate(pixels => {
     const viewport = document.querySelector('.starter-ticker-row')
-    if (viewport) viewport.scrollLeft += pixels
+    if (!viewport) return
+    viewport.scrollLeft += pixels
+    viewport.dispatchEvent(new Event('scroll'))
   }, distance)
 }
 
