@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { AlertCircle, Clock, Scissors } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ChatErrorView } from '@/lib/chat/answer'
+import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import {
   INCOMPLETE_NOTICE,
@@ -129,7 +130,10 @@ export function ChatErrorNotice({
       {error.message}
       {offersReset && (
         <button
-          className="ml-2 font-medium underline underline-offset-2 hover:text-primary"
+          className={cn(
+            'ml-2 font-medium underline underline-offset-2 hover:text-primary',
+            FOCUS_RING
+          )}
           onClick={onReset}
           type="button"
         >
@@ -143,7 +147,10 @@ export function ChatErrorNotice({
 function NoticeLink({ children, href }: { children: ReactNode; href: string }) {
   return (
     <Link
-      className="text-foreground underline underline-offset-2 hover:text-primary"
+      className={cn(
+        'text-foreground underline underline-offset-2 hover:text-primary',
+        FOCUS_RING
+      )}
       href={href}
     >
       {children}

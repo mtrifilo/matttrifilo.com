@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import { ASSISTANT_EVALS_TITLE, MATT_MAILTO } from './copy'
 import { useEvalsPublished } from './evals-published'
@@ -24,6 +25,11 @@ import { useEvalsPublished } from './evals-published'
  * knowledge, and this renders in the browser, so the server pages provide
  * it through ./evals-published.
  */
+const LINK_CLASS = cn(
+  'underline underline-offset-2 hover:text-foreground',
+  FOCUS_RING
+)
+
 export function AssistantDisclosure({ className }: { className?: string }) {
   const evalsPublished = useEvalsPublished()
 
@@ -37,10 +43,7 @@ export function AssistantDisclosure({ className }: { className?: string }) {
       <p>
         AI-generated. May be incomplete or wrong. Check anything that matters
         with{' '}
-        <Link
-          className="underline underline-offset-2 hover:text-foreground"
-          href={MATT_MAILTO}
-        >
+        <Link className={LINK_CLASS} href={MATT_MAILTO}>
           Matt himself
         </Link>
         .
@@ -48,8 +51,10 @@ export function AssistantDisclosure({ className }: { className?: string }) {
       <p>Conversations aren&rsquo;t saved.</p>
       {evalsPublished && (
         <p>
+          {/* On a line of its own, so not a link inside a sentence: it
+              takes the 44 px hit area the other small controls have. */}
           <Link
-            className="underline underline-offset-2 hover:text-foreground"
+            className={cn(LINK_CLASS, 'touch-target relative')}
             href="/ask/evals"
           >
             {ASSISTANT_EVALS_TITLE}

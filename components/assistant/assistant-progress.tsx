@@ -165,7 +165,9 @@ function label(row: ProgressRow): string {
 
 /**
  * What a read row says under its title: the corpus topic, then the
- * document's section headings as a second, quieter line.
+ * document's section headings as a second line, in the same muted token:
+ * the line is 12 px text, and a lighter tint of that token falls under
+ * 4.5:1 on both themes.
  *
  * Read rows only. The writing row names no document, and a GitHub check has
  * neither a topic nor sections. A row whose step carries neither field, as
@@ -186,7 +188,7 @@ function description(row: ProgressRow): ReactNode {
     <div className="space-y-1">
       {topic !== undefined && <div>{topic}</div>}
       {headings.length > 0 && (
-        <div className="text-muted-foreground/70">
+        <div className="text-muted-foreground">
           {progressHeadings(headings)}
         </div>
       )}

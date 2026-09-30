@@ -62,3 +62,9 @@ evals/out/
 .claude/*
 !.claude/skills/
 !.claude/settings.json
+
+# accessibility and performance reports (a11y/, MTC-88)
+/a11y/report/
+/a11y/results/
+/a11y/lighthouse-reports/
+/.lighthouseci/

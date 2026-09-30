@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { noticeFor, type AnswerView } from '@/lib/chat/answer'
+import { FOCUS_RING } from '@/lib/focus-ring'
+import { cn } from '@/lib/utils'
 import { IncompleteNotice, TruncatedNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { FOLLOW_UPS_LABEL } from './copy'
@@ -101,13 +103,13 @@ function FollowUpRow({
   if (questions.length === 0) return null
 
   return (
-    // The negative margin sits out here so the reveal animates the row's own
+    // The negative margins sit out here so the reveal animates the row's own
     // box; the padding inside the row is room for a focus ring it would
-    // otherwise clip.
-    <div className="follow-up-reveal -my-1">
+    // otherwise clip, above, below and before the first pill.
+    <div className="follow-up-reveal -mx-1 -my-1">
       <div
         aria-label={FOLLOW_UPS_LABEL}
-        className="edge-faded-row follow-up-row w-full py-1"
+        className="edge-faded-row follow-up-row w-full px-1 py-1"
         role="group"
       >
         <Suggestions className="w-max flex-nowrap">
@@ -127,6 +129,9 @@ function FollowUpRow({
     </div>
   )
 }
+
+const ACTION_CLASS =
+  'touch-target relative flex items-center gap-2 transition-colors hover:text-foreground'
 
 function AnswerActions({
   onRegenerate,
@@ -156,7 +161,7 @@ function AnswerActions({
   return (
     <div className="flex items-center gap-5 text-sm text-muted-foreground">
       <button
-        className="flex items-center gap-2 transition-colors hover:text-foreground"
+        className={cn(ACTION_CLASS, FOCUS_RING)}
         onClick={copy}
         type="button"
       >
@@ -168,13 +173,21 @@ function AnswerActions({
         {copied ? 'Copied' : 'Copy'}
       </button>
       <button
-        className="flex items-center gap-2 transition-colors hover:text-foreground"
+        className={cn(ACTION_CLASS, FOCUS_RING)}
         onClick={onRegenerate}
         type="button"
       >
         <RefreshCw aria-hidden="true" className="size-3.5" />
         Regenerate
       </button>
+      {/* The label's change to "Copied" is only seen: a screen reader does
+          not reread a focused button whose name changes. This says it once,
+          politely, and says nothing when it empties again. It is rendered
+          before the copy, because a live region added with its text already
+          in it is not reliably announced. */}
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Copied' : ''}
+      </span>
     </div>
   )
 }

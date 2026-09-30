@@ -65,7 +65,10 @@
   --destructive: #e7000b;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #90a1b9;
+  /* A focus ring is part of the control it marks, so it clears 3:1 against
+     the page and the card (WCAG 1.4.11); lib/theme-contrast.test.ts holds
+     both themes to it. */
+  --ring: #62748e;
   --chart-1: #2563eb;
   --chart-2: #0ea5e9;
   --chart-3: #0d9488;
@@ -107,8 +110,11 @@
 }
 
 @layer base {
+  /* The outline every focusable element falls back to is the ring token at
+     full strength: at half strength it was under 3:1 on both themes (WCAG
+     1.4.11), and lib/theme-contrast.test.ts holds the token to 3:1. */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html {
     @apply bg-background text-foreground;
@@ -640,7 +646,38 @@ nav[data-scrolled='true'] {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
 }
 
+/*
+ * A hit area of at least 44 by 44 px for a control drawn smaller (MTC-88),
+ * the size WCAG 2.5.5 and Apple's guidelines set for a finger. What the
+ * control draws is unchanged: an empty ::after, centred on it, is what grows
+ * the area a tap lands on, and a control already wider or taller than 44 px
+ * keeps its own size on that side. It goes only on controls with room
+ * around them; two grown areas that overlapped would split the space
+ * between them by paint order, not by what the finger meant.
+ *
+ * The control has to be positioned (`relative`, or `absolute` where it
+ * already floats) for the area to centre on it. That is left to the
+ * control's own classes: a `position` here would outrank every Tailwind
+ * utility and pull a floating control back into the flow.
+ */
+.touch-target::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
 /* Tactile button feedback */
 [data-slot='button']:active {
   transform: scale(0.98);
+}
+
+/* After the rule above, which it has to follow to win. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='button']:active {
+    transform: none;
+  }
 }

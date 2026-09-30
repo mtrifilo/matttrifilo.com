@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
@@ -18,18 +19,33 @@ import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
  *    `role="status"` region in components/assistant instead.
  * 2. The download button and its Markdown serialiser are gone. Nothing offers
  *    a transcript download: conversations are not saved anywhere.
+ * 3. The scroll to the newest line is a spring only for a visitor who has
+ *    not asked for less motion; for one who has, it is instant (MTC-88).
+ *    The library animates it from script, where the stylesheet's
+ *    `prefers-reduced-motion` rules cannot reach.
  */
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
-  <StickToBottom
-    className={cn("relative flex-1 overflow-y-hidden", className)}
-    initial="smooth"
-    resize="smooth"
-    {...props}
-  />
-);
+export const Conversation = ({ className, ...props }: ConversationProps) => {
+  const scroll = useTranscriptScroll();
+  return (
+    <StickToBottom
+      className={cn("relative flex-1 overflow-y-hidden", className)}
+      initial={scroll}
+      resize={scroll}
+      {...props}
+    />
+  );
+};
+
+/**
+ * How the transcript moves to its newest line: the library's spring
+ * ("smooth"), or at once under reduced motion.
+ */
+export function useTranscriptScroll(): "instant" | "smooth" {
+  return usePrefersReducedMotion() ? "instant" : "smooth";
+}
 
 export type ConversationContentProps = ComponentProps<
   typeof StickToBottom.Content
@@ -49,18 +65,30 @@ export const ConversationContent = ({
   />
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {
+  /**
+   * Called once the scroll has been asked for. The button is about to go
+   * (it only shows while the transcript is away from its end), so this is
+   * where the caller moves focus that would otherwise fall to the page.
+   */
+  afterScroll?: () => void;
+};
 
 export const ConversationScrollButton = ({
+  afterScroll,
   className,
   children,
   ...props
 }: ConversationScrollButtonProps) => {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const scroll = useTranscriptScroll();
 
+  // Named explicitly: called bare, the library springs whatever the
+  // transcript's own setting says.
   const handleScrollToBottom = useCallback(() => {
-    scrollToBottom();
-  }, [scrollToBottom]);
+    scrollToBottom(scroll);
+    afterScroll?.();
+  }, [afterScroll, scroll, scrollToBottom]);
 
   if (isAtBottom) return null;
 
@@ -69,7 +97,7 @@ export const ConversationScrollButton = ({
       // Opaque in both themes: the pill floats over the transcript, and the
       // Button outline variant's dark background is translucent.
       className={cn(
-        "absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full",
+        "touch-target absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full",
         "bg-background dark:bg-background dark:hover:bg-muted",
         className
       )}

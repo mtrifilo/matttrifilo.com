@@ -73,7 +73,10 @@ export default function RootLayout({
             </HideOnRoutes>
           </div>
         </ThemeProvider>
-        <Analytics />
+        {/* Vercel serves the script this loads; anywhere else (the
+            accessibility job's `next start`, for one) it is a 404 in the
+            console. VERCEL is set on every Vercel build and runtime. */}
+        {process.env.VERCEL && <Analytics />}
       </body>
     </html>
   )

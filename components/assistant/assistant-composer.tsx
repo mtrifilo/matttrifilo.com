@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from 'react'
 import { CHAT_MAX_MESSAGE_CHARS } from '@/lib/chat/answer'
+import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import { ASSISTANT_PLACEHOLDER } from './copy'
 
@@ -138,7 +139,10 @@ export function AssistantComposer({
         {streaming && onStop ? (
           <button
             aria-label="Stop generating"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70"
+            className={cn(
+              'touch-target relative flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/70',
+              FOCUS_RING
+            )}
             onClick={onStop}
             type="button"
           >
@@ -148,9 +152,10 @@ export function AssistantComposer({
           <button
             aria-label="Send question"
             className={cn(
-              'flex size-9 shrink-0 items-center justify-center rounded-full',
+              'touch-target relative flex size-9 shrink-0 items-center justify-center rounded-full',
               'bg-primary text-primary-foreground transition-opacity',
-              'disabled:opacity-40'
+              'disabled:opacity-40',
+              FOCUS_RING
             )}
             disabled={!canSend}
             type="submit"
