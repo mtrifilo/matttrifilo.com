@@ -48,7 +48,7 @@ Small-business marketing automation and CRM. Joined a founder-led company of ~40
 
 #### Software Engineer II · Jul 2018 – Aug 2020
 - On the Platform team (2019): helped decompose the Contacts domain out of the Core monolith, moving Mobile's and Web's contact reads onto the new Contacts API (75 PRs).
-- Built a resilience4j fault-tolerance library with a failure-injection harness, rolled into Core and two email APIs before Black Friday 2019; mitigated thousands of failed sends during traffic spikes.
+- Built the circuit breakers that held Black Friday 2019, then extracted them into a shared resilience4j fault-tolerance library with a failure-injection harness (December 2019 to February 2020), later adopted by two more email services; mitigated thousands of failed sends during traffic spikes.
 - Migrated Email Compliance's logging and alerting from Splunk to New Relic: BigQuery ingestion harness, rebuilt queries, feature-toggled cutover, 7 rebuilt alerts (46 PRs).
 
 #### Software Engineer I · Jul 2017 – Jul 2018
