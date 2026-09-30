@@ -90,8 +90,14 @@ const nextConfig: NextConfig = {
            * object-src 'none' refuses plugins outright rather than inheriting
            * default-src. upgrade-insecure-requests has the browser request a
            * page's subresources, frames and form posts over https://, so none
-           * of them travels in the clear; on a page served over plain http
-           * that includes the page's own files.
+           * of them travels in the clear. It is sent only where VERCEL is set
+           * (every Vercel build and runtime, the same test app/layout.tsx
+           * uses for the analytics script): on a page served over plain http
+           * the page's own files are upgraded too, and WebKit then loads none
+           * of its scripts, styles or images, which would break a local
+           * `next start` on http://127.0.0.1 and the browser checks that run
+           * WebKit against one. On production it is a second safeguard, since
+           * Vercel already sends Strict-Transport-Security there.
            */
           {
             key: 'Content-Security-Policy',
@@ -110,7 +116,7 @@ const nextConfig: NextConfig = {
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
-              'upgrade-insecure-requests',
+              ...(process.env.VERCEL ? ['upgrade-insecure-requests'] : []),
             ].join('; '),
           },
         ],

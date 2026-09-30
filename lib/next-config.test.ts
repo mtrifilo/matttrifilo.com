@@ -32,9 +32,12 @@ describe('the Turbopack build cache switch', () => {
  * (BotID's wrapper included) rather than from the source text. Every
  * directive is pinned to its exact sources, so a new host is a deliberate
  * edit here as well as in next.config.ts, not something a refactor slips in.
+ * The policy has two shapes: upgrade-insecure-requests is sent only where
+ * VERCEL is set, so plain-http runs (a local `next start`, the browser
+ * checks' WebKit) keep their own files.
  */
 const SITE_WIDE = '/(.*)'
-const EXPECTED_POLICY: Record<string, string[]> = {
+const POLICY_EVERYWHERE: Record<string, string[]> = {
   'default-src': ["'self'"],
   'script-src': ["'self'", "'unsafe-inline'", 'https://vercel.live'],
   'style-src': ["'self'", "'unsafe-inline'"],
@@ -53,13 +56,36 @@ const EXPECTED_POLICY: Record<string, string[]> = {
   'frame-ancestors': ["'none'"],
   'base-uri': ["'self'"],
   'form-action': ["'self'"],
+}
+const POLICY_ON_VERCEL: Record<string, string[]> = {
+  ...POLICY_EVERYWHERE,
   'upgrade-insecure-requests': [],
 }
 
-async function siteWidePolicy(): Promise<Record<string, string[]>> {
+type HeaderRules = Awaited<
+  ReturnType<
+    NonNullable<(typeof import('../next.config'))['default']['headers']>
+  >
+>
+
+/** The config's header rules as Next would build them with VERCEL as given. */
+async function headerRules(vercel: string | undefined): Promise<HeaderRules> {
   const { default: config } = await import('../next.config')
-  const rules = (await config.headers?.()) ?? []
-  const rule = rules.find(r => r.source === SITE_WIDE)
+  const saved = process.env.VERCEL
+  if (vercel === undefined) delete process.env.VERCEL
+  else process.env.VERCEL = vercel
+  try {
+    return (await config.headers?.()) ?? []
+  } finally {
+    if (saved === undefined) delete process.env.VERCEL
+    else process.env.VERCEL = saved
+  }
+}
+
+async function siteWidePolicy(
+  vercel: string | undefined
+): Promise<Record<string, string[]>> {
+  const rule = (await headerRules(vercel)).find(r => r.source === SITE_WIDE)
   const header = rule?.headers.find(h => h.key === 'Content-Security-Policy')
   if (!header) throw new Error(`no Content-Security-Policy on ${SITE_WIDE}`)
   const policy: Record<string, string[]> = {}
@@ -73,14 +99,17 @@ async function siteWidePolicy(): Promise<Record<string, string[]>> {
 }
 
 describe('the Content-Security-Policy', () => {
-  test('is exactly the pinned set of directives and sources', async () => {
-    expect(await siteWidePolicy()).toEqual(EXPECTED_POLICY)
+  test('on Vercel is exactly the pinned set, upgrade-insecure-requests included', async () => {
+    expect(await siteWidePolicy('1')).toEqual(POLICY_ON_VERCEL)
   })
 
-  test('refuses plugins and upgrades insecure requests', async () => {
-    const policy = await siteWidePolicy()
-    expect(policy['object-src']).toEqual(["'none'"])
-    expect(policy['upgrade-insecure-requests']).toEqual([])
+  test('off Vercel is the same set without upgrade-insecure-requests', async () => {
+    expect(await siteWidePolicy(undefined)).toEqual(POLICY_EVERYWHERE)
+  })
+
+  test('refuses plugins on and off Vercel', async () => {
+    expect((await siteWidePolicy('1'))['object-src']).toEqual(["'none'"])
+    expect((await siteWidePolicy(undefined))['object-src']).toEqual(["'none'"])
   })
 
   // Next keeps the last matching rule's value for a header key, so on
@@ -88,9 +117,7 @@ describe('the Content-Security-Policy', () => {
   // the site-wide one. frame-src 'self' relies on that value; a BotID
   // upgrade that changes it, or a new rule that sets the header, fails here.
   test('is replaced only on BotID challenge paths, by frame-ancestors', async () => {
-    const { default: config } = await import('../next.config')
-    const rules = (await config.headers?.()) ?? []
-    const others = rules
+    const others = (await headerRules('1'))
       .filter(r => r.source !== SITE_WIDE)
       .flatMap(r =>
         r.headers
