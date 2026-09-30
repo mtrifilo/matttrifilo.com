@@ -26,3 +26,60 @@ describe('the Turbopack build cache switch', () => {
     expect(schema).toContain(OPTION)
   })
 })
+
+/**
+ * The site-wide Content-Security-Policy, read from the config Next loads
+ * (BotID's wrapper included) rather than from the source text. Every
+ * directive is pinned to its exact sources, so a new host is a deliberate
+ * edit here as well as in next.config.ts, not something a refactor slips in.
+ */
+const SITE_WIDE = '/(.*)'
+const EXPECTED_POLICY: Record<string, string[]> = {
+  'default-src': ["'self'"],
+  'script-src': ["'self'", "'unsafe-inline'", 'https://vercel.live'],
+  'style-src': ["'self'", "'unsafe-inline'"],
+  'img-src': [
+    "'self'",
+    'data:',
+    'blob:',
+    'https://vercel.com',
+    'https://vercel.live',
+  ],
+  'font-src': ["'self'"],
+  'worker-src': ["'self'", 'blob:'],
+  'connect-src': ["'self'"],
+  'object-src': ["'none'"],
+  'frame-src': ["'self'", 'https://vercel.live'],
+  'frame-ancestors': ["'none'"],
+  'base-uri': ["'self'"],
+  'form-action': ["'self'"],
+  'upgrade-insecure-requests': [],
+}
+
+async function siteWidePolicy(): Promise<Record<string, string[]>> {
+  const { default: config } = await import('../next.config')
+  const rules = (await config.headers?.()) ?? []
+  const rule = rules.find(r => r.source === SITE_WIDE)
+  const header = rule?.headers.find(h => h.key === 'Content-Security-Policy')
+  if (!header) throw new Error(`no Content-Security-Policy on ${SITE_WIDE}`)
+  const policy: Record<string, string[]> = {}
+  for (const directive of header.value.split(';')) {
+    const [name, ...sources] = directive.trim().split(/\s+/)
+    if (!name) continue
+    if (name in policy) throw new Error(`${name} appears twice`)
+    policy[name] = sources
+  }
+  return policy
+}
+
+describe('the Content-Security-Policy', () => {
+  test('is exactly the pinned set of directives and sources', async () => {
+    expect(await siteWidePolicy()).toEqual(EXPECTED_POLICY)
+  })
+
+  test('refuses plugins and upgrades insecure requests', async () => {
+    const policy = await siteWidePolicy()
+    expect(policy['object-src']).toEqual(["'none'"])
+    expect(policy['upgrade-insecure-requests']).toEqual([])
+  })
+})
