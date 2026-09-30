@@ -1,0 +1,38 @@
+# Dependabot version updates. GitHub reads this file from the default branch
+# only, so nothing here runs until it is merged to main.
+version: 2
+updates:
+  # The package.json dependencies. Bun has its own ecosystem value: "npm"
+  # covers npm, pnpm and yarn lockfiles, and only "bun" regenerates bun.lock,
+  # which CI installs with --frozen-lockfile.
+  - package-ecosystem: 'bun'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '07:00'
+      timezone: 'America/Phoenix'
+    groups:
+      # Minor and patch releases promise no breaking changes, so they share
+      # one pull request and one CI run a week. A major matches no group and
+      # gets a pull request of its own, because each can break the build and
+      # needs its own review.
+      minor-and-patch:
+        patterns: ['*']
+        update-types: ['minor', 'patch']
+    ignore:
+      # Pinned to the Bun that CI installs (bun-version in each workflow) and
+      # the Bun that wrote bun.lock. The workflows say to bump all three
+      # together, which a Dependabot pull request cannot do, so it is bumped
+      # by hand with them.
+      - dependency-name: '@types/bun'
+
+  # Each workflow pins an action to a commit SHA with its version in a comment
+  # on the same line. Dependabot moves the SHA and rewrites that comment.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '07:00'
+      timezone: 'America/Phoenix'
