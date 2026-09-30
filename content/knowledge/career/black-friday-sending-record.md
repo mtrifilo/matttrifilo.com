@@ -18,9 +18,9 @@ point, and it helps reduce churn.
 
 ## Year by year
 
-- **2019, as Software Engineer II:** built the resilience4j-based
-  fault-tolerance library specifically to prepare for that season's sending
-  volume, and raised then restored autoscaling floors across three services
+- **2019, as Software Engineer II:** built the circuit breakers that became
+  the resilience4j-based fault-tolerance library, specifically to prepare for
+  that season's sending volume, and raised then restored autoscaling floors across three services
   around the peak.
 - **2021, as Software Engineer III:** early email-decomposition work on
   fault tolerance and event-driven flows continued building the foundation.
