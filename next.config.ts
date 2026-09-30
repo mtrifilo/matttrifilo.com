@@ -47,11 +47,7 @@ const nextConfig: NextConfig = {
      * names the invalidation fix.
      */
     turbopackFileSystemCacheForBuild: false,
-    optimizePackageImports: [
-      'lucide-react',
-      '@radix-ui/react-dialog',
-      '@radix-ui/react-slot',
-    ],
+    optimizePackageImports: ['lucide-react', 'radix-ui'],
   },
   async headers() {
     return [
