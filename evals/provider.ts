@@ -4,6 +4,7 @@ import {
   fetchRepositoryActivity,
   toActivityDigest,
 } from '@/lib/chat/github-activity'
+import type { EnvSource } from '@/lib/env'
 import { loadKnowledgeIndex, readKnowledgeDocument } from '@/lib/knowledge'
 import {
   chatRequest,
@@ -55,7 +56,7 @@ interface CallContext {
   vars?: Record<string, unknown>
 }
 
-interface ProviderResponse {
+export interface ProviderResponse {
   output: string
   error?: string
   metadata?: EvalMetadata
@@ -196,63 +197,117 @@ export default class ChatRouteProvider {
     request: Request,
     attempt: number
   ): Promise<{ response: ProviderResponse; transportFailure: boolean }> {
-    const ledger = createReadLedger(readKnowledgeDocument)
-    const activityRepos: string[] = []
-    const activityDates: string[] = []
-    const model = geminiModel()
+    const session = createEvalChatSession()
+    const response = await session.handler(request)
+    return session.read(response, await response.text(), attempt)
+  }
+}
 
-    const handler = createChatHandler({
-      loadKnowledgeIndex,
-      readKnowledgeDocument: ledger.readKnowledgeDocument,
-      // Real GitHub, wrapped only to record what was asked for: a suite about
-      // whether the assistant reports current work has to exercise the fetch
-      // it would make in production, cache and rate limit included.
-      fetchActivity: async (repository, onFailure) => {
-        activityRepos.push(repository.id)
-        const result = await fetchRepositoryActivity(repository, onFailure)
-        // The digest is built again here rather than read off the tool
-        // result, which never leaves the handler. It is the same pure
-        // function on the same payload, so these are the dates the model was
-        // given, give or take entries the token cap dropped.
-        if (result.kind === 'ok') {
-          const digest = toActivityDigest(repository, result.raw)
-          for (const date of [
-            digest.pushedOn,
-            digest.release?.date,
-            ...digest.pullRequests.map(pull => pull.mergedOn),
-            ...digest.commits.map(commit => commit.date),
-          ]) {
-            if (date) activityDates.push(date)
-          }
+/**
+ * One request's handler, built the way every suite builds it, and the reading
+ * of its response into what a suite grades.
+ *
+ * Exported so evals/measure-first-sentence.ts can time the stream as it
+ * arrives through the same handler and then grade the finished body through
+ * the same reading, rather than keeping a second construction that could
+ * drift from this one.
+ */
+export interface EvalChatSession {
+  handler: (request: Request) => Promise<Response>
+  /**
+   * The finished response, read into the provider's result. `body` is passed
+   * in because a caller timing the stream has already consumed it.
+   */
+  read: (
+    response: Response,
+    body: string,
+    attempt: number
+  ) => { response: ProviderResponse; transportFailure: boolean }
+  /**
+   * Each first byte a model call on this request waited for, in the order
+   * they arrived. The route's own log line reports only the slowest; the
+   * order is what tells the first step's wait from the answer's.
+   */
+  firstByteMs: () => readonly number[]
+  /** Attempts the fetch wrapper abandoned and reopened on this request. */
+  vertexRetries: () => number
+}
+
+/**
+ * `env` is the handler's environment. A caller comparing thinking levels
+ * passes its own copy with `CHAT_REASONING` set rather than mutating
+ * `process.env`, which concurrent requests share.
+ */
+export function createEvalChatSession(
+  env: EnvSource = process.env
+): EvalChatSession {
+  const ledger = createReadLedger(readKnowledgeDocument)
+  const activityRepos: string[] = []
+  const activityDates: string[] = []
+  const firstBytes: number[] = []
+  let retries = 0
+  const model = geminiModel()
+
+  const handler = createChatHandler({
+    loadKnowledgeIndex,
+    readKnowledgeDocument: ledger.readKnowledgeDocument,
+    // Real GitHub, wrapped only to record what was asked for: a suite about
+    // whether the assistant reports current work has to exercise the fetch
+    // it would make in production, cache and rate limit included.
+    fetchActivity: async (repository, onFailure) => {
+      activityRepos.push(repository.id)
+      const result = await fetchRepositoryActivity(repository, onFailure)
+      // The digest is built again here rather than read off the tool
+      // result, which never leaves the handler. It is the same pure
+      // function on the same payload, so these are the dates the model was
+      // given, give or take entries the token cap dropped.
+      if (result.kind === 'ok') {
+        const digest = toActivityDigest(repository, result.raw)
+        for (const date of [
+          digest.pushedOn,
+          digest.release?.date,
+          ...digest.pullRequests.map(pull => pull.mergedOn),
+          ...digest.commits.map(commit => commit.date),
+        ]) {
+          if (date) activityDates.push(date)
         }
-        return result
-      },
-      // The counters are forwarded rather than dropped so the route's own
-      // `[chat]` completion line carries real vertexRetries and
-      // vertexFirstByteMs for an eval run. Those two numbers are what the
-      // timeout constants in lib/ai/bounded-fetch.ts are checked against, and
-      // a full suite is the largest sample of them anything here produces.
-      model: modelRequest =>
-        getVertex({
-          onRetry: modelRequest.onVertexRetry,
-          onFirstByte: modelRequest.onVertexFirstByte,
-        })(model),
-      // BotID needs a Vercel deployment and a browser challenge, neither of
-      // which exists here. Every suite is about what the model does with a
-      // question that has already been let through, so the classifier is
-      // answered with the verdict a local development request gets.
-      verifyVisitor: () =>
-        Promise.resolve({
-          isBot: false,
-          isVerifiedBot: false,
-          bypassed: true,
-        }),
-      env: process.env,
-    })
+      }
+      return result
+    },
+    // The counters are forwarded rather than dropped so the route's own
+    // `[chat]` completion line carries real vertexRetries and
+    // vertexFirstByteMs for an eval run. Those two numbers are what the
+    // timeout constants in lib/ai/bounded-fetch.ts are checked against, and
+    // a full suite is the largest sample of them anything here produces.
+    model: modelRequest =>
+      getVertex({
+        onRetry: retry => {
+          retries += 1
+          modelRequest.onVertexRetry(retry)
+        },
+        onFirstByte: ms => {
+          firstBytes.push(ms)
+          modelRequest.onVertexFirstByte(ms)
+        },
+      })(model),
+    // BotID needs a Vercel deployment and a browser challenge, neither of
+    // which exists here. Every suite is about what the model does with a
+    // question that has already been let through, so the classifier is
+    // answered with the verdict a local development request gets.
+    verifyVisitor: () =>
+      Promise.resolve({
+        isBot: false,
+        isVerifiedBot: false,
+        bypassed: true,
+      }),
+    env,
+  })
 
-    const response = await handler(request)
-    const body = await response.text()
-
+  function read(
+    response: Response,
+    body: string,
+    attempt: number
+  ): { response: ProviderResponse; transportFailure: boolean } {
     // A refusal before the stream exists is a JSON envelope, not SSE. Report
     // its code rather than letting the suite assert against an empty answer.
     if (!response.ok) {
@@ -318,6 +373,13 @@ export default class ChatRouteProvider {
       },
       transportFailure: false,
     }
+  }
+
+  return {
+    handler,
+    read,
+    firstByteMs: () => firstBytes,
+    vertexRetries: () => retries,
   }
 }
 

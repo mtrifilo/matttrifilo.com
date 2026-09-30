@@ -128,6 +128,39 @@ Outcomes: 22 of the 514 recorded `vertexRetries` above zero; 12 of those answere
 
 **Re-measure when any of these change**, because each one moves the distribution and leaves the figures above quietly false: the default thinking level (`DEFAULT_CHAT_REASONING`, `lib/chat/validate.ts`), the model (`DEFAULT_GEMINI_MODEL`, `lib/ai/vertex.ts`, overridable by `GEMINI_MODEL` and not pinned by the workflow, so record which model a run used), the prompt or corpus size, or `CHAT_MAX_STEPS`. Update the table here, the two constants in `lib/ai/bounded-fetch.test.ts`, and the figures on `vertexFirstByteMs` in `lib/chat/handler.ts` together. Note also that GitHub deletes workflow logs on its retention window, so the run ids above stop being checkable after roughly 90 days from their dates.
 
+### Time to the first useful sentence (MTC-87)
+
+`evals/measure-first-sentence.ts` sends ten starter questions at `CHAT_REASONING=low` and `medium`, three times each (60 requests, concurrency 2), through the eval provider's own handler (`createEvalChatSession` in `evals/provider.ts`), in process, with no server. It reads the stream as it arrives and records, per request, the time from the handler call to the first progress part, the first answer token and the first complete sentence (`firstSentenceEnd` in `evals/first-sentence.ts` says what counts and where it is fooled), the total, each model call's first byte in order, the documents read, and whether the answer passed its golden's deterministic assertions (the rubrics and the live follow-up check are skipped). A failed request is not sent again, and the run stops starting requests at the first `CHAT_ERROR`. It writes the run to `evals/out/` and prints every table below; `--from <that file>` reprints them without calling anything. A run costs about $1.20 at the list prices under "Cost of a run".
+
+```
+GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals/measure-first-sentence.ts
+```
+
+Measured 2026-09-28, 23:31 to 23:40 UTC, from Matt's machine with Application Default Credentials against `gemini-3.8-flash` (the default; that run predates the script recording its model), at commit b70fa7f. Nearest-rank, in ms:
+
+| level  | first progress part p50 / p90 | first complete sentence p50 / p90 | within 8 s | answer call's first byte p50 / p90 | documents read p50 | no answer | golden, deterministic |
+| ------ | ----------------------------- | --------------------------------- | ---------- | ---------------------------------- | ------------------ | --------- | --------------------- |
+| low    | 1,485 / 5,411                 | 7,832 / 15,377                    | 18 of 30   | 1,276 / 5,134                      | 1                  | 0         | 26 of 30              |
+| medium | 3,204 / 7,121                 | 22,967 / 54,154 (n = 29)          | 0 of 30    | 10,905 / 20,855 (n = 29)           | 2                  | 1         | 29 of 29              |
+
+**The first sentence arrives with the whole answer.** `onlyAnswerText` in `lib/chat/handler.ts` holds a step's text until the step ends, so tool-call narration never reaches the bubble (MTC-49). In every request that answered, the first token, the first sentence and the end of the stream fell within 10 ms of each other, so the wait is the time to finish the answer step. At `medium` the largest measured part of it is the silent wait before the answer call's first byte; thought tokens are not streamed, so that wait includes the thinking, but a first-byte time cannot separate thinking from connection time.
+
+`vertexFirstByteMs` (the slowest call of a request) next to MTC-47:
+
+| sample                                                     | n   | p50    | p90    | p95    | max    |
+| ---------------------------------------------------------- | --- | ------ | ------ | ------ | ------ |
+| MTC-47, GitHub runners, concurrency 2, 2026-09-22          | 514 | 5,288  | 17,013 | 22,051 | 35,970 |
+| two full runs on Matt's machine, concurrency 8, 2026-09-28 | 358 | 8,019  | 14,051 | 17,193 | 27,223 |
+| a third full run, same machine and day (eval-wl2)          | 179 | 8,348  | 13,776 | 15,751 | 29,590 |
+| this measurement, `low`                                    | 30  | 1,565  | 6,401  | 17,572 | 23,670 |
+| this measurement, `medium`                                 | 30  | 10,905 | 20,855 | 23,233 | 28,517 |
+
+The full-run rows are extracted with the recipe above from the `[chat]` lines of the 2026-09-28 `bun run evals` logs. The first row's two logs (180 and 178 requests) sat in agent worktrees that have since been removed, so it cannot be re-extracted; the third run's log is `evals/out/full-run-2026-09-28.log` in the main checkout. Its one `TimeoutError` line is followed a few lines later by an `incomplete` line with `vertexRetries: 1` and a value, most likely the same request with the value of an earlier call, which would put it in the row, as the MTC-47 note on overlapping populations allows. None of the three command lines sets `CHAT_REASONING`, so they ran at the default `medium` unless the shell exported it.
+
+**What these numbers cannot tell you.** They are not Vercel: no egress, no cold start, no browser. They are 30 requests per level in one nine-minute window, so a busy hour can move them a long way, and at n = 30 a p90 is the 27th value and a p95 the 29th. Three `medium` figures carry Vertex stalls rather than thinking: three calls were cut at the 30 s probe and retried, and those three requests are the three slowest `medium` sentences (54 to 56 s); the abandoned waits are inside their sentence times and in no first-byte figure. Three cuts in 93 attempts against none in 68 is too few to blame on the level. One `medium` request read three documents, checked GitHub and ended `incomplete` with no text: its fourth call, the one given `toolChoice: 'none'`, still returned a tool call. The deterministic grade is not the golden pass rate; the rubrics are the judgment. `bun run evals:compare` passed the smoke subset 12 of 12 at all three levels the same evening.
+
+**Re-measure** with this script whenever the thinking level changes, for the whole request or for one step, and whenever the hold in `onlyAnswerText`, the model, the prompt or `CHAT_MAX_STEPS` changes, and update this section with the date and the commit. The Vercel-side reading from a browser on a preview is still owed (MTC-87).
+
 ## Runbook: something is wrong
 
 1. Spend or request rate is climbing and it is not visitors: set `CHAT_DISABLED=1` on production and redeploy. The assistant disappears from the site on that deploy (panel, nav entry, résumé button, sitemap entries; `/ask` becomes a 404) and the route refuses. Nothing else on the site changes.
