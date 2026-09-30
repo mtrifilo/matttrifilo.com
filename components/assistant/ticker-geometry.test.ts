@@ -15,6 +15,8 @@ import {
   sidewaysWheelPixels,
   TICKER_SPEED_PX_PER_SECOND,
   tickerRows,
+  TOUCH_DIRECTION_THRESHOLD_PX,
+  touchDirection,
   widestPlacement,
 } from './ticker-geometry'
 
@@ -371,6 +373,48 @@ describe('how far a wheel event moves a handed-over row', () => {
     expect(
       sidewaysWheelPixels(motion(1, 0, { deltaMode: 2 }), LINE, PAGE)
     ).toBe(PAGE)
+  })
+})
+
+describe('which way a touch on a moving row is going', () => {
+  const T = TOUCH_DIRECTION_THRESHOLD_PX
+
+  test("the threshold is Matt's, about 8 px", () => {
+    // MTC-79, 2026-09-28. A larger one eats the start of every drag along
+    // the row; a smaller one reads a shaky tap as a drag.
+    expect(T).toBe(8)
+  })
+
+  test('a finger that has not travelled the threshold has said nothing yet', () => {
+    expect(touchDirection(0, 0)).toBe('undecided')
+    expect(touchDirection(T - 1, 0)).toBe('undecided')
+    // Below the threshold on the diagonal too: the distance decides, not
+    // either axis alone.
+    expect(touchDirection(5, 5)).toBe('undecided')
+    expect(touchDirection(-5, -5)).toBe('undecided')
+  })
+
+  test('more across than up or down is a drag along the row, either way', () => {
+    expect(touchDirection(T, 0)).toBe('sideways')
+    expect(touchDirection(-T, 0)).toBe('sideways')
+    expect(touchDirection(9, 6)).toBe('sideways')
+    expect(touchDirection(-9, -6)).toBe('sideways')
+  })
+
+  test('more up or down than across is the page being scrolled past', () => {
+    expect(touchDirection(0, T)).toBe('upright')
+    expect(touchDirection(0, -T)).toBe('upright')
+    expect(touchDirection(6, 9)).toBe('upright')
+    expect(touchDirection(-6, -9)).toBe('upright')
+  })
+
+  test('an exact diagonal leaves the rows moving', () => {
+    expect(touchDirection(6, 6)).toBe('upright')
+    expect(touchDirection(-6, 6)).toBe('upright')
+  })
+
+  test('a movement that is not a number decides nothing', () => {
+    expect(touchDirection(Number.NaN, 20)).toBe('undecided')
   })
 })
 
