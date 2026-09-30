@@ -218,6 +218,33 @@ describe('the last step called a tool', () => {
     expect(screen.queryByRole('button', { name: FOLLOW_UP })).not.toBeNull()
   })
 
+  test('with narration, then the call, then an answer, only the answer is shown', async () => {
+    const turn = await ask(
+      modelEndingWith([
+        { text: NARRATION },
+        { read: 'timeline' },
+        { text: FINISHED },
+      ])
+    )
+
+    await answeredRunEnded()
+    expect(turn.textContent).toContain(PROSE)
+    expect(turn.textContent).not.toContain(NARRATION)
+    expect(turn.textContent).not.toContain(INCOMPLETE_NOTICE)
+  })
+
+  test('with only the trailers, the turn holds the notice', async () => {
+    const turn = await ask(
+      modelEndingWith([
+        { text: `Sources: resume\n${FOLLOW_UPS_TRAILER_PREFIX}\n${FOLLOW_UP}` },
+        { read: 'timeline' },
+      ])
+    )
+
+    await waitFor(() => expect(turn.textContent).toContain(INCOMPLETE_NOTICE))
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull()
+  })
+
   test('with a decline, the decline is shown and the notice is not', async () => {
     const turn = await ask(
       modelEndingWith([{ text: DECLINE_SENTENCE }, { read: 'timeline' }])
