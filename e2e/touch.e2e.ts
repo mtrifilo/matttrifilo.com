@@ -20,6 +20,52 @@ import { expect, test, tickerRows, waitForRows } from './support'
 
 test.skip(({ hasTouch }) => !hasTouch, 'touch is the mobile projects')
 
+/**
+ * Every touch and scroll event on the rows, in order, with each row's state
+ * as the event arrived, kept on the page. A failed test attaches it and
+ * prints it, because which event came first (a scroll before or after the
+ * finger lifted, a scroll that never came) is what a failure here turns on,
+ * and neither a trace nor a screenshot shows it.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const log: unknown[] = []
+    ;(window as unknown as { rowEvents: unknown[] }).rowEvents = log
+    const note = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const viewport = target.closest('.starter-ticker-row')
+      if (!viewport) return
+      const rows = [...document.querySelectorAll('.starter-ticker-row')]
+      const state = (viewport as HTMLElement).dataset
+      log.push({
+        at: Math.round(event.timeStamp),
+        type: event.type,
+        row: rows.indexOf(viewport),
+        scrollLeft: viewport.scrollLeft,
+        handedOver: state.handedOver === 'true',
+        touchHeld: state.touchHeld === 'true',
+      })
+    }
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'scroll']) {
+      document.addEventListener(type, note, { capture: true, passive: true })
+    }
+  })
+})
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return
+  const events = await page
+    .evaluate(() => (window as unknown as { rowEvents?: unknown[] }).rowEvents)
+    .catch(() => undefined)
+  const body = JSON.stringify(events ?? 'not recorded', null, 1)
+  console.log(`row events for "${testInfo.title}":\n${body}`)
+  await testInfo.attach('row-events', {
+    body,
+    contentType: 'application/json',
+  })
+})
+
 /** Each row as the stylesheet and the component see it. */
 interface RowState {
   handedOver: boolean
