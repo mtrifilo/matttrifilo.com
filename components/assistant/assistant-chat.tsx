@@ -313,12 +313,20 @@ export function AssistantChat() {
   // The run in flight, for the announcement only. A screen reader hears the
   // steps as they change instead of one flat "Responding" for twenty seconds.
   const lastProgress = lastView?.progress
-  const announcement = announcementFor(
+  const nextAnnouncement = announcementFor(
     status,
     messages.some(message => message.role === 'assistant'),
     stopped && awaitingFirstContent ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
     stopped
   )
+  // `undefined` is "nothing new to say", so the region keeps its words: a
+  // change, even back to an earlier one, is read out again. Adjusted during
+  // render, React's pattern for keeping something from an earlier render, so
+  // the region never commits a frame with the stale words.
+  const [announcement, setAnnouncement] = useState('')
+  if (nextAnnouncement !== undefined && nextAnnouncement !== announcement) {
+    setAnnouncement(nextAnnouncement)
+  }
 
   const stopRun = useCallback(() => {
     setStopped(true)

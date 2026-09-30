@@ -538,6 +538,13 @@ describe('announcementFor, with a run in flight', () => {
     ).toBe('Writing answer')
   })
 
+  test('has nothing new to say between the done part and the end of the stream', () => {
+    // The route sends `done` just before `finish`; how the run ended rides
+    // on `finish`. `undefined` keeps the region on the step it last named,
+    // where "Responding" would say the run had started over.
+    expect(announcementFor('streaming', true, done(3, 14_000))).toBeUndefined()
+  })
+
   test('falls back to the plain wait when there is no step yet', () => {
     expect(announcementFor('submitted', false)).toBe('Responding')
     expect(

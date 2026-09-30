@@ -132,25 +132,19 @@ describe('a streamed answer', () => {
     expect(repeats).toEqual([])
   })
 
-  // Known, and left for a ticket (MTC-88, 2026-09-28): the route sends the
-  // `done` part just before `finish`, and `announcementFor` in
-  // lib/chat/answer.ts has no step to name for `done` while the run is
-  // still streaming, so the region says "Responding" again for the moment
-  // between the two. A screen reader may speak it before "Response
-  // complete". The fix is in lib/chat, which this ticket does not touch;
-  // when it lands this turns red and becomes an ordinary test.
-  test.failing(
-    'goes straight from the last step to "Response complete"',
-    async () => {
-      const { said } = await streamOneAnswer()
-      expect(said).toEqual([
-        'Responding',
-        'Reading Résumé',
-        'Writing answer',
-        'Response complete',
-      ])
-    }
-  )
+  // The route sends the `done` part just before `finish`, and the stream
+  // closes a moment after. In that gap the region keeps the step it last
+  // named: "Responding" there would tell a screen reader the run had
+  // started over, just before "Response complete".
+  test('goes straight from the last step to "Response complete"', async () => {
+    const { said } = await streamOneAnswer()
+    expect(said).toEqual([
+      'Responding',
+      'Reading Résumé',
+      'Writing answer',
+      'Response complete',
+    ])
+  })
 
   test('sits in no live region, so the answer is never read as it grows', async () => {
     stubRoute(() =>
