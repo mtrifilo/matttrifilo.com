@@ -939,6 +939,9 @@ describe('a row handed over to the visitor by touch or wheel', () => {
           fingerUp(rows[0].viewport)
         },
       ],
+      // In the next two orders the touch is already the page's, or over,
+      // so the direction rule and the lift ignore the event before the
+      // position is compared; they pin those paths for the late event.
       [
         'after a move up the page',
         rows => {
@@ -978,6 +981,66 @@ describe('a row handed over to the visitor by touch or wheel', () => {
         expectBothLooping(rows)
       })
     }
+
+    test('a keyboard reveal in a held row is not taken for a drag', () => {
+      // A touchscreen laptop: a finger rests on a row and Tab reaches a
+      // pill beyond its fade, so the reveal scrolls the row it holds.
+      const { rows } = renderLaidOutRows([0.27, 0.61])
+      const [first, second] = rows
+      fingerDown(first.viewport)
+      const held = first.viewport.scrollLeft
+
+      announcedPills(first.viewport)[3].focus()
+      // The premise: the reveal moved the row.
+      expect(first.viewport.scrollLeft).not.toBe(held)
+      holdsEcho(rows)
+      expectNeitherHandedOver(rows)
+
+      fingerUp(first.viewport)
+      expectNeitherHandedOver(rows)
+      // The focused row stays frozen for focus; the other moves on.
+      expect(first.track.dataset.frozen).toBe('true')
+      expect(second.track.dataset.frozen).toBeUndefined()
+    })
+
+    test('the list opening and closing under a resting finger is not taken for a drag', () => {
+      // Opening the list thaws the held rows, and closing it puts them
+      // back; neither write is a finger's.
+      const { rows } = renderLaidOutRows([0.27, 0.61])
+      const [first] = rows
+      fingerDown(first.viewport)
+      const held = first.viewport.scrollLeft
+
+      fireEvent.click(listToggle())
+      // The premise: the list's thaw moved the row the finger rests on.
+      expect(first.viewport.scrollLeft).not.toBe(held)
+      holdsEcho(rows)
+      fireEvent.click(listToggle())
+      holdsEcho(rows)
+      expectNeitherHandedOver(rows)
+
+      fingerUp(first.viewport)
+      expectBothLooping(rows)
+    })
+
+    test('the list opening over a focused row a finger rests on is not taken for a drag', () => {
+      // Focus keeps the row frozen through the finger's release, so the
+      // list's own thaw of a focused row is the write here.
+      const { rows } = renderLaidOutRows([0.27, 0.61])
+      const [first] = rows
+      announcedPills(first.viewport)[3].focus()
+      fingerDown(first.viewport)
+      const held = first.viewport.scrollLeft
+
+      fireEvent.click(listToggle())
+      // The premise: the list's thaw moved the row the finger rests on.
+      expect(first.viewport.scrollLeft).not.toBe(held)
+      holdsEcho(rows)
+      expectNeitherHandedOver(rows)
+      fireEvent.click(listToggle())
+      fingerUp(first.viewport)
+      expectNeitherHandedOver(rows)
+    })
 
     test('arriving on a row the browser snapped hands nothing over', () => {
       // A browser keeps scrollLeft in its own pixels, so what the hold

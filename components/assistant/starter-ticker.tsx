@@ -343,6 +343,21 @@ function TickerRow({
     return () => observer.disconnect()
   }, [measure])
 
+  /**
+   * Records where this row is now as the component's own doing, for the
+   * finger on it, if any. Called after every write to the row's scrollLeft
+   * that can happen while a finger is undecided (a hold, its release, a
+   * focus freeze or reveal, a blur, the list opening), so the scroll event
+   * that write sends is not taken for the browser scrolling under the
+   * finger. Read back, not computed: the browser snaps what was written to
+   * its own pixels, and a scroll event reports the snapped value.
+   */
+  const noteOwnScroll = useCallback(() => {
+    const viewport = viewportRef.current
+    const touch = touchRef.current
+    if (viewport && touch) touch.ownScrollLeft = viewport.scrollLeft
+  }, [])
+
   const handleFocus = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
       const viewport = viewportRef.current
@@ -368,6 +383,7 @@ function TickerRow({
       ) {
         return
       }
+      noteOwnScroll()
 
       // A pointer press focuses the pill before the click completes. Moving
       // the row now would take the pill out from under the cursor and the
@@ -389,8 +405,9 @@ function TickerRow({
         fade: fadeWidth(viewport),
         maxScrollLeft: maxScrollLeftOf(viewport),
       })
+      noteOwnScroll()
     },
-    [sharedScroll]
+    [sharedScroll, noteOwnScroll]
   )
 
   const handleBlur = useCallback(
@@ -408,8 +425,9 @@ function TickerRow({
       thawRow(track, viewport, copyWidthRef.current)
       // Any width the row grew while it was held still is taken now.
       measure()
+      noteOwnScroll()
     },
-    [measure]
+    [measure, noteOwnScroll]
   )
 
   /**
@@ -431,7 +449,8 @@ function TickerRow({
       return
     }
     viewport.dataset.touchHeld = 'true'
-  }, [])
+    noteOwnScroll()
+  }, [noteOwnScroll])
 
   /**
    * The finger let go of the row without handing it over: a tap, or the
@@ -448,7 +467,8 @@ function TickerRow({
     if (viewport.contains(document.activeElement)) return
     thawRow(track, viewport, copyWidthRef.current)
     measure()
-  }, [measure])
+    noteOwnScroll()
+  }, [measure, noteOwnScroll])
 
   /**
    * Stops this row for good and gives it to the visitor as a scroll strip.
@@ -496,8 +516,15 @@ function TickerRow({
       handOverThisRow,
       holdForTouch,
       releaseTouchHold,
+      noteOwnScroll,
     })
-  }, [sharedScroll, handOverThisRow, holdForTouch, releaseTouchHold])
+  }, [
+    sharedScroll,
+    handOverThisRow,
+    holdForTouch,
+    releaseTouchHold,
+    noteOwnScroll,
+  ])
 
   // Lets go of the rows this row's touch was holding, once.
   const endHold = useCallback(
@@ -519,16 +546,17 @@ function TickerRow({
   // read by hand, so it is handed over. Once the rule has called the touch
   // the page's, it stays the page's (Matt, 2026-09-28, MTC-79).
   //
-  // The hold's own write to scrollLeft sends a scroll event as well: within
-  // a frame in Chromium, and as much as a second later in headless WebKit,
-  // after later touch events or the lift. So the event alone says nothing
-  // about the finger; where the row is does. A row still at the position
-  // the hold left it has not been scrolled by anyone, whichever write the
-  // event was sent for, and a scroll the browser makes has moved the row
-  // off that position by the time its event runs. A flag that skipped the
-  // next event could not tell them apart: an engine sends one event for a
-  // write and a drag in the same frame, and none for a write that changes
-  // nothing, which would leave the flag to swallow the drag's.
+  // The component's own writes to scrollLeft send scroll events as well,
+  // the hold's at touchstart above all: within a frame in Chromium, and as
+  // much as a second later in headless WebKit, after later touch events or
+  // the lift. So the event alone says nothing about the finger; where the
+  // row is does. A row still where the component last put it has not been
+  // scrolled by the browser, whichever write the event was sent for, and a
+  // scroll the browser makes has moved the row off that position by the
+  // time its event runs. A flag that skipped the next event could not tell
+  // them apart: an engine sends one event for a write and a drag in the
+  // same frame, and none for a write that changes nothing, which would
+  // leave the flag to swallow the drag's.
   const handleScroll = useCallback(() => {
     const viewport = viewportRef.current
     if (!viewport) return
@@ -536,7 +564,7 @@ function TickerRow({
     if (
       touch?.direction === 'undecided' &&
       !isHandedOver(viewport) &&
-      viewport.scrollLeft !== touch.heldScrollLeft
+      viewport.scrollLeft !== touch.ownScrollLeft
     ) {
       touch.direction = 'sideways'
       sharedScroll.handOverAll()
@@ -571,9 +599,8 @@ function TickerRow({
         y: touch.clientY,
         direction: 'undecided',
         holding: true,
-        // Read back, not computed: the browser snaps what the hold wrote to
-        // its own pixels, and a scroll event reports the snapped value.
-        heldScrollLeft: viewport.scrollLeft,
+        // Read back after the hold, as noteOwnScroll reads it.
+        ownScrollLeft: viewport.scrollLeft,
       }
     },
     [sharedScroll, endHold]
@@ -862,10 +889,11 @@ interface RowTouch {
   /** Whether this touch still holds the rows still. */
   holding: boolean
   /**
-   * The row's scrollLeft once the hold has stopped it. A row found still
-   * there has not been scrolled under this finger.
+   * The row's scrollLeft where the component last put it during this
+   * touch, the hold's write first. A row found still there has not been
+   * scrolled under this finger.
    */
-  heldScrollLeft: number
+  ownScrollLeft: number
 }
 
 /** Whether a finger is holding this row still until it shows its direction. */
@@ -938,6 +966,8 @@ interface SharedRow {
   holdForTouch: () => void
   /** Lets go of that hold without handing the row over. */
   releaseTouchHold: () => void
+  /** Records a write made to the row's scrollLeft as not the browser's. */
+  noteOwnScroll: () => void
 }
 
 /**
@@ -1189,6 +1219,10 @@ function createSharedScroll(): SharedScroll {
       // the pair back a few pixels apart.
       const shared = members.keys().next().value?.scrollLeft
       const unparks = [...rows].map(row => parkRow(row, shared))
+      // A row held for focus has just been thawed, and a finger resting on
+      // it did not move it. Putting the rows back writes only to strips no
+      // finger can hand over: a handed-over pair, or static strips.
+      for (const row of rows) row.noteOwnScroll()
       return () => {
         for (const unpark of unparks) unpark()
       }
