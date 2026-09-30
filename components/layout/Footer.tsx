@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Github, Linkedin, Mail } from 'lucide-react'
+import { Github, Linkedin, Mail, Rss } from 'lucide-react'
 import { CopyrightYear } from './copyright-year'
 
 export default function Footer() {
@@ -44,6 +44,16 @@ export default function Footer() {
             >
               <Mail className="h-4 w-4" />
             </Link>
+            {/* A plain anchor: the feed is a route handler, not a page, so
+                there is nothing for Link to prefetch or navigate to. */}
+            <a
+              href="/feed.xml"
+              type="application/rss+xml"
+              className="hover:text-foreground transition-colors"
+              aria-label="RSS"
+            >
+              <Rss className="h-4 w-4" />
+            </a>
           </nav>
         </div>
       </div>
