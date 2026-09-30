@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generateBlogPostingSchema } from '@/lib/seo/jsonld'
 import { formatDate } from '@/lib/format-date'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
@@ -28,11 +29,9 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
   return {
     title: cleanTitle,
     description: post.frontmatter.description || post.excerpt,
-    // A page's alternates replace the layout's whole object, so the feed
-    // link is repeated here for readers pointed at a post.
     alternates: {
       canonical: `https://matttrifilo.com/blog/${slug}`,
-      types: { 'application/rss+xml': '/feed.xml' },
+      types: FEED_ALTERNATE_TYPES,
     },
     openGraph: {
       title: cleanTitle,

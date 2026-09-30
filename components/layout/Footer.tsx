@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Github, Linkedin, Mail, Rss } from 'lucide-react'
+import { FEED_PATH } from '@/lib/seo/feed'
 import { CopyrightYear } from './copyright-year'
 
 export default function Footer() {
@@ -47,7 +48,7 @@ export default function Footer() {
             {/* A plain anchor: the feed is a route handler, not a page, so
                 there is nothing for Link to prefetch or navigate to. */}
             <a
-              href="/feed.xml"
+              href={FEED_PATH}
               type="application/rss+xml"
               className="hover:text-foreground transition-colors"
               aria-label="RSS"

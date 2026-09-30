@@ -1,12 +1,15 @@
 import { describe, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import type { Metadata } from 'next'
 import { Window } from 'happy-dom'
 import { dynamic, GET } from '@/app/feed.xml/route'
 import sitemap from '@/app/sitemap'
 import robots from '@/app/robots'
 import { getAllBlogPosts } from '@/lib/blog'
+import { FEED_PATH } from './feed'
 import {
   escapeXml,
-  FEED_PATH,
   postUrl,
   renderPostHtml,
   renderRssFeed,
@@ -45,19 +48,35 @@ const item = (overrides: Partial<FeedItem> = {}): FeedItem => ({
 })
 
 describe('rfc822Date', () => {
-  test('is noon UTC on the written date, whatever the process time zone', () => {
-    // CI runs this file with TZ=America/Phoenix as well as without.
+  test('is noon UTC on the written date', () => {
     expect(rfc822Date('2026-03-01')).toBe('Sun, 01 Mar 2026 12:00:00 GMT')
     expect(rfc822Date('2025-12-31')).toBe('Wed, 31 Dec 2025 12:00:00 GMT')
   })
 
-  test('shows the written date to a reader in the Americas, Europe and Asia', () => {
+  test('is the same whatever time zone the build runs in', () => {
+    // CI runs the suite under TZ=America/Phoenix only, and Bun does not
+    // reliably apply a TZ changed mid-process, so each zone gets its own
+    // process.
+    const script = `import { rfc822Date } from './lib/seo/rss-feed'; console.log(rfc822Date('2026-03-01'))`
+    for (const TZ of ['UTC', 'America/Phoenix', 'Pacific/Kiritimati']) {
+      const run = Bun.spawnSync([process.execPath, '-e', script], {
+        cwd: join(import.meta.dir, '..', '..'),
+        env: { ...process.env, TZ },
+      })
+      expect(`${TZ}: ${run.stdout.toString().trim()}`).toBe(
+        `${TZ}: Sun, 01 Mar 2026 12:00:00 GMT`
+      )
+    }
+  })
+
+  test('shows the written date to a reader from Hawaii to Tokyo', () => {
     const instant = new Date(rfc822Date('2026-03-01'))
     for (const timeZone of [
       'Pacific/Honolulu',
       'America/Phoenix',
       'America/Chicago',
       'UTC',
+      'Europe/Berlin',
       'Asia/Tokyo',
     ]) {
       const shown = instant.toLocaleDateString('en-US', {
@@ -199,5 +218,66 @@ describe('GET /feed.xml', () => {
   test('is not offered in the sitemap or robots', () => {
     expect(sitemap().some(entry => entry.url.endsWith(FEED_PATH))).toBe(false)
     expect(JSON.stringify(robots())).not.toContain(FEED_PATH)
+  })
+})
+
+/**
+ * The page modules under app/, each with the metadata Next would resolve
+ * for it: the static `metadata` export, or `generateMetadata` called with
+ * the first static params of a dynamic route.
+ */
+async function pageMetadata(): Promise<{ page: string; metadata: Metadata }[]> {
+  const root = join(import.meta.dir, '..', '..')
+  const pages = readdirSync(join(root, 'app'), { recursive: true })
+    .map(String)
+    .filter(file => /(^|\/)page\.tsx$/.test(file))
+    .sort()
+  const resolved: { page: string; metadata: Metadata }[] = []
+  for (const file of pages) {
+    const page = relative(root, join(root, 'app', file))
+    const mod = await import(join(root, page))
+    if (mod.metadata) resolved.push({ page, metadata: mod.metadata })
+    if (!mod.generateMetadata) continue
+    const [params = {}] = mod.generateStaticParams
+      ? await mod.generateStaticParams()
+      : []
+    try {
+      const metadata = await mod.generateMetadata({
+        params: Promise.resolve(params),
+      })
+      resolved.push({ page, metadata })
+    } catch (error) {
+      // A page behind the assistant's kill switch 404s instead; the
+      // not-found metadata is the layout's, which carries the feed.
+      if (!String((error as { digest?: string }).digest).includes('404'))
+        throw error
+    }
+  }
+  return resolved
+}
+
+describe('feed autodiscovery', () => {
+  test('the root layout advertises the feed', () => {
+    // The layout imports next/font, which Bun cannot load, so its source is
+    // read instead of its module.
+    const layout = readFileSync(
+      join(import.meta.dir, '..', '..', 'app', 'layout.tsx'),
+      'utf8'
+    )
+    expect(layout).toContain(`'application/rss+xml': '${FEED_PATH}'`)
+  })
+
+  test('every page that sets its own alternates keeps the feed in them', async () => {
+    // A page's alternates replace the layout's whole object in Next.
+    const pages = await pageMetadata()
+    expect(pages.some(p => p.page === 'app/blog/[slug]/page.tsx')).toBe(true)
+    for (const { page, metadata } of pages) {
+      if (!metadata.alternates) continue
+      const types = metadata.alternates.types as
+        Record<string, unknown> | undefined
+      expect(`${page}: ${types?.['application/rss+xml']}`).toBe(
+        `${page}: ${FEED_PATH}`
+      )
+    }
   })
 })

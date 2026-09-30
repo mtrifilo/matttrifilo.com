@@ -3,11 +3,12 @@ import { Star } from 'lucide-react'
 import { openSourceRepos } from '@/content/open-source'
 import { formatMonthYear } from '@/lib/format-date'
 import { getOpenSourceProjects } from '@/lib/github'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 export const metadata: Metadata = {
   title: 'Open Source',
   description: 'Open source projects by Matt Trifilo on GitHub.',
-  alternates: { canonical: '/open-source' },
+  alternates: { canonical: '/open-source', types: FEED_ALTERNATE_TYPES },
 }
 
 export default async function OpenSourcePage() {

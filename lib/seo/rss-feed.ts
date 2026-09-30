@@ -2,11 +2,9 @@ import { compile } from '@mdx-js/mdx'
 import { toHtml } from 'hast-util-to-html'
 import type { Element, Root, RootContent } from 'hast'
 import { getAllBlogPosts, getBlogPost } from '@/lib/blog'
+import { FEED_PATH } from './feed'
 
 const SITE_URL = 'https://matttrifilo.com'
-
-/** Where the feed is served; app/feed.xml/route.ts is the route. */
-export const FEED_PATH = '/feed.xml'
 
 // The site's own name (openGraph siteName in app/layout.tsx) and the blog
 // index's description (app/blog/page.tsx), so a reader names the feed the

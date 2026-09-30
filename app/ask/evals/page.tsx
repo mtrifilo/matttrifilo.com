@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { ASSISTANT_EVALS_TITLE } from '@/components/assistant/copy'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { evalHistory } from '@/lib/evals/results'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 import { History, LatestRun } from './run-report'
 
 /**
@@ -50,7 +51,7 @@ export function generateMetadata(): Metadata {
     title: ASSISTANT_EVALS_TITLE,
     description:
       "Published results from the suites that check Matt's Career Assistant for accuracy, refusals, injection resistance and groundedness before a change ships.",
-    alternates: { canonical: '/ask/evals' },
+    alternates: { canonical: '/ask/evals', types: FEED_ALTERNATE_TYPES },
   }
 }
 
