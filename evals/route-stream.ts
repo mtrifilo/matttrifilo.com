@@ -16,10 +16,12 @@ import {
  * be tested without Vertex.
  *
  * Only the public shape of the stream is read: `text-delta` chunks, the
- * `finish` chunk and its message metadata, an `error` chunk, and the
- * progress part, which is how the provider tells a completed read from a
- * refused one (evals/read-ledger.ts). Chunk types this module does not know
- * about are ignored, so a new part on the stream cannot break the suites.
+ * `start-step` and `reset-step` chunks that decide which of them the
+ * browser keeps, the `finish` chunk and its message metadata, an `error`
+ * chunk, and the progress part, which is how the provider tells a completed
+ * read from a refused one (evals/read-ledger.ts). Chunk types this module
+ * does not know about are ignored, so a new part on the stream cannot break
+ * the suites.
  */
 
 /**
@@ -34,10 +36,15 @@ export type StreamedMetadata = ChatMessageMetadata
 
 export interface StreamedAnswer {
   /**
-   * Every `text-delta` concatenated, trailer included. The browser strips the
-   * `Sources:` line; the suites need it, so nothing is stripped here.
+   * The text the browser keeps, trailer included: every `text-delta` joined,
+   * less the steps a `reset-step` withdrew (MTC-101). A withdrawn step's text
+   * was narration the route took back, so a suite never grades it as the
+   * answer. The browser strips the `Sources:` line; the suites need it, so
+   * nothing is stripped here.
    */
   text: string
+  /** How many `reset-step` chunks withdrew text the browser had been shown. */
+  retractions: number
   /** The `finish` chunk's reason, when it carried one. */
   finishReason?: string
   /**
@@ -64,11 +71,17 @@ const DONE = '[DONE]'
  * did produce, not as a crash that takes the other tests down with it.
  */
 export function parseUiMessageStream(body: string): StreamedAnswer {
-  const answer: StreamedAnswer = { text: '', metadata: {} }
+  const answer: StreamedAnswer = { text: '', retractions: 0, metadata: {} }
   // The route rewrites one part in place, so the last one is the run's final
   // account. An earlier part is never a fallback: it can list a read that a
   // refusal later withdrew.
   let lastProgress: { type: string; data: unknown } | undefined
+  // The browser keeps text per step: a `reset-step` removes everything the
+  // current step added (the SDK's `useChat` does this), so the current
+  // step's text is held apart until the next step begins.
+  let stepText = ''
+  let step = 0
+  let progressFirstInStep: number | undefined
 
   for (const rawLine of body.split('\n')) {
     const line = rawLine.trim()
@@ -79,8 +92,22 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
     const chunk = parseJson(payload)
     if (!chunk) continue
 
+    if (chunk.type === 'start-step') {
+      answer.text += stepText
+      stepText = ''
+      step += 1
+    }
+    if (chunk.type === 'reset-step') {
+      if (stepText !== '') answer.retractions += 1
+      stepText = ''
+      // The browser drops a data part the step added, too.
+      if (progressFirstInStep === step) {
+        lastProgress = undefined
+        progressFirstInStep = undefined
+      }
+    }
     if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-      answer.text += chunk.delta
+      stepText += chunk.delta
     }
     if (chunk.type === 'error' && typeof chunk.errorText === 'string') {
       answer.errorText = chunk.errorText
@@ -92,9 +119,11 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
       Object.assign(answer.metadata, chunk.messageMetadata)
     }
     if (chunk.type === PROGRESS_PART_TYPE) {
+      if (lastProgress === undefined) progressFirstInStep = step
       lastProgress = { type: PROGRESS_PART_TYPE, data: chunk.data }
     }
   }
+  answer.text += stepText
 
   const progress = lastProgress ? toProgressView([lastProgress]) : undefined
   if (progress) answer.progress = progress

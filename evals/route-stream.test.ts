@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { stripTrailers } from '@/lib/chat/answer'
+import { readUIMessageStream, type UIMessage, type UIMessageChunk } from 'ai'
+import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
+import { joinTextParts, stripTrailers } from '@/lib/chat/answer'
+import { createChatHandler } from '@/lib/chat/handler'
+import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
+import type { KnowledgeDocument } from '@/lib/knowledge'
+import { chatRequest } from './route-request'
 import {
   answerProse,
   hasNothingToGrade,
@@ -76,7 +82,182 @@ describe('parseUiMessageStream', () => {
   })
 
   test('an empty body is an empty answer, not a throw', () => {
-    expect(parseUiMessageStream('')).toEqual({ text: '', metadata: {} })
+    expect(parseUiMessageStream('')).toEqual({
+      text: '',
+      retractions: 0,
+      metadata: {},
+    })
+  })
+})
+
+describe('parseUiMessageStream, on a withdrawal (MTC-101)', () => {
+  const step = (...deltas: string[]) => [
+    { type: 'start-step' },
+    { type: 'text-start', id: 't' },
+    ...deltas.map(delta => ({ type: 'text-delta', id: 't', delta })),
+  ]
+
+  test('a reset takes back the text of its own step and no other', () => {
+    const answer = parseUiMessageStream(
+      sse([
+        ...step('Kept from the first step. '),
+        { type: 'text-end', id: 't' },
+        ...step('Let me check ', 'his résumé.'),
+        { type: 'reset-step' },
+        ...step('He led the migration.'),
+        { type: 'text-end', id: 't' },
+      ])
+    )
+
+    expect(answer.text).toBe('Kept from the first step. He led the migration.')
+    expect(answer.retractions).toBe(1)
+  })
+
+  test('a reset of a step that showed nothing counts no withdrawal', () => {
+    const answer = parseUiMessageStream(
+      sse([{ type: 'start-step' }, { type: 'reset-step' }, ...step('ok')])
+    )
+
+    expect(answer.text).toBe('ok')
+    expect(answer.retractions).toBe(0)
+  })
+
+  test('a progress part first sent in the withdrawn step goes with it', () => {
+    // The route never sends one before a reset in the same step; the
+    // browser would drop it, so the parser reads the stream the same way.
+    const part = {
+      type: 'data-progress',
+      id: 'progress',
+      data: { phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] },
+    }
+    expect(
+      parseUiMessageStream(
+        sse([{ type: 'start-step' }, part, { type: 'reset-step' }])
+      ).progress
+    ).toBeUndefined()
+    expect(
+      parseUiMessageStream(
+        sse([
+          { type: 'start-step' },
+          part,
+          { type: 'start-step' },
+          { type: 'reset-step' },
+        ])
+      ).progress
+    ).toEqual({ phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] })
+  })
+
+  test('against the route: narration a call withdrew is not the answer', async () => {
+    // The real handler over a model that narrates, reads, then answers. The
+    // parser's text has to be the text the SDK's own reader leaves in the
+    // browser, which is the answer alone.
+    const answerText = 'He led the migration.\n\nSources: resume'
+    const narration = 'Let me check his résumé first.'
+    const usage = {
+      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 1, text: 1, reasoning: 0 },
+    }
+    const finish = (unified: string) => ({
+      type: 'finish',
+      finishReason: { unified, raw: 'STOP' },
+      usage,
+    })
+    const calls = [
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'n' },
+        { type: 'text-delta', id: 'n', delta: narration },
+        { type: 'text-end', id: 'n' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: READ_DOCUMENT_TOOL_NAME,
+          input: JSON.stringify({ id: 'resume' }),
+        },
+        finish('tool-calls'),
+      ],
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'a' },
+        { type: 'text-delta', id: 'a', delta: answerText },
+        { type: 'text-end', id: 'a' },
+        finish('stop'),
+      ],
+    ]
+    let call = 0
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: calls[Math.min(call++, calls.length - 1)] as never[],
+          chunkDelayInMs: null,
+          initialDelayInMs: null,
+        }),
+      }),
+    })
+    const resume: KnowledgeDocument = {
+      id: 'resume',
+      title: 'Résumé',
+      summary: 'Where Matt has worked.',
+      tags: [],
+      topic: 'resume',
+      source: 'resume',
+      tokenEstimate: 10,
+      text: 'Matt led the migration.',
+      updated: '2026-09-01',
+    }
+    const { text: _text, updated: _updated, ...entry } = resume
+    void _text
+    void _updated
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => ({
+        entries: [entry],
+        text: '[resume] Résumé',
+        tokenEstimate: 10,
+        builtAt: '2026-09-29T00:00:00.000Z',
+      }),
+      readKnowledgeDocument: id => (id === 'resume' ? resume : undefined),
+      model: () => model,
+      verifyVisitor: async () => ({
+        isBot: false,
+        isVerifiedBot: false,
+        bypassed: true,
+      }),
+      env: {},
+      now: () => 0,
+    })
+
+    const info = console.info
+    console.info = () => {}
+    let body: string
+    try {
+      body = await (
+        await handler(chatRequest('What did Matt build?', []))
+      ).text()
+    } finally {
+      console.info = info
+    }
+
+    const answer = parseUiMessageStream(body)
+    expect(body).toContain(narration)
+    expect(answer.text).toBe(answerText)
+    expect(answer.retractions).toBe(1)
+
+    const chunks = body
+      .split('\n')
+      .filter(line => line.startsWith('data: ') && !line.includes('[DONE]'))
+      .map(line => JSON.parse(line.slice('data: '.length)) as UIMessageChunk)
+    let browser: UIMessage | undefined
+    for await (const message of readUIMessageStream({
+      stream: new ReadableStream<UIMessageChunk>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk)
+          controller.close()
+        },
+      }),
+    })) {
+      browser = message
+    }
+    expect(joinTextParts(browser?.parts ?? [])).toBe(answer.text)
   })
 })
 
