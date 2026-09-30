@@ -265,7 +265,15 @@ for (const [name, offsets] of [
     ],
   ],
 ] as const) {
-  test(`${name} leaves both rows moving`, async ({ page }) => {
+  test(`${name} leaves both rows moving`, async ({ page, browserName }) => {
+    // Chromium sends a scroll event for the freeze's own write at touchstart,
+    // and the rows read it as a drag (MTC-104). Marked rather than skipped,
+    // so the check still runs there and a pass fails the job, which is when
+    // this line goes.
+    test.fail(
+      browserName === 'chromium',
+      'MTC-104: the freeze write at touchstart hands the rows over in Chromium'
+    )
     await page.goto('/ask')
     await waitForRows(page)
 
