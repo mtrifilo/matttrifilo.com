@@ -28,10 +28,10 @@ export function PostListItem({
   headingLevel: HeadingLevel
   /** Position in the list, which staggers the entrance animation. */
   index: number
-  /** The list's own spacing between rows, which differs by surface. */
+  /** Row classes that differ by surface: spacing, the last row's rule. */
   className?: string
 }) {
-  const Heading = headingLevel === 2 ? 'h2' : 'h3'
+  const Heading = `h${headingLevel}` as const
 
   return (
     <article

@@ -104,11 +104,11 @@ describe('app/globals.css through the build optimiser', () => {
 })
 
 /**
- * The fluid heading sizes stand in for inline font-size styles, which no
- * class could outrank, so each has to emit its exact clamp and font-size
- * alone: a line height here would change the leading of every heading that
- * uses it. Compiled through Tailwind itself, so a name another utility
- * claims, or a value `@utility` rewrites, fails here rather than on a page.
+ * Each fluid heading size is one clamp that every heading of its kind
+ * shares, so it has to emit exactly that clamp and font-size alone: a line
+ * height here would change the leading of every heading that uses it.
+ * Compiled through Tailwind itself, so a name another utility claims, or a
+ * value `@utility` rewrites, fails here rather than on a page.
  */
 describe('the fluid heading utilities', () => {
   const compiled = compile(css, {

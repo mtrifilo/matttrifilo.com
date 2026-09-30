@@ -39,6 +39,8 @@ export default function Nav({
   }, [])
 
   return (
+    // --nav-height in app/globals.css is this bar's height (py-3, the 36px
+    // controls, the unscrolled border); change them together.
     <nav
       data-scrolled={scrolled}
       className={cn(
