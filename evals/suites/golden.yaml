@@ -193,13 +193,13 @@
         - type: llm-rubric
           value: *r5
 
-# Reads any of: team-throughput-study-2025-2026 or faq; both give open customer-reported defects falling from 28 to 12 as output rose.
+# Reads any of: team-throughput-study-2025-2026, faq or resume; each gives open customer-reported defects falling from 28 to 12 as output rose (the résumé: "the open customer-defect backlog from 28 to 12" beside merged PRs per week rising 2.9x).
 - description: 'golden: quality while throughput rose'
   vars:
     question: Did quality hold up while the team shipped more?
   metadata:
     suite: golden
-    expectReadsAny: [team-throughput-study-2025-2026, faq]
+    expectReadsAny: [team-throughput-study-2025-2026, faq, resume]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -324,8 +324,10 @@
       assert:
         - type: llm-rubric
           value: &r9 >-
-            The answer says Matt joined in July 2017 and has been there since,
-            about nine years, through the company's acquisition by Thryv.
+            The answer says how long Matt has been at the company, either as
+            since July 2017 (a date range from July 2017 to the present
+            counts) or as about nine years; either one is enough. It says he
+            stayed through the company's acquisition by Thryv.
         - type: llm-rubric
           value: *r9
         - type: llm-rubric
@@ -700,9 +702,18 @@
         - type: llm-rubric
           value: *r20
 
+# A follow-up: the subject lives only in the prior turn, which travels as
+# history the way a browser sends it, so the run has to carry "that
+# migration" over to post-acquisition-integration (Matt, 2026-09-28, MTC-91).
+# Reads: post-acquisition-integration only; it alone states the slipped cutover window.
 - description: 'golden: whether the migration went to plan'
   vars:
     question: Did that migration go to plan?
+    history:
+      - role: user
+        text: What did the compliance case-system migration involve?
+      - role: assistant
+        text: After the acquisition, Matt owned moving the compliance case system's case handling to the parent company's Salesforce organization. He built a per-target configuration toggle, implemented OAuth client-credentials authentication, and authored the field-parity analysis.
   metadata:
     suite: golden
     expectReads: [post-acquisition-integration]
@@ -2879,13 +2890,15 @@
       assert:
         - type: llm-rubric
           value: &r68 >-
-            The answer says yes and gives the documented case: Matt forecast
-            2026 sending volume for the annual mail transfer
-            agent license renewal, which the vendor had quoted at plus 48
-            percent, matched the vendor's own reporting within about one
+            The answer gives Matt's documented role in the annual mail
+            transfer agent license renewal: he forecast 2026 sending volume
+            for the renewal, which the vendor had quoted at plus 48 percent,
+            the forecast matched the vendor's own reporting within about one
             percent, and the renewal closed at the recommended tier, roughly
-            flat year over
-            year. It may add that he grants API-key access to developers
+            flat year over year. It need not answer with a literal yes: an
+            answer that describes this role and declines to claim ownership of
+            a negotiation or a budget the documents do not state is correct.
+            It may add that he grants API-key access to developers
             building new automations and manages the budget for them, but it
             fails if, in its own voice, it says he owns or oversees his
             organization's AI tooling access or grants Claude Code or Claude
@@ -3010,22 +3023,26 @@
 # technical leads, and the per-team rollout path were built before the
 # broadcast, rather than after."; engineering-philosophy: "distribution
 # needs governance and tech-lead alignment before the broadcast, or it
-# becomes a dumping ground."
+# becomes a dumping ground." The rubric asks for the "dumping ground"
+# lesson plus at least two of the four instances (Matt, 2026-09-28,
+# MTC-91). The lesson in those words is in engineering-philosophy alone and
+# the instances are in the marketplaces document alone, so the run must read
+# both.
+# Reads: plugin-marketplaces-and-sme-knowledge-bases and engineering-philosophy, both; neither holds the lesson and two instances on its own.
 - description: 'golden: aligning other teams before shipping a shared thing'
   vars:
     question: How does Matt get buy-in from other teams before rolling something out?
   metadata:
     suite: golden
-    expectReadsAny:
-      - plugin-marketplaces-and-sme-knowledge-bases
-      - engineering-philosophy
+    expectReads:
+      [plugin-marketplaces-and-sme-knowledge-bases, engineering-philosophy]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
     - type: javascript
       value: file://assertions.ts:assertNoNarration
     - type: javascript
-      value: file://assertions.ts:assertReadsAnyOf
+      value: file://assertions.ts:assertReadsExpected
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
     - type: icontains-any
@@ -3039,14 +3056,15 @@
         - type: llm-rubric
           value: &r71 >-
             The answer rests on the documented lesson that distribution needs
-            governance and technical-lead alignment before the broadcast or it
-            becomes a dumping ground, and names at least one concrete
-            instance: the governance proposal written before version one, the
-            demo to the developer-experience leads the week before, the
-            audience test adopted from review feedback that removed two
+            governance and technical-lead alignment before the broadcast, or
+            it becomes a dumping ground, and names at least two of these four
+            concrete instances: the governance proposal written before version
+            one, the demo to the developer-experience leads the week before,
+            the audience test adopted from review feedback that removed two
             entries, or the per-team rollout path built ahead of the
-            announcement. It is written about Matt in the third person, and it
-            must not present an inferred characterization as a documented one.
+            announcement. One instance is not enough. It is written about Matt
+            in the third person, and it must not present an inferred
+            characterization as a documented one.
         - type: llm-rubric
           value: *r71
         - type: llm-rubric
@@ -3950,9 +3968,8 @@
           value: &k51 >-
             The answer names the Accelerator award in March 2026 and the 2025
             Emerging Leaders program, with at least one documented detail
-            about either. It repeats the document's own framing that the
-            award is corroboration rather than a performance rating, and it
-            does not describe any other person's performance.
+            about either, and it does not describe any other person's
+            performance.
         - type: llm-rubric
           value: *k51
         - type: llm-rubric

@@ -1,9 +1,9 @@
 ---
 id: plugin-marketplaces-and-sme-knowledge-bases
 title: Claude Code plugin marketplaces, governance, and per-service knowledge bases
-summary: How Matt turned an ad hoc skills library into governed plugin distribution, then gave every service a knowledge base agents load.
+summary: Plugin marketplaces: Matt's governance proposal, demo to developer-experience leads, audience test, per-team rollout, on-call plugin, service knowledge bases.
 tags: [claude-code, plugins, governance, architecture, knowledge-base, developer-experience]
-updated: 2026-09-15
+updated: 2026-09-29
 ---
 
 # Claude Code plugin marketplaces, governance, and per-service knowledge bases
