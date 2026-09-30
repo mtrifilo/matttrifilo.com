@@ -1,36 +1,134 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# matttrifilo.com
 
-## Getting Started
+The source of [matttrifilo.com](https://matttrifilo.com), Matt Trifilo's personal site: a blog, his résumé, a curated list of open-source projects, recommended books, a contact page, and Matt's Career Assistant, an AI assistant that answers questions about his published work.
 
-First, run the development server:
+The repository is public, so a push publishes. That includes this file.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Contributor and agent rules are in [`CLAUDE.md`](CLAUDE.md). Anything about the Career Assistant is covered by [`.claude/skills/career-assistant-context/SKILL.md`](.claude/skills/career-assistant-context/SKILL.md) and the runbook, [`docs/career-assistant-operations.md`](docs/career-assistant-operations.md). This README points at them rather than repeating them.
+
+## Stack
+
+- Next.js 16 (app router), React 19, TypeScript
+- Tailwind CSS 4, with shadcn/ui components on Radix (`components.json`)
+- Bun for installs, scripts and tests (CI pins Bun 1.3.3)
+- Vercel for hosting, deploys and analytics
+- The Career Assistant: the AI SDK (`ai`) with Gemini on Google Vertex AI (`@ai-sdk/google-vertex`); its eval suites run on promptfoo
+
+## Run it locally
+
+```sh
+bun install
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`bun run dev` starts the Next.js development server. Agents working in this repository do not run `dev`, `build` or `start`; see `CLAUDE.md`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Before a push, run the same checks CI runs:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```sh
+bun run typecheck
+bun run lint
+bun test
+TZ=America/Phoenix bun test
+```
 
-## Learn More
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, `bun test` with `TZ=America/Phoenix` (so a date that shifts outside UTC fails; see `lib/format-date.ts`) and `bun run build` on every pull request and every push to `main`. A second workflow, `.github/workflows/accessibility.yml`, builds the site with the assistant on and runs axe-core and Lighthouse against it.
 
-To learn more about Next.js, take a look at the following resources:
+After any change under `content/knowledge` or `lib/knowledge`, also run `bun run knowledge:check`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Write a blog post
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```sh
+bun run scripts/new-blog-post.ts
+```
 
-## Deploy on Vercel
+It asks for a title, optional comma-separated categories and an optional description, then writes two files with the same body:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `content/blog/<date>-<slug>.md`, the post. The file name is the URL: `/blog/<date>-<slug>`.
+- `content/knowledge/blog/<date>-<slug>.md`, its knowledge twin, which the Career Assistant reads. `bun test` fails when a post has no twin or when the two bodies differ, so edit both.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`<date>` is today's date in UTC (the script uses `toISOString`), so in the evening in US time zones it can already be tomorrow's.
+
+### The post's frontmatter
+
+Read by `lib/blog.ts`; the type is `lib/types/blog.ts`.
+
+| Field         | Rule                                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `title`       | Required by the script.                                                                                   |
+| `date`        | A plain `YYYY-MM-DD` that is a real calendar date, with no time or offset; anything else fails the build. |
+| `categories`  | Optional list.                                                                                            |
+| `description` | Optional.                                                                                                 |
+
+### The twin's frontmatter
+
+Read by `lib/knowledge/build.ts`, which accepts these keys and no others.
+
+| Field       | Rule                                                                                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`        | Required; must match the file name.                                                                                                                                                                           |
+| `title`     | Required.                                                                                                                                                                                                     |
+| `summary`   | Required; at most 160 characters. The script drafts it from the description or the title: rewrite it to say what a reader would learn, since it is what the assistant reads before deciding to open the post. |
+| `tags`      | Required, an inline list such as `[blog, engineering]`. The script writes `blog` plus the categories.                                                                                                         |
+| `updated`   | Required, `YYYY-MM-DD`.                                                                                                                                                                                       |
+| `canonical` | Optional; must be an `https://matttrifilo.com` URL. The script points it at the post.                                                                                                                         |
+
+A title or summary must be one line, with no em dash, no en dash used as a sentence dash (a range such as "2019 – 2025" is fine) and no middle dot (`·`) or look-alike. The script refuses these at its prompt.
+
+### Headings and body
+
+- The post's title is the page's only `<h1>`. Write `#` for top-level sections: `components/blog/mdx-content.tsx` renders every heading one level down.
+- `##` headings are the section titles the assistant shows while it reads the post. Keep fewer than twelve, each under 120 characters (`lib/progress-caps.ts`), or `bun test` fails.
+- The twin is part of the corpus, so the corpus rules apply to the body: no em dash and no British spelling from the list in `lib/american-english.ts` (`lib/site-copy.test.ts`), and no prose line that starts with `TODO` or contains `TODO (Matt)`.
+- A long post can exceed the corpus's size guards (`KNOWLEDGE_DOCUMENT_TOKEN_CEILING` in `lib/knowledge/build.ts`, and the assistant's read budget). `bun run knowledge:check` prints each document's cost and the headroom left.
+
+Because a post adds a document the assistant can answer from, it is a corpus change: follow [Updating the corpus](#updating-the-corpus) below, including the eval run before the pull request.
+
+## Deploys
+
+Vercel builds from Git with `bun install` and `bun run build` (`vercel.json`). A push to `main` deploys production; a push to any other branch gets a preview deployment, which sits behind Vercel's deployment protection. Environment variables live on the Vercel project and are baked into a deployment when it builds, so a change takes effect on the next deploy.
+
+## The Career Assistant
+
+Matt's Career Assistant lives at `/ask`, with a compact panel on the homepage. It is written for a hiring manager or recruiter deciding whether to talk to Matt about a hands-on engineering-manager role. It answers from a curated corpus in `content/knowledge/`, names the documents it read, and speaks about Matt in the third person, never as Matt. Nothing a visitor writes is stored.
+
+The route is `app/api/chat`; the code is under `lib/chat`, `lib/knowledge` and `components/assistant`; the evals are under `evals`. Read the skill and the runbook before changing any of it.
+
+### Updating the corpus
+
+Documents live at `content/knowledge/<topic>/<id>.md`, with the frontmatter in the twin table above. The runbook's "Updating the knowledge base" section has the rest.
+
+- `bun run knowledge:check` prints the index the model reads and every dropped document, then runs the corpus guards.
+- `scripts/knowledge-denylist-check.sh` checks the corpus against a private denylist kept outside the repository. Without that file it prints one line and exits 0, so its OK is not proof on a machine that lacks it.
+- Career documents follow Matt's verbatim-first rubric: copied from his private drafts, with only sensitive material, employer IP and personal data about other people removed, and never with a verb or scope stronger than the draft's.
+- The repository is public, so a corpus change gets a fresh-context privacy review before any push.
+- An em dash or a listed British spelling in the corpus fails `bun test` (the runbook's "Copy rules").
+
+### Running the evals
+
+Four promptfoo suites (`golden`, `refusals`, `injection`, `groundedness`) run the chat route's own handler in process against Vertex AI. They authenticate with your Application Default Credentials:
+
+```sh
+gcloud auth application-default login
+GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
+GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals
+```
+
+- `GCP_PROJECT_ID` is the project the route calls; `VERTEX_PROJECT_ID` is the one promptfoo's own Vertex grader uses. Both are needed.
+- `evals:smoke` runs a few tests from each suite while you iterate; `bun run evals` is the full run, due before a pull request that changes anything the answers depend on (the list is under "When they run" in the runbook). Paste the table it prints into the pull request.
+- They run locally, never in CI on pull requests. `.github/workflows/evals.yml` runs only when dispatched by hand, and is not a required check.
+- Results go to `evals/out/`, which is not committed. To publish a run, commit the change it covers first, then run `bun run evals:publish`, which writes `evals/results/<date>-<sha>.json` and refuses a run that does not meet its bar; commit that file in the same pull request. `/ask/evals` shows the newest record.
+
+The runbook's "Eval suites" section has the traps (a `.env` from `vercel env pull` changes how the suites authenticate), the cost of a run and how to add a golden.
+
+### The kill switch
+
+`CHAT_DISABLED=1` on a Vercel environment makes `/api/chat` answer 503 and removes the assistant from the site: `/ask` returns 404 and the homepage panel and nav entry go. It takes effect on the next deploy. It was set on Production on 2026-09-15 and stays there until the launch checklist in Linear (MTC-35) is done; `vercel env ls production` is the source of truth. The commands are in the runbook's "Kill switch" section.
+
+### Nothing to rotate
+
+The deployment holds no Google service-account key. It presents its Vercel OIDC token to a Google workload identity pool and gets a short-lived token in exchange (`lib/ai/vertex.ts`). The hand-dispatched eval workflow does the same with GitHub's OIDC token; its one-time setup is the runbook's "GCP and GitHub setup for the evals". Local eval runs use your own Application Default Credentials. The one optional token the site reads is `GITHUB_TOKEN`, used by `lib/github.ts` and `lib/chat/github-activity.ts` to lift GitHub's anonymous rate limit; it is not a Google credential.
+
+## Where the work is tracked
+
+Linear, team MTC, in two projects: "Ask Matt AI chat" for the Career Assistant, and the September 2026 site audit (Site Audit & Foundations) for the rest of the site. Every change has a ticket, and commit subjects and pull request titles carry its ID in parentheses at the end, for example `(MTC-19)`.
