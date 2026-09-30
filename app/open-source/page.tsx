@@ -17,12 +17,7 @@ export default async function OpenSourcePage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
-        <h1
-          className="font-bold mb-8"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
-          Open Source
-        </h1>
+        <h1 className="font-bold mb-8 text-page-title">Open Source</h1>
 
         {projects.length === 0 ? (
           <p className="text-muted-foreground">

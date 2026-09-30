@@ -132,6 +132,24 @@
   }
 }
 
+/*
+ * Fluid heading sizes: each grows with the viewport between a floor and a
+ * ceiling. They set font-size only, unlike Tailwind's text-xl and friends,
+ * which also set a line height; the heading keeps whatever leading its own
+ * classes give it. lib/globals-css.test.ts holds each to its exact clamp.
+ */
+@utility text-display {
+  font-size: clamp(2rem, 5vw + 0.5rem, 3.5rem);
+}
+
+@utility text-page-title {
+  font-size: clamp(1.75rem, 4vw + 0.25rem, 3rem);
+}
+
+@utility text-section-title {
+  font-size: clamp(1.5rem, 3vw + 0.25rem, 2rem);
+}
+
 /* Staggered entrance animation */
 @keyframes fade-in-up {
   from {

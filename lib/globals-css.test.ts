@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { optimize } from '@tailwindcss/node'
+import { fileURLToPath } from 'node:url'
+import { compile, optimize } from '@tailwindcss/node'
 
 /**
  * Guards for rules in app/globals.css that the build's optimiser can silently
@@ -99,5 +100,30 @@ describe('app/globals.css through the build optimiser', () => {
     )
     expect(out).not.toContain(';backdrop-filter')
     expect(out).toContain('-webkit-backdrop-filter:blur(12px)')
+  })
+})
+
+/**
+ * The fluid heading sizes stand in for inline font-size styles, which no
+ * class could outrank, so each has to emit its exact clamp and font-size
+ * alone: a line height here would change the leading of every heading that
+ * uses it. Compiled through Tailwind itself, so a name another utility
+ * claims, or a value `@utility` rewrites, fails here rather than on a page.
+ */
+describe('the fluid heading utilities', () => {
+  const compiled = compile(css, {
+    base: fileURLToPath(new URL('../app', import.meta.url)),
+    onDependency: () => {},
+  })
+
+  test.each([
+    ['text-display', 'clamp(2rem,5vw + .5rem,3.5rem)'],
+    ['text-page-title', 'clamp(1.75rem,4vw + .25rem,3rem)'],
+    ['text-section-title', 'clamp(1.5rem,3vw + .25rem,2rem)'],
+  ])('.%s is font-size %s and nothing else', async (utility, clamp) => {
+    const built = (await compiled).build([utility])
+    const rule = built.match(new RegExp(`\\.${utility} \\{[^}]*\\}`))
+    expect(rule).not.toBeNull()
+    expect(emitted(rule![0])).toBe(`.${utility}{font-size:${clamp}}`)
   })
 })

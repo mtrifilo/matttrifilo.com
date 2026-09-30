@@ -21,12 +21,7 @@ export default function BlogPage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-8 md:px-8">
-        <h1
-          className="font-bold text-center mb-8"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
-          Blog
-        </h1>
+        <h1 className="font-bold text-center mb-8 text-page-title">Blog</h1>
 
         <section className="w-full">
           {posts.map((post, i) => (
@@ -47,7 +42,6 @@ export default function BlogPage() {
               <div className="text-sm text-muted-foreground mt-1">
                 {formatDate(post.date)}
               </div>
-
             </article>
           ))}
 

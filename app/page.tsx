@@ -16,12 +16,7 @@ export default function Home() {
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
         {/* Hero */}
         <section className="mb-16 hero-glow">
-          <h1
-            className="font-bold mb-1"
-            style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
-          >
-            Matt Trifilo
-          </h1>
+          <h1 className="font-bold mb-1 text-display">Matt Trifilo</h1>
           <p className="text-xl text-muted-foreground">{JOB_TITLE}</p>
           <p className="text-base leading-relaxed text-foreground/90 max-w-2xl mt-6">
             {TAGLINE}
@@ -68,10 +63,7 @@ export default function Home() {
         {/* Latest Posts */}
         {recentPosts.length > 0 && (
           <section>
-            <h2
-              className="font-semibold mb-6"
-              style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
-            >
+            <h2 className="font-semibold mb-6 text-section-title">
               Latest Posts
             </h2>
             <div className="space-y-6">
