@@ -3,7 +3,7 @@
 /**
  * Interactive script to scaffold a new blog post.
  *
- * Usage: bun run scripts/new-blog-post.ts
+ * Usage: bun run new-post
  *
  * Writes two files: the post itself, and its twin in
  * content/knowledge/blog so the career assistant can answer from it. The
@@ -69,18 +69,30 @@ export interface PostDraft {
   body?: string
 }
 
+/**
+ * A YAML double-quoted scalar that reads back as exactly `value`.
+ *
+ * JSON's string syntax is a subset of YAML's double-quoted style, so
+ * JSON.stringify escapes quotes, backslashes and control characters the
+ * way the post's YAML parser expects. Only the post file is YAML; the
+ * twin's frontmatter is read by its own parser and quoted by `quoted`.
+ */
+function yamlString(value: string): string {
+  return JSON.stringify(value)
+}
+
 export function buildPostFile(draft: PostDraft): string {
   const categories = draft.categories ?? []
   const categoriesYaml =
     categories.length > 0
-      ? `categories:\n${categories.map(c => `  - ${c}`).join('\n')}\n`
+      ? `categories:\n${categories.map(c => `  - ${yamlString(c)}`).join('\n')}\n`
       : ''
   const descriptionYaml = draft.description
-    ? `description: "${draft.description}"\n`
+    ? `description: ${yamlString(draft.description)}\n`
     : ''
   return `---
-title: "${draft.title}"
-date: "${draft.date}"
+title: ${yamlString(draft.title)}
+date: ${yamlString(draft.date)}
 ${categoriesYaml}${descriptionYaml}---
 
 ${draft.body ?? STARTER_BODY}`

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "knowledge:check": "bun run scripts/knowledge-check.ts",
+    "new-post": "bun run scripts/new-blog-post.ts",
     "evals": "bun run evals/run-and-report.ts full",
     "evals:run": "mkdir -p evals/out && PROMPTFOO_CACHE_ENABLED=false PROMPTFOO_SCHEDULER_QUEUE_TIMEOUT_MS=900000 PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=1 promptfoo eval -c evals/promptfooconfig.yaml --max-concurrency 8 --output evals/out/results.json",
     "evals:report": "bun run evals/summarize.ts evals/out/results.json evals/out/summary.json",

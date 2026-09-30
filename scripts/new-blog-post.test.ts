@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { getBlogPost } from '@/lib/blog'
 import {
   buildKnowledgeCorpus,
   INDEX_TITLE_SEPARATOR,
@@ -47,6 +48,33 @@ describe('new-blog-post scaffold', () => {
     const twin = stripFrontmatter(buildKnowledgeTwin(draft))
     expect(post).toBe(twin)
     expect(post.trim()).toBe(STARTER_BODY.trim())
+  })
+
+  test('the post loads through the site loader with every value as typed', () => {
+    // Quotes, a backslash, a colon and a leading `#` or `-` each broke or
+    // changed the hand-quoted YAML; categories YAML would read as a
+    // boolean, a number or a mapping must stay text.
+    const tricky: PostDraft = {
+      title: 'He said "ship it": a \\ note',
+      date: '2026-09-14',
+      categories: ['yes', '2026', 'a: b', '- x', '#tag'],
+      description: '"Quoted" at the start, # and \' inside, and a trailing \\',
+    }
+    const slug = postSlug(tricky.title, tricky.date)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-post-'))
+    try {
+      fs.writeFileSync(path.join(dir, `${slug}.md`), buildPostFile(tricky))
+      const post = getBlogPost(slug, dir)
+      expect(post?.frontmatter).toEqual({
+        title: tricky.title,
+        date: tricky.date,
+        categories: tricky.categories,
+        description: tricky.description,
+      })
+      expect(post?.content.trim()).toBe(STARTER_BODY.trim())
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test('the twin loads as a blog document under content/knowledge/blog', () => {
