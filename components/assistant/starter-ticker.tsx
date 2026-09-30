@@ -10,6 +10,7 @@ import {
   type FocusEvent,
   type MouseEvent,
   type Ref,
+  type TouchEvent,
 } from 'react'
 import { Suggestion } from '@/components/ai-elements/suggestion'
 import { cn } from '@/lib/utils'
@@ -39,6 +40,8 @@ import {
   sidewaysWheelPixels,
   TICKER_COPIES,
   tickerRows,
+  type TouchDirection,
+  touchDirection,
   WHEEL_GESTURE_GAP_MS,
   widestPlacement,
 } from './ticker-geometry'
@@ -85,17 +88,21 @@ import {
  * clear of the gradient.
  *
  * **Rows a visitor reaches for are handed over to them, both at once.** A
- * touch, or a sideways wheel or trackpad gesture, on either row freezes
- * each row the same way focus does, at the point its own loop had reached,
- * and then hands both over for good: they become real scroll strips and
- * never move on their own again, because a row that resumed under a
- * reader's finger would take the question they were reading away from
- * them. From then on the two strips share one scroll position, so a drag on
- * either moves both the same distance and a reader never has to scroll one
- * row to catch up with the other. The rows stopped at different points of
- * their loops, so each is trimmed to the window both can scroll through,
- * after which one scrollLeft is the position of both and the browser's own
- * edge is where both stop.
+ * sideways drag, or a sideways wheel or trackpad gesture, on either row
+ * freezes each row the same way focus does, at the point its own loop had
+ * reached, and then hands both over for good: they become real scroll
+ * strips and never move on their own again, because a row that resumed
+ * under a reader's finger would take the question they were reading away
+ * from them. A touch is read before it is acted on (MTC-79): both rows
+ * hold still under the finger until it has moved far enough to show its
+ * direction, a touch that goes more up or down than across is the page
+ * being scrolled past and leaves them moving, and a tap that goes nowhere
+ * asks its question and hands nothing over. Once handed over, the two
+ * strips share one scroll position, so a drag on either moves both the same
+ * distance and a reader never has to scroll one row to catch up with the
+ * other. The rows stopped at different points of their loops, so each is
+ * trimmed to the window both can scroll through, after which one scrollLeft
+ * is the position of both and the browser's own edge is where both stop.
  *
  * **The whole pool can be opened as a list** (MTC-85), for a visitor who
  * would rather read every question than wait for the one they want. The
@@ -263,6 +270,9 @@ function TickerRow({
   // False until the row has been laid out once and placed on its opening
   // pill. After that the offset belongs to the loop and to the blur handler.
   const placedRef = useRef(false)
+  // The finger that landed on this row, while it is down: touch events keep
+  // going to the element the touch started on, so this row sees all of it.
+  const touchRef = useRef<RowTouch | null>(null)
 
   /**
    * One loop is one copy's width, so the duration is what holds the speed
@@ -411,12 +421,12 @@ function TickerRow({
    * over and leave the other moving.
    *
    * The loop's position goes to scrollLeft exactly as it does for focus, so
-   * the pill under a finger does not move and a tap still lands on it; the
+   * the pill under a finger does not move as the drag takes the row; the
    * stylesheet then lets the row scroll by hand. Nothing takes the row back:
    * blur leaves it frozen, nothing measures it again, and no timer exists to
    * resume it. A row whose position cannot be read yet is left moving rather
-   * than moved wrongly, and the next touch or wheel on either row tries
-   * again.
+   * than moved wrongly, and the next sideways drag or wheel on either row
+   * tries again.
    *
    * Returns whether this call is the one that handed the row over.
    */
@@ -451,21 +461,90 @@ function TickerRow({
 
   // A drag, its momentum, or a native wheel scroll on a handed-over row
   // moves the other row with it.
+  //
+  // A row still moving can be scrolled too, where it is a scroll container
+  // under a finger from the first paint: the browser, not the direction
+  // rule, chooses which box a drag scrolls, and it may take a sideways drag
+  // before the finger has travelled far enough for the rule to say so. A
+  // row the browser scrolls under a finger is being read by hand, so it is
+  // handed over, whatever the rule would have said.
   const handleScroll = useCallback(() => {
     const viewport = viewportRef.current
-    if (viewport) sharedScroll.syncFrom(viewport)
+    if (!viewport) return
+    const touch = touchRef.current
+    if (touch && !isHandedOver(viewport)) {
+      touch.direction = 'sideways'
+      sharedScroll.handOverAll()
+      sharedScroll.endTouchPause()
+    }
+    sharedScroll.syncFrom(viewport)
   }, [sharedScroll])
 
-  const handleTouchStart = useCallback(() => {
-    const viewport = viewportRef.current
-    sharedScroll.handOverAll()
-    if (viewport) sharedScroll.touchStarted(viewport)
-  }, [sharedScroll])
+  /**
+   * A finger lands on a row. Nothing is handed over yet: the touch may be a
+   * tap on a pill, a drag along the row, or the page being scrolled past,
+   * and only the finger's first movement tells them apart. Until then both
+   * rows hold still, so the pill under the finger is still under it when a
+   * tap lifts. A second finger landing does not start the reading again.
+   */
+  const handleTouchStart = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      const viewport = viewportRef.current
+      if (!viewport) return
+      sharedScroll.touchStarted(viewport)
+      const touch = event.changedTouches[0]
+      // Only one finger down means any touch recorded earlier has ended,
+      // even if its end never reached this row.
+      if (!touch || (touchRef.current && event.touches.length > 1)) return
+      touchRef.current = {
+        id: touch.identifier,
+        x: touch.clientX,
+        y: touch.clientY,
+        direction: 'undecided',
+      }
+      sharedScroll.pauseForTouch()
+    },
+    [sharedScroll]
+  )
 
-  const handleTouchEnd = useCallback(() => {
-    const viewport = viewportRef.current
-    if (viewport) sharedScroll.touchEnded(viewport)
-  }, [sharedScroll])
+  /**
+   * The finger's first movement past the threshold decides the touch. More
+   * across than up or down hands both rows over, and the browser, which
+   * already had this row as a scroll container, scrolls it with the rest of
+   * the drag. More up or down is the page scrolling: nothing here cancels
+   * it or hands anything over, and the rows move again. Later movement of
+   * the same touch changes nothing.
+   */
+  const handleTouchMove = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      const touch = touchRef.current
+      if (!touch || touch.direction !== 'undecided') return
+      const finger = findTouch(event.touches, touch.id)
+      if (!finger) return
+      const direction = touchDirection(
+        finger.clientX - touch.x,
+        finger.clientY - touch.y
+      )
+      if (direction === 'undecided') return
+      touch.direction = direction
+      if (direction === 'sideways') sharedScroll.handOverAll()
+      sharedScroll.endTouchPause()
+    },
+    [sharedScroll]
+  )
+
+  const handleTouchEnd = useCallback(
+    (event: TouchEvent<HTMLDivElement>) => {
+      const viewport = viewportRef.current
+      if (viewport) sharedScroll.touchEnded(viewport)
+      const touch = touchRef.current
+      // Another finger lifting leaves the first one's touch as it was.
+      if (!touch || findTouch(event.touches, touch.id)) return
+      touchRef.current = null
+      sharedScroll.endTouchPause()
+    },
+    [sharedScroll]
+  )
 
   /**
    * A sideways wheel or trackpad gesture over a moving row hands both rows
@@ -535,6 +614,7 @@ function TickerRow({
       // and a touchscreen laptop reports a fine pointer.
       onTouchCancel={handleTouchEnd}
       onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
       onTouchStart={handleTouchStart}
       ref={viewportRef}
     >
@@ -646,16 +726,47 @@ function freezeAtLoopPosition(
   const progress = animationProgress(track)
   if (progress === null) return 'not-moving'
   if (copyWidth <= 0) return 'unmeasured'
+  // What the browser has already scrolled the moving row by, which a drag
+  // that it took before the hand-over leaves: the row shows the loop's
+  // position plus that, so the frozen row has to show the same.
+  const scrolledWhileMoving = viewport.scrollLeft
   // Freeze first: the rule that drops the animation also drops the
   // transform and adds the lead, and the scroll offset below replaces both
   // exactly.
   track.dataset.frozen = 'true'
-  viewport.scrollLeft = scrollLeftForProgress(
-    progress,
-    copyWidth,
-    leadOf(track)
-  )
+  viewport.scrollLeft =
+    scrollLeftForProgress(progress, copyWidth, leadOf(track)) +
+    scrolledWhileMoving
   return 'frozen'
+}
+
+/** A finger on a row: which one, where it landed, and what it has shown. */
+interface RowTouch {
+  id: number
+  x: number
+  y: number
+  direction: TouchDirection
+}
+
+/** A finger as a touch event lists it: React's list and the DOM's both fit. */
+interface Finger {
+  identifier: number
+  clientX: number
+  clientY: number
+}
+
+/** The finger with this identifier among a touch event's list, if it is there. */
+function findTouch(
+  touches: { readonly length: number; readonly [index: number]: Finger },
+  id: number
+): Finger | undefined {
+  // By index rather than item(): every browser's list answers both, and the
+  // test DOM's is a plain array.
+  for (let index = 0; index < touches.length; index += 1) {
+    const touch = touches[index]
+    if (touch?.identifier === id) return touch
+  }
+  return undefined
 }
 
 /**
@@ -705,7 +816,7 @@ interface SharedScroll {
   /**
    * Hands every row over at once and trims them to the window they share.
    * A row that cannot be handed over yet is left moving, and joins the
-   * window when a later touch or wheel on either row hands it over.
+   * window when a later sideways drag or wheel on either row hands it over.
    */
   handOverAll(): void
   /**
@@ -717,6 +828,13 @@ interface SharedScroll {
   touchStarted(viewport: HTMLElement): void
   /** The finger on this row has lifted, or the browser took the touch. */
   touchEnded(viewport: HTMLElement): void
+  /**
+   * Holds every row that is still moving where it is, while a finger that
+   * landed on one has not yet shown which way it is going.
+   */
+  pauseForTouch(): void
+  /** Lets the rows held for a touch move again. */
+  endTouchPause(): void
   /**
    * Brings a focused pill in a handed-over row into view and takes the
    * other rows the same distance, trimming them again around where they
@@ -866,6 +984,18 @@ function createSharedScroll(): SharedScroll {
       if (touched === viewport) touched = null
     },
 
+    pauseForTouch() {
+      // Under reduced motion nothing moves, so there is nothing to hold.
+      if (prefersReducedMotion()) return
+      for (const { viewport } of rows) {
+        if (!members.has(viewport)) viewport.dataset.touchPaused = 'true'
+      }
+    },
+
+    endTouchPause() {
+      for (const { viewport } of rows) delete viewport.dataset.touchPaused
+    },
+
     reveal(viewport, pill) {
       const focused = members.get(viewport)
       if (!focused) return false
@@ -895,8 +1025,9 @@ function createSharedScroll(): SharedScroll {
 
     park() {
       // No touch on a row that is being hidden should hold the other row
-      // once both are shown again.
+      // once both are shown again, nor keep either paused.
       touched = null
+      for (const { viewport } of rows) delete viewport.dataset.touchPaused
       // The handed-over rows share one position, so it is read once: a row
       // still coasting ahead of its last scroll event would otherwise bring
       // the pair back a few pixels apart.
