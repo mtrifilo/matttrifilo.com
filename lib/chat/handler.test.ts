@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { createVertex } from '@ai-sdk/google-vertex'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import type { BoundedFetchRetry } from '@/lib/ai/bounded-fetch'
 import {
@@ -209,6 +210,51 @@ function readsAfterSaying(preamble: string, id: string): Step {
         toolName: READ_DOCUMENT_TOOL_NAME,
         input: JSON.stringify({ id }),
       },
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
+/**
+ * A step that writes and calls tools in the order given and stops on
+ * tool-calls. On the last step this is a model ignoring `toolChoice: 'none'`,
+ * which a measured run did (MTC-100).
+ */
+function writesAndCalls(
+  ...parts: ({ text: string } | { read: string } | { check: string })[]
+): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      ...parts.flatMap<unknown>((part, n) =>
+        'text' in part
+          ? [
+              { type: 'text-start', id: `w${n}` },
+              { type: 'text-delta', id: `w${n}`, delta: part.text },
+              { type: 'text-end', id: `w${n}` },
+            ]
+          : 'read' in part
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: `call-forced-${n}-${part.read}`,
+                  toolName: READ_DOCUMENT_TOOL_NAME,
+                  input: JSON.stringify({ id: part.read }),
+                },
+              ]
+            : [
+                {
+                  type: 'tool-call',
+                  toolCallId: `call-forced-${n}-${part.check}`,
+                  toolName: RECENT_ACTIVITY_TOOL_NAME,
+                  input: JSON.stringify({ repository: part.check }),
+                },
+              ]
+      ),
       {
         type: 'finish',
         finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
@@ -456,6 +502,14 @@ function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
     chunks.push(JSON.parse(line.slice('data: '.length)))
   }
   return chunks
+}
+
+/** The answer text the browser was sent: every text delta, joined. */
+function textFrom(body: string): string {
+  return chunksFrom(body)
+    .filter(chunk => chunk.type === 'text-delta')
+    .map(chunk => String(chunk.delta))
+    .join('')
 }
 
 /** Each progress payload the route wrote, in the order it wrote them. */
@@ -940,13 +994,13 @@ describe('checking GitHub', () => {
     // repository spends one check and not three; a counter that moved at the
     // call would have been at its cap by the fourth chunk and the second
     // repository would have gone unnarrated while the log line said it
-    // happened. The counters move on the outcome instead.
+    // happened. The counters move on the outcome instead. The last two calls
+    // share the third step because the last step's calls do no work.
     const second = ASSISTANT_REPOSITORIES[1].id
     const model = modelOf(
       checks(REPOSITORY),
       checks(REPOSITORY),
-      checks(REPOSITORY),
-      checks(second),
+      checksAll(REPOSITORY, second),
       answers()
     )
     const handler = createChatHandler({
@@ -1355,6 +1409,7 @@ describe('reading documents', () => {
     const marker = logged.find(args => args[0] === '[chat] incomplete')
     expect(marker?.[1]).toMatchObject({
       answered: false,
+      finalStepToolCall: true,
       finishReason: 'tool-calls',
       documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
     })
@@ -1436,6 +1491,461 @@ describe('reading documents', () => {
     ])
     expect(progressFrom(body).at(-1)?.steps).toEqual([])
     expect(body).not.toContain(huge.text)
+  })
+})
+
+describe('a tool call on the step forced to answer', () => {
+  // The shape of the measured run (MTC-87, 2026-09-28): two reads and a
+  // GitHub check spend the first three steps, and the fourth, sent
+  // `toolChoice: 'none'`, calls a tool anyway.
+  const readThenCheck = () =>
+    [reads('resume'), reads('faq'), checks(REPOSITORY)] as const
+
+  const NARRATION = 'Let me open the projects document as well.'
+  const FOLLOW_UP = 'What did the platform migration change?'
+  /** An answer in the policy's shape: citation line, then follow-ups. */
+  const FINISHED = [ANSWER, FOLLOW_UPS_TRAILER_PREFIX, FOLLOW_UP].join('\n')
+
+  /** The completion line, with the marker it was written under. */
+  const completion = () => {
+    const line = logged.find(
+      args =>
+        typeof args[0] === 'string' &&
+        args[0].startsWith('[chat]') &&
+        typeof args[1] === 'object' &&
+        'answered' in (args[1] as object) &&
+        !(args[1] as { aborted?: boolean }).aborted
+    )
+    return { marker: line?.[0], fields: line?.[1] }
+  }
+
+  const okActivity: ActivityFetchResult = { kind: 'ok', raw: ACTIVITY_RAW }
+
+  /** Runs the MTC-87 shape with `last` as the fourth call. */
+  async function run(
+    last: Step,
+    fetchActivity: (repository: {
+      id: string
+    }) => Promise<ActivityFetchResult> = async () => okActivity
+  ) {
+    const model = modelOf(...readThenCheck(), last)
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => model,
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      fetchActivity,
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+    return { model, body }
+  }
+
+  /** One Gemini streaming event carrying `parts`, as Vertex sends it. */
+  const vertexEvent = (parts: object[], finishReason?: string) =>
+    `data: ${JSON.stringify({
+      candidates: [
+        {
+          content: { role: 'model', parts },
+          ...(finishReason ? { finishReason } : {}),
+        },
+      ],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+    })}\n\n`
+
+  interface VertexRequestBody {
+    toolConfig?: { functionCallingConfig?: { mode?: string } }
+    tools?: { functionDeclarations?: { name: string }[] }[]
+  }
+
+  /**
+   * The route, the SDK and the real Vertex provider, with only `fetch`
+   * replaced. The first three calls each read one document; the fourth
+   * streams `lastEvents`, one Gemini event per entry. Returns what the
+   * browser was sent and every request body Vertex would have received.
+   */
+  async function throughVertex(lastEvents: object[][]) {
+    const bodies: VertexRequestBody[] = []
+    const capture = async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      const events =
+        bodies.length < CHAT_MAX_STEPS
+          ? [
+              vertexEvent(
+                [
+                  {
+                    functionCall: {
+                      name: READ_DOCUMENT_TOOL_NAME,
+                      args: { id: documents[bodies.length - 1].id },
+                    },
+                  },
+                ],
+                'STOP'
+              ),
+            ]
+          : lastEvents.map((parts, n) =>
+              vertexEvent(
+                parts,
+                n === lastEvents.length - 1 ? 'STOP' : undefined
+              )
+            )
+      return new Response(events.join(''), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }
+    const vertex = createVertex({
+      apiKey: 'test',
+      fetch: capture as unknown as typeof fetch,
+    })
+    const handler = createChatHandler({
+      loadKnowledgeIndex: () => index,
+      readKnowledgeDocument,
+      model: () => vertex('gemini-3.8-flash'),
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      env: {},
+      now: () => 1_000,
+    })
+    const body = await (
+      await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+    ).text()
+    return { body, bodies }
+  }
+
+  const strayCall = {
+    functionCall: { name: READ_DOCUMENT_TOOL_NAME, args: { id: 'timeline' } },
+  }
+
+  test('Vertex is sent no tool declarations on that step, so there is nothing to call', async () => {
+    const { body, bodies } = await throughVertex([[{ text: FINISHED }]])
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(bodies).toHaveLength(CHAT_MAX_STEPS)
+    // Every earlier step declares the tools and lets the model choose.
+    for (const earlier of bodies.slice(0, -1)) {
+      expect(earlier.toolConfig?.functionCallingConfig?.mode).not.toBe('NONE')
+      expect(
+        earlier.tools?.flatMap(t => t.functionDeclarations ?? []).length
+      ).toBeGreaterThan(0)
+    }
+    // The last declares none. `toolChoice: 'none'` alone would send
+    // `mode: "NONE"` with the declarations still attached, which a measured
+    // run ignored (MTC-87).
+    expect(bodies.at(-1)?.tools).toBeUndefined()
+    expect(bodies.at(-1)?.toolConfig).toBeUndefined()
+  })
+
+  // A model that returns a call anyway, through the real provider, in the
+  // three orderings its stream can take. The provider handles an event's
+  // text parts before its function calls, so the order the route sees is
+  // not always the order the model wrote in; these pin what the visitor gets
+  // in each, the leak included, so a future fix can be measured.
+  test('narration, a call and an answer in separate events: only the answer is shown', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }],
+      [strayCall],
+      [{ text: FINISHED }],
+    ])
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('narration, then the call and the answer in one event: the narration is shown too (known limit)', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }],
+      [strayCall, { text: FINISHED }],
+    ])
+
+    // The second event's text reaches the route before its call, so the
+    // narration and the answer are one segment.
+    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('narration, the call and the answer in one event: the narration is shown too (known limit)', async () => {
+    const { body } = await throughVertex([
+      [{ text: NARRATION }, strayCall, { text: FINISHED }],
+    ])
+
+    expect(textFrom(body)).toBe(NARRATION + FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('a forced step that obeys answers as it always did', async () => {
+    const { body } = await run(answers(FINISHED))
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+    expect(completion()).toEqual({
+      marker: '[chat]',
+      fields: expect.objectContaining({
+        answered: true,
+        finalStepToolCall: false,
+        finishReason: 'stop',
+      }),
+    })
+  })
+
+  test('narration before the call stays out, and the run ends on the notice', async () => {
+    const { body } = await run(
+      writesAndCalls({ text: NARRATION }, { read: 'projects' })
+    )
+
+    expect(textFrom(body)).toBe('')
+    expect(body).not.toContain(NARRATION)
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(metadataFrom(body).followUps).toBeUndefined()
+    // The log and the transcript agree: nothing was shown, so nothing was
+    // answered, and the line says which step broke the rule.
+    expect(completion()).toEqual({
+      marker: '[chat] incomplete',
+      fields: expect.objectContaining({
+        answered: false,
+        finalStepToolCall: true,
+        finishReason: 'tool-calls',
+      }),
+    })
+  })
+
+  test('a call with no text at all ends on the notice too', async () => {
+    const { body } = await run(writesAndCalls({ read: 'projects' }))
+
+    expect(textFrom(body)).toBe('')
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(completion().fields).toMatchObject({
+      answered: false,
+      finalStepToolCall: true,
+    })
+  })
+
+  test('a finished answer written before the call is shown as the answer', async () => {
+    const { body } = await run(
+      writesAndCalls({ text: FINISHED }, { read: 'projects' })
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    // Nothing follows this step, so the stray call is the only thing that
+    // did not finish; the answer did, and is shown and logged as one.
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+    expect(completion()).toEqual({
+      marker: '[chat]',
+      fields: expect.objectContaining({
+        answered: true,
+        finalStepToolCall: true,
+        finishReason: 'tool-calls',
+      }),
+    })
+  })
+
+  test('a finished answer written after the call is shown the same way', async () => {
+    const { body } = await run(
+      writesAndCalls({ read: 'projects' }, { text: FINISHED })
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('narration, then the call, then the answer: only the answer is shown', async () => {
+    const { body } = await run(
+      writesAndCalls(
+        { text: NARRATION },
+        { read: 'projects' },
+        { text: FINISHED }
+      )
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(body).not.toContain(NARRATION)
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+  })
+
+  test('the answer, then the call, then narration: the answer is kept', async () => {
+    const { body } = await run(
+      writesAndCalls(
+        { text: FINISHED },
+        { read: 'projects' },
+        { text: NARRATION }
+      )
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(body).not.toContain(NARRATION)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+  })
+
+  test('a text block the provider leaves open across the call arrives well formed', async () => {
+    // The Google provider opens one text block for a response's text and
+    // does not close it at a function call, so the narration and the answer
+    // can share a block id. Only the kept answer may reach the browser, in a
+    // block that opens before its delta and closes after it.
+    const { body } = await run(() =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '0' },
+        { type: 'text-delta', id: '0', delta: NARRATION },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-open-block',
+          toolName: READ_DOCUMENT_TOOL_NAME,
+          input: JSON.stringify({ id: 'projects' }),
+        },
+        { type: 'text-delta', id: '0', delta: FINISHED },
+        { type: 'text-end', id: '0' },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: 'STOP' },
+          usage,
+          providerMetadata: VERTEX_METADATA,
+        },
+      ])
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    const open = new Set<unknown>()
+    for (const chunk of chunksFrom(body)) {
+      if (chunk.type === 'text-start') open.add(chunk.id)
+      if (chunk.type === 'text-delta') expect(open.has(chunk.id)).toBe(true)
+      if (chunk.type === 'text-end') {
+        expect(open.has(chunk.id)).toBe(true)
+        open.delete(chunk.id)
+      }
+    }
+    expect(open.size).toBe(0)
+  })
+
+  test('an answer an error already flushed is sent once, in a closed block', async () => {
+    // The provider reports an unparseable event as an error part and keeps
+    // streaming, so a finished answer can be flushed by the error before a
+    // stray call arrives. It must not then be sent again as the kept answer.
+    const { body } = await run(() =>
+      chunks([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '0' },
+        { type: 'text-delta', id: '0', delta: FINISHED },
+        { type: 'error', error: new Error('unparseable event') },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-after-error',
+          toolName: READ_DOCUMENT_TOOL_NAME,
+          input: JSON.stringify({ id: 'projects' }),
+        },
+        { type: 'text-end', id: '0' },
+        {
+          type: 'finish',
+          finishReason: { unified: 'tool-calls', raw: 'STOP' },
+          usage,
+          providerMetadata: VERTEX_METADATA,
+        },
+      ])
+    )
+
+    expect(textFrom(body)).toBe(FINISHED)
+    const open = new Set<unknown>()
+    for (const chunk of chunksFrom(body)) {
+      if (chunk.type === 'text-start') open.add(chunk.id)
+      if (chunk.type === 'text-end') open.delete(chunk.id)
+    }
+    expect(open.size).toBe(0)
+  })
+
+  test('the trailers alone are not an answer', async () => {
+    // The transcript takes both trailers off, so a step that wrote only
+    // them would be an empty bubble with no notice if it counted.
+    const { body } = await run(
+      writesAndCalls(
+        { text: `Sources: resume\n${FOLLOW_UPS_TRAILER_PREFIX}\n${FOLLOW_UP}` },
+        { read: 'projects' }
+      )
+    )
+
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(completion()).toEqual({
+      marker: '[chat] incomplete',
+      fields: expect.objectContaining({ answered: false }),
+    })
+  })
+
+  test('a decline before the call is shown, with no follow-ups', async () => {
+    const { body } = await run(
+      writesAndCalls({ text: DECLINE_SENTENCE }, { read: 'projects' })
+    )
+
+    expect(textFrom(body)).toBe(DECLINE_SENTENCE)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('a stray call does no work: no read spent, no row left behind', async () => {
+    const { body } = await run(
+      writesAndCalls({ text: FINISHED }, { read: 'projects' })
+    )
+
+    expect(completion().fields).toMatchObject({ documentsRead: 2 })
+    // The row the call opened is withdrawn when its refusal comes back, so
+    // the list names only what the answer was drawn from.
+    expect(
+      progressFrom(body)
+        .at(-1)
+        ?.steps.map(step => step.id)
+    ).toEqual(['resume', 'faq', REPOSITORY])
+    // The model never sees the refusal: no step follows it.
+    expect(body).not.toContain('no_steps_left')
+  })
+
+  test('a stray GitHub check reaches no network', async () => {
+    const second = ASSISTANT_REPOSITORIES[1].id
+    const fetched: string[] = []
+    const { body } = await run(
+      writesAndCalls({ text: FINISHED }, { check: second }),
+      async repository => {
+        fetched.push(repository.id)
+        return okActivity
+      }
+    )
+
+    expect(fetched).toEqual([REPOSITORY])
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(completion().fields).toMatchObject({ activityCalls: 1 })
+    expect(
+      progressFrom(body)
+        .at(-1)
+        ?.steps.some(step => step.id === second)
+    ).toBe(false)
+  })
+
+  test('an earlier step that calls a tool keeps its text out, however finished it looks', async () => {
+    // MTC-49's rule is unconditional before the last step: the model is
+    // coming back, so anything it wrote alongside a call is scratchpad, even
+    // a draft that carries both trailers.
+    const draft = [
+      'He may have led the migration.\n\nSources: faq',
+      FOLLOW_UPS_TRAILER_PREFIX,
+      'Which migration was it?',
+    ].join('\n')
+    const model = modelOf(
+      writesAndCalls({ text: draft }, { read: 'faq' }),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(body).not.toContain('He may have led the migration.')
+    expect(textFrom(body)).toBe(ANSWER)
+    expect(completion().fields).toMatchObject({
+      answered: true,
+      finalStepToolCall: false,
+      finishReason: 'stop',
+    })
   })
 })
 
@@ -2116,6 +2626,8 @@ describe('logging', () => {
       cacheHit: true,
       documentsRead: 0,
       readTokens: 0,
+      answered: true,
+      finalStepToolCall: false,
       finishReason: 'stop',
       aborted: false,
       ms: 0,
@@ -2205,12 +2717,34 @@ describe('logging', () => {
     ])
   })
 
+  test('a reply that is only the trailers is not an answer', async () => {
+    // The transcript takes both trailers off, so counting this as answered
+    // would leave an empty bubble with no notice under it.
+    const response = await handlerWith(
+      modelOf(reads('resume'), answers('Sources: resume'))
+    )(post({ messages: [uiMessage('user', QUESTION)] }))
+    const body = await response.text()
+    expect(metadataFrom(body).incomplete).toBe(true)
+    // A clean 'stop' that left nothing to read is logged where the notice
+    // is: under the incomplete marker, not on the ordinary line.
+    const line = logged.find(
+      args => typeof args[1] === 'object' && 'answered' in (args[1] as object)
+    )
+    expect(line?.[0]).toBe('[chat] incomplete')
+    expect(line?.[1]).toMatchObject({ answered: false, finishReason: 'stop' })
+  })
+
   test('a whitespace-only reply is not an answer', async () => {
     const response = await handlerWith(
       modelOf(reads('resume'), answers('   \n'))
     )(post({ messages: [uiMessage('user', QUESTION)] }))
     const body = await response.text()
     expect(metadataFrom(body).incomplete).toBe(true)
+    const line = logged.find(
+      args => typeof args[1] === 'object' && 'answered' in (args[1] as object)
+    )
+    expect(line?.[0]).toBe('[chat] incomplete')
+    expect(line?.[1]).toMatchObject({ answered: false, finishReason: 'stop' })
   })
 
   test('a visitor who disconnects mid-answer is logged as an abort', async () => {
@@ -2239,6 +2773,7 @@ describe('logging', () => {
     expect(entry?.[1]).toMatchObject({
       aborted: true,
       finishReason: 'abort',
+      finalStepToolCall: false,
       documentsRead: 0,
       readTokens: 0,
       readsRefusedUnknown: 0,
