@@ -14,6 +14,7 @@ import {
   type HexCell,
   type HexWaveState,
 } from './hex-renderer'
+import { browserStartHost, startWhenIdle } from './start-when-idle'
 
 export function HexBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -76,215 +77,229 @@ export function HexBackground() {
 
   // The canvas element renders identically on server and client, so no
   // mount gate is needed; everything window-dependent lives in this effect.
+  // None of it runs until startWhenIdle says so (see start-when-idle.ts):
+  // until then the canvas is as blank as it is before hydration, and nothing
+  // is measured, drawn or listened to.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const initial = setupCanvas(canvas)
-    let ctx = initial.ctx
-    let dpr = initial.dpr
-    const { width, height } = initial
+    const startDrawing = () => {
+      const initial = setupCanvas(canvas)
+      let ctx = initial.ctx
+      let dpr = initial.dpr
+      const { width, height } = initial
 
-    // Frame-rate policy: this background is mounted in the root layout, so a
-    // loop that runs at 60 fps forever burns battery on every page for a
-    // shimmer nobody is looking at. Three rates instead (see nextFrameMode):
-    // full rate while the reader is driving something, about 4 fps once the
-    // pointer settles or leaves so the shimmer keeps breathing for the many
-    // readers who never move a pointer at all, and a full park only under
-    // reduced motion, where every further frame would be identical.
-    //
-    // The slow and parked rates make the wake-up set load-bearing: anything
-    // that can change a pixel has to call wake(), because neither rate is
-    // self-healing the way a 60 fps loop was. The full set is
-    //   - pointer move / leave      (the glow)
-    //   - theme change              (the palette)
-    //   - resize, DPR change        (bitmap re-created, therefore blank)
-    //   - reduced-motion, veil      (what and how brightly we draw)
-    //   - visibilitychange, pageshow, contextrestored
-    //     (the backing store can be discarded out from under us: WebKit
-    //      purges 2D bitmaps for backgrounded tabs, and a bfcache restore
-    //      or a lost-then-restored context hands back a blank canvas)
-    const scheduler = createFrameScheduler({
-      requestFrame: callback => requestAnimationFrame(callback),
-      cancelFrame: handle => cancelAnimationFrame(handle),
-      setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-      clearTimer: handle => window.clearTimeout(handle),
-      now: () => performance.now(),
-      drawFrame: (now, dt) => {
-        if (!ctx) return 'parked'
+      // Frame-rate policy: this background is mounted in the root layout, so a
+      // loop that runs at 60 fps forever burns battery on every page for a
+      // shimmer nobody is looking at. Three rates instead (see nextFrameMode):
+      // full rate while the reader is driving something, about 4 fps once the
+      // pointer settles or leaves so the shimmer keeps breathing for the many
+      // readers who never move a pointer at all, and a full park only under
+      // reduced motion, where every further frame would be identical.
+      //
+      // The slow and parked rates make the wake-up set load-bearing: anything
+      // that can change a pixel has to call wake(), because neither rate is
+      // self-healing the way a 60 fps loop was. The full set is
+      //   - pointer move / leave      (the glow)
+      //   - theme change              (the palette)
+      //   - resize, DPR change        (bitmap re-created, therefore blank)
+      //   - reduced-motion, veil      (what and how brightly we draw)
+      //   - visibilitychange, pageshow, contextrestored
+      //     (the backing store can be discarded out from under us: WebKit
+      //      purges 2D bitmaps for backgrounded tabs, and a bfcache restore
+      //      or a lost-then-restored context hands back a blank canvas)
+      const scheduler = createFrameScheduler({
+        requestFrame: callback => requestAnimationFrame(callback),
+        cancelFrame: handle => cancelAnimationFrame(handle),
+        setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+        clearTimer: handle => window.clearTimeout(handle),
+        now: () => performance.now(),
+        drawFrame: (now, dt) => {
+          if (!ctx) return 'parked'
 
-        const isDark = themeRef.current === 'dark'
-        const levels = (
-          veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed
-        )[isDark ? 'dark' : 'light']
+          const isDark = themeRef.current === 'dark'
+          const levels = (
+            veiledRef.current ? BRIGHTNESS.veiled : BRIGHTNESS.fullBleed
+          )[isDark ? 'dark' : 'light']
 
-        renderFrame({
-          ctx,
-          grid: gridRef.current,
-          mouse: mouseRef.current,
-          time: now,
-          palette: isDark
-            ? HEX_RENDER_PALETTES.dark
-            : HEX_RENDER_PALETTES.light,
-          wave: waveRef.current,
-          dt,
-          reducedMotion: reducedMotionRef.current,
-          levels,
-          dpr,
-        })
+          renderFrame({
+            ctx,
+            grid: gridRef.current,
+            mouse: mouseRef.current,
+            time: now,
+            palette: isDark
+              ? HEX_RENDER_PALETTES.dark
+              : HEX_RENDER_PALETTES.light,
+            wave: waveRef.current,
+            dt,
+            reducedMotion: reducedMotionRef.current,
+            levels,
+            dpr,
+          })
 
-        const idle = shouldIdle({
-          waveActive: waveRef.current.active,
-          pointerOnCanvas: pointerOnCanvasRef.current,
-          msSincePointerMove: now - lastMoveTime.current,
-          reducedMotion: reducedMotionRef.current,
-        })
-        return nextFrameMode(idle, reducedMotionRef.current)
-      },
-    })
+          const idle = shouldIdle({
+            waveActive: waveRef.current.active,
+            pointerOnCanvas: pointerOnCanvasRef.current,
+            msSincePointerMove: now - lastMoveTime.current,
+            reducedMotion: reducedMotionRef.current,
+          })
+          return nextFrameMode(idle, reducedMotionRef.current)
+        },
+      })
 
-    // One named wake for every listener below to share, and a stable
-    // reference so addEventListener and removeEventListener agree.
-    const wake = () => scheduler.wake()
+      // One named wake for every listener below to share, and a stable
+      // reference so addEventListener and removeEventListener agree.
+      const wake = () => scheduler.wake()
 
-    // Check reduced motion preference
-    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    reducedMotionRef.current = motionQuery.matches
-    const onMotionChange = (e: MediaQueryListEvent) => {
-      reducedMotionRef.current = e.matches
-      // Pointer tracking is suspended while reduced motion is on (below),
-      // so the stored position is stale on the way out. Forget it rather
-      // than painting a glow where the pointer used to be.
-      pointerOnCanvasRef.current = false
-      mouseRef.current = { x: -1000, y: -1000 }
-      // updateWave is skipped under reduced motion, so a wave left active
-      // here would play, months late, the moment the preference turns off.
-      if (e.matches) waveRef.current.active = false
+      // Check reduced motion preference
+      const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+      reducedMotionRef.current = motionQuery.matches
+      const onMotionChange = (e: MediaQueryListEvent) => {
+        reducedMotionRef.current = e.matches
+        // Pointer tracking is suspended while reduced motion is on (below),
+        // so the stored position is stale on the way out. Forget it rather
+        // than painting a glow where the pointer used to be.
+        pointerOnCanvasRef.current = false
+        mouseRef.current = { x: -1000, y: -1000 }
+        // updateWave is skipped under reduced motion, so a wave left active
+        // here would play, months late, the moment the preference turns off.
+        if (e.matches) waveRef.current.active = false
+        wake()
+      }
+      motionQuery.addEventListener('change', onMotionChange)
+
+      // Track whether the reading column is veiled (see globals.css) so the
+      // field uses the brighter range only where the mask is active.
+      const veilQuery = window.matchMedia(VEIL_QUERY)
+      veiledRef.current = veilQuery.matches
+      const onVeilChange = (e: MediaQueryListEvent) => {
+        veiledRef.current = e.matches
+        wake()
+      }
+      veilQuery.addEventListener('change', onVeilChange)
+
+      // Fire entrance wave on first mount (not under reduced motion: it would
+      // sit unplayed until the preference changed)
+      if (!mountedRef.current && !motionQuery.matches) {
+        mountedRef.current = true
+        waveRef.current = {
+          active: true,
+          originX: width / 2,
+          originY: height / 2,
+          radius: 0,
+          startTime: performance.now(),
+        }
+      }
+
+      // Mouse tracking (throttled, no re-renders).
+      //
+      // Under reduced motion the shimmer, the glow and the wave are all forced
+      // to zero, so no pointer position can change a pixel and waking would
+      // redraw the whole grid identically. The inputs that can still change
+      // such a frame (theme, viewport, the preference itself) wake directly.
+      const onPointerMove = (e: PointerEvent) => {
+        if (reducedMotionRef.current) return
+        pointerOnCanvasRef.current = true
+        wake()
+        const now = performance.now()
+        if (now - lastMoveTime.current < 16) return
+        lastMoveTime.current = now
+        mouseRef.current = { x: e.clientX, y: e.clientY }
+      }
+
+      // Reset mouse when it leaves the window
+      const onPointerLeave = () => {
+        if (reducedMotionRef.current) return
+        pointerOnCanvasRef.current = false
+        mouseRef.current = { x: -1000, y: -1000 }
+        // One more frame so a glow left under the departing pointer is erased.
+        wake()
+      }
+
+      // A hidden tab gets no animation frames but does still run the idle
+      // timer, and WebKit may purge the canvas' backing store while it is
+      // away. So stop outright while hidden, and repaint on the way back
+      // rather than trusting whatever is left in the bitmap.
+      const onVisibilityChange = () => {
+        if (document.hidden) scheduler.stop()
+        else wake()
+      }
+
+      window.addEventListener('pointermove', onPointerMove, { passive: true })
+      document.addEventListener('pointerleave', onPointerLeave)
+      document.addEventListener('visibilitychange', onVisibilityChange)
+      window.addEventListener('pageshow', wake)
+
+      // Rebuild the bitmap and grid, coalescing bursts of resize events.
+      let resizeTimer: ReturnType<typeof setTimeout>
+      const scheduleCanvasSetup = () => {
+        clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(() => {
+          const result = setupCanvas(canvas)
+          ctx = result.ctx
+          dpr = result.dpr
+          // Re-creating the bitmap clears it, so a parked loop must redraw.
+          wake()
+        }, 150)
+      }
+
+      // A restored 2D context comes back in its default state: the bitmap
+      // keeps its size but the dpr transform is gone, so a plain repaint would
+      // draw at 1x into the top-left corner. Re-run setup, which also wakes.
+      canvas.addEventListener('contextrestored', scheduleCanvasSetup)
+
+      const ro = new ResizeObserver(scheduleCanvasSetup)
+      // Observe the canvas itself: it is CSS-sized to the viewport, so this
+      // also fires on height-only changes (devtools docking) where <html>'s
+      // content height would not.
+      ro.observe(canvas)
+
+      // A device-pixel-ratio change (window dragged between a Retina and a 1x
+      // display, or a browser zoom) resizes no box, so the ResizeObserver
+      // never fires and the bitmap would keep its old resolution forever.
+      // matchMedia has no "any resolution change" query, so watch for "no
+      // longer the current ratio" and re-arm at the new one each time.
+      let dprQuery: MediaQueryList | null = null
+      const onDprChange = () => {
+        armDprWatch()
+        scheduleCanvasSetup()
+      }
+      function armDprWatch() {
+        dprQuery?.removeEventListener('change', onDprChange)
+        dprQuery = window.matchMedia(
+          `(resolution: ${window.devicePixelRatio}dppx)`
+        )
+        dprQuery.addEventListener('change', onDprChange)
+      }
+      armDprWatch()
+
+      wakeRef.current = wake
       wake()
-    }
-    motionQuery.addEventListener('change', onMotionChange)
 
-    // Track whether the reading column is veiled (see globals.css) so the
-    // field uses the brighter range only where the mask is active.
-    const veilQuery = window.matchMedia(VEIL_QUERY)
-    veiledRef.current = veilQuery.matches
-    const onVeilChange = (e: MediaQueryListEvent) => {
-      veiledRef.current = e.matches
-      wake()
-    }
-    veilQuery.addEventListener('change', onVeilChange)
-
-    // Fire entrance wave on first mount (not under reduced motion: it would
-    // sit unplayed until the preference changed)
-    if (!mountedRef.current && !motionQuery.matches) {
-      mountedRef.current = true
-      waveRef.current = {
-        active: true,
-        originX: width / 2,
-        originY: height / 2,
-        radius: 0,
-        startTime: performance.now(),
+      return () => {
+        wakeRef.current = null
+        scheduler.stop()
+        ro.disconnect()
+        clearTimeout(resizeTimer)
+        dprQuery?.removeEventListener('change', onDprChange)
+        window.removeEventListener('pointermove', onPointerMove)
+        document.removeEventListener('pointerleave', onPointerLeave)
+        document.removeEventListener('visibilitychange', onVisibilityChange)
+        window.removeEventListener('pageshow', wake)
+        canvas.removeEventListener('contextrestored', scheduleCanvasSetup)
+        motionQuery.removeEventListener('change', onMotionChange)
+        veilQuery.removeEventListener('change', onVeilChange)
       }
     }
 
-    // Mouse tracking (throttled, no re-renders).
-    //
-    // Under reduced motion the shimmer, the glow and the wave are all forced
-    // to zero, so no pointer position can change a pixel and waking would
-    // redraw the whole grid identically. The inputs that can still change
-    // such a frame (theme, viewport, the preference itself) wake directly.
-    const onPointerMove = (e: PointerEvent) => {
-      if (reducedMotionRef.current) return
-      pointerOnCanvasRef.current = true
-      wake()
-      const now = performance.now()
-      if (now - lastMoveTime.current < 16) return
-      lastMoveTime.current = now
-      mouseRef.current = { x: e.clientX, y: e.clientY }
-    }
-
-    // Reset mouse when it leaves the window
-    const onPointerLeave = () => {
-      if (reducedMotionRef.current) return
-      pointerOnCanvasRef.current = false
-      mouseRef.current = { x: -1000, y: -1000 }
-      // One more frame so a glow left under the departing pointer is erased.
-      wake()
-    }
-
-    // A hidden tab gets no animation frames but does still run the idle
-    // timer, and WebKit may purge the canvas' backing store while it is
-    // away. So stop outright while hidden, and repaint on the way back
-    // rather than trusting whatever is left in the bitmap.
-    const onVisibilityChange = () => {
-      if (document.hidden) scheduler.stop()
-      else wake()
-    }
-
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
-    document.addEventListener('pointerleave', onPointerLeave)
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('pageshow', wake)
-
-    // Rebuild the bitmap and grid, coalescing bursts of resize events.
-    let resizeTimer: ReturnType<typeof setTimeout>
-    const scheduleCanvasSetup = () => {
-      clearTimeout(resizeTimer)
-      resizeTimer = setTimeout(() => {
-        const result = setupCanvas(canvas)
-        ctx = result.ctx
-        dpr = result.dpr
-        // Re-creating the bitmap clears it, so a parked loop must redraw.
-        wake()
-      }, 150)
-    }
-
-    // A restored 2D context comes back in its default state: the bitmap
-    // keeps its size but the dpr transform is gone, so a plain repaint would
-    // draw at 1x into the top-left corner. Re-run setup, which also wakes.
-    canvas.addEventListener('contextrestored', scheduleCanvasSetup)
-
-    const ro = new ResizeObserver(scheduleCanvasSetup)
-    // Observe the canvas itself: it is CSS-sized to the viewport, so this
-    // also fires on height-only changes (devtools docking) where <html>'s
-    // content height would not.
-    ro.observe(canvas)
-
-    // A device-pixel-ratio change (window dragged between a Retina and a 1x
-    // display, or a browser zoom) resizes no box, so the ResizeObserver
-    // never fires and the bitmap would keep its old resolution forever.
-    // matchMedia has no "any resolution change" query, so watch for "no
-    // longer the current ratio" and re-arm at the new one each time.
-    let dprQuery: MediaQueryList | null = null
-    const onDprChange = () => {
-      armDprWatch()
-      scheduleCanvasSetup()
-    }
-    function armDprWatch() {
-      dprQuery?.removeEventListener('change', onDprChange)
-      dprQuery = window.matchMedia(
-        `(resolution: ${window.devicePixelRatio}dppx)`
-      )
-      dprQuery.addEventListener('change', onDprChange)
-    }
-    armDprWatch()
-
-    wakeRef.current = wake
-    wake()
-
+    let stopDrawing: (() => void) | undefined
+    const cancelStart = startWhenIdle(browserStartHost(), () => {
+      stopDrawing = startDrawing()
+    })
     return () => {
-      wakeRef.current = null
-      scheduler.stop()
-      ro.disconnect()
-      clearTimeout(resizeTimer)
-      dprQuery?.removeEventListener('change', onDprChange)
-      window.removeEventListener('pointermove', onPointerMove)
-      document.removeEventListener('pointerleave', onPointerLeave)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('pageshow', wake)
-      canvas.removeEventListener('contextrestored', scheduleCanvasSetup)
-      motionQuery.removeEventListener('change', onMotionChange)
-      veilQuery.removeEventListener('change', onVeilChange)
+      cancelStart()
+      stopDrawing?.()
     }
   }, [setupCanvas])
 
