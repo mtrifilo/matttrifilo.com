@@ -1912,7 +1912,9 @@
 # back down after it, with a deploy freeze in between.";
 # black-friday-sending-record: "scale up by early November, freeze deploys
 # for a window around the peak, scale down in early December", and the 2023
-# load tests across ten services in the sending path.
+# load tests across ten services in the sending path; resume: "Built the
+# circuit breakers that held Black Friday 2019, then a shared resilience4j
+# library with a failure-injection harness (2019 to 2020)".
 # Reads any of: resume, owned-systems-and-operations or black-friday-sending-record; each names a preparation.
 - description: 'golden: peak-season readiness'
   vars:
@@ -1947,14 +1949,14 @@
             deploy freeze in between, hardening the engagement-tracking
             service before Black Friday 2022, the 2023 sending-limit
             hardening, the 2023 load tests across the services in the sending
-            path, or the resilience library built for the 2019 season (which
-            the résumé says mitigated thousands of failed sends; a different
-            figure is wrong). It may add that Matt owned readiness four years
-            running from 2022 to 2025
-            with zero major incidents, and that 27.7 million emails went out
-            on Cyber Monday 2025. It is written about Matt in the third
-            person, and it must not present an inferred characterization as a
-            documented one.
+            path, or the 2019 resilience work: circuit breakers built for
+            that season, then a shared resilience4j library in 2019 to 2020
+            (the résumé says the work mitigated thousands of failed sends; a
+            different figure is wrong). It may add that Matt owned readiness
+            four years running from 2022 to 2025 with zero major incidents,
+            and that 27.7 million emails went out on Cyber Monday 2025. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r49
         - type: llm-rubric
@@ -3242,10 +3244,10 @@
             The answer says Matt owned Black Friday and Cyber Monday
             readiness for consecutive seasons with no major user-impacting
             incidents, and names at least one documented specific such as the
-            2019 resilience library, the 2022 engagement-tracking hardening,
-            or the scale-up and deploy-freeze ritual. It does not claim a
-            season would have failed without a given change, which the
-            documents explicitly decline to claim.
+            2019 resilience work that became a shared library, the 2022
+            engagement-tracking hardening, or the scale-up and deploy-freeze
+            ritual. It does not claim a season would have failed without a
+            given change, which the documents explicitly decline to claim.
         - type: llm-rubric
           value: *k34
         - type: llm-rubric
@@ -3546,8 +3548,11 @@
             design twice in two services, and names at least one documented
             specific such as the failure-injection test harness, the
             runtime-tunable settings, or the architecture decision record. It
-            does not present the thousands-of-failures claim as verified,
-            since the document says it is unverified.
+            does not say the shared library itself was in place before Black
+            Friday 2019: the document dates its extraction from December 2019,
+            with the epic resolved in February 2020. It does not present the
+            thousands-of-failures claim as verified, since the document says
+            it is unverified.
         - type: llm-rubric
           value: *k42
         - type: llm-rubric
