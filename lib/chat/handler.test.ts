@@ -218,6 +218,42 @@ function readsAfterSaying(preamble: string, id: string): Step {
     ])
 }
 
+/**
+ * A step that writes and reads in the order given and stops on tool-calls.
+ * On the last step this is a model ignoring `toolChoice: 'none'`, which a
+ * measured run did (MTC-100).
+ */
+function writesAndReads(
+  ...parts: ({ text: string } | { read: string })[]
+): Step {
+  return () =>
+    chunks([
+      { type: 'stream-start', warnings: [] },
+      ...parts.flatMap<unknown>((part, n) =>
+        'text' in part
+          ? [
+              { type: 'text-start', id: `w${n}` },
+              { type: 'text-delta', id: `w${n}`, delta: part.text },
+              { type: 'text-end', id: `w${n}` },
+            ]
+          : [
+              {
+                type: 'tool-call',
+                toolCallId: `call-forced-${n}-${part.read}`,
+                toolName: READ_DOCUMENT_TOOL_NAME,
+                input: JSON.stringify({ id: part.read }),
+              },
+            ]
+      ),
+      {
+        type: 'finish',
+        finishReason: { unified: 'tool-calls', raw: 'TOOL_CALLS' },
+        usage,
+        providerMetadata: VERTEX_METADATA,
+      },
+    ])
+}
+
 /** A step that calls recent_activity for `repository` and stops on tool-calls. */
 function checks(repository: string): Step {
   return () =>
@@ -456,6 +492,14 @@ function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
     chunks.push(JSON.parse(line.slice('data: '.length)))
   }
   return chunks
+}
+
+/** The answer text the browser was sent: every text delta, joined. */
+function textFrom(body: string): string {
+  return chunksFrom(body)
+    .filter(chunk => chunk.type === 'text-delta')
+    .map(chunk => String(chunk.delta))
+    .join('')
 }
 
 /** Each progress payload the route wrote, in the order it wrote them. */
@@ -1355,6 +1399,7 @@ describe('reading documents', () => {
     const marker = logged.find(args => args[0] === '[chat] incomplete')
     expect(marker?.[1]).toMatchObject({
       answered: false,
+      finalStepToolCall: true,
       finishReason: 'tool-calls',
       documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
     })
@@ -1436,6 +1481,189 @@ describe('reading documents', () => {
     ])
     expect(progressFrom(body).at(-1)?.steps).toEqual([])
     expect(body).not.toContain(huge.text)
+  })
+})
+
+describe('a tool call on the step forced to answer', () => {
+  // The shape of the measured run (MTC-87, 2026-09-28): two reads and a
+  // GitHub check spend the first three steps, and the fourth, sent
+  // `toolChoice: 'none'`, calls a tool anyway.
+  const readThenCheck = () =>
+    [reads('resume'), reads('faq'), checks(REPOSITORY)] as const
+
+  const NARRATION = 'Let me open the projects document as well.'
+  const FOLLOW_UP = 'What did the platform migration change?'
+  /** An answer in the policy's shape: citation line, then follow-ups. */
+  const FINISHED = [ANSWER, FOLLOW_UPS_TRAILER_PREFIX, FOLLOW_UP].join('\n')
+
+  const completionLine = () =>
+    logged.find(
+      args =>
+        (args[0] === '[chat]' || args[0] === '[chat] incomplete') &&
+        'answered' in (args[1] as object) &&
+        !(args[1] as { aborted?: boolean }).aborted
+    )?.[1]
+
+  test('the SDK does send toolChoice none; the call is the model ignoring it', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ read: 'projects' })
+    )
+    await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    // What reached the model is the option as the route set it; the Vertex
+    // provider turns it into `functionCallingConfig.mode: "NONE"` with the
+    // function declarations still attached, so nothing below the route
+    // drops it on the way.
+    expect(model.doStreamCalls).toHaveLength(CHAT_MAX_STEPS)
+    expect(model.doStreamCalls.at(-1)?.toolChoice).toEqual({ type: 'none' })
+  })
+
+  test('a forced step that obeys answers as it always did', async () => {
+    const model = modelOf(...readThenCheck(), answers(FINISHED))
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+    expect(completionLine()).toMatchObject({
+      answered: true,
+      finalStepToolCall: false,
+      finishReason: 'stop',
+    })
+  })
+
+  test('narration before the call stays out, and the run ends on the notice', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ text: NARRATION }, { read: 'projects' })
+    )
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe('')
+    expect(body).not.toContain(NARRATION)
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(metadataFrom(body).followUps).toBeUndefined()
+    // The log and the transcript agree: nothing was shown, so nothing was
+    // answered, and the line says which step broke the rule.
+    expect(completionLine()).toMatchObject({
+      answered: false,
+      finalStepToolCall: true,
+      finishReason: 'tool-calls',
+    })
+  })
+
+  test('a call with no text at all ends on the notice too', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ read: 'projects' })
+    )
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe('')
+    expect(metadataFrom(body).incomplete).toBe(true)
+    expect(completionLine()).toMatchObject({
+      answered: false,
+      finalStepToolCall: true,
+    })
+  })
+
+  test('a finished answer written before the call is flushed as the answer', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ text: FINISHED }, { read: 'projects' })
+    )
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe(FINISHED)
+    // Nothing follows this step, so the stray call is the only thing that
+    // did not finish; the answer did, and is shown as one.
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+    expect(completionLine()).toMatchObject({
+      answered: true,
+      finalStepToolCall: true,
+      finishReason: 'tool-calls',
+    })
+  })
+
+  test('a finished answer written after the call is flushed the same way', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ read: 'projects' }, { text: FINISHED })
+    )
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe(FINISHED)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+  })
+
+  test('a decline before the call is shown, with no follow-ups', async () => {
+    const model = modelOf(
+      ...readThenCheck(),
+      writesAndReads({ text: DECLINE_SENTENCE }, { read: 'projects' })
+    )
+    const body = await (
+      await handlerChecking(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(textFrom(body)).toBe(DECLINE_SENTENCE)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
+    expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('an earlier step that calls a tool keeps its text out, however finished it looks', async () => {
+    // MTC-49's rule is unconditional before the last step: the model is
+    // coming back, so anything it wrote alongside a call is scratchpad, even
+    // a draft that carries both trailers.
+    const draft = [
+      'He may have led the migration.\n\nSources: faq',
+      FOLLOW_UPS_TRAILER_PREFIX,
+      'Which migration was it?',
+    ].join('\n')
+    const model = modelOf(
+      writesAndReads({ text: draft }, { read: 'faq' }),
+      answers()
+    )
+    const body = await (
+      await handlerWith(model)(
+        post({ messages: [uiMessage('user', QUESTION)] })
+      )
+    ).text()
+
+    expect(body).not.toContain('He may have led the migration.')
+    expect(textFrom(body)).toBe(ANSWER)
+    expect(completionLine()).toMatchObject({
+      answered: true,
+      finalStepToolCall: false,
+      finishReason: 'stop',
+    })
   })
 })
 
@@ -2116,6 +2344,8 @@ describe('logging', () => {
       cacheHit: true,
       documentsRead: 0,
       readTokens: 0,
+      answered: true,
+      finalStepToolCall: false,
       finishReason: 'stop',
       aborted: false,
       ms: 0,
@@ -2239,6 +2469,7 @@ describe('logging', () => {
     expect(entry?.[1]).toMatchObject({
       aborted: true,
       finishReason: 'abort',
+      finalStepToolCall: false,
       documentsRead: 0,
       readTokens: 0,
       readsRefusedUnknown: 0,

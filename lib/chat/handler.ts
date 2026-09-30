@@ -32,7 +32,7 @@ import {
   type ChatProgressPhase,
   type ChatProgressStep,
 } from './progress'
-import { parseFollowUps } from './answer'
+import { findSourcesTrailer, parseFollowUps } from './answer'
 import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
@@ -70,8 +70,9 @@ import {
  * The shape of one request: the policy and the document index go up as the
  * prompt, the model calls `read_document` for the documents it decides it
  * needs, and only then does it answer. `stopWhen` bounds that loop,
- * `prepareStep` forces the last step to write the answer, and
- * KNOWLEDGE_READ_BUDGET bounds what may be read.
+ * `prepareStep` tells the last step to write the answer, `StepText` decides
+ * which step's text is that answer, and KNOWLEDGE_READ_BUDGET bounds what may
+ * be read.
  *
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat:
@@ -171,9 +172,10 @@ export { CHAT_MAX_STEPS }
  * - `truncated`: text arrived but stopped mid-sentence on the output cap. The
  *   answer is partial and still worth showing under a "cut short" notice.
  * - `incomplete`: the run ended without a clean answer: no text at all, or a
- *   finish reason other than 'stop'. Show a "couldn't finish, try again"
- *   notice. `truncated` implies this, so a UI that handles only `incomplete`
- *   still degrades correctly.
+ *   finish reason other than 'stop', except a finished answer from the last
+ *   step that also called a tool (`StepText`). Show a "couldn't finish, try
+ *   again" notice. `truncated` implies this, so a UI that handles only
+ *   `incomplete` still degrades correctly.
  *
  * Both flags are present-or-absent rather than booleans, so `metadata.x` is
  * never a falsy `false` the UI has to distinguish from "not set".
@@ -324,7 +326,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         onFailure: logGitHubFailure,
       })
 
-      const answer = new AnswerText()
+      const answer = new StepText()
 
       const result = streamText({
         model: model({
@@ -343,12 +345,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         // Reads, then one answer. Without a stop condition the SDK would run
         // a single step and never come back for the answer after a tool call.
         stopWhen: stepCountIs(CHAT_MAX_STEPS),
-        // The last step has to produce the answer, so it is not offered the
-        // tool. Without this a model that spends every step reading ends the
-        // run on 'tool-calls' with no text at all, and the visitor gets an
-        // empty bubble under a list of the documents it opened, which is
-        // worse than nothing because it looks like an answer that said
-        // nothing.
+        // The last step has to produce the answer, so it is told not to call
+        // a tool. Without this a model that spends every step reading ends
+        // the run on 'tool-calls' with no text at all. It is an instruction
+        // the model can ignore, and one run did (MTC-87), so it is not the
+        // whole guard: `StepText` keeps a finished answer from that step
+        // even when a call came with it, and the transcript shows the
+        // incomplete notice when there is none. A fifth call to recover the
+        // answer is not an option: the Vertex deadlines in
+        // lib/ai/bounded-fetch.ts divide the request's waiting budget by
+        // CHAT_MAX_STEPS model calls.
         prepareStep: ({ stepNumber }) =>
           stepNumber === CHAT_MAX_STEPS - 1
             ? { toolChoice: 'none' }
@@ -391,6 +397,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             usage,
             finishReason,
             answered: answer.answered(),
+            finalStepToolCall: answer.forcedStepCalledTool(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             readsRefused: session.readsRefused(),
@@ -411,6 +418,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
             finishReason: 'abort',
             aborted: true,
             answered: answer.answered(),
+            finalStepToolCall: answer.forcedStepCalledTool(),
             documentsRead: session.documentsRead(),
             readTokens: session.readTokens(),
             ...flatRefusals(session.readsRefused()),
@@ -434,17 +442,24 @@ export function createChatHandler(deps: ChatHandlerDeps) {
           sendReasoning: false,
           sendSources: false,
           messageMetadata: ({ part }) => {
-            answer.observe(part)
+            observeModelPart(answer, part)
             if (part.type !== 'finish') return undefined
 
             const metadata: ChatMessageMetadata = {}
             // Lets the transcript show "this answer was cut short" instead of
             // leaving a half sentence looking like a finished answer.
             if (part.finishReason === 'length') metadata.truncated = true
+            // A forced step that wrote a finished answer and then called a
+            // tool ends on 'tool-calls', but the answer is whole and nothing
+            // was coming after it, so it is shown as one.
+            const finished =
+              part.finishReason === 'stop' ||
+              (part.finishReason === 'tool-calls' &&
+                answer.forcedStepCalledTool())
             // No text, or any finish that is not a clean stop, means the run
             // did not end with a finished answer, most often a model that
             // spent every step reading. Say so.
-            if (!answer.answered() || part.finishReason !== 'stop') {
+            if (!answer.answered() || !finished) {
               metadata.incomplete = true
             } else {
               // Only a finished answer offers more. A cut-off one may have
@@ -478,42 +493,123 @@ export function createChatHandler(deps: ChatHandlerDeps) {
 }
 
 /**
- * Whether the run produced an answer for the visitor to read, and how that
- * answer ended.
+ * Whether the latest step's text is the answer the visitor reads, and what
+ * its end says.
  *
- * Both reset on every `start-step`, so only the final step is judged: a model
- * may narrate before a tool call ("Let me check his résumé."), and that
- * preamble is neither the answer nor a place to look for its trailers.
+ * Every `start-step` resets it, so only the step in progress is judged. Text
+ * from a step that called no tool is the answer. Text from a step that called
+ * one is scratchpad (MTC-49): the model is coming back, and what it wrote
+ * alongside the call is narration ("Let me check his résumé."), neither the
+ * answer nor a place to look for its trailers.
  *
- * Only the end of the text is kept. The trailers the policy asks for are the
- * last thing written, so a fixed-size tail is all the metadata callback needs,
- * and a long briefing costs the same handful of kilobytes as a short one.
- * Nothing here is logged: a visitor's answer stays in memory for the length of
- * the request and goes no further.
+ * The exception is the step the route forces to answer, the CHAT_MAX_STEPS-th
+ * (MTC-100). It is sent `toolChoice: 'none'`, and the SDK does put that on
+ * the wire (the Vertex provider sends `functionCallingConfig.mode: "NONE"`
+ * with the function declarations still attached), but the model can return
+ * a call anyway, and a measured run did (MTC-87, 2026-09-28). No step
+ * follows it, so dropping its text would leave the visitor nothing. Its text
+ * is kept when it reads as a finished answer by the policy's own markers: a
+ * citation line, a follow-ups block, or the decline sentence. Narration
+ * carries none of them, so a forced step that only narrated is still dropped
+ * and the run ends on the incomplete notice.
+ *
+ * Each request runs two of these: one over the model's parts, for the
+ * metadata and the log, and one over the chunks bound for the browser, in
+ * `onlyAnswerText`. Both see the same text in the same order, so the log's
+ * `answered` and what the bubble shows cannot disagree.
+ *
+ * Only the end of the text is kept. The markers are the last thing written,
+ * so a fixed-size tail is all either question needs, and a long briefing
+ * costs the same handful of kilobytes as a short one. Nothing here is logged:
+ * a visitor's answer stays in memory for the length of the request and goes
+ * no further.
  */
-class AnswerText {
+class StepText {
+  private step = 0
+  private calledTool = false
   private sawText = false
   private tail = ''
 
-  observe(part: { type: string; text?: string }): void {
-    if (part.type === 'start-step') {
-      this.sawText = false
-      this.tail = ''
-      return
-    }
-    if (part.type !== 'text-delta' || typeof part.text !== 'string') return
-    this.sawText ||= part.text.trim().length > 0
-    this.tail = (this.tail + part.text).slice(-ANSWER_TAIL_CHARS)
+  /** A `start-step` part or chunk. */
+  startStep(): void {
+    this.step += 1
+    this.calledTool = false
+    this.sawText = false
+    this.tail = ''
   }
 
-  /** Whether the final step produced any text for the visitor to read. */
+  /** Any tool part or chunk: the step called a tool. */
+  toolCalled(): void {
+    this.calledTool = true
+  }
+
+  write(text: string): void {
+    this.sawText ||= text.trim().length > 0
+    this.tail = (this.tail + text).slice(-ANSWER_TAIL_CHARS)
+  }
+
+  /**
+   * Whether text this step writes from here on could still turn out to be
+   * the answer. False once a step before the forced one has called a tool,
+   * which is when its text can be let go without waiting for the step to
+   * end.
+   */
+  mayBeAnswer(): boolean {
+    return !this.calledTool || this.isForcedStep()
+  }
+
+  /** Whether the step's text so far is the answer. */
+  keepsText(): boolean {
+    if (!this.calledTool) return true
+    return this.isForcedStep() && readsAsFinishedAnswer(this.tail)
+  }
+
+  /** Whether the step produced text the visitor is shown. */
   answered(): boolean {
-    return this.sawText
+    return this.sawText && this.keepsText()
   }
 
-  /** The end of the final step's text, where the trailers are. */
+  /** The step sent `toolChoice: 'none'` called a tool anyway. */
+  forcedStepCalledTool(): boolean {
+    return this.isForcedStep() && this.calledTool
+  }
+
+  /** The end of the step's text, where the trailers are. */
   end(): string {
     return this.tail
+  }
+
+  private isForcedStep(): boolean {
+    return this.step >= CHAT_MAX_STEPS
+  }
+}
+
+/**
+ * Whether text reads as an answer the policy would call finished: it ends
+ * on the citation line or on a follow-ups block with at least one
+ * well-formed question, or it holds the decline sentence. Every answer the
+ * policy asks for carries one of the three; narration before a read carries
+ * none. An answer that broke the policy by leaving out both trailers is
+ * judged unfinished, which costs the visitor the notice rather than risking
+ * narration in the bubble.
+ */
+function readsAsFinishedAnswer(tail: string): boolean {
+  return (
+    tail.includes(DECLINE_SENTENCE) ||
+    findSourcesTrailer(tail) !== undefined ||
+    parseFollowUps(tail).length > 0
+  )
+}
+
+/** Feeds one of the model's parts to a StepText. */
+function observeModelPart(
+  step: StepText,
+  part: { type: string; text?: string }
+): void {
+  if (part.type === 'start-step') step.startStep()
+  else if (part.type.startsWith('tool-')) step.toolCalled()
+  else if (part.type === 'text-delta' && typeof part.text === 'string') {
+    step.write(part.text)
   }
 }
 
@@ -578,33 +674,33 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
 
 /**
  * Holds text from a step until that step is known to be the answer, and
- * drops it when the step called a tool (MTC-49).
+ * drops it when it is not (MTC-49); `StepText` is where that is decided.
  *
  * Models routinely narrate before a read ("Let me check his résumé."). That
  * prose is `text-delta`, the same chunk type as the answer, so an allowlist
  * that forwards every text chunk puts chain-of-thought in the bubble. T3
  * Code never lets a non-`assistant_text` delta mutate the message; this is
  * the same gate for a one-tool loop: text from a tool-calling step is
- * scratchpad, text from a step that only wrote is the answer.
+ * scratchpad, text from a step that only wrote is the answer, and the one
+ * step with no step after it keeps a finished answer even when it also
+ * called a tool.
  *
  * Held until `finish-step` so a live token cannot race a tool call that
  * arrives later in the same step. The answer therefore appears when that
  * step ends rather than token-by-token; the progress view already covers
- * the wait. An abort or error mid-answer flushes what was held so a
- * partial briefing is not thrown away.
+ * the wait. An abort or error mid-answer flushes what was held, by the same
+ * rule, so a partial briefing is not thrown away.
  */
 function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
+  const step = new StepText()
   let held: ChatUIChunk[] = []
-  let dropText = false
 
   function flushHeld(
     controller: TransformStreamDefaultController<ChatUIChunk>
   ): void {
-    if (dropText) {
-      held = []
-      return
+    if (step.keepsText()) {
+      for (const part of held) controller.enqueue(part)
     }
-    for (const part of held) controller.enqueue(part)
     held = []
   }
 
@@ -612,13 +708,13 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
     transform(chunk, controller) {
       if (chunk.type === 'start-step') {
         flushHeld(controller)
-        dropText = false
+        step.startStep()
         controller.enqueue(chunk)
         return
       }
       if (chunk.type.startsWith('tool-')) {
-        dropText = true
-        held = []
+        step.toolCalled()
+        if (!step.mayBeAnswer()) held = []
         controller.enqueue(chunk)
         return
       }
@@ -627,7 +723,8 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
         chunk.type === 'text-delta' ||
         chunk.type === 'text-end'
       ) {
-        if (!dropText) held.push(chunk)
+        if (chunk.type === 'text-delta') step.write(chunk.delta)
+        if (step.mayBeAnswer()) held.push(chunk)
         return
       }
       if (chunk.type.startsWith('reasoning')) return
@@ -1110,6 +1207,8 @@ interface CompletionAggregates {
   usage: LanguageModelUsage
   finishReason: string
   answered: boolean
+  /** The step sent `toolChoice: 'none'` called a tool anyway. */
+  finalStepToolCall: boolean
   documentsRead: number
   readTokens: number
   readsRefused: ReadsRefused
@@ -1137,6 +1236,7 @@ function logCompletion({
   usage,
   finishReason,
   answered,
+  finalStepToolCall,
   documentsRead,
   readTokens,
   readsRefused,
@@ -1174,9 +1274,15 @@ function logCompletion({
     // a counter, and `flatActivityRefusals` says when a line tells them apart.
     ...flatActivityRefusals(activityRefused),
     // False here is the signal that a request burned tokens and gave the
-    // visitor nothing. It should be rare; if it is not, CHAT_MAX_STEPS is
-    // wrong.
+    // visitor nothing: no text, or only text the route withheld as
+    // narration. It should be rare; if it is not, CHAT_MAX_STEPS is wrong.
     answered,
+    // True when the last step, told not to call a tool, called one anyway
+    // (MTC-100). With `answered: false` it names why the visitor got the
+    // notice; with `answered: true` the answer was written before or after
+    // the stray call and was shown. Either way `finishReason` is
+    // 'tool-calls' and the line is marked incomplete.
+    finalStepToolCall,
     finishReason,
     aborted: false,
     // Zero on a healthy request. Anything above it means a model call stalled
