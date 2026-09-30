@@ -4,8 +4,9 @@
  * The pool is split across two rows. Each row is one track holding its own
  * half of the pool twice, moved by a CSS `transform` keyframe that travels
  * exactly one copy's width. Two coordinate systems therefore describe the
- * same row, and the component swaps between them whenever a pill takes focus
- * or the visitor takes a row over by touch or wheel:
+ * same row, and the component swaps between them whenever a pill takes
+ * focus, a finger holds the row, or the visitor takes a row over by a drag
+ * or a wheel:
  *
  * - **animation progress**, a fraction of one loop, which is what the CSS
  *   animation and its negative `animation-delay` speak;
@@ -415,7 +416,7 @@ export const TOUCH_DIRECTION_THRESHOLD_PX = 8
 
 /**
  * What a touch on a moving row is, so far: `undecided` until the finger has
- * travelled the threshold from where it landed, then `sideways` (a drag
+ * traveled the threshold from where it landed, then `sideways` (a drag
  * along the row, which hands the rows over) or `upright` (the page being
  * scrolled past, which leaves them moving).
  */

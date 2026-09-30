@@ -303,13 +303,14 @@
  * from the first paint, still at scroll zero while the loop runs. A touch
  * browser can choose the box a drag will scroll when the finger lands,
  * before any handler has run, so a row that only became scrollable in its
- * touchstart handler could stop under the first drag without moving. The
- * hand-over then only has to swap the transform for scrollLeft.
+ * touchstart handler could stop under the first drag without moving.
+ * Holding the row for a touch then only has to swap the transform for
+ * scrollLeft, keeping any scroll the browser has already given it.
  * Phone and tablet browsers draw overlay scrollbars, so nothing shows until
  * the row scrolls. A fine pointer keeps `hidden`, where a classic scrollbar
- * would be drawn under every moving row; it becomes scrollable when it is
- * handed over. This block has to follow the rule above, whose `overflow`
- * shorthand would otherwise undo it.
+ * would be drawn under every moving row; it becomes scrollable while a
+ * finger holds it and once it is handed over. This block has to follow the
+ * rule above, whose `overflow` shorthand would otherwise undo it.
  */
 @media (pointer: coarse) {
   .starter-ticker-row {
@@ -420,19 +421,13 @@
  * one being read is the distraction the pause exists to remove. That is why
  * both conditions are read off the group rather than off a single row.
  *
- * A finger on either row holds both only until it shows which way it is
- * going (starter-ticker.tsx sets the flag on every moving row): a drag along
- * a row hands both over for good (below), and a tap or a page scroll lets
- * them move again. Hover is read only where a pointer can hover, because a
- * touch browser keeps `:hover` on whatever was last tapped, and a tap hands
- * nothing over, so it would otherwise leave both rows paused, with no strip
- * to scroll.
+ * A finger is not a pause: starter-ticker.tsx holds both rows still under
+ * it with the freeze below until it shows which way it is going. Hover is
+ * read only where a pointer can hover, because a touch browser keeps
+ * `:hover` on whatever was last tapped, and a tap hands nothing over, so it
+ * would otherwise leave both rows paused, with no strip to scroll.
  */
 .starter-ticker:focus-within .starter-ticker-track {
-  animation-play-state: paused;
-}
-
-.starter-ticker-row[data-touch-paused='true'] .starter-ticker-track {
   animation-play-state: paused;
 }
 
@@ -464,6 +459,20 @@
   /* The lead that lets a row's first pill be scrolled clear of the fade.
      The component adds the same width to scrollLeft as it freezes. */
   padding-inline-start: var(--edge-fade);
+}
+
+/*
+ * A row frozen under a finger that has not yet shown which way it is going
+ * (MTC-79). It is a scroll container for as long as the finger is down,
+ * whatever the pointer, so a drag the browser starts along it scrolls it:
+ * a touchscreen laptop reports a fine pointer, where a moving row is not
+ * one. A tap or a page scroll sets the row moving again from where it
+ * stopped; a drag along it hands it over (below).
+ */
+.starter-ticker-row[data-touch-held='true'] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
 }
 
 /*

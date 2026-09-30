@@ -294,6 +294,7 @@ describe("the rows' scrollbar", () => {
     for (const block of [
       ruleFor('.follow-up-row {'),
       ruleFor(".starter-ticker-row[data-handed-over='true'] {"),
+      ruleFor(".starter-ticker-row[data-touch-held='true'] {"),
       ruleFor('.starter-ticker-row {'),
       blockAround(".starter-ticker-copy[aria-hidden='true']"),
       cssBlock(css, '@media (pointer: coarse)'),
@@ -426,29 +427,31 @@ describe('the state flags the component writes', () => {
     ).toContain('animation-play-state: paused')
   })
 
-  test('a finger holds the rows by pausing them, wherever a finger can land', () => {
-    // Paused, not frozen: a tap or a page scroll lets the rows move on from
-    // exactly where they were, and only a drag along a row freezes them.
-    // Not inside a media query: a touchscreen laptop reports a fine pointer
-    // and can hover, and a finger on it is still a finger.
-    const selector =
-      ".starter-ticker-row[data-touch-paused='true'] .starter-ticker-track {"
+  test('a row held under a finger can be scrolled, wherever a finger can land', () => {
+    // The hold is the freeze, so the rows stop as they do for focus; the
+    // held row is also a scroll container, so a drag the browser starts
+    // before the direction is read scrolls it. Not inside a media query: a
+    // touchscreen laptop reports a fine pointer, and a finger on it is
+    // still a finger. After the base rule, whose `overflow` shorthand would
+    // otherwise undo it.
+    const selector = ".starter-ticker-row[data-touch-held='true'] {"
     const rule = ruleFor(selector)
-    expect(rule).toContain('animation-play-state: paused')
-    expect(rule).not.toContain('animation: none')
+    expect(rule).toContain('overflow-x: auto')
+    expect(rule).toContain('overscroll-behavior-x: contain')
     const at = css.indexOf(selector)
     // At the top level: the last block opened before it is also closed
     // before it.
     expect(css.lastIndexOf('}', at)).toBeGreaterThan(css.lastIndexOf('{', at))
+    expect(at).toBeGreaterThan(css.indexOf('.starter-ticker-row {'))
     expect(componentSource('starter-ticker.tsx')).toContain(
-      "dataset.touchPaused = 'true'"
+      "dataset.touchHeld = 'true'"
     )
   })
 
   test('hover pauses only where a pointer can hover', () => {
     // A touch browser keeps :hover on the last thing tapped, and a tap
-    // before the rows are placed hands nothing over, so an unscoped hover
-    // pause would hold both rows still with no strip to scroll.
+    // hands nothing over, so an unscoped hover pause would hold both rows
+    // still with no strip to scroll.
     expect(
       blockAround('.starter-ticker:hover .starter-ticker-track {')
     ).toContain('@media (hover: hover)')

@@ -385,7 +385,7 @@ describe('which way a touch on a moving row is going', () => {
     expect(T).toBe(8)
   })
 
-  test('a finger that has not travelled the threshold has said nothing yet', () => {
+  test('a finger that has not traveled the threshold has said nothing yet', () => {
     expect(touchDirection(0, 0)).toBe('undecided')
     expect(touchDirection(T - 1, 0)).toBe('undecided')
     // Below the threshold on the diagonal too: the distance decides, not
