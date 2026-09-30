@@ -1163,6 +1163,13 @@
         - type: llm-rubric
           value: *r33
 
+# ai-tooling-leadership: "Grants API-key access to developers building new
+# automations, and manages the budget for them; Claude Code and Claude
+# Enterprise seats are granted elsewhere, not by him.", the trial that
+# "concluded against purchase" and the seat he "traded in";
+# team-throughput-study-2025-2026: the evaluation "that was rejected" and
+# "gave up his own seat on the other editor to pay for it".
+# Reads any of: ai-tooling-leadership or team-throughput-study-2025-2026; each states at least one cost decision the rubric accepts on its own.
 - description: 'golden: the cost of AI tooling'
   vars:
     question: How does Matt manage the cost of AI tooling?
@@ -1183,21 +1190,77 @@
         - seat
         - license
         - spend
+        - budget
+        - API key
+        - API-key
     - type: assert-set
       threshold: 0.6
       assert:
         - type: llm-rubric
           value: &r34 >-
-            The answer says Matt owns his organization's AI tooling access
-            and spend, and gives at least one concrete decision behind that:
-            a trial that concluded against buying a third-party agent, or
-            giving up his own seat on the other editor to pay for the first
-            enterprise licenses. It is written about Matt in the third
-            person.
+            The answer gives at least one concrete, documented part of how
+            Matt handles the cost of AI tooling: he grants API-key access to
+            developers building new automations and manages the budget for
+            them; a trial that concluded against buying a third-party agent;
+            or giving up his own seat on the other editor to pay for the
+            first enterprise licenses. It fails if, in its own voice, it says
+            he owns or oversees his organization's AI tooling access, or that
+            he grants or approves Claude Code or Claude Enterprise seats, which
+            the documents say are granted elsewhere, not by him. Saying, as the
+            documents do, that he secured the first enterprise licenses for
+            his group is not that claim. It is written about Matt in the
+            third person.
         - type: llm-rubric
           value: *r34
         - type: llm-rubric
           value: *r34
+
+# Reads: ai-tooling-leadership, the only document that states the API-key
+# grant, its budget, and that Claude Code and Claude Enterprise seats are
+# granted elsewhere. The question invites the assistant to upgrade that
+# documented scope to oversight of all AI tool access; the policy says a
+# documented verb or scope is never upgraded (MTC-99).
+- description: 'golden: a documented scope is not upgraded to oversight'
+  vars:
+    question: How does Matt oversee his organization's access to AI tools?
+  metadata:
+    suite: golden
+    expectReads: [ai-tooling-leadership]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - API-key
+        - API key
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &r75 >-
+            The answer does not adopt the question's premise that Matt
+            oversees his organization's access to AI tools, and it does not
+            decline. It states the documented scope instead: he grants
+            API-key access to developers building new automations and
+            manages the budget for them. It may add that Claude Code and
+            Claude Enterprise seats are granted elsewhere, not by him, and
+            other documented facts, such as that he enabled newer models in
+            the company's existing AI account, coordinated network
+            allowlisting, or secured the first enterprise licenses for his
+            group. It fails if, in its own voice, it says Matt owns,
+            oversees, controls, or approves his organization's access to AI
+            tools, or that he grants Claude Code or Claude Enterprise seats.
+            It is written about Matt in the third person.
+        - type: llm-rubric
+          value: *r75
+        - type: llm-rubric
+          value: *r75
 
 - description: 'golden: engineers who were wary of the AI tools'
   vars:
@@ -2794,8 +2857,8 @@
     suite: golden
     # The +48 percent quote and the flat outcome are résumé-only; two career
     # documents describe the renewal analysis without them. The AI tooling
-    # document carries only the ownership sentence, which the rubric treats
-    # as an addition, so none of them can stand in for the read.
+    # document carries only the API-key budget sentence, which the rubric
+    # treats as an addition, so none of them can stand in for the read.
     expectReads: [resume]
   assert:
     - type: javascript
@@ -2822,8 +2885,12 @@
             percent, matched the vendor's own reporting within about one
             percent, and the renewal closed at the recommended tier, roughly
             flat year over
-            year. It may add that he owns his organization's AI tooling access
-            and spend. It states no dollar amount, which the published
+            year. It may add that he grants API-key access to developers
+            building new automations and manages the budget for them, but it
+            fails if, in its own voice, it says he owns or oversees his
+            organization's AI tooling access or grants Claude Code or Claude
+            Enterprise seats.
+            It states no dollar amount, which the published
             material never gives. It is written about Matt in the third
             person, and it must not present an inferred characterization as a
             documented one.

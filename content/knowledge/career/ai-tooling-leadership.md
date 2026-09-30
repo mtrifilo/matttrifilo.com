@@ -3,7 +3,7 @@ id: ai-tooling-leadership
 title: AI tooling leadership across the engineering organization
 summary: The talks, demos, forums, skills library, trials, and proposals behind Matt's push for AI-agent adoption across roughly fifty engineers.
 tags: [ai, agentic-engineering, claude-code, talks, enablement, leadership]
-updated: 2026-09-15
+updated: 2026-09-28
 ---
 
 # AI tooling leadership across the engineering organization
@@ -63,7 +63,9 @@ significant time.
 
 ## Access, budget, and proposals
 
-- Owns the organization's AI tooling access and spend for agent workflows.
+- Grants API-key access to developers building new automations, and manages
+  the budget for them; Claude Code and Claude Enterprise seats are granted
+  elsewhere, not by him.
 - Authored proposals to leadership: an AI-champions-per-team adoption
   proposal; the plugin marketplace governance proposal; an LLM
   evaluation-framework proposal (February 2026, local eval tooling first
