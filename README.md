@@ -64,22 +64,23 @@ Read by `lib/blog.ts`; the type is `lib/types/blog.ts`.
 
 Read by `lib/knowledge/build.ts`, which accepts these keys and no others.
 
-| Field       | Rule                                                                                                                                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`        | Required; must match the file name.                                                                                                                                                                           |
-| `title`     | Required.                                                                                                                                                                                                     |
-| `summary`   | Required; at most 160 characters. The script drafts it from the description or the title: rewrite it to say what a reader would learn, since it is what the assistant reads before deciding to open the post. |
-| `tags`      | Required, an inline list such as `[blog, engineering]`. The script writes `blog` plus the categories.                                                                                                         |
-| `updated`   | Required, `YYYY-MM-DD`.                                                                                                                                                                                       |
-| `canonical` | Optional; must be an `https://matttrifilo.com` URL. The script points it at the post.                                                                                                                         |
+| Field       | Rule                                                                                                                                                                                                              |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`        | Required; must match the file name.                                                                                                                                                                               |
+| `title`     | Required.                                                                                                                                                                                                         |
+| `summary`   | Required; at most 160 characters. The script drafts it from the description or the title: rewrite it to say what a reader would learn, since it is what the assistant reads before deciding to open the post.     |
+| `tags`      | Required, an inline list such as `[blog, engineering]`. The script writes `blog` plus the categories.                                                                                                             |
+| `updated`   | Required, `YYYY-MM-DD`.                                                                                                                                                                                           |
+| `canonical` | Required for a blog twin, and exactly `https://matttrifilo.com/blog/<date>-<slug>` (`bun test` checks it); the script writes it. Optional for other documents, where it must be an `https://matttrifilo.com` URL. |
 
 A title or summary must be one line, with no em dash, no en dash used as a sentence dash (a range such as "2019 – 2025" is fine) and no middle dot (`·`) or look-alike. The script refuses these at its prompt.
 
 ### Headings and body
 
 - The post's title is the page's only `<h1>`. Write `#` for top-level sections: `components/blog/mdx-content.tsx` renders every heading one level down.
-- `##` headings are the section titles the assistant shows while it reads the post. Keep fewer than twelve, each under 120 characters (`lib/progress-caps.ts`), or `bun test` fails.
+- `##` headings are the section titles the assistant shows while it reads the post. Keep fewer than twelve, each under 120 characters (`lib/progress-caps.ts`), or `bun test` fails. `#` headings are not counted, so a post sectioned only with `#` shows no section titles while it is read.
 - The twin is part of the corpus, so the corpus rules apply to the body: no em dash and no British spelling from the list in `lib/american-english.ts` (`lib/site-copy.test.ts`), and no prose line that starts with `TODO` or contains `TODO (Matt)`.
+- Posts compile as MDX. Outside inline code or a fenced block, the body may not contain a bare `<` or `{`: wrap it in backticks, or write `&lt;` or `&#123;`. Close every code fence, indent a fence no more than three spaces, and do not open one on a list item or block quote line. `assertMdxSafe` in `lib/knowledge/build.ts` fails `bun test` otherwise.
 - A long post can exceed the corpus's size guards (`KNOWLEDGE_DOCUMENT_TOKEN_CEILING` in `lib/knowledge/build.ts`, and the assistant's read budget). `bun run knowledge:check` prints each document's cost and the headroom left.
 
 Because a post adds a document the assistant can answer from, it is a corpus change: follow [Updating the corpus](#updating-the-corpus) below, including the eval run before the pull request.
@@ -90,9 +91,9 @@ Vercel builds from Git with `bun install` and `bun run build` (`vercel.json`). A
 
 ## The Career Assistant
 
-Matt's Career Assistant lives at `/ask`, with a compact panel on the homepage. It is written for a hiring manager or recruiter deciding whether to talk to Matt about a hands-on engineering-manager role. It answers from a curated corpus in `content/knowledge/`, names the documents it read, and speaks about Matt in the third person, never as Matt. Nothing a visitor writes is stored.
+Matt's Career Assistant lives at `/ask`, with a compact panel on the homepage. It is switched off in production until launch (see [The kill switch](#the-kill-switch)). It is written for a hiring manager or recruiter deciding whether to talk to Matt about a hands-on engineering-manager role. It answers from a curated corpus in `content/knowledge/`, names the documents it read, and speaks about Matt in the third person, never as Matt. Nothing a visitor writes is stored.
 
-The route is `app/api/chat`; the code is under `lib/chat`, `lib/knowledge` and `components/assistant`; the evals are under `evals`. Read the skill and the runbook before changing any of it.
+The chat route is `app/api/chat`, and `app/api/ask/health` is a Vertex health probe served only on previews and in local development; the pages are under `app/ask`; the code is under `lib/chat`, `lib/knowledge`, `lib/ai` and `components/assistant`; the evals are under `evals`. Read the skill and the runbook before changing any of it.
 
 ### Updating the corpus
 
@@ -102,6 +103,7 @@ Documents live at `content/knowledge/<topic>/<id>.md`, with the frontmatter in t
 - `scripts/knowledge-denylist-check.sh` checks the corpus against a private denylist kept outside the repository. Without that file it prints one line and exits 0, so its OK is not proof on a machine that lacks it.
 - Career documents follow Matt's verbatim-first rubric: copied from his private drafts, with only sensitive material, employer IP and personal data about other people removed, and never with a verb or scope stronger than the draft's.
 - The repository is public, so a corpus change gets a fresh-context privacy review before any push.
+- A new document needs at least one `golden` eval test that only it can answer, and it can make existing goldens' expected reads stale: see the runbook's "Adding a golden when a corpus document is added" before running `bun run evals`.
 - An em dash or a listed British spelling in the corpus fails `bun test` (the runbook's "Copy rules").
 
 ### Running the evals
