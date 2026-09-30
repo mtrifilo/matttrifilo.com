@@ -40,7 +40,9 @@ test.beforeEach(async ({ page }) => {
       const rows = [...document.querySelectorAll('.starter-ticker-row')]
       const state = (viewport as HTMLElement).dataset
       log.push({
-        at: Math.round(event.timeStamp),
+        // When the listener ran. A scroll event's own timeStamp is when it
+        // was queued, which can be before an event delivered ahead of it.
+        at: Math.round(performance.now()),
         type: event.type,
         row: rows.indexOf(viewport),
         scrollLeft: viewport.scrollLeft,
@@ -148,10 +150,16 @@ async function dragFirstRow(
 }
 
 /**
- * Dispatches one finger's touch on the first row: a touchstart at the row's
- * middle, a touchmove to each later offset (in px from where it landed), and
- * a touchend. Dispatched events never scroll anything or produce a click, so
- * this reads only the component's direction rule.
+ * Dispatches one finger's touch on the first row: a touchstart three
+ * quarters along the row and halfway down, a touchmove to each later offset
+ * (in px from where it landed), and a touchend. Dispatched events never
+ * scroll anything or produce a click, so this reads only the component's
+ * direction rule.
+ *
+ * Two frames pass after each event, as they would under a finger, whose
+ * next event never arrives in the frame of the one before. Without them,
+ * whether anything the page does in its next frame (a scroll event, say)
+ * lands before or after the finger's next event would be a race.
  */
 async function dispatchTouch(
   page: Page,
@@ -167,16 +175,24 @@ async function dispatchTouch(
     clientX: x + dx,
     clientY: y + dy,
   })
+  const twoFrames = () =>
+    page.evaluate(async () => {
+      for (let frame = 0; frame < 2; frame += 1) {
+        await new Promise(resolve => requestAnimationFrame(resolve))
+      }
+    })
   const [first, ...rest] = offsets
   await row.dispatchEvent('touchstart', {
     touches: [at(first)],
     changedTouches: [at(first)],
   })
+  await twoFrames()
   for (const offset of rest) {
     await row.dispatchEvent('touchmove', {
       touches: [at(offset)],
       changedTouches: [at(offset)],
     })
+    await twoFrames()
   }
   const last = offsets[offsets.length - 1]
   await row.dispatchEvent('touchend', {

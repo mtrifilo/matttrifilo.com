@@ -17,7 +17,8 @@ import {
 /**
  * A visitor who asked for less motion (WCAG 2.2.2; the research behind
  * MTC-55): the rows are static strips that still open on a whole pill,
- * nothing on the page animates, and an answer arrives without movement.
+ * nothing on the page moves or resizes (a color or opacity transition is
+ * not motion; see `running`), and an answer arrives without movement.
  */
 
 test.beforeEach(async ({ page }) => {
