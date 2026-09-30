@@ -1506,7 +1506,7 @@ describe('documents must survive being compiled as MDX', () => {
     expect(built.documents[0].text).toContain('\\<100')
   })
 
-  test('says so when an over-indented fence is the likely cause', () => {
+  test('refuses a fence indented four or more spaces, by name', () => {
     // A fence indented four or more spaces is valid CommonMark inside a
     // nested list, and a fence anywhere to MDX, and this check does not
     // recognise it: recognising it means tracking list context, which is a
@@ -1710,7 +1710,9 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
           'knowledge:check` and prints the <Index> `text` field.',
         ].join('\n')
       )
-    ).toThrow(/"<" outside code.*keep each code span on one line/)
+    ).toThrow(
+      /"<" outside code.*keep each code span on one line, or escape a lone backtick/
+    )
     expect(
       placeholder('Run `rg\nTODO` then TODO (Matt) `x` and move on.')
     ).toBe(true)
@@ -1724,6 +1726,80 @@ describe('the build reads Markdown the way CommonMark does (MTC-71)', () => {
     expect(() => career('Intro.\n\n```ts\nconst x = 1')).toThrow(
       /a-role\.md:11: a fenced code block opened here is never closed/
     )
+  })
+
+  test('refuses a fence that opens on a list item or block quote line', () => {
+    // CommonMark and MDX read "- ```sh" as a fence inside the item; the
+    // line reader cannot see it, so its closer would read as an opener and
+    // everything after it as code, a tag and a placeholder included.
+    const refused =
+      /a ``` fence that opens on a list item or block quote line.*Put the fence on its own line/
+    expect(() =>
+      career(
+        [
+          'Steps:',
+          '',
+          '- ```sh',
+          '  npm run build',
+          '  ```',
+          '',
+          'Then open <b>the preview</b>.',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+    expect(() =>
+      faq(
+        [
+          '## How does he ship?',
+          '',
+          '- ```sh',
+          '  npm run build',
+          '  ```',
+          '',
+          'TODO (Matt)',
+        ].join('\n')
+      )
+    ).toThrow(refused)
+    expect(() => career('> ```\n> code\n> ```\n\nDone.')).toThrow(refused)
+    // The advice works: the fence on its own line under the item builds.
+    const fixed = [
+      'Steps:',
+      '',
+      '- Build it:',
+      '',
+      '  ```sh',
+      '  npm run build',
+      '  ```',
+      '',
+      'Then open the preview.',
+    ].join('\n')
+    expect(career(fixed).documents[0].text).toBe(fixed)
+  })
+
+  test('a nested fence inside a Markdown sample is content, not refused', () => {
+    // Inside the ```` block, MDX reads the indented ``` lines as content:
+    // too short to close it, and "```js" carries an info string.
+    const sample = [
+      'An example:',
+      '',
+      '````md',
+      '1. Run:',
+      '',
+      '    ```js',
+      '    x()',
+      '    ```',
+      '````',
+      '',
+      'Done.',
+    ].join('\n')
+    expect(career(sample).documents[0].text).toBe(sample)
+  })
+
+  test('a heading indented four or more spaces is read by its title for placeholders', () => {
+    expect(placeholder('Intro.\n\n    ## TODO')).toBe(true)
+    expect(() => career('Intro.\n\n    ## TODO')).toThrow(/a TODO placeholder/)
+    // It still does not start a section.
+    expect(documentHeadings('## A\n\n    ## B\n\nx')).toEqual(['A'])
   })
 
   test('a backtick fence whose info string holds a backtick is prose', () => {

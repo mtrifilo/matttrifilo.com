@@ -5,6 +5,7 @@ import { MAX_HEADING_CHARS, MAX_HEADINGS } from '@/lib/progress-caps'
 import {
   atxHeading,
   FenceTracker,
+  isFenceAfterContainerMarker,
   isOverIndentedFence,
   LineReader,
   proseText,
@@ -647,18 +648,27 @@ export function sourceLines(body: string, lineOffset = 0): SourceLine[] {
  * indented code, so a fence indented four or more columns (a tab counts as
  * four) is a fence to MDX and indented code to CommonMark. The two then
  * disagree about which later ``` opens and which closes, and whichever this
- * check picked, it could pass prose that MDX rejects. So such a fence line
- * is refused, inside a fence or out. The cost is a fenced block nested in a
- * list item deeper than three spaces, which the corpus does not have; a
- * fence under a bullet or a one-digit numbered item fits within three.
+ * check picked, it could pass prose that MDX rejects. So such a line is
+ * refused when it would open a fence, or when MDX would read it as closing
+ * the open one; any other deep fence line inside a fence is content to
+ * both. The cost is a fenced block nested in a list item deeper than three
+ * spaces, which the corpus does not have; a fence under a bullet or a
+ * one-digit numbered item fits within three. A fence that opens on a list
+ * item or block quote line ("- ```sh") is refused for the same reason:
+ * the reader cannot see it, so it would misread everything after it.
  */
 function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
   const reader = new LineReader()
   let fenceOpenedAt = 0
   for (const line of lines) {
-    if (isOverIndentedFence(line.text)) {
+    if (isOverIndentedFence(line.text, reader.openFenceRun)) {
       throw new Error(
         `${label}:${line.number}: a \`\`\` fence indented four or more spaces, which this check does not recognise as code (a tab counts as four). CommonMark reads it as indented code and MDX as a fence, so they disagree about everything after it; outdent it to three spaces or fewer. Line: ${line.text.trim()}`
+      )
+    }
+    if (!reader.fenceOpen && isFenceAfterContainerMarker(line.text)) {
+      throw new Error(
+        `${label}:${line.number}: a \`\`\` fence that opens on a list item or block quote line, which this check does not read as a fence, so it would misread everything after it. Put the fence on its own line, indented under the item by up to three spaces, and keep fenced code out of block quotes. Line: ${line.text.trim()}`
       )
     }
     const wasOpen = reader.fenceOpen
@@ -673,7 +683,7 @@ function assertMdxSafe(lines: readonly SourceLine[], label: string): void {
         ? 'wrap it in backticks, or write &lt; — a bare < starts a JSX tag in MDX, and an autolink <https://…> is an MDX error too'
         : 'wrap it in backticks, or write &#123; — a bare { starts a JavaScript expression that MDX evaluates on the server rather than printing'
     const spanNote = read.afterUnmatchedRun
-      ? ' (an earlier line of this paragraph leaves a backtick unmatched, so this check reads every backtick after it as text; keep each code span on one line)'
+      ? ' (an earlier line of this paragraph leaves a backtick unmatched, so this check reads every backtick after it as text; keep each code span on one line, or escape a lone backtick as \\`)'
       : ''
     throw new Error(
       `${label}:${line.number}: "${char}" outside code would break the MDX build for every page on the site; ${advice}${spanNote}. Line: ${line.text.trim()}`

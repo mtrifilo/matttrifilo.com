@@ -9,15 +9,20 @@
  * needs three answers per line, a dependency would put a Markdown library's
  * release cycle between Matt and his corpus, and a small set of rules is
  * one a reader can hold in their head. What that costs is written next to
- * the rule it affects, and every cost is chosen to make a check read more
- * of a line as prose, never less.
+ * the rule it affects, and every cost but one is chosen to make a check
+ * read more of a line as prose, never less; the one is below, and the
+ * build refuses the shape that causes it.
  *
  * Nothing here tracks container blocks (list items, block quotes). So a
  * line is read as if it stood at the top level: a fence or heading indented
  * four or more columns is not one here, although CommonMark accepts it
  * inside a list item and MDX, which turns off indented code, accepts it
- * anywhere. lib/knowledge/build.ts refuses such a fence (isOverIndentedFence)
- * because the two readings disagree about everything after it.
+ * anywhere. And a fence that opens on a list-item or block-quote line
+ * ("- ```sh") is not seen as one, so its closer would read as an opener
+ * and the prose after it as code: the one place this module alone reads
+ * less prose, not more. lib/knowledge/build.ts refuses both shapes
+ * (isOverIndentedFence, isFenceAfterContainerMarker) before any check
+ * reads the document, so no document that builds contains either.
  */
 
 /** Where the indentation of a line ends, and how many columns it spans. */
@@ -93,12 +98,48 @@ function closesFence(line: string, opener: string): boolean {
 }
 
 /**
- * A fence line indented four or more columns: an indented code block to
- * CommonMark at the top level, a fence to MDX. See the module comment.
+ * A fence line indented four or more columns, where CommonMark (indented
+ * code at the top level) and MDX (a fence at any indentation) disagree.
+ * See the module comment.
+ *
+ * With no fence open (`openRun` null), any such opener counts. While one
+ * is open, only a line MDX would read as closing it: the same character,
+ * a run at least as long, nothing after it but spaces and tabs. Any other
+ * deep fence line is content to both, such as a nested fence in a sample.
  */
-export function isOverIndentedFence(line: string): boolean {
+export function isOverIndentedFence(
+  line: string,
+  openRun: string | null
+): boolean {
   const marker = fenceMarker(line)
-  return marker !== null && marker.indent > MAX_BLOCK_INDENT
+  if (marker === null || marker.indent <= MAX_BLOCK_INDENT) return false
+  if (openRun === null) return true
+  return (
+    marker.run[0] === openRun[0] &&
+    marker.run.length >= openRun.length &&
+    /^[ \t]*$/.test(marker.info)
+  )
+}
+
+/**
+ * A list-item or block-quote marker, once or nested, at the start of a
+ * line: "- ", "* ", "+ ", "1. ", "1) ", "> ".
+ */
+const CONTAINER_MARKERS =
+  /^(?:[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+|[ \t]*>[ \t]?)+/
+
+/**
+ * A fence that opens on the same line as a list item or block quote
+ * marker ("- ```sh", "> ```"). CommonMark and MDX both read it as a fence
+ * inside the item, but this module reads lines at the top level and sees
+ * no fence, so the fence's closer would read as an opener and everything
+ * after it as code. The build refuses it rather than read less prose.
+ */
+export function isFenceAfterContainerMarker(line: string): boolean {
+  const markers = CONTAINER_MARKERS.exec(line)
+  if (!markers) return false
+  const marker = fenceMarker(line.slice(markers[0].length))
+  return marker !== null && marker.indent <= MAX_BLOCK_INDENT
 }
 
 /**
@@ -125,6 +166,11 @@ export class FenceTracker {
 
   get open(): boolean {
     return this.opener !== null
+  }
+
+  /** The run the open fence started with, or null when none is open. */
+  get openRun(): string | null {
+    return this.opener
   }
 }
 
@@ -358,9 +404,16 @@ export class LineReader {
     const afterUnmatchedRun = this.unmatchedRunInParagraph
     const { pieces, unmatchedRun } = inlinePieces(line, !afterUnmatchedRun)
     if (unmatchedRun) this.unmatchedRunInParagraph = true
+    // A heading indented four or more columns is indented code or a
+    // paragraph line to CommonMark and a heading to MDX. Its prose is read
+    // by its title either way, so "    ## TODO" is a placeholder, as the
+    // same heading with less indentation is.
+    const deepHeading = atxHeading(line.replace(/^[ \t]+/, ''))
     return {
       code: false,
-      prose: readerText(pieces),
+      prose: deepHeading
+        ? readerText(inlinePieces(deepHeading.title, !afterUnmatchedRun).pieces)
+        : readerText(pieces),
       mdxText: mdxText(pieces),
       afterUnmatchedRun,
     }
@@ -369,5 +422,10 @@ export class LineReader {
   /** True while a fence is open. */
   get fenceOpen(): boolean {
     return this.fence.open
+  }
+
+  /** The run the open fence started with, or null when none is open. */
+  get openFenceRun(): string | null {
+    return this.fence.openRun
   }
 }

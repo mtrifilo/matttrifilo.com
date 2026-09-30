@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   atxHeading,
   FenceTracker,
+  isFenceAfterContainerMarker,
   isOverIndentedFence,
   LineReader,
   mdxSyntaxText,
@@ -140,13 +141,34 @@ describe('fenced code blocks', () => {
   })
 
   test('names a fence indented too far to count, and nothing else', () => {
-    expect(isOverIndentedFence('    ```tsx')).toBe(true)
-    expect(isOverIndentedFence('\t```')).toBe(true)
-    expect(isOverIndentedFence('      ~~~')).toBe(true)
-    expect(isOverIndentedFence('   ```')).toBe(false)
-    expect(isOverIndentedFence('```')).toBe(false)
-    expect(isOverIndentedFence('    ``not a fence')).toBe(false)
-    expect(isOverIndentedFence('    ```a`b')).toBe(false)
+    // With no fence open, any deep fence line would open one.
+    expect(isOverIndentedFence('    ```tsx', null)).toBe(true)
+    expect(isOverIndentedFence('\t```', null)).toBe(true)
+    expect(isOverIndentedFence('      ~~~', null)).toBe(true)
+    expect(isOverIndentedFence('   ```', null)).toBe(false)
+    expect(isOverIndentedFence('```', null)).toBe(false)
+    expect(isOverIndentedFence('    ``not a fence', null)).toBe(false)
+    expect(isOverIndentedFence('    ```a`b', null)).toBe(false)
+    // With one open, only a line MDX would read as closing it.
+    expect(isOverIndentedFence('\t```', '```')).toBe(true)
+    expect(isOverIndentedFence('    `````', '````')).toBe(true)
+    expect(isOverIndentedFence('    ```js', '```')).toBe(false)
+    expect(isOverIndentedFence('    ```', '````')).toBe(false)
+    expect(isOverIndentedFence('    ~~~', '```')).toBe(false)
+  })
+
+  test('names a fence that opens on a list item or block quote line', () => {
+    expect(isFenceAfterContainerMarker('- ```sh')).toBe(true)
+    expect(isFenceAfterContainerMarker('  * ~~~')).toBe(true)
+    expect(isFenceAfterContainerMarker('1. ```')).toBe(true)
+    expect(isFenceAfterContainerMarker('2) ```ts')).toBe(true)
+    expect(isFenceAfterContainerMarker('> ```')).toBe(true)
+    expect(isFenceAfterContainerMarker('> - ```')).toBe(true)
+    // Not a fence, or not after a marker.
+    expect(isFenceAfterContainerMarker('```')).toBe(false)
+    expect(isFenceAfterContainerMarker('- ```code``` inline')).toBe(false)
+    expect(isFenceAfterContainerMarker('- an item')).toBe(false)
+    expect(isFenceAfterContainerMarker('-```')).toBe(false)
   })
 })
 
@@ -245,6 +267,13 @@ describe('escapes and code spans', () => {
     read('a lone `')
     expect(read('## `Title` here').prose).toBe(' here')
     expect(read('then `code` again').prose).toBe('then  again')
+  })
+
+  test('reads a heading indented four or more columns by its title', () => {
+    const reader = new LineReader()
+    expect(reader.read('    ## TODO').prose).toBe('TODO')
+    expect(reader.read('\t### TODO: `x` later').prose).toBe('TODO:  later')
+    expect(reader.read('    ##not a heading').prose).toBe('    ##not a heading')
   })
 
   test('reads a heading by its title and a fenced line as code', () => {
