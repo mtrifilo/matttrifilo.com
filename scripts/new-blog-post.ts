@@ -58,6 +58,20 @@ export function postSlug(title: string, date: string): string {
   return `${date}-${slugify(title)}`
 }
 
+/**
+ * Today on the machine running the script, as `YYYY-MM-DD`.
+ *
+ * The local calendar day rather than UTC's: from 17:00 in Phoenix (UTC-7)
+ * the UTC date is already tomorrow, and a post would carry a date its
+ * author never saw.
+ */
+export function localDateStamp(now: Date = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 /** The body both files start life with; they must never diverge. */
 export const STARTER_BODY = 'Write your post here.\n'
 
@@ -210,7 +224,7 @@ async function main() {
     process.exit(1)
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDateStamp()
   const draft: PostDraft = { title, date: today, categories, description }
   const summaryProblem = draftSummaryProblem(draft)
   if (summaryProblem) {
