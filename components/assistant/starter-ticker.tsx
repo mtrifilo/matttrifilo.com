@@ -518,11 +518,26 @@ function TickerRow({
   // say so. A row the browser scrolls under an undecided finger is being
   // read by hand, so it is handed over. Once the rule has called the touch
   // the page's, it stays the page's (Matt, 2026-09-28, MTC-79).
+  //
+  // The hold's own write to scrollLeft sends a scroll event as well: within
+  // a frame in Chromium, and as much as a second later in headless WebKit,
+  // after later touch events or the lift. So the event alone says nothing
+  // about the finger; where the row is does. A row still at the position
+  // the hold left it has not been scrolled by anyone, whichever write the
+  // event was sent for, and a scroll the browser makes has moved the row
+  // off that position by the time its event runs. A flag that skipped the
+  // next event could not tell them apart: an engine sends one event for a
+  // write and a drag in the same frame, and none for a write that changes
+  // nothing, which would leave the flag to swallow the drag's.
   const handleScroll = useCallback(() => {
     const viewport = viewportRef.current
     if (!viewport) return
     const touch = touchRef.current
-    if (touch?.direction === 'undecided' && !isHandedOver(viewport)) {
+    if (
+      touch?.direction === 'undecided' &&
+      !isHandedOver(viewport) &&
+      viewport.scrollLeft !== touch.heldScrollLeft
+    ) {
       touch.direction = 'sideways'
       sharedScroll.handOverAll()
       endHold(touch)
@@ -549,14 +564,17 @@ function TickerRow({
       // Only one finger down means any touch recorded earlier has ended,
       // even if its end never reached this row.
       if (earlier) endHold(earlier)
+      sharedScroll.holdForTouch()
       touchRef.current = {
         id: touch.identifier,
         x: touch.clientX,
         y: touch.clientY,
         direction: 'undecided',
         holding: true,
+        // Read back, not computed: the browser snaps what the hold wrote to
+        // its own pixels, and a scroll event reports the snapped value.
+        heldScrollLeft: viewport.scrollLeft,
       }
-      sharedScroll.holdForTouch()
     },
     [sharedScroll, endHold]
   )
@@ -843,6 +861,11 @@ interface RowTouch {
   direction: TouchDirection
   /** Whether this touch still holds the rows still. */
   holding: boolean
+  /**
+   * The row's scrollLeft once the hold has stopped it. A row found still
+   * there has not been scrolled under this finger.
+   */
+  heldScrollLeft: number
 }
 
 /** Whether a finger is holding this row still until it shows its direction. */

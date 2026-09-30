@@ -882,6 +882,164 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     ).toBe(true)
   })
 
+  describe("the scroll event the hold's own write sends", () => {
+    // The hold writes each row's scrollLeft at touchstart, and browsers
+    // send a scroll event for that write: Chromium within a frame, before
+    // the first touchmove, and headless WebKit as much as a second later,
+    // after later touch events or the lift. Happy DOM sends none, so each
+    // test fires it where an engine could deliver it, with the row where
+    // the hold left it, and a touch that is no drag must leave both rows
+    // moving (Matt, 2026-09-28, MTC-79).
+    type Row = { viewport: HTMLElement; track: HTMLElement }
+
+    /** The event each row's hold write sends, the touched row's first. */
+    function holdsEcho(rows: readonly Row[]): void {
+      for (const { viewport } of rows) fireEvent.scroll(viewport)
+    }
+
+    function expectNeitherHandedOver(rows: readonly Row[]): void {
+      for (const { viewport } of rows)
+        expect(isHandedOver(viewport)).toBe(false)
+    }
+
+    function expectBothLooping(rows: readonly Row[]): void {
+      for (const { viewport, track } of rows) {
+        expect(isHandedOver(viewport)).toBe(false)
+        expect(isTouchHeld(viewport)).toBe(false)
+        expect(track.dataset.frozen).toBeUndefined()
+      }
+    }
+
+    const orders: readonly (readonly [
+      string,
+      (rows: readonly Row[]) => void,
+    ])[] = [
+      [
+        'before the first touchmove',
+        rows => {
+          fingerDown(rows[0].viewport)
+          // The write the event stands for moved the row.
+          expect(rows[0].viewport.scrollLeft).toBeGreaterThan(0)
+          holdsEcho(rows)
+          expectNeitherHandedOver(rows)
+          for (const { viewport } of rows) {
+            expect(isTouchHeld(viewport)).toBe(true)
+          }
+          fingerMove(rows[0].viewport, 4, 3)
+          fingerUp(rows[0].viewport)
+        },
+      ],
+      [
+        'after a move that stays within the threshold',
+        rows => {
+          fingerDown(rows[0].viewport)
+          fingerMove(rows[0].viewport, 4, 3)
+          holdsEcho(rows)
+          expectNeitherHandedOver(rows)
+          fingerUp(rows[0].viewport)
+        },
+      ],
+      [
+        'after a move up the page',
+        rows => {
+          fingerDown(rows[0].viewport)
+          fingerMove(rows[0].viewport, 3, -20)
+          holdsEcho(rows)
+          expectNeitherHandedOver(rows)
+          fingerUp(rows[0].viewport)
+        },
+      ],
+      [
+        'after the lift',
+        rows => {
+          fingerDown(rows[0].viewport)
+          fingerMove(rows[0].viewport, 4, 3)
+          fingerUp(rows[0].viewport)
+          holdsEcho(rows)
+        },
+      ],
+      [
+        "during the next touch, from the last touch's hold",
+        rows => {
+          fingerDown(rows[0].viewport)
+          fingerUp(rows[0].viewport)
+          fingerDown(rows[0].viewport)
+          holdsEcho(rows)
+          expectNeitherHandedOver(rows)
+          fingerUp(rows[0].viewport)
+        },
+      ],
+    ]
+
+    for (const [when, touch] of orders) {
+      test(`arriving ${when} hands nothing over, and both rows move on`, () => {
+        const { rows } = renderLaidOutRows([0.27, 0.61])
+        touch(rows)
+        expectBothLooping(rows)
+      })
+    }
+
+    test('arriving on a row the browser snapped hands nothing over', () => {
+      // A browser keeps scrollLeft in its own pixels, so what the hold
+      // wrote is not what it reads back, nor what the event reports.
+      const { rows } = renderLaidOutRows([0.2503, 0.61])
+      const [first] = rows
+      let written = Number.NaN
+      let stored = 0
+      Object.defineProperty(first.viewport, 'scrollLeft', {
+        configurable: true,
+        get: () => stored,
+        set: (value: number) => {
+          written = value
+          stored = Math.round(value)
+        },
+      })
+
+      fingerDown(first.viewport)
+      // The premise: the hold wrote a position that is not a whole pixel.
+      expect(written).not.toBe(stored)
+      holdsEcho(rows)
+      expectNeitherHandedOver(rows)
+      fingerUp(first.viewport)
+      expectBothLooping(rows)
+    })
+
+    test('a real scroll after it, to another position, still hands both over', () => {
+      // The browser scrolls a held row it has taken a drag for before the
+      // finger passes the threshold; the echo that came first changes
+      // nothing about that.
+      const progress = 0.27
+      const { rows } = renderLaidOutRows(progress)
+      const [first, second] = rows
+
+      fingerDown(first.viewport)
+      holdsEcho(rows)
+      fingerMove(first.viewport, -3, 0)
+      expectNeitherHandedOver(rows)
+      first.viewport.scrollLeft += 1
+      fireEvent.scroll(first.viewport)
+
+      for (const { viewport } of rows) {
+        expect(isHandedOver(viewport)).toBe(true)
+        expect(isTouchHeld(viewport)).toBe(false)
+      }
+      expect(
+        samePixels(
+          first.track,
+          positionOf(first),
+          frozenAt(first.track, progress) + 1
+        )
+      ).toBe(true)
+      expect(
+        samePixels(
+          second.track,
+          positionOf(second),
+          frozenAt(second.track, progress)
+        )
+      ).toBe(true)
+    })
+  })
+
   test('a moving row the browser had already scrolled freezes showing the same pixels', () => {
     // A coarse-pointer row is a scroll container while it moves, so it can
     // carry a scroll offset on top of its loop; the freeze keeps both.
