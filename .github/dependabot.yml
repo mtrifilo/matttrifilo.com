@@ -1,10 +1,13 @@
 # Dependabot version updates. GitHub reads this file from the default branch
-# only, so nothing here runs until it is merged to main.
+# only, so nothing here runs until it is merged to main. For Bun, GitHub offers
+# version updates only: no security update pull requests are opened for
+# bun.lock.
 version: 2
 updates:
   # The package.json dependencies. Bun has its own ecosystem value: "npm"
-  # covers npm, pnpm and yarn lockfiles, and only "bun" regenerates bun.lock,
-  # which CI installs with --frozen-lockfile.
+  # covers npm, pnpm and yarn lockfiles, and only "bun" regenerates bun.lock.
+  # Dependabot writes bun.lock with its own Bun, not the one the workflows pin,
+  # so CI's `bun install --frozen-lockfile` is the check that the two agree.
   - package-ecosystem: 'bun'
     directory: '/'
     schedule:
@@ -13,18 +16,32 @@ updates:
       time: '07:00'
       timezone: 'America/Phoenix'
     groups:
-      # Minor and patch releases promise no breaking changes, so they share
-      # one pull request and one CI run a week. A major matches no group and
-      # gets a pull request of its own, because each can break the build and
-      # needs its own review.
+      # Minor and patch updates are meant to be backward compatible, so they
+      # share one pull request and one CI run a week. Dependabot reads every
+      # version as major.minor.patch, so a 0.x minor (0.4 to 0.5), which may
+      # break, lands here too.
+      #
+      # A major matches no group and gets a pull request of its own (up to the
+      # open pull request limit, five by default), because each can break the
+      # build and needs its own review. Two consequences of how Dependabot does
+      # this: a package whose newest release is a new major leaves the group and
+      # is offered only that major, so no pull request offers its patches
+      # within the current major; and while this group's pull request is open,
+      # the weekly run opens no new major pull requests.
+      #
+      # CI does not run the evals. A pull request that bumps ai or
+      # @ai-sdk/google-vertex needs a local `bun run evals`, with its table
+      # pasted into the pull request, before it is merged
+      # (docs/career-assistant-operations.md, "Eval suites", "When they run").
       minor-and-patch:
         patterns: ['*']
         update-types: ['minor', 'patch']
     ignore:
-      # Pinned to the Bun that CI installs (bun-version in each workflow) and
-      # the Bun that wrote bun.lock. The workflows say to bump all three
-      # together, which a Dependabot pull request cannot do, so it is bumped
-      # by hand with them.
+      # Kept equal to the bun-version the workflows install. ci.yml and
+      # evals.yml say to bump that, @types/bun and bun.lock together, which a
+      # Dependabot pull request cannot do, so it is bumped by hand with them.
+      # Dependabot does not see the workflows' bun-version and node-version
+      # inputs or the @lhci/cli version in accessibility.yml either.
       - dependency-name: '@types/bun'
 
   # Each workflow pins an action to a commit SHA with its version in a comment
