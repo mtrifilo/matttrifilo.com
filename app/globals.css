@@ -59,7 +59,11 @@
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172b;
   --muted: #f1f5f9;
-  --muted-foreground: #62748e;
+  /* Dark enough for 4.5:1 where a phone draws this text over the
+     full-bleed honeycomb (WCAG 1.4.3): 4.56:1 against the brightest resting
+     stroke and 4.54:1 under the pointer's glow. lib/theme-contrast.test.ts
+     holds the resting pair. */
+  --muted-foreground: #5f718b;
   --accent: #f1f5f9;
   --accent-foreground: #0f172b;
   --destructive: #e7000b;
