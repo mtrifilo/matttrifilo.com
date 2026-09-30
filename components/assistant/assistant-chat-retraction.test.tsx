@@ -6,7 +6,7 @@ import { createChatHandler } from '@/lib/chat/handler'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import type { KnowledgeDocument, KnowledgeIndex } from '@/lib/knowledge'
 import { AssistantChat } from './assistant-chat'
-import { PROGRESS_THINKING, progressReading } from './copy'
+import { PROGRESS_STOPPED, PROGRESS_THINKING, progressReading } from './copy'
 
 /**
  * What the transcript does when the route withdraws streamed text (MTC-101).
@@ -94,10 +94,14 @@ const finish = (unified: 'stop' | 'tool-calls') => ({
 })
 
 /**
- * Narrates, waits for `first`, then reads the résumé; waits for `second`,
- * then answers. Any later call answers at once.
+ * Narrates, waits for `first`, then reads `id`; waits for `second`, then
+ * answers. Any later call answers at once.
  */
-function narratingModel(first: Promise<void>, second: Promise<void>) {
+function narratingModel(
+  first: Promise<void>,
+  second: Promise<void>,
+  id = 'resume'
+) {
   let calls = 0
   return new MockLanguageModelV4({
     doStream: async () => {
@@ -114,9 +118,9 @@ function narratingModel(first: Promise<void>, second: Promise<void>) {
             { type: 'text-end', id: 'n' },
             {
               type: 'tool-call',
-              toolCallId: 'call-resume',
+              toolCallId: `call-${id}`,
               toolName: READ_DOCUMENT_TOOL_NAME,
-              input: JSON.stringify({ id: 'resume' }),
+              input: JSON.stringify({ id }),
             },
             finish('tool-calls'),
           ]
@@ -198,7 +202,15 @@ afterEach(() => {
   sessionStorage.clear()
 })
 
-async function ask(model: MockLanguageModelV4): Promise<HTMLElement> {
+/**
+ * Asks one question and returns a reader for the assistant's side of the
+ * transcript. A reader, not an element: a turn a withdrawal empties is
+ * replaced by the placeholder row and drawn again when the run next says
+ * something, so the element the turn started in does not last.
+ */
+async function ask(
+  model: MockLanguageModelV4
+): Promise<{ textContent: string }> {
   globalThis.fetch = routeWith(model)
   const { container } = render(<AssistantChat />)
   const composer = screen.getByRole('textbox', {
@@ -209,17 +221,26 @@ async function ask(model: MockLanguageModelV4): Promise<HTMLElement> {
   await waitFor(() =>
     expect(container.querySelector('.is-assistant')).not.toBeNull()
   )
-  return container.querySelector('.is-assistant') as HTMLElement
+  return {
+    get textContent() {
+      return [...container.querySelectorAll('.is-assistant')]
+        .map(turn => turn.textContent ?? '')
+        .join('')
+    },
+  }
 }
 
 describe('an answer that streams', () => {
-  test('keeps both trailers off the screen as they arrive, token by token', async () => {
-    const gates = [gate(), gate()]
-    const deltas = [
-      `${PROSE}\n\nSour`,
-      'ces: resume\nFollow',
-      `-ups:\n${FOLLOW_UP}`,
-    ]
+  /**
+   * An answer in these deltas, each after the previous gate opens. `next`
+   * opens the next gate and resolves once the delta is on screen: a delta
+   * that only adds hidden trailer text changes nothing a test can wait for,
+   * so it waits for the route's own response to carry it, then lets the
+   * page render.
+   */
+  function streaming(deltas: string[]) {
+    const gates = deltas.slice(1).map(() => gate())
+    const sent = deltas.map(() => gate())
     const model = new MockLanguageModelV4({
       doStream: async () =>
         ({
@@ -230,6 +251,7 @@ describe('an answer that streams', () => {
               for (const [at, delta] of deltas.entries()) {
                 if (at > 0) await gates[at - 1].opened
                 controller.enqueue({ type: 'text-delta', id: 'a', delta })
+                sent[at].open()
               }
               controller.enqueue({ type: 'text-end', id: 'a' })
               controller.enqueue(finish('stop'))
@@ -238,28 +260,62 @@ describe('an answer that streams', () => {
           }),
         }) as never,
     })
+    let opened = 0
+    async function next(): Promise<void> {
+      gates[opened].open()
+      opened += 1
+      await sent[opened].opened
+      await Bun.sleep(50)
+    }
+    return { model, next }
+  }
+
+  test('keeps both trailers off the screen as they arrive, token by token', async () => {
+    const { model, next } = streaming([
+      `${PROSE}\n\nSour`,
+      'ces: resume\nFollow',
+      `-ups:\n${FOLLOW_UP}`,
+    ])
     const turn = await ask(model)
 
-    // A half-written prefix is prose until the word is whole: the cost of
-    // not guessing at lines that open "So" (lib/chat/answer.ts).
-    await waitFor(() => expect(turn.textContent).toContain('Sour'))
-    expect(turn.textContent).toContain(PROSE)
+    // The citation marker is half written: held back until it is whole.
+    await waitFor(() => expect(turn.textContent).toContain(PROSE))
+    expect(turn.textContent).not.toContain('Sour')
 
     // The citation line is whole, and a follow-ups marker is half written
     // under it: neither the ids nor the marker shows.
-    gates[0].open()
-    await waitFor(() => expect(turn.textContent).not.toContain('Sour'))
-    expect(turn.textContent).toContain(PROSE)
+    await next()
+    await waitFor(() => expect(turn.textContent).toContain(PROSE))
     expect(turn.textContent).not.toContain('resume')
     expect(turn.textContent).not.toContain('Follow')
 
-    gates[1].open()
+    await next()
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: FOLLOW_UP })).not.toBeNull()
     )
     // The question shows once, as a pill, and not in the answer above it.
     expect(turn.textContent?.split(FOLLOW_UP)).toHaveLength(2)
     expect(turn.textContent).not.toContain('Sources')
+  })
+
+  test('keeps a half-written follow-ups marker off the screen with no citation line above it', async () => {
+    // An answer that read nothing has no Sources line, and still ends on
+    // the follow-ups block.
+    const { model, next } = streaming([
+      `${PROSE}\n\nFollow-u`,
+      `ps:\n${FOLLOW_UP}`,
+    ])
+    const turn = await ask(model)
+
+    await waitFor(() => expect(turn.textContent).toContain(PROSE))
+    expect(turn.textContent).not.toContain('Follow')
+
+    await next()
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: FOLLOW_UP })).not.toBeNull()
+    )
+    expect(turn.textContent?.split(FOLLOW_UP)).toHaveLength(2)
+    expect(turn.textContent).not.toContain('Follow-ups')
   })
 })
 
@@ -306,6 +362,31 @@ describe('narration a call withdraws', () => {
     await waitFor(() => expect(requests).toHaveLength(2))
     expect(requests[1]).toContain(PROSE)
     expect(requests[1]).not.toContain(NARRATION)
+  })
+
+  test('a stop after a withdrawal whose call earned no row still says Stopped', async () => {
+    // The call names a document the index does not list, so no progress
+    // part goes up: after the withdrawal the turn holds nothing at all.
+    const first = gate()
+    const never = gate()
+    const turn = await ask(
+      narratingModel(first.opened, never.opened, 'not-in-the-index')
+    )
+    await waitFor(() => expect(turn.textContent).toContain(NARRATION))
+
+    first.open()
+    await waitFor(() =>
+      expect(document.body.textContent).not.toContain(NARRATION)
+    )
+    // Still working: the wait reads as thinking, not as an empty turn.
+    expect(document.body.textContent).toContain(PROGRESS_THINKING)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(PROGRESS_STOPPED)
+    )
+    expect(screen.getByRole('status').textContent).toBe('Response stopped')
+    never.open()
   })
 
   test('a visitor who stops before the call keeps the text, as a partial answer (known limit)', async () => {

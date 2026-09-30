@@ -1,10 +1,16 @@
 import { describe, expect, test } from 'bun:test'
-import { readUIMessageStream, type UIMessage, type UIMessageChunk } from 'ai'
+import {
+  UIMessageStreamError,
+  readUIMessageStream,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import { joinTextParts, stripTrailers } from '@/lib/chat/answer'
 import { createChatHandler } from '@/lib/chat/handler'
 import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
 import type { KnowledgeDocument } from '@/lib/knowledge'
+import { createStreamTimeline } from './first-sentence'
 import { chatRequest } from './route-request'
 import {
   answerProse,
@@ -146,44 +152,94 @@ describe('parseUiMessageStream, on a withdrawal (MTC-101)', () => {
       ).progress
     ).toEqual({ phase: 'reading', steps: [{ id: 'resume', title: 'Résumé' }] })
   })
+})
 
-  test('against the route: narration a call withdrew is not the answer', async () => {
-    // The real handler over a model that narrates, reads, then answers. The
-    // parser's text has to be the text the SDK's own reader leaves in the
-    // browser, which is the answer alone.
-    const answerText = 'He led the migration.\n\nSources: resume'
-    const narration = 'Let me check his résumé first.'
-    const usage = {
-      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-      outputTokens: { total: 1, text: 1, reasoning: 0 },
-    }
-    const finish = (unified: string) => ({
-      type: 'finish',
-      finishReason: { unified, raw: 'STOP' },
-      usage,
-    })
-    const calls = [
+/*
+ * The evals' reading of the stream against the browser's, on the route's
+ * real output: the handler over a scripted model, its body read three ways.
+ * `parseUiMessageStream` (what a suite grades) and the first-sentence
+ * timeline (what the measurement times) must both keep exactly the text the
+ * SDK's own reader leaves in the browser, for every way a withdrawal and an
+ * error can fall.
+ */
+describe('the evals keep the text the browser keeps (MTC-101)', () => {
+  const ANSWER_TEXT = 'He led the migration.\n\nSources: resume'
+  const NARRATION = 'Let me check his résumé first.'
+  const usage = {
+    inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+    outputTokens: { total: 1, text: 1, reasoning: 0 },
+  }
+  const finish = (unified: string) => ({
+    type: 'finish',
+    finishReason: { unified, raw: 'STOP' },
+    usage,
+  })
+  const text = (id: string, delta: string) => [
+    { type: 'text-start', id },
+    { type: 'text-delta', id, delta },
+    { type: 'text-end', id },
+  ]
+  const readCall = (n: number) => ({
+    type: 'tool-call',
+    toolCallId: `call-${n}`,
+    toolName: READ_DOCUMENT_TOOL_NAME,
+    input: JSON.stringify({ id: 'resume' }),
+  })
+  const start = { type: 'stream-start', warnings: [] }
+  const reads = (n: number) => [start, readCall(n), finish('tool-calls')]
+  const answers = [start, ...text('a', ANSWER_TEXT), finish('stop')]
+
+  const cases: [string, unknown[][], string, number][] = [
+    [
+      'narration, a read, then the answer',
       [
-        { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: 'n' },
-        { type: 'text-delta', id: 'n', delta: narration },
-        { type: 'text-end', id: 'n' },
-        {
-          type: 'tool-call',
-          toolCallId: 'call-1',
-          toolName: READ_DOCUMENT_TOOL_NAME,
-          input: JSON.stringify({ id: 'resume' }),
-        },
-        finish('tool-calls'),
+        [start, ...text('n', NARRATION), readCall(1), finish('tool-calls')],
+        answers,
       ],
+      ANSWER_TEXT,
+      1,
+    ],
+    [
+      'the last step narrates and calls a tool it was not offered',
       [
-        { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: 'a' },
-        { type: 'text-delta', id: 'a', delta: answerText },
-        { type: 'text-end', id: 'a' },
-        finish('stop'),
+        reads(1),
+        reads(2),
+        reads(3),
+        [start, ...text('n', NARRATION), readCall(4), finish('tool-calls')],
       ],
-    ]
+      '',
+      1,
+    ],
+    [
+      'the last step writes its answer, then calls a tool anyway',
+      [
+        reads(1),
+        reads(2),
+        reads(3),
+        [start, ...text('a', ANSWER_TEXT), readCall(4), finish('tool-calls')],
+      ],
+      ANSWER_TEXT,
+      1,
+    ],
+    [
+      'an error part in the middle of the answer',
+      [
+        [
+          start,
+          { type: 'text-start', id: 'a' },
+          { type: 'text-delta', id: 'a', delta: 'He led it. ' },
+          { type: 'error', error: new Error('unparseable event') },
+          { type: 'text-delta', id: 'a', delta: 'After the error.' },
+          { type: 'text-end', id: 'a' },
+          finish('stop'),
+        ],
+      ],
+      'He led it. ',
+      0,
+    ],
+  ]
+
+  test.each(cases)('%s', async (_, calls, expected, withdrawals) => {
     let call = 0
     const model = new MockLanguageModelV4({
       doStream: async () => ({
@@ -226,38 +282,56 @@ describe('parseUiMessageStream, on a withdrawal (MTC-101)', () => {
       now: () => 0,
     })
 
-    const info = console.info
+    const quiet = {
+      info: console.info,
+      warn: console.warn,
+      error: console.error,
+    }
     console.info = () => {}
+    console.warn = () => {}
+    console.error = () => {}
     let body: string
     try {
       body = await (
         await handler(chatRequest('What did Matt build?', []))
       ).text()
     } finally {
-      console.info = info
+      Object.assign(console, quiet)
     }
 
-    const answer = parseUiMessageStream(body)
-    expect(body).toContain(narration)
-    expect(answer.text).toBe(answerText)
-    expect(answer.retractions).toBe(1)
-
+    // The browser: the SDK's reader, stopping at an error as `useChat` does.
     const chunks = body
       .split('\n')
       .filter(line => line.startsWith('data: ') && !line.includes('[DONE]'))
       .map(line => JSON.parse(line.slice('data: '.length)) as UIMessageChunk)
     let browser: UIMessage | undefined
-    for await (const message of readUIMessageStream({
-      stream: new ReadableStream<UIMessageChunk>({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(chunk)
-          controller.close()
-        },
-      }),
-    })) {
-      browser = message
+    try {
+      for await (const message of readUIMessageStream({
+        stream: new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk)
+            controller.close()
+          },
+        }),
+        terminateOnError: true,
+      })) {
+        browser = message
+      }
+    } catch (error) {
+      if (error instanceof UIMessageStreamError) throw error
     }
-    expect(joinTextParts(browser?.parts ?? [])).toBe(answer.text)
+    const browserText = joinTextParts(browser?.parts ?? [])
+    expect(browserText).toBe(expected)
+
+    const answer = parseUiMessageStream(body)
+    expect(answer.text).toBe(browserText)
+    expect(answer.retractions).toBe(withdrawals)
+
+    const timeline = createStreamTimeline(0, () => 0)
+    timeline.push(body)
+    const timings = timeline.finish()
+    expect(timings.text).toBe(browserText)
+    expect(timings.retractions).toHaveLength(withdrawals)
   })
 })
 

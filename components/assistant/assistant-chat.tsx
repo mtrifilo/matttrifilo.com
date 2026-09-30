@@ -21,6 +21,7 @@ import {
   announcementFor,
   discardsQuestion,
   joinTextParts,
+  saysNothingYet,
   showsFollowUps,
   toAnswerView,
   toChatErrorView,
@@ -284,20 +285,26 @@ export function AssistantChat() {
   }, [sendMessage])
 
   const lastMessage = messages.at(-1)
-  const lastIsQuestion = lastMessage?.role === 'user'
-  // The run in flight, for the announcement only. A screen reader hears the
-  // steps as they change instead of one flat "Responding" for twenty seconds.
-  const lastProgress = useMemo(
+  const lastView = useMemo(
     () =>
       lastMessage && lastMessage.role === 'assistant'
-        ? toAnswerView(lastMessage).progress
+        ? toAnswerView(lastMessage)
         : undefined,
     [lastMessage]
   )
+  // Nothing of this run is on screen yet: no assistant turn, or one a
+  // withdrawal emptied again (`saysNothingYet`). The placeholder row stands
+  // in for it either way, so a stop in that gap still says "Stopped".
+  const awaitingFirstContent =
+    lastMessage?.role === 'user' ||
+    (lastView !== undefined && saysNothingYet(lastView))
+  // The run in flight, for the announcement only. A screen reader hears the
+  // steps as they change instead of one flat "Responding" for twenty seconds.
+  const lastProgress = lastView?.progress
   const announcement = announcementFor(
     status,
     messages.some(message => message.role === 'assistant'),
-    stopped && lastIsQuestion ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
+    stopped && awaitingFirstContent ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
     stopped
   )
 
@@ -367,6 +374,10 @@ export function AssistantChat() {
                   </Message>
                 )
               }
+              // The placeholder row below speaks for an empty last turn.
+              if (isLast && (busy || stopped) && awaitingFirstContent) {
+                return null
+              }
               const view = toAnswerView(message)
               return (
                 <Message from="assistant" key={message.id}>
@@ -400,8 +411,9 @@ export function AssistantChat() {
             })}
 
             {/* Between sending and the stream opening there is no assistant
-                message to hang the wait on, so it gets a row of its own. */}
-            {(busy || stopped) && lastIsQuestion && (
+                message to hang the wait on, so it gets a row of its own; so
+                does a turn a withdrawal emptied before anything else came. */}
+            {(busy || stopped) && awaitingFirstContent && (
               <Message from="assistant">
                 <MessageContent>
                   <AssistantProgress

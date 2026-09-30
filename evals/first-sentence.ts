@@ -1,6 +1,7 @@
 import { PROGRESS_PART_TYPE } from '@/lib/chat/progress'
 import * as assertions from './assertions'
 import type { AssertionContext, AssertionResult } from './assertions'
+import { createKeptText, type KeptToken } from './route-stream'
 
 /**
  * The pure half of evals/measure-first-sentence.ts (MTC-87): reading the
@@ -124,9 +125,13 @@ export interface StreamTimeline {
  * frame split across two network chunks is stamped when its end arrives,
  * which is when a browser could have acted on it too.
  *
- * Text is kept per step, the way the browser keeps it: a `reset-step`
- * withdraws the current step's text (recorded as a retraction), and only the
- * text no reset took back is the answer. Whether a step's text is kept is
+ * Text is kept the way the browser keeps it (`createKeptText` in
+ * ./route-stream, shared with the eval parser): a `reset-step` withdraws the
+ * current step's text (recorded as a retraction), an `error` ends the
+ * reading, and only the text no reset took back is the answer. The first
+ * progress part is stamped on arrival even if a reset later drops it, since
+ * the visitor saw it; the route never sends one before a reset in the same
+ * step. Whether a step's text is kept is
  * known only once the next step begins or the stream ends, so the answer's
  * first token and first sentence are worked out at `finish`, from the kept
  * tokens and the times they arrived.
@@ -136,13 +141,8 @@ export function createStreamTimeline(
   now: () => number
 ): StreamTimeline {
   let buffer = ''
-  /** Tokens of earlier steps, which no reset can take back any more. */
-  const kept: { at: number; delta: string }[] = []
-  /** Tokens of the step in progress. */
-  let step: { at: number; delta: string }[] = []
-  const retractions: StreamRetraction[] = []
+  const kept = createKeptText()
   let firstProgressMs: number | undefined
-  let firstShownTokenMs: number | undefined
 
   function onLine(rawLine: string, at: number): void {
     const line = rawLine.trim()
@@ -156,30 +156,15 @@ export function createStreamTimeline(
       return
     }
     if (typeof chunk !== 'object' || chunk === null) return
-    const { type, delta } = chunk as { type?: unknown; delta?: unknown }
-    if (type === PROGRESS_PART_TYPE && firstProgressMs === undefined) {
+    const typed = chunk as { type?: unknown; delta?: unknown }
+    if (typed.type === PROGRESS_PART_TYPE && firstProgressMs === undefined) {
       firstProgressMs = at - startedAt
     }
-    if (type === 'start-step') {
-      kept.push(...step)
-      step = []
-    }
-    if (type === 'reset-step' && step.length > 0) {
-      retractions.push({
-        shownMs: step[0].at - startedAt,
-        visibleMs: at - step[0].at,
-        chars: step.reduce((sum, token) => sum + token.delta.length, 0),
-      })
-      step = []
-    }
-    if (type === 'text-delta' && typeof delta === 'string' && delta !== '') {
-      firstShownTokenMs ??= at - startedAt
-      step.push({ at, delta })
-    }
+    kept.read(typed, at)
   }
 
   /** When the kept answer's first sentence was whole, and by which rule. */
-  function sentenceOf(tokens: readonly { at: number; delta: string }[]): {
+  function sentenceOf(tokens: readonly KeptToken[]): {
     ms?: number
     rule: SentenceRule
   } {
@@ -209,19 +194,26 @@ export function createStreamTimeline(
       const at = now()
       if (buffer !== '') onLine(buffer, at)
       buffer = ''
-      const tokens = [...kept, ...step]
+      const tokens = kept.tokens()
       const sentence = sentenceOf(tokens)
+      const firstShownAt = kept.firstShownAt()
       return {
         ...(firstProgressMs !== undefined ? { firstProgressMs } : {}),
-        ...(firstShownTokenMs !== undefined ? { firstShownTokenMs } : {}),
+        ...(firstShownAt !== undefined
+          ? { firstShownTokenMs: firstShownAt - startedAt }
+          : {}),
         ...(tokens.length > 0
           ? { firstAnswerTokenMs: tokens[0].at - startedAt }
           : {}),
         ...(sentence.ms !== undefined ? { firstSentenceMs: sentence.ms } : {}),
         sentenceRule: sentence.rule,
-        retractions,
+        retractions: kept.withdrawals().map(withdrawal => ({
+          shownMs: withdrawal.shownAt - startedAt,
+          visibleMs: withdrawal.withdrawnAt - withdrawal.shownAt,
+          chars: withdrawal.chars,
+        })),
         totalMs: at - startedAt,
-        text: tokens.map(token => token.delta).join(''),
+        text: kept.text(),
       }
     },
   }

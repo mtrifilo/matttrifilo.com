@@ -543,13 +543,16 @@ export function createChatHandler(deps: ChatHandlerDeps) {
  * metadata and the log, and one over the chunks bound for the browser, in
  * `onlyAnswerText`. Both see the same text and the same calls in the same
  * order, so the log's `answered` and what the bubble shows cannot disagree,
- * and neither can the log's `textRetractions` and the withdrawals the
- * browser was sent.
+ * and the log's `textRetractions` counts exactly the withdrawals the route
+ * sent. (A visitor who pressed Stop just before one arrived never reads it;
+ * the count is of what was sent.)
  *
  * A step's text travels as it is written (MTC-101), so the browser may
  * already hold text that a call later in the step turns into scratchpad.
- * The first call of such a step withdraws it (`toolCalled` returns true),
- * which `onlyAnswerText` turns into the SDK's `reset-step` chunk. Text a
+ * The first call of such a step withdraws it (`recordToolCall` returns
+ * true), which `onlyAnswerText` turns into the SDK's `reset-step` chunk. On
+ * the forced step the withdrawn text can be a finished answer, which is then
+ * sent again whole when the step ends (`forcedAnswer`). Text a
  * step wrote after an `error` part stays: the browser stops reading the
  * stream at an error, so nothing sent after it could take the text back.
  *
@@ -587,27 +590,32 @@ class StepText {
   }
 
   /**
-   * The model called a tool: a part or chunk on the call's side
+   * Records that the model called a tool: a part or chunk on the call's side
    * (`isToolCallChunk`). On the forced step this closes a segment.
    *
-   * True when this call withdraws text the browser was already shown.
+   * Returns whether this call withdrew text the browser was already shown,
+   * and counts it when it did; the caller that writes the browser's stream
+   * sends the withdrawal. Call it once per call part, never to ask.
    */
-  toolCalled(): boolean {
+  recordToolCall(): boolean {
     if (this.isForcedStep() && readsAsFinishedAnswer(this.segment)) {
       this.kept = this.segment
     }
     this.segment = ''
-    return this.becomesScratchpad()
+    this.calledTool = true
+    if (!this.shown || this.stopsReading) return false
+    this.shown = false
+    this.withdrawals += 1
+    return true
   }
 
   /**
-   * Any other tool part or chunk, a result or an error. A result follows its
-   * call, so this withdraws nothing on the browser's side; it is here for a
-   * model stream that reports a failed call without the call part, so the
-   * log still counts the withdrawal the browser was sent.
+   * Any other tool part or chunk, a result or an error. Each follows the
+   * call it settles (the SDK emits the call part even for a call it
+   * refuses), so the withdrawal, if any, has already happened.
    */
-  toolSettled(): boolean {
-    return this.becomesScratchpad()
+  toolSettled(): void {
+    this.calledTool = true
   }
 
   /** An `error` part or chunk. */
@@ -667,15 +675,6 @@ class StepText {
   private isForcedStep(): boolean {
     return this.step >= CHAT_MAX_STEPS
   }
-
-  /** The step's text is scratchpad from here on; see `toolCalled`. */
-  private becomesScratchpad(): boolean {
-    this.calledTool = true
-    if (!this.shown || this.stopsReading) return false
-    this.shown = false
-    this.withdrawals += 1
-    return true
-  }
 }
 
 /**
@@ -718,7 +717,7 @@ function observeModelPart(
   part: { type: string; text?: string }
 ): void {
   if (part.type === 'start-step') step.startStep()
-  else if (isToolCallChunk(part.type)) step.toolCalled()
+  else if (isToolCallChunk(part.type)) step.recordToolCall()
   else if (part.type.startsWith('tool-')) step.toolSettled()
   else if (part.type === 'error') step.failed()
   else if (part.type === 'text-delta' && typeof part.text === 'string') {
@@ -873,10 +872,14 @@ function onlyClientChunks<T extends { type: string }>(): TransformStream<T, T> {
  * browser has forgotten those blocks and a delta or an end for one would
  * throw; the step's remaining text is scratchpad and is dropped anyway.
  *
- * The browser drops its data parts from the step too, so a reset has to
- * reach the browser before this step's first progress part: this stage runs
- * ahead of `withProgress`, which writes no part in a step before the step's
- * first call, and restores one a reset takes (see there).
+ * The browser drops the data parts the step created too, so a reset has to
+ * reach the browser before the progress part is first created in that
+ * step. An update to a part created in an earlier step is made in place and
+ * survives the reset, which is why the "writing" update a step's narration
+ * triggers may come before its reset. This stage runs ahead of
+ * `withProgress`, which creates the part only when a call's row goes up,
+ * after the reset that call sends, and sends the part again if a reset ever
+ * took it (see there).
  *
  * The forced step composes with this unchanged: its text streams live like
  * any other until a stray call withdraws it, and its kept answer
@@ -948,10 +951,8 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
         return
       }
       if (chunk.type.startsWith('tool-')) {
-        const withdraws = isToolCallChunk(chunk.type)
-          ? step.toolCalled()
-          : step.toolSettled()
-        if (withdraws) {
+        if (!isToolCallChunk(chunk.type)) step.toolSettled()
+        else if (step.recordToolCall()) {
           open.clear()
           controller.enqueue({ type: 'reset-step' })
         }
@@ -1565,8 +1566,10 @@ function logCompletion({
     finalStepToolCall,
     // How many times the visitor saw text appear and then leave the bubble:
     // a step streamed text and then called a tool, so the route withdrew it
-    // (MTC-101). Each is a flash of narration the progress row replaced.
-    // Zero on most requests; the rate across requests is how often a
+    // (MTC-101). Before the last step each is narration the progress row
+    // replaced. With `finalStepToolCall: true` one of them may be a finished
+    // answer the last step's stray call withdrew and the route sent again
+    // whole. Zero on most requests; the rate across requests is how often a
     // visitor sees one.
     textRetractions,
     finishReason,

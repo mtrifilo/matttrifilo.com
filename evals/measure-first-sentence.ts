@@ -117,6 +117,9 @@ const CONCURRENCY = 2
  */
 const PAGE_WINDOW_MS = 8_000
 
+/** The second count MTC-87's memo reported, kept for comparison with it. */
+const LATER_WINDOW_MS = 15_000
+
 interface Job {
   label: string
   question: string
@@ -352,6 +355,23 @@ function summaryTable(
       ['first answer token', row => row.firstAnswerTokenMs],
       ['first complete sentence', row => row.firstSentenceMs],
       ['total', row => row.totalMs],
+      // How much sooner the first sentence came than the stream's end: what
+      // holding each step's text until the step ended would have cost.
+      [
+        'first sentence before the end',
+        row =>
+          row.firstSentenceMs === undefined
+            ? undefined
+            : row.totalMs - row.firstSentenceMs,
+      ],
+      [
+        'first token to first sentence',
+        row =>
+          row.firstSentenceMs === undefined ||
+          row.firstAnswerTokenMs === undefined
+            ? undefined
+            : row.firstSentenceMs - row.firstAnswerTokenMs,
+      ],
       ['vertexFirstByteMs (slowest call)', row => row.vertexFirstByteMs],
       ['first call first byte', row => row.firstBytesMs[0]],
       // The last call of an answered request is the one that wrote the
@@ -408,8 +428,8 @@ function passTable(
   levels: readonly ChatReasoning[]
 ): string {
   const lines = [
-    `| level | requests | no answer | sentence within ${PAGE_WINDOW_MS / 1000} s | golden deterministic pass | no progress part | sentence rule: punctuation / line / end / none |`,
-    '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
+    `| level | requests | no answer | sentence within ${PAGE_WINDOW_MS / 1000} s | sentence within ${LATER_WINDOW_MS / 1000} s | golden deterministic pass | no progress part | sentence rule: punctuation / line / end / none |`,
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
   ]
   for (const level of levels) {
     const ofLevel = rows.filter(row => row.level === level)
@@ -417,13 +437,12 @@ function passTable(
     const passed = graded.filter(row => row.grade?.pass)
     const rule = (name: string) =>
       ofLevel.filter(row => row.sentenceRule === name).length
-    const within = ofLevel.filter(
-      row =>
-        row.firstSentenceMs !== undefined &&
-        row.firstSentenceMs <= PAGE_WINDOW_MS
-    ).length
+    const within = (ms: number) =>
+      ofLevel.filter(
+        row => row.firstSentenceMs !== undefined && row.firstSentenceMs <= ms
+      ).length
     lines.push(
-      `| ${level} | ${ofLevel.length} | ${ofLevel.filter(row => row.noAnswer || row.error).length} | ${within} of ${ofLevel.length} | ${passed.length} of ${graded.length} | ${ofLevel.filter(row => row.firstProgressMs === undefined).length} | ${rule('punctuation')} / ${rule('line')} / ${rule('end')} / ${rule('none')} |`
+      `| ${level} | ${ofLevel.length} | ${ofLevel.filter(row => row.noAnswer || row.error).length} | ${within(PAGE_WINDOW_MS)} of ${ofLevel.length} | ${within(LATER_WINDOW_MS)} of ${ofLevel.length} | ${passed.length} of ${graded.length} | ${ofLevel.filter(row => row.firstProgressMs === undefined).length} | ${rule('punctuation')} / ${rule('line')} / ${rule('end')} / ${rule('none')} |`
     )
   }
   return lines.join('\n')
@@ -493,9 +512,17 @@ function printRun(run: SavedRun): void {
     `Tokens across ${run.tokens.lines} completion lines: ${run.tokens.input.toLocaleString('en-US')} input (${run.tokens.cached.toLocaleString('en-US')} cached), ${run.tokens.output.toLocaleString('en-US')} output.`
   )
   if (run.tokens.textRetractions !== undefined) {
+    // The two counts cover the same requests only without the errored rows:
+    // a request that failed mid-stream writes a failure line, not a
+    // completion line, so its withdrawals are in the streams alone.
+    const streamed = rows
+      .filter(row => !row.error)
+      .reduce((sum, row) => sum + row.retractions.length, 0)
+    const agree = streamed === run.tokens.textRetractions
     console.log(
-      `The route's own textRetractions over those lines: ${run.tokens.textRetractions}; read off the streams: ${rows.reduce((sum, row) => sum + row.retractions.length, 0)}.`
+      `${agree ? 'Withdrawals agree' : 'MISMATCH in withdrawals'}: the route's textRetractions over those lines ${run.tokens.textRetractions}, read off the streams of the requests without an error ${streamed}.`
     )
+    if (!agree) process.exitCode = 1
   }
   console.log('')
   console.log(summaryTable(rows, levels))

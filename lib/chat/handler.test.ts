@@ -1806,11 +1806,16 @@ describe('a tool call on the step forced to answer', () => {
     // did not finish; the answer did, and is shown and logged as one.
     expect(metadataFrom(body).incomplete).toBeUndefined()
     expect(metadataFrom(body).followUps).toEqual([FOLLOW_UP])
+    // It streamed, the call withdrew it, and it was sent again whole: the
+    // visitor sees it go and come back, and the log counts the withdrawal.
+    expect(resetsIn(body)).toBe(1)
+    expect(wireTextFrom(body)).toBe(FINISHED + FINISHED)
     expect(completion()).toEqual({
       marker: '[chat]',
       fields: expect.objectContaining({
         answered: true,
         finalStepToolCall: true,
+        textRetractions: 1,
         finishReason: 'tool-calls',
       }),
     })
@@ -2179,10 +2184,12 @@ describe('text streams as it is written, and a call withdraws it (MTC-101)', () 
   })
 
   test('a withdrawal that drops the progress part is followed by the part again', async () => {
-    // Not an ordering the route produces: a reset comes before the step's
-    // first call, and no part is sent in a step before its first call. The
-    // browser would drop a part first sent in the step being reset, so the
-    // stage sends it again rather than rely on that.
+    // Not an ordering the route produces: the part is first created when a
+    // call's row goes up, which is after the reset that call sends. (A part
+    // created in an earlier step is updated in place, so an update before
+    // the reset survives it.) The browser would drop a part first created
+    // in the step being reset, so the stage sends it again rather than rely
+    // on that.
     const read = {
       type: 'tool-input-available',
       toolCallId: 'call-1',
@@ -2266,6 +2273,42 @@ describe('text streams as it is written, and a call withdraws it (MTC-101)', () 
       'writing:2',
       'done:2',
     ])
+    expect(await textFrom(body)).toBe(ANSWER)
+    // The "writing" update came before the reset, but the part was created
+    // in the first step, so the reset left it where it was.
+    const parts = (await browserMessageFrom(body)).parts
+    const progress = parts.filter(part => part.type === PROGRESS_PART_TYPE)
+    expect(progress).toHaveLength(1)
+    expect(toProgressView(parts)?.phase).toBe('done')
+  })
+
+  test('reasoning never reaches the browser, and the withdrawal still fires around it', async () => {
+    const thought = 'Private chain of thought about which document to open.'
+    const model = modelOf(
+      () =>
+        chunks([
+          { type: 'stream-start', warnings: [] },
+          { type: 'reasoning-start', id: 'r1' },
+          { type: 'reasoning-delta', id: 'r1', delta: thought },
+          { type: 'reasoning-end', id: 'r1' },
+          { type: 'text-start', id: 'p' },
+          { type: 'text-delta', id: 'p', delta: NARRATION },
+          { type: 'text-end', id: 'p' },
+          { type: 'reasoning-start', id: 'r2' },
+          { type: 'reasoning-delta', id: 'r2', delta: thought },
+          { type: 'reasoning-end', id: 'r2' },
+          readCall('resume'),
+          finishOn('tool-calls'),
+        ]),
+      answers()
+    )
+    const body = await (await ask(model)).text()
+
+    expect(body).not.toContain(thought)
+    expect(
+      chunksFrom(body).filter(chunk => chunk.type.startsWith('reasoning'))
+    ).toEqual([])
+    expect(resetsIn(body)).toBe(1)
     expect(await textFrom(body)).toBe(ANSWER)
   })
 
@@ -2436,6 +2479,33 @@ describe('text streams as it is written, and a call withdraws it (MTC-101)', () 
       const body = await throughVertex(events)
 
       expect(wireTextFrom(body)).toContain(NARRATION)
+      expect(resetsIn(body)).toBe(1)
+      expect(await textFrom(body)).toBe(ANSWER)
+      expectWellFormedText(body)
+    })
+
+    test('a thought between the narration and the call stays off the wire', async () => {
+      // The provider closes the open text block at a thought part and opens
+      // a new one after it, so this is two text blocks in one step, both
+      // withdrawn, and a reasoning part the route must drop.
+      const thought = 'Private chain of thought about the résumé.'
+      const body = await throughVertex([
+        [{ text: NARRATION }],
+        [{ text: thought, thought: true }],
+        [{ text: 'And the FAQ too.' }, call],
+      ])
+
+      expect(body).not.toContain(thought)
+      expect(
+        chunksFrom(body).filter(chunk => chunk.type.startsWith('reasoning'))
+      ).toEqual([])
+      // The thought did reach the route: it split the text into two blocks.
+      const types = chunksFrom(body).map(chunk => chunk.type)
+      expect(
+        types
+          .slice(0, types.indexOf('reset-step'))
+          .filter(type => type === 'text-start')
+      ).toHaveLength(2)
       expect(resetsIn(body)).toBe(1)
       expect(await textFrom(body)).toBe(ANSWER)
       expectWellFormedText(body)

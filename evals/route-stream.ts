@@ -36,11 +36,11 @@ export type StreamedMetadata = ChatMessageMetadata
 
 export interface StreamedAnswer {
   /**
-   * The text the browser keeps, trailer included: every `text-delta` joined,
-   * less the steps a `reset-step` withdrew (MTC-101). A withdrawn step's text
-   * was narration the route took back, so a suite never grades it as the
-   * answer. The browser strips the `Sources:` line; the suites need it, so
-   * nothing is stripped here.
+   * The text the browser keeps, trailer included (`createKeptText`): every
+   * `text-delta` up to the first `error`, less the steps a `reset-step`
+   * withdrew (MTC-101). A withdrawn step's text was narration the route took
+   * back, so a suite never grades it as the answer. The browser strips the
+   * `Sources:` line; the suites need it, so nothing is stripped here.
    */
   text: string
   /** How many `reset-step` chunks withdrew text the browser had been shown. */
@@ -63,6 +63,79 @@ export interface StreamedAnswer {
 const DATA_PREFIX = 'data: '
 const DONE = '[DONE]'
 
+/** One answer token the browser keeps, and when it arrived. */
+export interface KeptToken {
+  at: number
+  delta: string
+}
+
+/** Text a `reset-step` took back after the browser had shown it. */
+export interface Withdrawal {
+  /** When its first token arrived. */
+  shownAt: number
+  /** When the `reset-step` arrived. */
+  withdrawnAt: number
+  chars: number
+}
+
+/**
+ * The answer text the browser keeps, read one chunk at a time (MTC-101).
+ *
+ * This is the SDK's `useChat` behavior written down for the evals, which
+ * read the route's body rather than run a browser: text is kept per step, a
+ * `reset-step` removes what the current step added, and an `error` chunk
+ * ends the reading, so nothing after it is kept. `parseUiMessageStream` and
+ * the first-sentence timeline both read through this, and
+ * `route-stream.test.ts` checks it against the SDK's own reader on the
+ * route's real output, so the three cannot drift apart unnoticed.
+ */
+export function createKeptText() {
+  const kept: KeptToken[] = []
+  let step: KeptToken[] = []
+  const withdrawals: Withdrawal[] = []
+  let stepNumber = 0
+  let stopped = false
+  let firstShownAt: number | undefined
+
+  return {
+    /** One parsed chunk, and when it arrived. */
+    read(chunk: { type?: unknown; delta?: unknown }, at: number): void {
+      if (stopped) return
+      if (chunk.type === 'start-step') {
+        kept.push(...step)
+        step = []
+        stepNumber += 1
+      } else if (chunk.type === 'reset-step') {
+        if (step.length > 0) {
+          withdrawals.push({
+            shownAt: step[0].at,
+            withdrawnAt: at,
+            chars: step.reduce((sum, token) => sum + token.delta.length, 0),
+          })
+        }
+        step = []
+      } else if (chunk.type === 'error') {
+        stopped = true
+      } else if (
+        chunk.type === 'text-delta' &&
+        typeof chunk.delta === 'string' &&
+        chunk.delta !== ''
+      ) {
+        firstShownAt ??= at
+        step.push({ at, delta: chunk.delta })
+      }
+    },
+    /** Steps begun so far, for a caller tracking what a reset drops. */
+    stepNumber: () => stepNumber,
+    /** The tokens the browser holds now, in order. */
+    tokens: (): KeptToken[] => [...kept, ...step],
+    text: () => [...kept, ...step].map(token => token.delta).join(''),
+    withdrawals: (): readonly Withdrawal[] => withdrawals,
+    /** When the first text of any kind appeared, withdrawn text included. */
+    firstShownAt: () => firstShownAt,
+  }
+}
+
 /**
  * Parse one SSE body into the answer, the finish reason, and the metadata.
  *
@@ -76,12 +149,8 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
   // account. An earlier part is never a fallback: it can list a read that a
   // refusal later withdrew.
   let lastProgress: { type: string; data: unknown } | undefined
-  // The browser keeps text per step: a `reset-step` removes everything the
-  // current step added (the SDK's `useChat` does this), so the current
-  // step's text is held apart until the next step begins.
-  let stepText = ''
-  let step = 0
-  let progressFirstInStep: number | undefined
+  const kept = createKeptText()
+  let progressCreatedInStep: number | undefined
 
   for (const rawLine of body.split('\n')) {
     const line = rawLine.trim()
@@ -92,22 +161,15 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
     const chunk = parseJson(payload)
     if (!chunk) continue
 
-    if (chunk.type === 'start-step') {
-      answer.text += stepText
-      stepText = ''
-      step += 1
-    }
-    if (chunk.type === 'reset-step') {
-      if (stepText !== '') answer.retractions += 1
-      stepText = ''
-      // The browser drops a data part the step added, too.
-      if (progressFirstInStep === step) {
-        lastProgress = undefined
-        progressFirstInStep = undefined
-      }
-    }
-    if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-      stepText += chunk.delta
+    kept.read(chunk, 0)
+    // A reset drops a data part the step created, as the browser does; one
+    // created in an earlier step is updated in place and stays.
+    if (
+      chunk.type === 'reset-step' &&
+      progressCreatedInStep === kept.stepNumber()
+    ) {
+      lastProgress = undefined
+      progressCreatedInStep = undefined
     }
     if (chunk.type === 'error' && typeof chunk.errorText === 'string') {
       answer.errorText = chunk.errorText
@@ -119,11 +181,14 @@ export function parseUiMessageStream(body: string): StreamedAnswer {
       Object.assign(answer.metadata, chunk.messageMetadata)
     }
     if (chunk.type === PROGRESS_PART_TYPE) {
-      if (lastProgress === undefined) progressFirstInStep = step
+      if (lastProgress === undefined) {
+        progressCreatedInStep = kept.stepNumber()
+      }
       lastProgress = { type: PROGRESS_PART_TYPE, data: chunk.data }
     }
   }
-  answer.text += stepText
+  answer.text = kept.text()
+  answer.retractions = kept.withdrawals().length
 
   const progress = lastProgress ? toProgressView([lastProgress]) : undefined
   if (progress) answer.progress = progress
