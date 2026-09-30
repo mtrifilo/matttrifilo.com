@@ -574,6 +574,29 @@ describe('announcementFor, with a run in flight', () => {
     )
   })
 
+  test("speaks a finished run's notice in place of \"Response complete\"", () => {
+    // What the notice under the answer says, so a reader who cannot see it
+    // is told the same thing (MTC-102).
+    const words = 'The words the notice shows.'
+    expect(announcementFor('ready', true, done(3, 14_000), false, words)).toBe(
+      words
+    )
+    expect(announcementFor('ready', true, undefined, false, words)).toBe(words)
+  })
+
+  test('a stop, a cut-off run and an error outrank the notice', () => {
+    const words = 'The words the notice shows.'
+    expect(announcementFor('ready', true, done(3, 14_000), true, words)).toBe(
+      'Response stopped'
+    )
+    expect(announcementFor('ready', true, reading('Résumé'), false, words)).toBe(
+      'Response stopped'
+    )
+    expect(announcementFor('error', true, done(3, 14_000), false, words)).toBe(
+      'Error'
+    )
+  })
+
   test('an answer with no progress at all still completes', () => {
     // A run that read nothing narrates nothing, and it answered.
     expect(announcementFor('ready', true)).toBe('Response complete')

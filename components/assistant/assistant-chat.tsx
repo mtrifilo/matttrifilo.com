@@ -21,6 +21,7 @@ import {
   announcementFor,
   discardsQuestion,
   joinTextParts,
+  noticeFor,
   saysNothingYet,
   showsFollowUps,
   toAnswerView,
@@ -37,7 +38,7 @@ import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantEmptyState } from './assistant-empty-state'
 import { AssistantHeader } from './assistant-header'
-import { ChatErrorNotice } from './assistant-notice'
+import { ANSWER_NOTICE_WORDS, ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { hasPendingQuestion, takePendingQuestion } from './pending-question'
@@ -313,11 +314,15 @@ export function AssistantChat() {
   // The run in flight, for the announcement only. A screen reader hears the
   // steps as they change instead of one flat "Responding" for twenty seconds.
   const lastProgress = lastView?.progress
+  // The notice under the last answer, chosen as AssistantAnswer chooses it,
+  // so the region speaks the words the page shows.
+  const lastNotice = lastView && !busy ? noticeFor(lastView) : null
   const nextAnnouncement = announcementFor(
     status,
     messages.some(message => message.role === 'assistant'),
     stopped && awaitingFirstContent ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
-    stopped
+    stopped,
+    lastNotice ? ANSWER_NOTICE_WORDS[lastNotice] : undefined
   )
   // `undefined` is "nothing new to say", so the region keeps its words: a
   // change, even back to an earlier one, is read out again. Adjusted during

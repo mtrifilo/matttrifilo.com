@@ -538,12 +538,19 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
  * end of the stream: the run is over, but how it ended rides on the `finish`
  * chunk that follows, so the step last named still stands until the status
  * settles. "Responding" there would say the run had started over.
+ *
+ * `noticeWords` are the words of the notice under a finished answer that was
+ * cut short or never came (`noticeFor`), spoken in place of "Response
+ * complete" so a reader who cannot see the notice is told what it says
+ * (Matt, 2026-09-30, MTC-102). The caller passes them because the words are
+ * copy, which lives in components/assistant and this module may not import.
  */
 export function announcementFor(
   status: ChatStatus,
   hasAnswer: boolean,
   progress?: ProgressView,
-  stopped = false
+  stopped = false,
+  noticeWords?: string
 ): string | undefined {
   if (status === 'error') return 'Error'
   if (status === 'submitted' || status === 'streaming') {
@@ -565,7 +572,7 @@ export function announcementFor(
   if (stopped) return 'Response stopped'
   if (!hasAnswer) return ''
   if (wasCutOff(progress)) return 'Response stopped'
-  return 'Response complete'
+  return noticeWords ?? 'Response complete'
 }
 
 /**

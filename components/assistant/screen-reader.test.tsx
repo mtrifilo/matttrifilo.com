@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { answered, openStream, type OpenStream } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
+import { INCOMPLETE_NOTICE, TRUNCATED_NOTICE } from './copy'
 
 /**
  * What a screen reader is told while an answer arrives (MTC-88).
@@ -163,6 +164,92 @@ describe('a streamed answer', () => {
     )
     expect(answer.closest(LIVE)).toBeNull()
     expect(answer.closest('[aria-atomic]')).toBeNull()
+  })
+})
+
+describe('an answer that did not end cleanly', () => {
+  // The region speaks the notice's own words in place of "Response
+  // complete" (Matt, 2026-09-30, MTC-102), so a reader who cannot see the
+  // notice is told what it says, once.
+  async function endWith(chunks: unknown[]): Promise<{
+    said: string[]
+    status: HTMLElement
+  }> {
+    stubRoute(() => answered(chunks))
+    render(<AssistantChat />)
+    const status = screen.getByRole('status')
+    const said: string[] = []
+    const observer = new MutationObserver(() => {
+      said.push(status.textContent ?? '')
+    })
+    observer.observe(status, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+    ask('Who is Matt?')
+    await waitFor(() => expect(status.textContent).not.toBe('Responding'))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send question' })).toBeTruthy()
+    )
+    observer.disconnect()
+    return { said, status }
+  }
+
+  /** The notice drawn under the answer, as opposed to the status region. */
+  function visibleNotice(words: string): HTMLElement | undefined {
+    return screen
+      .getAllByText(words)
+      .find(element => element.closest('[role="status"]') === null)
+  }
+
+  test('a cut-short answer is announced in the words of its notice', async () => {
+    const { said, status } = await endWith([
+      { type: 'start' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'writing', steps: STEPS },
+      },
+      { type: 'text-start', id: 't' },
+      { type: 'text-delta', id: 't', delta: 'Matt led the platform team and' },
+      { type: 'text-end', id: 't' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'done', steps: STEPS, ms: 9_000 },
+      },
+      {
+        type: 'finish',
+        messageMetadata: { truncated: true, incomplete: true },
+      },
+    ])
+    await waitFor(() => expect(status.textContent).toBe(TRUNCATED_NOTICE))
+    expect(visibleNotice(TRUNCATED_NOTICE)).toBeDefined()
+    expect(said).not.toContain('Response complete')
+    expect(said.slice(1)).not.toContain('Responding')
+    expect(said.filter(text => text === TRUNCATED_NOTICE)).toHaveLength(1)
+  })
+
+  test('a run with no answer is announced in the words of its notice', async () => {
+    const { said, status } = await endWith([
+      { type: 'start' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'reading', steps: STEPS },
+      },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'done', steps: STEPS, ms: 9_000 },
+      },
+      { type: 'finish', messageMetadata: { incomplete: true } },
+    ])
+    await waitFor(() => expect(status.textContent).toBe(INCOMPLETE_NOTICE))
+    expect(visibleNotice(INCOMPLETE_NOTICE)).toBeDefined()
+    expect(said).not.toContain('Response complete')
+    expect(said.slice(1)).not.toContain('Responding')
   })
 })
 
