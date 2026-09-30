@@ -3,7 +3,7 @@
 
 /*
  * Streamdown renders the assistant's Markdown with Tailwind classes of its
- * own — heading sizes, blockquote rules, the link-safety dialog's backdrop.
+ * own: heading sizes, blockquote rules, link styles.
  * Tailwind does not scan node_modules, so without this those classes are
  * never generated and the answers render half-styled.
  */
