@@ -82,4 +82,26 @@ describe('the Content-Security-Policy', () => {
     expect(policy['object-src']).toEqual(["'none'"])
     expect(policy['upgrade-insecure-requests']).toEqual([])
   })
+
+  // Next keeps the last matching rule's value for a header key, so on
+  // BotID's challenge prefix the wrapper's one-directive policy replaces
+  // the site-wide one. frame-src 'self' relies on that value; a BotID
+  // upgrade that changes it, or a new rule that sets the header, fails here.
+  test('is replaced only on BotID challenge paths, by frame-ancestors', async () => {
+    const { default: config } = await import('../next.config')
+    const rules = (await config.headers?.()) ?? []
+    const others = rules
+      .filter(r => r.source !== SITE_WIDE)
+      .flatMap(r =>
+        r.headers
+          .filter(h => h.key === 'Content-Security-Policy')
+          .map(h => ({ source: r.source, value: h.value }))
+      )
+    expect(others).toEqual([
+      {
+        source: expect.stringMatching(/^\/[0-9a-f-]{36}\/[0-9a-f-]{36}\//),
+        value: "frame-ancestors 'self'",
+      },
+    ])
+  })
 })

@@ -77,16 +77,21 @@ const nextConfig: NextConfig = {
            * data block the browser never runs, so it needs none of this.
            *
            * Removing it takes a proxy.ts that mints a nonce per request and
-           * puts it in script-src here (Next reads it from this header and
-           * stamps its own scripts), and that nonce passed to ThemeProvider.
-           * Every page then renders per request instead of being served
-           * prerendered. What keeps an injected script out meanwhile: a
-           * question renders as React text, and the model's Markdown goes
-           * through Streamdown's sanitizer.
+           * sets the policy, with 'nonce-...' in script-src, on the forwarded
+           * request as well as the response: Next reads the nonce from the
+           * request's Content-Security-Policy header and stamps its own
+           * scripts with it. This fixed header cannot carry a per-request
+           * value, so the policy moves there. The same nonce goes to
+           * ThemeProvider. Every page then renders per request instead of
+           * being served prerendered. What keeps an injected script out
+           * meanwhile: a question renders as React text, and the model's
+           * Markdown goes through Streamdown's sanitizer.
            *
            * object-src 'none' refuses plugins outright rather than inheriting
-           * default-src. upgrade-insecure-requests has the browser fetch any
-           * http:// URL a page names over https:// instead.
+           * default-src. upgrade-insecure-requests has the browser request a
+           * page's subresources, frames and form posts over https://, so none
+           * of them travels in the clear; on a page served over plain http
+           * that includes the page's own files.
            */
           {
             key: 'Content-Security-Policy',
