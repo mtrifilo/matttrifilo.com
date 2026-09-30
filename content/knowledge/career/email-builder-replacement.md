@@ -134,6 +134,4 @@ years after the feature it gated shipped.
 
 ## Why this thread matters
 
-The largest customer-facing program Matt shipped as a Software Engineer III,
-and the substance behind the player-coach line about working across teams to
-deliver a new email builder.
+The largest customer-facing program Matt shipped as a Software Engineer III.
