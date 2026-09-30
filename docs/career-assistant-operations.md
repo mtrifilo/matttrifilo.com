@@ -575,6 +575,8 @@ If the corpus cannot answer the question, it does not get a golden that expects 
 
 These are Matt's to run. Nothing in the repository can do them, and the workflow fails closed until they exist.
 
+They set up the eval workflow's identity only. The deployment reaches Vertex with no service-account key: it exchanges its Vercel OIDC token through the `vercel` workload identity pool for a short-lived token that impersonates `vercel-chat` (MTC-30), and `lib/ai/vertex.ts` documents that path.
+
 ### 1. A GitHub provider on the existing workload identity pool
 
 ```
