@@ -56,20 +56,24 @@ jobs:
         run: bunx playwright install --with-deps chromium
       - name: axe-core, the homepage and /ask at 390 and 1440, both themes
         run: bunx playwright test -c a11y/playwright.config.ts
-      # Both Lighthouse runs go ahead when axe fails, so one red run still
-      # reports every score.
+      # Both Lighthouse runs go ahead when axe or the other run fails, so one
+      # red run still reports every score. Each starts from an empty
+      # .lighthouseci, where collect writes and assert reads, and keeps its
+      # reports before asserting on them.
       - name: Lighthouse, mobile
         if: ${{ !cancelled() && steps.server.outcome == 'success' }}
         run: |
+          rm -rf .lighthouseci
           $LHCI collect --config=a11y/lighthouserc.mobile.json
           $LHCI upload --config=a11y/lighthouserc.mobile.json
-          rm -rf .lighthouseci
+          $LHCI assert --config=a11y/lighthouserc.mobile.json
       - name: Lighthouse, desktop
         if: ${{ !cancelled() && steps.server.outcome == 'success' }}
         run: |
+          rm -rf .lighthouseci
           $LHCI collect --config=a11y/lighthouserc.desktop.json
           $LHCI upload --config=a11y/lighthouserc.desktop.json
-          rm -rf .lighthouseci
+          $LHCI assert --config=a11y/lighthouserc.desktop.json
       - name: Lighthouse scores
         if: always()
         run: |
