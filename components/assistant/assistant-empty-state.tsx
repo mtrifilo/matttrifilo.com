@@ -32,9 +32,8 @@ export function AssistantEmptyState({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <h1
-          className="font-semibold"
+          className="font-semibold text-section-title"
           ref={headingRef}
-          style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
           tabIndex={-1}
         >
           {ASSISTANT_NAME}
