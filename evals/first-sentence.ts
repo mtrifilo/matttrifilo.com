@@ -1,6 +1,7 @@
 import { PROGRESS_PART_TYPE } from '@/lib/chat/progress'
 import * as assertions from './assertions'
 import type { AssertionContext, AssertionResult } from './assertions'
+import { createKeptText, type KeptToken } from './route-stream'
 
 /**
  * The pure half of evals/measure-first-sentence.ts (MTC-87): reading the
@@ -41,9 +42,9 @@ export type SentenceRule = 'punctuation' | 'line' | 'end' | 'none'
  * A heuristic with known limits: it ends early at an abbreviation past the
  * floor ("e.g. ", "U.S. "), it runs past a stop followed by a closing quote
  * or bracket, and it takes a heading or bold label of 40 characters as the
- * sentence. While the route holds a step's text until the step ends, none of
- * this moves a timing, because the whole answer arrives at once; read the
- * `rule` and the answer before trusting it once the answer streams.
+ * sentence. The answer streams token by token (MTC-101), so each of these
+ * moves a timing: an abbreviation ends the sentence early, a closing quote
+ * late. Read the `rule` and the answer before trusting an outlier.
  */
 export function firstSentenceEnd(
   text: string,
@@ -74,18 +75,38 @@ export function firstSentenceEnd(
   return undefined
 }
 
+/**
+ * Text the visitor saw and then lost: a step streamed it and a `reset-step`
+ * withdrew it when the step turned out to call a tool (MTC-101).
+ */
+export interface StreamRetraction {
+  /** When its first token arrived, in ms from the send. */
+  shownMs: number
+  /** How long it was on screen before the withdrawal, in ms. */
+  visibleMs: number
+  /** How much of it there was, in characters. */
+  chars: number
+}
+
 /** When each event a visitor waits for first happened, in ms from the send. */
 export interface StreamTimings {
   /** The first progress part: the first sign on screen that work started. */
   firstProgressMs?: number
-  /** The first non-empty `text-delta`: the answer's first visible token. */
+  /**
+   * The first non-empty `text-delta` of any kind: the first text on screen,
+   * narration that was later withdrawn included.
+   */
+  firstShownTokenMs?: number
+  /** The first non-empty `text-delta` of the answer the browser kept. */
   firstAnswerTokenMs?: number
-  /** When the text so far first held a whole first sentence. */
+  /** When the kept answer first held a whole first sentence. */
   firstSentenceMs?: number
   sentenceRule: SentenceRule
+  /** Every withdrawal, in the order it happened. */
+  retractions: StreamRetraction[]
   /** The stream's end. */
   totalMs: number
-  /** Every `text-delta` joined, so a caller can check the rule it fired. */
+  /** The kept answer's text, so a caller can check the rule it fired. */
   text: string
 }
 
@@ -103,17 +124,25 @@ export interface StreamTimeline {
  * Frames are split on newlines with the partial last line carried over, so a
  * frame split across two network chunks is stamped when its end arrives,
  * which is when a browser could have acted on it too.
+ *
+ * Text is kept the way the browser keeps it (`createKeptText` in
+ * ./route-stream, shared with the eval parser): a `reset-step` withdraws the
+ * current step's text (recorded as a retraction), an `error` ends the
+ * reading, and only the text no reset took back is the answer. The first
+ * progress part is stamped on arrival even if a reset later drops it, since
+ * the visitor saw it; the route never sends one before a reset in the same
+ * step. Whether a step's text is kept is
+ * known only once the next step begins or the stream ends, so the answer's
+ * first token and first sentence are worked out at `finish`, from the kept
+ * tokens and the times they arrived.
  */
 export function createStreamTimeline(
   startedAt: number,
   now: () => number
 ): StreamTimeline {
   let buffer = ''
-  let text = ''
-  let lastTextAt: number | undefined
-  const timings: Omit<StreamTimings, 'totalMs' | 'text' | 'sentenceRule'> & {
-    sentenceRule?: SentenceRule
-  } = {}
+  const kept = createKeptText()
+  let firstProgressMs: number | undefined
 
   function onLine(rawLine: string, at: number): void {
     const line = rawLine.trim()
@@ -127,22 +156,30 @@ export function createStreamTimeline(
       return
     }
     if (typeof chunk !== 'object' || chunk === null) return
-    const { type, delta } = chunk as { type?: unknown; delta?: unknown }
-    if (type === PROGRESS_PART_TYPE && timings.firstProgressMs === undefined) {
-      timings.firstProgressMs = at - startedAt
+    const typed = chunk as { type?: unknown; delta?: unknown }
+    if (typed.type === PROGRESS_PART_TYPE && firstProgressMs === undefined) {
+      firstProgressMs = at - startedAt
     }
-    if (type === 'text-delta' && typeof delta === 'string' && delta !== '') {
-      timings.firstAnswerTokenMs ??= at - startedAt
-      text += delta
-      lastTextAt = at
-      if (timings.firstSentenceMs === undefined) {
-        const found = firstSentenceEnd(text, false)
-        if (found) {
-          timings.firstSentenceMs = at - startedAt
-          timings.sentenceRule = found.rule
-        }
-      }
+    kept.read(typed, at)
+  }
+
+  /** When the kept answer's first sentence was whole, and by which rule. */
+  function sentenceOf(tokens: readonly KeptToken[]): {
+    ms?: number
+    rule: SentenceRule
+  } {
+    let text = ''
+    for (const token of tokens) {
+      text += token.delta
+      const found = firstSentenceEnd(text, false)
+      if (found) return { ms: token.at - startedAt, rule: found.rule }
     }
+    // Only the whole answer can settle it now, and it was readable when its
+    // last token arrived, not when the stream closed.
+    const last = tokens.at(-1)
+    const found = last ? firstSentenceEnd(text, true) : undefined
+    if (last && found) return { ms: last.at - startedAt, rule: found.rule }
+    return { rule: 'none' }
   }
 
   return {
@@ -157,28 +194,26 @@ export function createStreamTimeline(
       const at = now()
       if (buffer !== '') onLine(buffer, at)
       buffer = ''
-      let sentenceRule = timings.sentenceRule
-      let firstSentenceMs = timings.firstSentenceMs
-      if (firstSentenceMs === undefined && lastTextAt !== undefined) {
-        // Only the whole answer can settle it now, and it was readable when
-        // its last token arrived, not when the stream closed.
-        const found = firstSentenceEnd(text, true)
-        if (found) {
-          firstSentenceMs = lastTextAt - startedAt
-          sentenceRule = found.rule
-        }
-      }
+      const tokens = kept.tokens()
+      const sentence = sentenceOf(tokens)
+      const firstShownAt = kept.firstShownAt()
       return {
-        ...(timings.firstProgressMs !== undefined
-          ? { firstProgressMs: timings.firstProgressMs }
+        ...(firstProgressMs !== undefined ? { firstProgressMs } : {}),
+        ...(firstShownAt !== undefined
+          ? { firstShownTokenMs: firstShownAt - startedAt }
           : {}),
-        ...(timings.firstAnswerTokenMs !== undefined
-          ? { firstAnswerTokenMs: timings.firstAnswerTokenMs }
+        ...(tokens.length > 0
+          ? { firstAnswerTokenMs: tokens[0].at - startedAt }
           : {}),
-        ...(firstSentenceMs !== undefined ? { firstSentenceMs } : {}),
-        sentenceRule: sentenceRule ?? 'none',
+        ...(sentence.ms !== undefined ? { firstSentenceMs: sentence.ms } : {}),
+        sentenceRule: sentence.rule,
+        retractions: kept.withdrawals().map(withdrawal => ({
+          shownMs: withdrawal.shownAt - startedAt,
+          visibleMs: withdrawal.withdrawnAt - withdrawal.shownAt,
+          chars: withdrawal.chars,
+        })),
         totalMs: at - startedAt,
-        text,
+        text: kept.text(),
       }
     },
   }

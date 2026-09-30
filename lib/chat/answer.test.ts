@@ -10,7 +10,9 @@ import {
   joinTextParts,
   noticeFor,
   parseFollowUps,
+  saysNothingYet,
   showsFollowUps,
+  withoutHalfWrittenMarker,
   stripFollowUpsTrailer,
   stripSourcesTrailer,
   stripTrailers,
@@ -627,5 +629,67 @@ describe('toChatErrorView', () => {
   test('falls back when the body parses but has no message', () => {
     const error = new Error(JSON.stringify({ error: { code: 'disabled' } }))
     expect(toChatErrorView(error)?.message).toBe(CHAT_UNKNOWN_ERROR_MESSAGE)
+  })
+})
+
+describe('withoutHalfWrittenMarker (MTC-101)', () => {
+  const PROSE = 'He led the migration.'
+
+  test.each([
+    ['S'],
+    ['Sour'],
+    ['Sources:'],
+    ['Fol'],
+    ['Follow-u'],
+    ['follow up'],
+    ['**Follow'],
+  ])('holds back a last line that is only the start of a marker: %s', line => {
+    expect(withoutHalfWrittenMarker(`${PROSE}\n\n${line}`)).toBe(PROSE)
+  })
+
+  test('leaves a line that has already left the marker behind', () => {
+    for (const line of ['So the team shipped it.', 'Southwest', 'Folks']) {
+      const text = `${PROSE}\n\n${line}`
+      expect(withoutHalfWrittenMarker(text)).toBe(text)
+    }
+  })
+
+  test('never holds back the first line, which is never a trailer', () => {
+    expect(withoutHalfWrittenMarker('So')).toBe('So')
+  })
+})
+
+describe('toAnswerView while the text streams (MTC-101)', () => {
+  const view = (text: string, state: 'streaming' | 'done') =>
+    toAnswerView({ parts: [{ type: 'text', text, state }] })
+
+  test('a half-written marker is held back only while the part streams', () => {
+    expect(view('He led it.\n\nSour', 'streaming').text).toBe('He led it.')
+    expect(view('He led it.\n\nFollow-u', 'streaming').text).toBe('He led it.')
+    // A finished answer is judged by the trailer rules alone.
+    expect(view('He led it.\n\nSo', 'done').text).toBe('He led it.\n\nSo')
+  })
+})
+
+describe('saysNothingYet (MTC-101)', () => {
+  const empty: AnswerView = {
+    text: '',
+    followUps: [],
+    truncated: false,
+    incomplete: false,
+  }
+
+  test('a turn a withdrawal emptied has nothing to show', () => {
+    expect(saysNothingYet(empty)).toBe(true)
+    expect(saysNothingYet({ ...empty, text: '  \n' })).toBe(true)
+  })
+
+  test('text, a progress part or a notice is something to show', () => {
+    expect(saysNothingYet({ ...empty, text: 'He led it.' })).toBe(false)
+    expect(
+      saysNothingYet({ ...empty, progress: { phase: 'reading', steps: [] } })
+    ).toBe(false)
+    expect(saysNothingYet({ ...empty, incomplete: true })).toBe(false)
+    expect(saysNothingYet({ ...empty, truncated: true })).toBe(false)
   })
 })

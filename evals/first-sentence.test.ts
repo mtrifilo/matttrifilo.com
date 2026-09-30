@@ -155,6 +155,54 @@ describe('createStreamTimeline', () => {
     expect(timings.firstSentenceMs).toBeUndefined()
     expect(timings.sentenceRule).toBe('none')
   })
+
+  test('withdrawn narration is a retraction, not the answer or its first sentence (MTC-101)', () => {
+    const clock = manualClock()
+    const timeline = createStreamTimeline(clock.now(), clock.now)
+    const narration =
+      'Let me open his résumé and the email reliability write-up. '
+    clock.at(2_000)
+    timeline.push(frame({ type: 'start-step' }))
+    clock.at(2_100)
+    timeline.push(frame({ type: 'text-delta', id: 'n', delta: narration }))
+    clock.at(2_700)
+    timeline.push(frame({ type: 'reset-step' }))
+    timeline.push(frame({ type: PROGRESS_PART_TYPE, id: 'progress', data: {} }))
+    clock.at(6_000)
+    timeline.push(frame({ type: 'start-step' }))
+    clock.at(8_000)
+    timeline.push(frame({ type: 'text-delta', id: 'a', delta: LEAD }))
+    clock.at(8_200)
+    timeline.push(frame({ type: 'text-delta', id: 'a', delta: ' Then more.' }))
+    clock.at(8_300)
+    const timings = timeline.finish()
+
+    expect(timings.firstShownTokenMs).toBe(2_100)
+    expect(timings.firstAnswerTokenMs).toBe(8_000)
+    // The narration was long enough to pass for a first sentence; it is
+    // not one, because the visitor lost it.
+    expect(timings.firstSentenceMs).toBe(8_200)
+    expect(timings.retractions).toEqual([
+      { shownMs: 2_100, visibleMs: 600, chars: narration.length },
+    ])
+    expect(timings.text).toBe(`${LEAD} Then more.`)
+  })
+
+  test('a step that is not withdrawn stays part of the answer', () => {
+    const clock = manualClock()
+    const timeline = createStreamTimeline(clock.now(), clock.now)
+    timeline.push(frame({ type: 'start-step' }))
+    clock.at(1_000)
+    timeline.push(frame({ type: 'text-delta', id: 'a', delta: LEAD }))
+    timeline.push(frame({ type: 'start-step' }))
+    timeline.push(frame({ type: 'reset-step' }))
+    clock.at(1_500)
+    const timings = timeline.finish()
+
+    expect(timings.firstAnswerTokenMs).toBe(1_000)
+    expect(timings.retractions).toEqual([])
+    expect(timings.text).toBe(LEAD)
+  })
 })
 
 describe('gradeDeterministic', () => {

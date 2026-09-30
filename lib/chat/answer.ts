@@ -93,12 +93,52 @@ export interface AnswerView {
 
 /** The parts of a UI message this module needs. Structural on purpose. */
 export interface AnswerMessage {
-  parts: readonly { type: string; text?: string }[]
+  parts: readonly { type: string; text?: string; state?: string }[]
   metadata?: ChatMessageMetadata
 }
 
+/** The last text part is still being written (the SDK's `state`). */
+function isStreaming(parts: AnswerMessage['parts']): boolean {
+  for (let at = parts.length - 1; at >= 0; at -= 1) {
+    if (parts[at].type === 'text') return parts[at].state === 'streaming'
+  }
+  return false
+}
+
+/**
+ * The text without a last line that is so far only the start of a trailer
+ * marker, `Sources:` or `Follow-ups:` (MTC-101).
+ *
+ * The answer streams token by token, so the marker arrives in pieces, and
+ * until it is whole the trailer rules cannot recognise it: "Sour" or
+ * "Follow-u" would show as prose for a token or two. While the text is still
+ * streaming, such a line is held back. It costs a line of the answer that
+ * really opens "So" or "Fol" one token of delay, never more: the next token
+ * either completes the marker or shows the line is prose. A finished answer
+ * is never judged by this.
+ */
+export function withoutHalfWrittenMarker(text: string): string {
+  const trimmed = text.trimEnd()
+  const lastBreak = trimmed.lastIndexOf('\n')
+  if (lastBreak < 0) return text
+  const line = trimmed
+    .slice(lastBreak + 1)
+    .replace(/^[\s#>*_]+/, '')
+    .toLowerCase()
+  if (line.length === 0) return text
+  const asFollowUps = line.replace(/[\s‐-―]/g, '-')
+  const startsAMarker =
+    SOURCES_TRAILER_PREFIX.toLowerCase().startsWith(line) ||
+    FOLLOW_UPS_TRAILER_PREFIX.toLowerCase().startsWith(asFollowUps) ||
+    'followups:'.startsWith(line)
+  return startsAMarker ? trimmed.slice(0, lastBreak).trimEnd() : text
+}
+
 export function toAnswerView(message: AnswerMessage): AnswerView {
-  const text = stripTrailers(joinTextParts(message.parts))
+  const joined = joinTextParts(message.parts)
+  const text = stripTrailers(
+    isStreaming(message.parts) ? withoutHalfWrittenMarker(joined) : joined
+  )
   return {
     text,
     // Validated again on the way in. The server is the gate, but these
@@ -133,9 +173,10 @@ export function joinTextParts(
  * The trailer is raw document ids, which mean nothing to a visitor: what was
  * read is disclosed above the answer, by title. Only a final line that opens
  * with the literal prefix is taken, which is specific enough that no sentence
- * of a real answer is mistaken for it. A half-written trailer stays on screen
- * for the tokens it takes to finish the word, which is the cost of not
- * guessing at prefixes like "So".
+ * of a real answer is mistaken for it. This never guesses at prefixes like
+ * "So": it also judges finished answers, the evals' included. A trailer still
+ * being written is `withoutHalfWrittenMarker`'s, and only while the text
+ * streams.
  *
  * It reads the final line of the text it is given, so it expects text the
  * follow-ups block is already off; `stripTrailers` and `findSourcesTrailer`
@@ -200,11 +241,10 @@ export function stripFollowUpsTrailer(text: string): string {
 /**
  * Both trailers, in the order they are written.
  *
- * The middle step is the window between them. Text reaches the browser a step
- * at a time rather than a token at a time, but the chunks of one step still
- * arrive as separate frames, so there is a paint or two in which the marker
- * is half written and the citation line is no longer the last line. Without
- * it the raw document ids show for those frames.
+ * The middle step is the window between them. Text reaches the browser as the
+ * model writes it (MTC-101), so there are paints in which the marker is half
+ * written and the citation line is no longer the last line. Without it the
+ * raw document ids show for those frames.
  */
 export function stripTrailers(text: string): string {
   return stripSourcesTrailer(withoutFollowUps(text))
@@ -434,6 +474,26 @@ const WWW_URL = /\bwww\./i
 const INVISIBLE_CHARACTER =
   /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufff9-\ufffb\ufeff]/
 const TAG_CHARACTER = /[\u{E0000}-\u{E007F}]/u
+
+/**
+ * Whether an assistant turn has nothing to show yet: no text, no progress
+ * part, and no notice.
+ *
+ * The SDK creates the assistant message at the first chunk that carries
+ * content, and a withdrawal (MTC-101) can empty it again: narration streams,
+ * its call names nothing the progress view can list, and the `reset-step`
+ * takes the text away. Until the run says something more, such a turn is the
+ * same as no turn at all, and the transcript treats it that way, so a stop
+ * in that gap still reads "Stopped" rather than leaving a blank turn.
+ */
+export function saysNothingYet(view: AnswerView): boolean {
+  return (
+    view.text.trim().length === 0 &&
+    view.progress === undefined &&
+    !view.incomplete &&
+    !view.truncated
+  )
+}
 
 /** Which notice, if any, sits under an answer once its run has ended. */
 export type AnswerNotice = 'truncated' | 'incomplete'

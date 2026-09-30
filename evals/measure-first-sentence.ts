@@ -24,7 +24,18 @@ import { hasNothingToGrade } from './route-stream'
  *
  *   bun run evals/measure-first-sentence.ts --from evals/out/first-sentence-<time>.json
  *
+ *   GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> \
+ *     bun run evals/measure-first-sentence.ts --level medium
+ *
  * The second form reprints the tables from a saved run and calls nothing.
+ * The third measures one thinking level only (30 requests); `--level` may be
+ * given more than once.
+ *
+ * Since MTC-101 a step's text streams as it is written and a call later in
+ * the step withdraws it, so each request also records the first text shown
+ * (withdrawn narration included) and every withdrawal: when the text
+ * appeared, how long it stayed, and how long it was. The first answer token
+ * and the first sentence are the kept answer's.
  *
  * Each request goes through the eval provider's own handler construction
  * (`createEvalChatSession`), in process, with no server: the same policy,
@@ -37,11 +48,12 @@ import { hasNothingToGrade } from './route-stream'
  * own rendering. The runbook section "Time to the first useful sentence" says
  * how to read the numbers.
  *
- * Spend: QUESTIONS x LEVELS x REPETITIONS requests (60). Unlike the eval
- * provider, a request that fails is not sent again (the fetch wrapper's own
- * retry of a stalled call still applies, and is counted per request), and the
- * run stops starting new requests at the first CHAT_ERROR, because a stalled
- * Vertex hour measures Vertex, not the thinking level.
+ * Spend: QUESTIONS x levels x REPETITIONS requests (60, or 30 for one
+ * level). Unlike the eval provider, a request that fails is not sent again
+ * (the fetch wrapper's own retry of a stalled call still applies, and is
+ * counted per request), and the run stops starting new requests at the first
+ * CHAT_ERROR, because a stalled Vertex hour measures Vertex, not the thinking
+ * level.
  */
 
 /**
@@ -104,6 +116,9 @@ const CONCURRENCY = 2
  * the stricter bar; this count is the lenient one.
  */
 const PAGE_WINDOW_MS = 8_000
+
+/** The second count MTC-87's memo reported, kept for comparison with it. */
+const LATER_WINDOW_MS = 15_000
 
 interface Job {
   label: string
@@ -228,6 +243,9 @@ function roundTimings(
     ...(timings.firstProgressMs !== undefined
       ? { firstProgressMs: round(timings.firstProgressMs) }
       : {}),
+    ...(timings.firstShownTokenMs !== undefined
+      ? { firstShownTokenMs: round(timings.firstShownTokenMs) }
+      : {}),
     ...(timings.firstAnswerTokenMs !== undefined
       ? { firstAnswerTokenMs: round(timings.firstAnswerTokenMs) }
       : {}),
@@ -235,8 +253,34 @@ function roundTimings(
       ? { firstSentenceMs: round(timings.firstSentenceMs) }
       : {}),
     sentenceRule: timings.sentenceRule,
+    retractions: timings.retractions.map(retraction => ({
+      shownMs: Math.round(retraction.shownMs),
+      visibleMs: Math.round(retraction.visibleMs),
+      chars: retraction.chars,
+    })),
     totalMs: Math.round(timings.totalMs),
   }
+}
+
+/** The levels `--level` names, or every level when none is named. */
+function levelsFromArgs(argv: readonly string[]): ChatReasoning[] {
+  const named: ChatReasoning[] = []
+  argv.forEach((arg, at) => {
+    if (arg !== '--level') return
+    const level = argv[at + 1] as ChatReasoning | undefined
+    if (level === undefined || !LEVELS.includes(level)) {
+      throw new Error(`--level takes one of ${LEVELS.join(', ')}`)
+    }
+    if (!named.includes(level)) named.push(level)
+  })
+  return named.length > 0
+    ? LEVELS.filter(level => named.includes(level))
+    : [...LEVELS]
+}
+
+/** The levels a saved run holds, in the usual order. */
+function levelsIn(rows: readonly Measurement[]): ChatReasoning[] {
+  return LEVELS.filter(level => rows.some(row => row.level === level))
 }
 
 /**
@@ -245,11 +289,11 @@ function roundTimings(
  * guaranteed to run side by side; what holds is that neither level gets a
  * quieter or a busier stretch of the run to itself.
  */
-function schedule(): Job[] {
+function schedule(levels: readonly ChatReasoning[]): Job[] {
   const jobs: Job[] = []
   for (let repetition = 1; repetition <= REPETITIONS; repetition++) {
     for (const { label, question } of QUESTIONS) {
-      for (const level of LEVELS) {
+      for (const level of levels) {
         jobs.push({ label, question, level, repetition })
       }
     }
@@ -260,10 +304,16 @@ function schedule(): Job[] {
 const ms = (value: number | undefined) =>
   value === undefined ? 'n/a' : value.toLocaleString('en-US')
 
+/** A request's withdrawals as `visible ms` each, or a dash for none. */
+const retractionCell = (row: Measurement) =>
+  row.retractions.length === 0
+    ? '-'
+    : row.retractions.map(retraction => ms(retraction.visibleMs)).join(', ')
+
 function requestTable(rows: readonly Measurement[]): string {
   const lines = [
-    '| level | question | rep | progress | first token | first sentence | rule | total | first byte (max) | first bytes per call | docs | retries | golden (deterministic) |',
-    '| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | ---: | ---: | --- |',
+    '| level | question | rep | progress | first shown | first token | first sentence | rule | withdrawn (visible ms) | total | first byte (max) | first bytes per call | docs | retries | golden (deterministic) |',
+    '| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | --- |',
   ]
   for (const row of rows) {
     const golden = row.error
@@ -276,7 +326,7 @@ function requestTable(rows: readonly Measurement[]): string {
             : `FAIL (${row.grade.failed.length})`
           : 'no golden'
     lines.push(
-      `| ${row.level} | ${row.label} | ${row.repetition} | ${ms(row.firstProgressMs)} | ${ms(row.firstAnswerTokenMs)} | ${ms(row.firstSentenceMs)} | ${row.sentenceRule} | ${ms(row.totalMs)} | ${ms(row.vertexFirstByteMs)} | ${row.firstBytesMs.map(value => ms(value)).join(', ')} | ${row.documentsRead} | ${row.vertexRetries} | ${golden} |`
+      `| ${row.level} | ${row.label} | ${row.repetition} | ${ms(row.firstProgressMs)} | ${ms(row.firstShownTokenMs)} | ${ms(row.firstAnswerTokenMs)} | ${ms(row.firstSentenceMs)} | ${row.sentenceRule} | ${retractionCell(row)} | ${ms(row.totalMs)} | ${ms(row.vertexFirstByteMs)} | ${row.firstBytesMs.map(value => ms(value)).join(', ')} | ${row.documentsRead} | ${row.vertexRetries} | ${golden} |`
     )
   }
   return lines.join('\n')
@@ -287,19 +337,41 @@ function requestTable(rows: readonly Measurement[]): string {
  * answer has no sentence time and is left out of that row, so every row
  * carries its own n. At n = 30, p90 is the 27th value.
  */
-function summaryTable(rows: readonly Measurement[]): string {
+function summaryTable(
+  rows: readonly Measurement[],
+  levels: readonly ChatReasoning[]
+): string {
   const lines = [
     '| level | measure | n | p50 | p90 | max |',
     '| --- | --- | ---: | ---: | ---: | ---: |',
   ]
-  for (const level of LEVELS) {
+  for (const level of levels) {
     const ofLevel = rows.filter(row => row.level === level && !row.error)
     const answered = (row: Measurement) => row.firstSentenceMs !== undefined
     const series: [string, (row: Measurement) => number | undefined][] = [
       ['first progress part', row => row.firstProgressMs],
+      // Withdrawn narration included: the first text on screen at all.
+      ['first text shown', row => row.firstShownTokenMs],
       ['first answer token', row => row.firstAnswerTokenMs],
       ['first complete sentence', row => row.firstSentenceMs],
       ['total', row => row.totalMs],
+      // How much sooner the first sentence came than the stream's end: what
+      // holding each step's text until the step ended would have cost.
+      [
+        'first sentence before the end',
+        row =>
+          row.firstSentenceMs === undefined
+            ? undefined
+            : row.totalMs - row.firstSentenceMs,
+      ],
+      [
+        'first token to first sentence',
+        row =>
+          row.firstSentenceMs === undefined ||
+          row.firstAnswerTokenMs === undefined
+            ? undefined
+            : row.firstSentenceMs - row.firstAnswerTokenMs,
+      ],
       ['vertexFirstByteMs (slowest call)', row => row.vertexFirstByteMs],
       ['first call first byte', row => row.firstBytesMs[0]],
       // The last call of an answered request is the one that wrote the
@@ -322,36 +394,70 @@ function summaryTable(rows: readonly Measurement[]): string {
   return lines.join('\n')
 }
 
-function passTable(rows: readonly Measurement[]): string {
+/**
+ * How often a visitor would see text appear and leave (MTC-101): requests
+ * with at least one withdrawal, withdrawals in all, and, per withdrawal, how
+ * long the text stayed on screen and how long it was. Nearest-rank, over
+ * withdrawals rather than requests.
+ */
+function retractionTable(
+  rows: readonly Measurement[],
+  levels: readonly ChatReasoning[]
+): string {
   const lines = [
-    `| level | requests | no answer | sentence within ${PAGE_WINDOW_MS / 1000} s | golden deterministic pass | no progress part | sentence rule: punctuation / line / end / none |`,
-    '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
+    '| level | requests | with a withdrawal | withdrawals | visible p50 / p90 / max (ms) | chars p50 / max | shown at p50 (ms) |',
+    '| --- | ---: | ---: | ---: | --- | --- | ---: |',
   ]
-  for (const level of LEVELS) {
-    const ofLevel = rows.filter(row => row.level === level)
-    const graded = ofLevel.filter(row => row.grade)
-    const passed = graded.filter(row => row.grade?.pass)
-    const rule = (name: string) =>
-      ofLevel.filter(row => row.sentenceRule === name).length
-    const within = ofLevel.filter(
-      row =>
-        row.firstSentenceMs !== undefined &&
-        row.firstSentenceMs <= PAGE_WINDOW_MS
-    ).length
+  for (const level of levels) {
+    const ofLevel = rows.filter(row => row.level === level && !row.error)
+    const all = ofLevel.flatMap(row => row.retractions)
+    const visible = all.map(retraction => retraction.visibleMs)
+    const chars = all.map(retraction => retraction.chars)
+    const shown = all.map(retraction => retraction.shownMs)
+    const max = (values: number[]) =>
+      values.length ? Math.max(...values) : undefined
     lines.push(
-      `| ${level} | ${ofLevel.length} | ${ofLevel.filter(row => row.noAnswer || row.error).length} | ${within} of ${ofLevel.length} | ${passed.length} of ${graded.length} | ${ofLevel.filter(row => row.firstProgressMs === undefined).length} | ${rule('punctuation')} / ${rule('line')} / ${rule('end')} / ${rule('none')} |`
+      `| ${level} | ${ofLevel.length} | ${ofLevel.filter(row => row.retractions.length > 0).length} | ${all.length} | ${ms(nearestRank(visible, 50))} / ${ms(nearestRank(visible, 90))} / ${ms(max(visible))} | ${ms(nearestRank(chars, 50))} / ${ms(max(chars))} | ${ms(nearestRank(shown, 50))} |`
     )
   }
   return lines.join('\n')
 }
 
-function perQuestionTable(rows: readonly Measurement[]): string {
+function passTable(
+  rows: readonly Measurement[],
+  levels: readonly ChatReasoning[]
+): string {
   const lines = [
-    `| question | ${LEVELS.map(level => `${level} p50 (n)`).join(' | ')} |`,
-    `| --- | ${LEVELS.map(() => '---:').join(' | ')} |`,
+    `| level | requests | no answer | sentence within ${PAGE_WINDOW_MS / 1000} s | sentence within ${LATER_WINDOW_MS / 1000} s | golden deterministic pass | no progress part | sentence rule: punctuation / line / end / none |`,
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+  ]
+  for (const level of levels) {
+    const ofLevel = rows.filter(row => row.level === level)
+    const graded = ofLevel.filter(row => row.grade)
+    const passed = graded.filter(row => row.grade?.pass)
+    const rule = (name: string) =>
+      ofLevel.filter(row => row.sentenceRule === name).length
+    const within = (ms: number) =>
+      ofLevel.filter(
+        row => row.firstSentenceMs !== undefined && row.firstSentenceMs <= ms
+      ).length
+    lines.push(
+      `| ${level} | ${ofLevel.length} | ${ofLevel.filter(row => row.noAnswer || row.error).length} | ${within(PAGE_WINDOW_MS)} of ${ofLevel.length} | ${within(LATER_WINDOW_MS)} of ${ofLevel.length} | ${passed.length} of ${graded.length} | ${ofLevel.filter(row => row.firstProgressMs === undefined).length} | ${rule('punctuation')} / ${rule('line')} / ${rule('end')} / ${rule('none')} |`
+    )
+  }
+  return lines.join('\n')
+}
+
+function perQuestionTable(
+  rows: readonly Measurement[],
+  levels: readonly ChatReasoning[]
+): string {
+  const lines = [
+    `| question | ${levels.map(level => `${level} p50 (n)`).join(' | ')} |`,
+    `| --- | ${levels.map(() => '---:').join(' | ')} |`,
   ]
   for (const { label } of QUESTIONS) {
-    const cells = LEVELS.map(level => {
+    const cells = levels.map(level => {
       const values = rows
         .filter(row => row.label === label && row.level === level)
         .map(row => row.firstSentenceMs)
@@ -367,19 +473,35 @@ interface SavedRun {
   startedAt: string
   model?: string
   concurrency: number
-  tokens: { input: number; output: number; cached: number; lines: number }
+  tokens: {
+    input: number
+    output: number
+    cached: number
+    lines: number
+    /**
+     * `textRetractions` summed over the same completion lines: the route's
+     * own count, to check against the withdrawals read off the streams.
+     * Absent from runs saved before MTC-101.
+     */
+    textRetractions?: number
+  }
   stopped?: string
   results: Measurement[]
 }
 
-function printRun(run: SavedRun, planned: number): void {
+function printRun(run: SavedRun): void {
   // A run saved before `noAnswer` existed graded its empty answers; the same
   // test the provider uses finds them again, so a reprint counts them alike.
-  const rows = run.results.map(row =>
-    !row.error && hasNothingToGrade(row.answer)
-      ? { ...row, noAnswer: true as const, grade: undefined }
-      : row
-  )
+  // One saved before MTC-101 recorded no withdrawals, and could not have
+  // had any: the route held each step's text until the step ended.
+  const rows = run.results.map(row => {
+    const read = { ...row, retractions: row.retractions ?? [] }
+    return !read.error && hasNothingToGrade(read.answer)
+      ? { ...read, noAnswer: true as const, grade: undefined }
+      : read
+  })
+  const levels = levelsIn(rows)
+  const planned = QUESTIONS.length * levels.length * REPETITIONS
   console.log(
     `\nTime to the first useful sentence, in process, ${run.startedAt}`
   )
@@ -387,13 +509,29 @@ function printRun(run: SavedRun, planned: number): void {
     `${rows.length} of ${planned} requests to ${run.model ?? 'an unrecorded model'} at concurrency ${run.concurrency}; the route default is ${DEFAULT_CHAT_REASONING}. All times in ms from the handler call.`
   )
   console.log(
-    `Tokens across ${run.tokens.lines} completion lines: ${run.tokens.input.toLocaleString('en-US')} input (${run.tokens.cached.toLocaleString('en-US')} cached), ${run.tokens.output.toLocaleString('en-US')} output.\n`
+    `Tokens across ${run.tokens.lines} completion lines: ${run.tokens.input.toLocaleString('en-US')} input (${run.tokens.cached.toLocaleString('en-US')} cached), ${run.tokens.output.toLocaleString('en-US')} output.`
   )
-  console.log(summaryTable(rows))
+  if (run.tokens.textRetractions !== undefined) {
+    // The two counts cover the same requests only without the errored rows:
+    // a request that failed mid-stream writes a failure line, not a
+    // completion line, so its withdrawals are in the streams alone.
+    const streamed = rows
+      .filter(row => !row.error)
+      .reduce((sum, row) => sum + row.retractions.length, 0)
+    const agree = streamed === run.tokens.textRetractions
+    console.log(
+      `${agree ? 'Withdrawals agree' : 'MISMATCH in withdrawals'}: the route's textRetractions over those lines ${run.tokens.textRetractions}, read off the streams of the requests without an error ${streamed}.`
+    )
+    if (!agree) process.exitCode = 1
+  }
   console.log('')
-  console.log(passTable(rows))
+  console.log(summaryTable(rows, levels))
   console.log('')
-  console.log(perQuestionTable(rows))
+  console.log(passTable(rows, levels))
+  console.log('')
+  console.log(retractionTable(rows, levels))
+  console.log('')
+  console.log(perQuestionTable(rows, levels))
   console.log('')
   console.log(requestTable(rows))
   for (const row of rows) {
@@ -405,7 +543,7 @@ function printRun(run: SavedRun, planned: number): void {
   }
 }
 
-async function run(): Promise<SavedRun> {
+async function run(levels: readonly ChatReasoning[]): Promise<SavedRun> {
   // The provider asks this before building a handler, for the reason given
   // there: a partial federation set would otherwise fail every request as
   // `unavailable`.
@@ -415,7 +553,13 @@ async function run(): Promise<SavedRun> {
 
   // Token totals from the route's own completion lines, for the cost of the
   // run. Summed, not attributed: two requests are in flight at once.
-  const tokens = { input: 0, output: 0, cached: 0, lines: 0 }
+  const tokens = {
+    input: 0,
+    output: 0,
+    cached: 0,
+    lines: 0,
+    textRetractions: 0,
+  }
   const info = console.info.bind(console)
   const warn = console.warn.bind(console)
   // `[chat] incomplete` and `[chat] truncated` are completion lines too,
@@ -432,6 +576,7 @@ async function run(): Promise<SavedRun> {
       tokens.input += fields.inputTokens
       tokens.output += Number(fields.outputTokens ?? 0)
       tokens.cached += Number(fields.cachedInputTokens ?? 0)
+      tokens.textRetractions += Number(fields.textRetractions ?? 0)
       tokens.lines += 1
     }
   }
@@ -444,7 +589,7 @@ async function run(): Promise<SavedRun> {
     warn(...args)
   }
 
-  const jobs = schedule()
+  const jobs = schedule(levels)
   const results: Measurement[] = []
   let stopped: string | undefined
   let next = 0
@@ -503,13 +648,12 @@ async function main(): Promise<void> {
       throw new Error(`not a starter question any more: ${question}`)
     }
   }
-  const planned = QUESTIONS.length * LEVELS.length * REPETITIONS
   const from = process.argv.indexOf('--from')
   const saved =
     from >= 0
       ? ((await Bun.file(process.argv[from + 1]).json()) as SavedRun)
-      : await run()
-  printRun(saved, planned)
+      : await run(levelsFromArgs(process.argv))
+  printRun(saved)
   if (saved.stopped) {
     console.log(
       `\nSTOPPED: ${saved.stopped}. No further requests were started.`
