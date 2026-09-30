@@ -24,6 +24,16 @@ const nextConfig: NextConfig = {
     '/': ['./evals/results/*.json'],
     '/ask/evals': ['./evals/results/*.json'],
   },
+  /**
+   * This app is its own workspace. Without a root, Next infers one from
+   * lockfiles found walking up from this directory, and on a machine with a
+   * stray bun.lock above the repository (the home directory, say) every
+   * build warns that it ignored that file. Next also uses this value as
+   * outputFileTracingRoot.
+   */
+  turbopack: {
+    root: __dirname,
+  },
   experimental: {
     /**
      * Off for every `next build`, local and CI included, not only on Vercel.
