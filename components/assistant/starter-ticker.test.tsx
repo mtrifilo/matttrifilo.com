@@ -1418,6 +1418,134 @@ describe('a row handed over to the visitor by touch or wheel', () => {
     expect(rows[0].track.dataset.frozen).toBeUndefined()
   })
 
+  describe("the rows' wheel listener", () => {
+    /**
+     * Counts the wheel listeners attached to each row's box, from before the
+     * render: the component attaches its own by hand when a row mounts.
+     * Patched where an element actually finds the methods, which in the
+     * test DOM is not the global EventTarget's prototype.
+     */
+    function countWheelListeners() {
+      let owner: object | null = document.createElement('div')
+      while (owner && !Object.hasOwn(owner, 'addEventListener')) {
+        owner = Object.getPrototypeOf(owner)
+      }
+      if (!owner) throw new Error('no prototype carries addEventListener')
+      const methods = owner as Pick<
+        EventTarget,
+        'addEventListener' | 'removeEventListener'
+      >
+      const realAdd = methods.addEventListener
+      const realRemove = methods.removeEventListener
+      const attached = new Map<EventTarget, Set<unknown>>()
+      const on = (target: EventTarget) => {
+        const set = attached.get(target) ?? new Set<unknown>()
+        attached.set(target, set)
+        return set
+      }
+      methods.addEventListener = function (
+        this: EventTarget,
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: AddEventListenerOptions | boolean
+      ) {
+        if (type === 'wheel') on(this).add(listener)
+        realAdd.call(this, type, listener, options)
+      }
+      methods.removeEventListener = function (
+        this: EventTarget,
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: EventListenerOptions | boolean
+      ) {
+        if (type === 'wheel') on(this).delete(listener)
+        realRemove.call(this, type, listener, options)
+      }
+      return {
+        count: (target: EventTarget) => attached.get(target)?.size ?? 0,
+        restore: () => {
+          methods.addEventListener = realAdd
+          methods.removeEventListener = realRemove
+        },
+      }
+    }
+
+    test('stays on rows that are still moving, a page scroll included', () => {
+      // A sideways wheel is how a moving row is handed over on a desktop.
+      const listeners = countWheelListeners()
+      try {
+        const { rows } = renderLaidOutRows()
+        fingerDown(rows[0].viewport)
+        fingerMove(rows[0].viewport, 0, 40)
+        fingerUp(rows[0].viewport)
+        fireEvent.wheel(rows[0].viewport, { deltaX: 0, deltaY: 60 })
+        for (const { viewport } of rows) {
+          expect(listeners.count(viewport)).toBe(1)
+        }
+      } finally {
+        listeners.restore()
+      }
+    })
+
+    test('comes off both rows when a drag hands them over', () => {
+      const listeners = countWheelListeners()
+      try {
+        const { rows } = renderLaidOutRows()
+        for (const { viewport } of rows) {
+          expect(listeners.count(viewport)).toBe(1)
+        }
+        dragSideways(rows[1].viewport)
+        for (const { viewport } of rows) {
+          expect(listeners.count(viewport)).toBe(0)
+        }
+      } finally {
+        listeners.restore()
+      }
+    })
+
+    test('comes off the other row at a wheel hand-over, and off the steering row once its gesture ends', () => {
+      // The row the wheel is over keeps steering the rest of that gesture,
+      // which needs its listener; the next gesture is the browser's.
+      const listeners = countWheelListeners()
+      try {
+        const { rows } = renderLaidOutRows()
+        const [first, second] = rows
+        wheelAt(first.viewport, 1000, { deltaX: 40, deltaY: 0 })
+        expect(listeners.count(second.viewport)).toBe(0)
+        expect(listeners.count(first.viewport)).toBe(1)
+
+        wheelAt(first.viewport, 1016, { deltaX: 20, deltaY: 0 })
+        expect(listeners.count(first.viewport)).toBe(1)
+
+        wheelAt(first.viewport, 1016 + WHEEL_GESTURE_GAP_MS + 1, {
+          deltaX: 20,
+          deltaY: 0,
+        })
+        expect(listeners.count(first.viewport)).toBe(0)
+      } finally {
+        listeners.restore()
+      }
+    })
+
+    test('stays on a row that could not be handed over, which a later wheel still hands over', () => {
+      const listeners = countWheelListeners()
+      try {
+        const { rows } = renderLaidOutRows(0.3)
+        const [first, second] = rows
+        second.track.getAnimations = () => []
+        dragSideways(first.viewport)
+        expect(listeners.count(first.viewport)).toBe(0)
+        expect(listeners.count(second.viewport)).toBe(1)
+
+        second.track.getAnimations = () => [runningLoop(0.6)]
+        wheelAt(second.viewport, 5000, { deltaX: 40, deltaY: 0 })
+        expect(isHandedOver(second.viewport)).toBe(true)
+      } finally {
+        listeners.restore()
+      }
+    })
+  })
+
   describe('never resumes', () => {
     test('losing focus leaves a handed-over row frozen, touched or not', () => {
       // The focus path thaws a row on blur; a row handed over to the visitor

@@ -273,6 +273,9 @@ function TickerRow({
   // The finger that landed on this row, while it is down: touch events keep
   // going to the element the touch started on, so this row sees all of it.
   const touchRef = useRef<RowTouch | null>(null)
+  // Takes this row's wheel listener off once the row is handed over; null
+  // while no listener is attached.
+  const detachWheelRef = useRef<(() => void) | null>(null)
 
   /**
    * One loop is one copy's width, so the duration is what holds the speed
@@ -426,7 +429,8 @@ function TickerRow({
    * blur leaves it frozen, nothing measures it again, and no timer exists to
    * resume it. A row whose position cannot be read yet is left moving rather
    * than moved wrongly, and the next sideways drag or wheel on either row
-   * tries again.
+   * tries again. A row handed over no longer needs its wheel listener, so it
+   * lets it go here, unless that listener is the one steering the gesture.
    *
    * Returns whether this call is the one that handed the row over.
    */
@@ -442,6 +446,7 @@ function TickerRow({
       return false
     }
     viewport.dataset.handedOver = 'true'
+    detachWheelRef.current?.()
     return true
   }, [])
 
@@ -558,18 +563,30 @@ function TickerRow({
    * deltas lets the first gesture read ahead whichever box the browser
    * chose, as long as its events can still be cancelled. The
    * next gesture begins over a strip that can scroll, so the browser takes
-   * over and the listener, which has to be able to cancel and so is attached
-   * by hand, is removed.
+   * over.
+   *
+   * The listener has to be able to cancel, so it is attached by hand, and a
+   * wheel listener that can cancel makes the browser wait for this page's
+   * script before it scrolls the box. It is therefore attached only while
+   * the row can still be handed over: the hand-over takes it off, from
+   * either row and by touch too, except on the row steering the gesture,
+   * which lets it go on the first event of the next gesture.
    */
   useEffect(() => {
     const viewport = viewportRef.current
-    if (!viewport) return
+    if (!viewport || isHandedOver(viewport)) return
     // When this row last moved under the gesture that handed it over.
     let steeredAt = Number.NEGATIVE_INFINITY
+    // True while this listener's own event is handing the rows over.
+    let steering = false
+    const detach = () => {
+      viewport.removeEventListener('wheel', handleWheel)
+      detachWheelRef.current = null
+    }
     const handleWheel = (event: WheelEvent) => {
       const handedOver = isHandedOver(viewport)
       if (handedOver && event.timeStamp - steeredAt > WHEEL_GESTURE_GAP_MS) {
-        viewport.removeEventListener('wheel', handleWheel)
+        detach()
         return
       }
       // Every event of the steered gesture keeps it alive, upright ones
@@ -583,7 +600,12 @@ function TickerRow({
       )
       if (pixels === 0) return
       if (!handedOver) {
-        sharedScroll.handOverAll()
+        steering = true
+        try {
+          sharedScroll.handOverAll()
+        } finally {
+          steering = false
+        }
         // This row may be the one that could not be handed over yet; its
         // track is still transformed, and scrolling it would add to that.
         if (!isHandedOver(viewport)) return
@@ -597,8 +619,11 @@ function TickerRow({
       viewport.scrollLeft += pixels
       sharedScroll.syncFrom(viewport)
     }
+    detachWheelRef.current = () => {
+      if (!steering) detach()
+    }
     viewport.addEventListener('wheel', handleWheel, { passive: false })
-    return () => viewport.removeEventListener('wheel', handleWheel)
+    return detach
   }, [sharedScroll])
 
   return (
