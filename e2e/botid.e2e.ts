@@ -1,11 +1,11 @@
 import {
   answerBotIdChallenge,
-  composer,
   expect,
   expectRecordedAnswer,
   isBotIdChallenge,
   press,
   test,
+  typeQuestion,
 } from './support'
 
 /**
@@ -32,7 +32,7 @@ test('the real challenge script loads, runs and stamps the question', async ({
   const challenge = page.waitForResponse(response =>
     isBotIdChallenge(new URL(response.url()))
   )
-  await composer(page).fill('What does the recorded fixture say?')
+  await typeQuestion(page, 'What does the recorded fixture say?')
   await press(page.getByRole('button', { name: 'Send question' }), hasTouch)
 
   expect((await challenge).status()).toBe(200)

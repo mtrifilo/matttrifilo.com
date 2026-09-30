@@ -14,6 +14,7 @@ import {
   press,
   statusRegion,
   test,
+  typeQuestion,
 } from './support'
 
 /**
@@ -93,7 +94,7 @@ test('a typed question on /ask shows the wait, then the answer', async ({
 }) => {
   await page.goto('/ask')
   const question = 'What does the recorded fixture say?'
-  await composer(page).fill(question)
+  await typeQuestion(page, question)
   const release = chat.holdNext()
   await press(page.getByRole('button', { name: 'Send question' }), hasTouch)
 
@@ -138,9 +139,8 @@ test('a question typed on the homepage is answered on /ask', async ({
 }) => {
   await page.goto('/')
   const question = 'What does the recorded fixture say?'
-  const box = composer(page)
-  await box.scrollIntoViewIfNeeded()
-  await box.fill(question)
+  await composer(page).scrollIntoViewIfNeeded()
+  await typeQuestion(page, question)
   await press(page.getByRole('button', { name: 'Send question' }), hasTouch)
 
   await expect(page).toHaveURL(/\/ask$/)

@@ -276,6 +276,27 @@ export async function waitForRows(page: Page): Promise<void> {
 }
 
 /**
+ * Types a question into the composer once the page can hear it, and checks
+ * that Send came alive. `fill` sets the whole value in one input event, and
+ * one that lands before React has hydrated the chat reaches no handler: the
+ * box shows the text while Send stays disabled. A person's next keystroke
+ * would bring the state back in line; `fill` has no next keystroke. The rows
+ * are placed by an effect in the same tree as the composer, with no
+ * Suspense boundary between them on either surface, so placed rows mean the
+ * composer is hydrated too.
+ */
+export async function typeQuestion(
+  page: Page,
+  question: string
+): Promise<void> {
+  await waitForRows(page)
+  await composer(page).fill(question)
+  await expect(
+    page.getByRole('button', { name: 'Send question' })
+  ).toBeEnabled()
+}
+
+/**
  * Waits for the page's fonts and two more frames. A row measures itself
  * again when a font changes its pills' widths, so a measurement taken before
  * the fonts are in may be of a layout the visitor never keeps.

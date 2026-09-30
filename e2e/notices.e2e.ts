@@ -7,6 +7,7 @@ import {
   horizontalOverflow,
   press,
   test,
+  typeQuestion,
 } from './support'
 
 /**
@@ -24,7 +25,7 @@ async function ask(
   hasTouch: boolean
 ): Promise<void> {
   await page.goto('/ask')
-  await composer(page).fill(QUESTION)
+  await typeQuestion(page, QUESTION)
   await press(page.getByRole('button', { name: 'Send question' }), hasTouch)
 }
 
