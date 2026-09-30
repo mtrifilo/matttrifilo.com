@@ -678,8 +678,12 @@ function onlyAnswerText(): TransformStream<ChatUIChunk, ChatUIChunk> {
  * that cannot lie, and an error chunk is the case worth spelling out: the SDK
  * still writes a finish chunk after one, so `done` has to be withheld
  * deliberately rather than by never arriving.
+ *
+ * Exported for its own tests. The read session settles a step's calls in
+ * the order they were made, so some orderings this stage defends against
+ * cannot be produced through the handler; the tests feed it chunks instead.
  */
-function withProgress({
+export function withProgress({
   entries,
   now,
   started,
@@ -691,31 +695,38 @@ function withProgress({
   const indexed = new Map(entries.map(entry => [entry.id, entry]))
   const steps: ChatProgressStep[] = []
   const listed = new Set<string>()
-  /** Calls whose outcome has not arrived yet, by the SDK's tool call id. */
+  /**
+   * Calls whose outcome has not arrived yet, by the SDK's tool call id,
+   * whether or not they earned a row: the prediction counts them all.
+   */
   const inFlight = new Map<string, ChatProgressStep>()
-  /** Ids a call has actually succeeded for, so a later refusal keeps the row. */
-  const succeeded = new Set<string>()
+  /**
+   * Ids a call has actually succeeded for, with the step, so a later
+   * refusal keeps the row and a success the prediction held back can still
+   * be listed.
+   */
+  const succeeded = new Map<string, ChatProgressStep>()
   /** Reads that succeeded, duplicates included, as the read budget counts them. */
   let reads = 0
   /**
-   * Repositories whose digest reached the model. Not the same as the
-   * session's `activityCalls`, which counts failures too: a row is for work
-   * the visitor can be told happened, and a fetch that returned nothing is
-   * not that.
+   * Repositories the activity session has spent a call on, as far as the
+   * outcomes show, for the prediction in `fitsPrediction`. Every outcome
+   * counts, a refusal as much as a digest: the session spends its call
+   * before the fetch, so a fetch that failed or a digest the read budget
+   * refused has spent one, a repeat told `repository_already_checked` is
+   * for a repository already here, and a refusal on the call cap means the
+   * cap is spent for the rest of the request anyway.
    *
    * A set of ids rather than a count of outputs, because one fetch can
    * answer two calls. The activity session answers a repeat call for a
    * repository whose fetch is still running with that same fetch
    * (lib/chat/recent-activity.ts), so a step that asks for one repository
-   * twice ends with two successful outputs from one fetch. The session's cap
-   * spends one call on that fetch, so the prediction in `toStep` must count
-   * it once too: counted per output, a repository asked for in a later step would be
-   * fetched with no row over it. The dedup lives where outputs are counted
-   * because the overcount is in the outputs. `toStep` sees calls, not
-   * outputs, and is handed only a number, so it cannot tell two outputs for
-   * one repository from one output each for two.
+   * twice ends with two outputs from one fetch. The session's cap spends one
+   * call on that fetch, so the prediction must count it once too: counted
+   * per output, a repository asked for in a later step would be held back
+   * as over the cap while the session fetched it.
    */
-  const checked = new Set<string>()
+  const spentRepositories = new Set<string>()
   let phase: ChatProgressPhase = 'reading'
   let emitted = false
   let failed = false
@@ -738,22 +749,64 @@ function withProgress({
     emitted = true
   }
 
+  /**
+   * Whether a row of this step's kind still fits under that kind's cap.
+   * Checked before every row goes up, however it got there, so no part this
+   * stage writes holds more rows of a kind than the session can serve, even
+   * for the moment between a late success and the refusal it overtook.
+   */
+  function hasRoom(step: ChatProgressStep): boolean {
+    let rows = 0
+    for (const listedStep of steps) {
+      if (isActivity(listedStep) === isActivity(step)) rows += 1
+    }
+    return rows < rowCap(step)
+  }
+
+  function list(step: ChatProgressStep): void {
+    listed.add(step.id)
+    steps.push(step)
+    phase = 'reading'
+  }
+
+  /**
+   * A success that found no room when it arrived, oldest first, for the
+   * place a withdrawn row of its kind just freed.
+   */
+  function waitingSuccess(
+    withdrawn: ChatProgressStep
+  ): ChatProgressStep | undefined {
+    for (const step of succeeded.values()) {
+      if (!listed.has(step.id) && isActivity(step) === isActivity(withdrawn)) {
+        return step
+      }
+    }
+    return undefined
+  }
+
   return new TransformStream({
     transform(chunk, controller) {
       switch (chunk.type) {
         case 'tool-input-available': {
-          const step = toStep(chunk, indexed, reads, checked.size)
+          const step = toStep(chunk, indexed)
           if (!step) break
+          // Predicted before this call joins the calls in flight: the
+          // prediction is about what is ahead of it.
+          const fits = fitsPrediction(
+            step,
+            reads,
+            spentRepositories,
+            inFlight.values()
+          )
           const callId = toolCallId(chunk)
           // Remembered even when it earns no row, because its outcome below
-          // still counts: a repeated read is charged again, and a repeat of
+          // still counts: a repeated read is charged again, a repeat of
           // either tool decides, with the call it repeats, whether the row
-          // they share stays.
+          // they share stays, and a call held back by the prediction may
+          // still succeed.
           if (callId !== undefined) inFlight.set(callId, step)
-          if (listed.has(step.id)) break
-          listed.add(step.id)
-          steps.push(step)
-          phase = 'reading'
+          if (!fits || listed.has(step.id) || !hasRoom(step)) break
+          list(step)
           emit(controller)
           break
         }
@@ -762,18 +815,28 @@ function withProgress({
           // The row goes up when the call starts, because narrating the wait
           // is the point; it is corrected here, when the outcome is known.
           // Both counters live here rather than at the call, so what they
-          // hold is work that happened and not work that was attempted: a
-          // refused read or an unreachable repository must neither be counted
-          // against the caps below nor left on screen.
+          // hold is what the sessions have spent and not what was asked
+          // for: a refused read must not be counted against the cap, and a
+          // refused call of either tool must not be left on screen.
           const callId = toolCallId(chunk)
           const step = callId === undefined ? undefined : inFlight.get(callId)
           if (!step || callId === undefined) break
           inFlight.delete(callId)
+          if (isActivity(step)) spentRepositories.add(step.id)
 
           if (!refusedOutput(chunk)) {
-            succeeded.add(step.id)
-            if (step.kind === 'activity') checked.add(step.id)
-            else reads += 1
+            if (!succeeded.has(step.id)) succeeded.set(step.id, step)
+            if (!isActivity(step)) reads += 1
+            // A call the prediction held back, which the session served
+            // after all because a call ahead of it was refused for a reason
+            // the prediction cannot see. The work happened, so it is
+            // narrated now rather than never. No room means a row of its
+            // kind is still waiting on a refusal; the withdrawal below lists
+            // this one when it frees the place.
+            if (!listed.has(step.id) && hasRoom(step)) {
+              list(step)
+              emit(controller)
+            }
             break
           }
           // Refused. Withdraw the row unless some other call for the same id
@@ -799,6 +862,8 @@ function withProgress({
           if (at < 0) break
           steps.splice(at, 1)
           listed.delete(step.id)
+          const waiting = waitingSuccess(step)
+          if (waiting) list(waiting)
           emit(controller)
           break
         }
@@ -837,44 +902,84 @@ function withProgress({
   })
 }
 
+function isActivity(step: ChatProgressStep): boolean {
+  return step.kind === 'activity'
+}
+
+/** The most rows of this step's kind a run can truthfully show. */
+function rowCap(step: ChatProgressStep): number {
+  return isActivity(step)
+    ? RECENT_ACTIVITY_MAX_CALLS
+    : KNOWLEDGE_READ_BUDGET.maxDocuments
+}
+
 /**
- * The step a tool call earns, if it earns one.
+ * Whether the session will still take this call, predicted at the call so
+ * the list never opens a row for work that cannot happen.
+ *
+ * Past KNOWLEDGE_READ_BUDGET.maxDocuments the read session refuses on count
+ * alone, and past RECENT_ACTIVITY_MAX_CALLS the activity session does the
+ * same, both before looking at the id. The SDK runs a step's tools only
+ * once the model has finished the step, so every call in a step arrives
+ * here before any outcome does; a prediction from finished calls alone
+ * would open a row for every call in a step that asks for more than the
+ * budget, and a visitor who stopped the run before the refusals arrived
+ * would keep them all. So the calls still in flight count too, each the way
+ * its session counts it:
+ *
+ * - Reads count per call. The read budget charges a repeat like any read,
+ *   so `reads` holds every successful read, repeats included, and every
+ *   read in flight is one more.
+ * - Checks count per repository. The activity session fetches a repository
+ *   once, spends the call whatever the fetch returns, and answers a repeat
+ *   in the same step from that fetch, so `spentRepositories` and the
+ *   repositories in flight are one set.
+ *
+ * A read in flight may still be refused for something this stage cannot
+ * see: a document larger than the remaining token budget, which depends on
+ * text this stage never reads and on how much of the shared budget the
+ * GitHub digests already spent (lib/chat/read-budget.ts). That refusal
+ * spends no place, so the prediction can hold back a call the session then
+ * serves. The caller lists that one when its success
+ * arrives, which is why guessing at the refusal is not needed here, and a
+ * refusal it did not predict withdraws its row when the outcome arrives.
+ */
+function fitsPrediction(
+  step: ChatProgressStep,
+  reads: number,
+  spentRepositories: ReadonlySet<string>,
+  inFlight: Iterable<ChatProgressStep>
+): boolean {
+  if (isActivity(step)) {
+    const repositories = new Set(spentRepositories)
+    for (const other of inFlight) {
+      if (isActivity(other)) repositories.add(other.id)
+    }
+    return repositories.size < RECENT_ACTIVITY_MAX_CALLS
+  }
+  let pending = 0
+  for (const other of inFlight) {
+    if (!isActivity(other)) pending += 1
+  }
+  return reads + pending < KNOWLEDGE_READ_BUDGET.maxDocuments
+}
+
+/**
+ * The step a tool call names, if it names one the index or the allowlist
+ * holds. Whether the call earns a row now is `fitsPrediction`'s question.
  *
  * Everything is guarded rather than asserted: this reads a chunk built from
  * model output, and a malformed one has to yield no step instead of throwing
  * inside a transform, where it would take the answer down with it.
- *
- * The caps are predicted here so the list never opens a row for work that
- * cannot happen: past KNOWLEDGE_READ_BUDGET.maxDocuments the read session
- * refuses on count alone, and past RECENT_ACTIVITY_MAX_CALLS the activity
- * session does the same, both before looking at the id. `reads` and
- * `checkedRepositories` come from successful tool OUTPUTS rather than from
- * calls, so they hold work that happened: `reads` counts every successful
- * read, repeats included, as the read budget does, and
- * `checkedRepositories` counts distinct repositories. Both can fall short of
- * what the sessions count, never exceed it: the activity cap also spends a
- * call on a fetch that failed. A refusal this stage cannot predict, such as
- * a document larger than the remaining token budget or a check past a cap
- * that a failed fetch helped spend, withdraws its row when the outcome
- * arrives instead of being guessed at here.
- *
- * That correction is what lets the token half of the budget go unpredicted.
- * It has to: whether a read fits depends on text this stage never sees, and
- * on how much of the shared budget the GitHub digests already spent
- * (lib/chat/read-budget.ts). Guessing would put a row over an answer that
- * never used the document.
  */
 function toStep(
   chunk: { toolName?: unknown; input?: unknown },
-  indexed: ReadonlyMap<string, KnowledgeEntry>,
-  reads: number,
-  checkedRepositories: number
+  indexed: ReadonlyMap<string, KnowledgeEntry>
 ): ChatProgressStep | undefined {
   const input = chunk.input
   if (typeof input !== 'object' || input === null) return undefined
 
   if (chunk.toolName === RECENT_ACTIVITY_TOOL_NAME) {
-    if (checkedRepositories >= RECENT_ACTIVITY_MAX_CALLS) return undefined
     const id = (input as { repository?: unknown }).repository
     if (typeof id !== 'string') return undefined
     // The name comes from the allowlist, never from the model, which is the
@@ -888,7 +993,6 @@ function toStep(
   }
 
   if (chunk.toolName !== READ_DOCUMENT_TOOL_NAME) return undefined
-  if (reads >= KNOWLEDGE_READ_BUDGET.maxDocuments) return undefined
   const id = (input as { id?: unknown }).id
   if (typeof id !== 'string') return undefined
   const entry = indexed.get(id)

@@ -13,6 +13,7 @@ import {
   cachedInputTokens,
   createChatHandler,
   type ChatModelRequest,
+  withProgress,
 } from './handler'
 import {
   PROGRESS_PART_ID,
@@ -280,14 +281,17 @@ function checksAll(...repositories: string[]): Step {
     ])
 }
 
-/** A step that asks for several documents at once, in one model call. */
+/**
+ * A step that asks for several documents at once, in one model call,
+ * repeats included: each call has its own id, as the SDK gives it.
+ */
 function readsAll(...ids: string[]): Step {
   return () =>
     chunks([
       { type: 'stream-start', warnings: [] },
-      ...ids.map(id => ({
+      ...ids.map((id, n) => ({
         type: 'tool-call',
-        toolCallId: `call-${id}`,
+        toolCallId: `call-${n}-${id}`,
         toolName: READ_DOCUMENT_TOOL_NAME,
         input: JSON.stringify({ id }),
       })),
@@ -455,6 +459,35 @@ function chunksFrom(body: string): { type: string; [key: string]: unknown }[] {
 }
 
 /** Each progress payload the route wrote, in the order it wrote them. */
+/**
+ * Every progress payload the progress stage writes for these chunks, fed to
+ * it directly. For the orderings the handler cannot produce, and for runs
+ * whose outcomes a test wants to state one by one.
+ */
+async function progressThroughStage(
+  input: readonly unknown[]
+): Promise<ChatProgress[]> {
+  const stage = withProgress({
+    entries: index.entries,
+    now: () => 0,
+    started: 0,
+  }) as unknown as TransformStream<unknown, { type: string; data?: unknown }>
+  const output = new ReadableStream<unknown>({
+    start(controller) {
+      for (const chunk of input) controller.enqueue(chunk)
+      controller.close()
+    },
+  }).pipeThrough(stage)
+  const payloads: ChatProgress[] = []
+  const reader = output.getReader()
+  for (let next = await reader.read(); !next.done; next = await reader.read()) {
+    if (next.value.type === PROGRESS_PART_TYPE) {
+      payloads.push(next.value.data as ChatProgress)
+    }
+  }
+  return payloads
+}
+
 function progressFrom(body: string): ChatProgress[] {
   return chunksFrom(body)
     .filter(chunk => chunk.type === PROGRESS_PART_TYPE)
@@ -1766,6 +1799,211 @@ describe('progress on the stream', () => {
       documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
       readsRefusedBudget: 1,
     })
+  })
+
+  test('a step over the read budget never shows the row it cannot keep', async () => {
+    // The SDK runs a step's tools only once the model has finished that
+    // step, so all four calls are seen before any outcome. Predicted from
+    // finished reads alone, each would open a row and the fourth would stay
+    // on screen until its refusal arrived; a visitor who stopped the run in
+    // that window would keep it. Counting the calls still running closes
+    // the window, so no part the browser is sent ever holds the fourth.
+    const model = modelOf(
+      readsAll('resume', 'faq', 'projects', 'timeline'),
+      answers()
+    )
+    const payloads = progressFrom(
+      await (
+        await handlerWith(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+    )
+
+    expect(payloads.length).toBeGreaterThan(0)
+    for (const payload of payloads) {
+      expect(payload.steps.length).toBeLessThanOrEqual(
+        KNOWLEDGE_READ_BUDGET.maxDocuments
+      )
+      expect(payload.steps.map(step => step.id)).not.toContain('timeline')
+    }
+  })
+
+  test('a repeated read spends a place in the prediction, as it does in the budget', async () => {
+    // The budget charges a repeat like any read, so the second `resume`
+    // takes the last place and `projects` is refused on count. Counted by
+    // distinct document, the prediction would have shown `projects` until
+    // that refusal arrived.
+    const model = modelOf(
+      readsAll('resume', 'resume', 'faq', 'projects'),
+      answers()
+    )
+    const payloads = progressFrom(
+      await (
+        await handlerWith(model)(
+          post({ messages: [uiMessage('user', QUESTION)] })
+        )
+      ).text()
+    )
+
+    for (const payload of payloads) {
+      expect(payload.steps.map(step => step.id)).not.toContain('projects')
+    }
+    expect(payloads.at(-1)?.steps.map(step => step.id)).toEqual([
+      'resume',
+      'faq',
+    ])
+    const entry = logged.find(
+      args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
+    )
+    expect(entry?.[1]).toMatchObject({
+      documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
+      readsRefusedBudget: 1,
+    })
+  })
+
+  test('a read the prediction held back still earns its row when it happens', async () => {
+    // The one refusal the prediction cannot see: a document too large for
+    // the budget, which spends no place. The three calls behind it were
+    // predicted against a budget it looked like filling, so the last is
+    // held back at the call; the session reads it all the same, and the
+    // row goes up with its outcome. Never more rows than the budget allows
+    // on the way there.
+    const huge = {
+      ...documents[0],
+      id: 'huge',
+      title: 'Huge',
+      text: 'x'.repeat((KNOWLEDGE_READ_BUDGET.maxTokens + 1) * 4),
+    }
+    const model = modelOf(
+      readsAll('huge', 'resume', 'faq', 'projects'),
+      answers()
+    )
+    const handler = createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      loadKnowledgeIndex: () => ({
+        ...index,
+        entries: [...index.entries, asEntry(huge)],
+      }),
+      readKnowledgeDocument: (id: string) =>
+        id === 'huge' ? huge : readKnowledgeDocument(id),
+      model: () => model,
+      env: {},
+      now: () => 1_000,
+    })
+    const payloads = progressFrom(
+      await (
+        await handler(post({ messages: [uiMessage('user', QUESTION)] }))
+      ).text()
+    )
+
+    expect(JSON.stringify(model.doStreamCalls[1].prompt)).toContain(
+      '"error":"document_too_large"'
+    )
+    for (const payload of payloads) {
+      expect(payload.steps.length).toBeLessThanOrEqual(
+        KNOWLEDGE_READ_BUDGET.maxDocuments
+      )
+    }
+    expect(payloads.at(-1)?.steps.map(step => step.id)).toEqual([
+      'resume',
+      'faq',
+      'projects',
+    ])
+    const entry = logged.find(
+      args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
+    )
+    expect(entry?.[1]).toMatchObject({
+      documentsRead: KNOWLEDGE_READ_BUDGET.maxDocuments,
+    })
+  })
+
+  test('a held-back success waits for room rather than overfilling the list', async () => {
+    // An ordering the handler cannot produce today, since the read session
+    // settles a step's calls in the order they were made, fed to the stage
+    // directly: the fourth call succeeds while the first, which the
+    // prediction counted, is still to be refused. The part never holds more
+    // rows than the budget, and the fourth row goes up in the place the
+    // withdrawal frees.
+    const call = (n: number, id: string) => ({
+      type: 'tool-input-available',
+      toolCallId: `call-${n}`,
+      toolName: READ_DOCUMENT_TOOL_NAME,
+      input: { id },
+    })
+    const served = (n: number, id: string) => ({
+      type: 'tool-output-available',
+      toolCallId: `call-${n}`,
+      output: { id, title: id, text: 'text' },
+    })
+    const refused = (n: number) => ({
+      type: 'tool-output-available',
+      toolCallId: `call-${n}`,
+      output: { error: 'read_budget_exhausted' },
+    })
+    const input = [
+      call(1, 'resume'),
+      call(2, 'faq'),
+      call(3, 'projects'),
+      call(4, 'timeline'),
+      served(4, 'timeline'),
+      served(2, 'faq'),
+      refused(1),
+      served(3, 'projects'),
+    ]
+    const payloads = await progressThroughStage(input)
+
+    for (const payload of payloads) {
+      expect(payload.steps.length).toBeLessThanOrEqual(
+        KNOWLEDGE_READ_BUDGET.maxDocuments
+      )
+    }
+    expect(payloads.map(payload => payload.steps.map(step => step.id))).toEqual(
+      [
+        ['resume'],
+        ['resume', 'faq'],
+        ['resume', 'faq', 'projects'],
+        ['faq', 'projects', 'timeline'],
+      ]
+    )
+  })
+
+  test('a repository whose fetch failed has spent its call in the prediction', async () => {
+    // The session spends a call before it fetches, so a repository GitHub
+    // did not answer counts against the cap like one it did. Asked for again
+    // once the other two are checked, it is refused on count, so it must
+    // not come back as a row, even for the moment before that refusal.
+    const [first, second, third] = ASSISTANT_REPOSITORIES.map(repo => repo.id)
+    const call = (n: number, repository: string) => ({
+      type: 'tool-input-available',
+      toolCallId: `check-${n}`,
+      toolName: RECENT_ACTIVITY_TOOL_NAME,
+      input: { repository },
+    })
+    const outcome = (n: number, output: unknown) => ({
+      type: 'tool-output-available',
+      toolCallId: `check-${n}`,
+      output,
+    })
+    const digest = (repository: string) => ({ repository, activity: 'x' })
+    const payloads = await progressThroughStage([
+      call(1, first),
+      call(2, second),
+      call(3, third),
+      outcome(1, { error: 'activity_unavailable' }),
+      outcome(2, digest(second)),
+      outcome(3, digest(third)),
+      call(4, first),
+      outcome(4, { error: 'activity_budget_exhausted' }),
+    ])
+
+    const withdrawn = payloads.findIndex(
+      payload => !payload.steps.some(step => step.id === first)
+    )
+    expect(withdrawn).toBeGreaterThan(0)
+    for (const payload of payloads.slice(withdrawn)) {
+      expect(payload.steps.map(step => step.id)).toEqual([second, third])
+    }
   })
 
   test('a document read twice is one row', async () => {
