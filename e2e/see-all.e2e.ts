@@ -28,7 +28,10 @@ import {
 const GROUPS = starterGroups()
 const SEE_ALL = seeAllQuestionsLabel(STARTER_QUESTIONS.length)
 
-/** The open list as the page draws it: each heading and its questions. */
+/**
+ * The open list as the page draws it: each theme's heading, with its level,
+ * and its questions.
+ */
 function drawnGroups(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
     const group = document.querySelector(
@@ -37,13 +40,19 @@ function drawnGroups(page: import('@playwright/test').Page) {
     const list = group?.lastElementChild
     if (!list || list.querySelector('.starter-ticker-row')) return []
     return [...list.children].map(section => ({
-      heading: section.querySelector('p')?.textContent ?? '',
+      heading: section.querySelector('h2, h3')?.textContent ?? '',
+      level: section.querySelector('h2, h3')?.tagName ?? '',
       questions: [...section.querySelectorAll('button')].map(
         button => button.textContent ?? ''
       ),
     }))
   })
 }
+
+// Each theme's label is a heading one level below the one naming the
+// assistant on that surface (MTC-97): the page's h1 on /ask, the panel's h2
+// on the homepage.
+const LIST_HEADING = { '/ask': 'H2', '/': 'H3' } as const
 
 for (const path of ['/ask', '/'] as const) {
   test(`on ${path} the list opens grouped and closes back to the rows`, async ({
@@ -64,6 +73,7 @@ for (const path of ['/ask', '/'] as const) {
     expect(await drawnGroups(page)).toEqual(
       GROUPS.map(({ heading, questions }) => ({
         heading,
+        level: LIST_HEADING[path],
         questions: [...questions],
       }))
     )

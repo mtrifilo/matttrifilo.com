@@ -24,10 +24,16 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
 })
 
-/** The names of the CSS animations and transitions running right now. */
+/**
+ * The CSS animations and transitions running right now that move or
+ * resize something. A color easing in under a pressed pill is not motion,
+ * and the reduced-motion rules rightly leave it alone, so transitions of a
+ * color alone are not counted; every keyframe animation is.
+ */
 function running(page: Page): Promise<string[]> {
-  return page.evaluate(() =>
-    document
+  return page.evaluate(() => {
+    const colorOnly = /(^|-)color$/
+    return document
       .getAnimations()
       .filter(animation => animation.playState === 'running')
       .map(animation => {
@@ -35,9 +41,11 @@ function running(page: Page): Promise<string[]> {
           animationName?: string
           transitionProperty?: string
         }
-        return named.animationName ?? named.transitionProperty ?? 'unnamed'
+        if (named.animationName) return named.animationName
+        return named.transitionProperty ?? 'unnamed'
       })
-  )
+      .filter(name => !colorOnly.test(name))
+  })
 }
 
 /** Where each row's first pill is, to see whether anything moved. */
