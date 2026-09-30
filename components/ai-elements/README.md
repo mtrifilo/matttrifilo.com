@@ -17,4 +17,5 @@ What was cut, and why, is at the top of each file. The short version: no
 branch selector, no transcript download, no `role="log"` (it re-announces
 every streamed token), no collapsible citations, no horizontal scroll area,
 no search-result chips or images on the chain of thought, and none of the
-`@streamdown/*` plugins.
+`@streamdown/*` plugins, and no Streamdown link check (a link in an answer
+opens directly, in a new tab).

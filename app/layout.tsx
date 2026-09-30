@@ -66,9 +66,10 @@ export default function RootLayout({
             <SkipLink />
             <Nav assistantDisabled={isChatDisabled()} />
             {/* The skip link's target: it takes focus, but Tab never stops
-                on it. Not a control, so it draws no ring around the page. */}
+                on it. Not a control, so it draws no ring around the page;
+                its scroll margin keeps its top clear of the sticky nav. */}
             <main
-              className="flex-1 outline-none"
+              className="flex-1 scroll-mt-(--nav-height) outline-none"
               id={MAIN_CONTENT_ID}
               tabIndex={-1}
             >

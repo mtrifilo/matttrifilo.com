@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from 'typescript'
 import { render, screen } from '@testing-library/react'
@@ -13,7 +13,8 @@ import { MAIN_CONTENT_ID, SKIP_LINK_LABEL, SkipLink } from './skip-link'
  * The root layout cannot render here (it loads next/font and the canvas),
  * so its order is read from its JSX, element by element, as the page
  * renders it. Every page, the homepage and /ask among them, is a child of
- * that one `<main>`.
+ * that one layout and its one `<main>`, and nothing on any page jumps the
+ * tab order with a positive tabIndex.
  */
 
 const ROOT = new URL('../../', import.meta.url).pathname
@@ -101,6 +102,38 @@ describe('the root layout', () => {
     const main = jsxElements(LAYOUT).find(element => element.name === 'main')
     expect(main?.attributes.get('id')).toBe('{MAIN_CONTENT_ID}')
     expect(main?.attributes.get('tabIndex')).toBe('{-1}')
+    // Scrolled to, its top would otherwise sit under the sticky nav.
+    expect(main?.attributes.get('className')).toContain(
+      'scroll-mt-(--nav-height)'
+    )
+  })
+
+  test('is the one root layout, around the homepage and /ask', () => {
+    // A second root layout (a route group with its own <html>) would carry
+    // a page out from under the skip link.
+    const roots = sourceFiles(['app']).filter(file =>
+      jsxElements(file).some(element => element.name === 'html')
+    )
+    expect(roots).toEqual([LAYOUT])
+    for (const page of ['app/page.tsx', 'app/ask/page.tsx']) {
+      expect(existsSync(join(ROOT, page))).toBe(true)
+    }
+  })
+
+  test('no page or component jumps ahead of it with a positive tabIndex', () => {
+    // Every number a tabIndex expression can produce, such as the -1 in
+    // `decorative ? -1 : undefined`, has to be 0 or below.
+    const positive = sourceFiles(['app', 'components']).flatMap(file =>
+      jsxElements(file)
+        .filter(element => {
+          const value = element.attributes.get('tabIndex')
+          if (value === undefined) return false
+          const numbers = value.match(/-?\d+/g) ?? []
+          return numbers.some(number => Number(number) > 0)
+        })
+        .map(element => `${file}: <${element.name}>`)
+    )
+    expect(positive).toEqual([])
   })
 
   test('the target is the one main landmark, around every page', () => {

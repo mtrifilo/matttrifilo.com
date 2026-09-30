@@ -8,8 +8,11 @@ export const MAIN_CONTENT_ID = 'main-content'
 export const SKIP_LINK_LABEL = 'Skip to content'
 
 /**
- * The first tab stop on every page, past the nav to the page's own content
- * (WCAG 2.4.1; Matt, 2026-09-30, MTC-102).
+ * First in the tab order on every page, past the nav to the page's own
+ * content (WCAG 2.4.1; Matt, 2026-09-30, MTC-102). It is the first Tab stop
+ * wherever focus starts at the top of the page. /ask is the exception by
+ * design: where the pointer is fine it puts the caret in its composer on
+ * load, so the first Tab there goes on from the composer.
  *
  * Above the top edge until it takes focus, then drawn over the nav's
  * corner, so a pointer never meets it and a keyboard always sees where it

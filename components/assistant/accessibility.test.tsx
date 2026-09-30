@@ -186,9 +186,9 @@ describe('controls drawn under 44 px', () => {
 })
 
 describe('a link inside an answer', () => {
-  // Streamdown's link check drew each link as a button that opened an
-  // overlay with no dialog role or label, which took no focus. With the
-  // check off (Matt, 2026-09-30, MTC-102) a link is a plain link.
+  // Streamdown's link check is off (Matt, 2026-09-30, MTC-102): its overlay
+  // has no dialog role or label and takes no focus. A link is a plain
+  // new-tab link.
   const REPOSITORY = 'https://github.com/mtrifilo/matttrifilo.com'
 
   test('is a plain link that opens in a new tab, with no overlay', () => {
