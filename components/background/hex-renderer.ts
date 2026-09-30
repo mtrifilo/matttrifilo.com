@@ -112,9 +112,9 @@ const WAVE_SPEED = 350 // px per second
 /**
  * Radius at which the wave's contribution has faded to exactly zero for
  * every cell. Past this point the wave is invisible, so it stops counting
- * as "active" and stops holding the loop awake. On most screens the ring
- * has already left the grid well before this (see renderFrame), which ends
- * the wave sooner.
+ * as "active" and stops holding the loop awake. On a screen whose grid the
+ * ring crosses before this (a phone, a laptop) endWavePastGrid ends the wave
+ * sooner; on a very large screen this is still the end.
  */
 const WAVE_FADE_DISTANCE = 1500
 const SHIMMER_PERIOD = 10000 // ms
@@ -408,11 +408,31 @@ function drawHexPath(
   ctx.closePath()
 }
 
+/**
+ * Advance the wave. It ends in one of two places: here, once the fade has
+ * zeroed its contribution everywhere, or in endWavePastGrid, once its ring
+ * has passed every cell of the grid. Whichever comes first.
+ */
 export function updateWave(wave: HexWaveState, dt: number): void {
   if (!wave.active) return
   wave.radius += WAVE_SPEED * dt
-  // Deactivate once the fade below has zeroed the wave's contribution.
   if (wave.radius >= WAVE_FADE_DISTANCE) {
+    wave.active = false
+  }
+}
+
+/**
+ * End the wave once the inner edge of its ring is past the farthest cell of
+ * the grid. From then on every cell's wave influence is zero and stays zero
+ * (the ring only grows), so each later frame draws exactly what a frame with
+ * no wave draws, and the loop may drop to the idle cadence. On a phone that
+ * is about 2 s into the wave, against 4.3 s for the fade.
+ *
+ * `farthest` is the largest distance from the wave's origin to any cell,
+ * which renderFrame measures while it draws.
+ */
+function endWavePastGrid(wave: HexWaveState, farthest: number): void {
+  if (wave.active && wave.radius - WAVE_RING_WIDTH >= farthest) {
     wave.active = false
   }
 }
@@ -463,8 +483,7 @@ export function renderFrame(frame: HexFrameInput): void {
   }
 
   const maxOpacity = levels.max
-  // How far the wave's ring has to travel to clear the grid; see the end of
-  // this function.
+  // Measured in the loop for endWavePastGrid, at the end of this function.
   let farthestFromWaveOrigin = 0
 
   for (let i = 0; i < grid.length; i++) {
@@ -572,17 +591,8 @@ export function renderFrame(frame: HexFrameInput): void {
     if (scaled) ctx.restore()
   }
 
-  // Once the ring's inner edge is past the farthest cell, every cell's
-  // waveInfluence is zero and stays zero, so this frame and every later one
-  // draw exactly what they would with no wave. Ending it here rather than at
-  // WAVE_FADE_DISTANCE releases the loop to the idle cadence as soon as the
-  // ring leaves the screen: about 2 s into the wave on a phone instead of
-  // 4.3 s, which is most of the canvas's start-up cost.
-  if (
-    !reducedMotion &&
-    wave.active &&
-    wave.radius - WAVE_RING_WIDTH >= farthestFromWaveOrigin
-  ) {
-    wave.active = false
-  }
+  // Under reduced motion the loop above skips the wave, so no distance was
+  // measured; the wave is not advanced either, and the component clears it
+  // when the preference turns on.
+  if (!reducedMotion) endWavePastGrid(wave, farthestFromWaveOrigin)
 }

@@ -27,6 +27,14 @@ async function declaredBy(label: string, load: () => Promise<unknown>) {
 
 const ROOT = process.cwd()
 
+/**
+ * An import of geist/font/mono, geist/font/mono-non-variable or the
+ * geist/font barrel, each of which declares Geist Mono with the default
+ * preload. geist/font/sans is left alone: the sans face is drawn on every
+ * page.
+ */
+const PRELOADING_MONO = /['"]geist\/font(\/mono[^'"]*)?['"]/
+
 describe('the mono font (MTC-102)', () => {
   test('is never preloaded, so a page that draws no mono text never fetches it', async () => {
     const ours = await declaredBy('app/fonts', () => import('@/app/fonts'))
@@ -59,24 +67,43 @@ describe('the mono font (MTC-102)', () => {
     expect(geist.preload).toBeUndefined()
   })
 
-  test('nothing imports the preloaded declaration from geist/font/mono', () => {
+  test('nothing imports a preloading Geist Mono from the geist package', () => {
+    const skipped = new Set(['node_modules', '.next', '.git', '.claude'])
     const offenders: string[] = []
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (skipped.has(entry.name)) continue
         const full = path.join(dir, entry.name)
         if (entry.isDirectory()) walk(full)
-        else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\./.test(entry.name))
-          if (fs.readFileSync(full, 'utf8').includes("'geist/font/mono'"))
-            offenders.push(path.relative(ROOT, full))
+        else if (
+          /\.(ts|tsx|js|jsx|mjs)$/.test(entry.name) &&
+          !/\.test\./.test(entry.name) &&
+          PRELOADING_MONO.test(fs.readFileSync(full, 'utf8'))
+        )
+          offenders.push(path.relative(ROOT, full))
       }
     }
-    for (const dir of ['app', 'components', 'lib']) walk(path.join(ROOT, dir))
+    walk(ROOT)
     expect(offenders).toEqual([])
+  })
+
+  test('PRELOADING_MONO catches every preloading form, and not the sans import', () => {
+    for (const source of [
+      "import { GeistMono } from 'geist/font/mono'",
+      'import { GeistMono } from "geist/font/mono-non-variable"',
+      "import { GeistMono } from 'geist/font'",
+    ])
+      expect(PRELOADING_MONO.test(source)).toBe(true)
+    expect(
+      PRELOADING_MONO.test("import { GeistSans } from 'geist/font/sans'")
+    ).toBe(false)
   })
 
   test('the root layout sets the mono variable from app/fonts', () => {
     const layout = fs.readFileSync(path.join(ROOT, 'app/layout.tsx'), 'utf8')
-    expect(layout).toContain("import { GeistMono } from '@/app/fonts'")
-    expect(layout).toContain('${GeistMono.variable}')
+    expect(layout).toMatch(
+      /import\s*\{\s*GeistMono\s*\}\s*from\s*['"](@\/app\/fonts|\.\/fonts)['"]/
+    )
+    expect(layout).toContain('GeistMono.variable')
   })
 })

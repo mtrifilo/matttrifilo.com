@@ -656,11 +656,47 @@ describe('the wave ends once its ring has left the grid (MTC-102)', () => {
     expect(wave.active).toBe(true)
   })
 
-  test('ends on a phone-sized grid in about 2 s instead of the 4.3 s fade', () => {
-    // 350 px/s is the wave's speed; 1500 px is where it used to end.
-    const seconds = (farthest + WAVE_RING_WIDTH) / 350
-    expect(seconds).toBeLessThan(2.2)
-    expect(1500 / 350).toBeGreaterThan(4.2)
+  /**
+   * Seconds of 60 fps frames the wave holds the loop awake for, from radius
+   * 0 on a grid of the given size, driven through renderFrame itself.
+   */
+  function secondsUntilWaveEnds(w: number, h: number): number {
+    const cells = generateHexGrid(w, h)
+    const wave: HexWaveState = {
+      active: true,
+      originX: w / 2,
+      originY: h / 2,
+      radius: 0,
+      startTime: 0,
+    }
+    const dt = 1 / 60
+    let frames = 0
+    while (wave.active && frames < 60 * 10) {
+      renderFrame({
+        ctx: recordingContext(w, h).ctx,
+        grid: cells,
+        mouse: { x: -1000, y: -1000 },
+        time: frames * dt * 1000,
+        palette: HEX_RENDER_PALETTES.light,
+        wave,
+        dt,
+        reducedMotion: false,
+        levels: BRIGHTNESS.fullBleed.light,
+        dpr: 1,
+      })
+      frames++
+    }
+    return frames * dt
+  }
+
+  test('on a phone the wave ends about 2 s in; on a screen too big to cross, at the fade', () => {
+    const phone = secondsUntilWaveEnds(width, height)
+    expect(phone).toBeGreaterThan(1.8)
+    expect(phone).toBeLessThan(2.2)
+    // A grid the ring cannot cross before fading: the fade still ends it.
+    const huge = secondsUntilWaveEnds(4000, 3000)
+    expect(huge).toBeGreaterThan(4.2)
+    expect(huge).toBeLessThan(4.4)
   })
 
   test('the frame it ends on draws exactly what a frame with no wave draws', () => {
@@ -676,7 +712,7 @@ describe('the wave ends once its ring has left the grid (MTC-102)', () => {
     expect(onGrid).not.toEqual(noWave)
   })
 
-  test('under reduced motion the wave is left alone, as before', () => {
+  test('under reduced motion the wave is left alone: nothing measured, nothing ended', () => {
     const wave = waveAt(farthest + WAVE_RING_WIDTH)
     frame(wave, true)
     expect(wave.active).toBe(true)

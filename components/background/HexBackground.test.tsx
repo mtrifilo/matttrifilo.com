@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { act, render } from '@testing-library/react'
 import { HexBackground } from './HexBackground'
+import { START_FALLBACK_DELAY_MS } from './start-when-idle'
 
 /**
  * The component's side of the deferred start (MTC-102): until the browser
@@ -31,14 +32,16 @@ describe('HexBackground waits for idle before any canvas work (MTC-102)', () => 
     window.cancelIdleCallback = ((handle: number) => {
       pendingIdle.delete(handle)
     }) as CancelIdle
-    if (document.readyState !== 'complete') {
-      window.dispatchEvent(new Event('load'))
-    }
   })
 
   afterEach(() => {
-    window.requestIdleCallback = original.request
-    window.cancelIdleCallback = original.cancel
+    // Happy DOM has no idle callback of its own: put back exactly what was
+    // there, which is usually nothing.
+    const w = window as unknown as Record<string, unknown>
+    if (original.request) window.requestIdleCallback = original.request
+    else delete w.requestIdleCallback
+    if (original.cancel) window.cancelIdleCallback = original.cancel
+    else delete w.cancelIdleCallback
   })
 
   function runIdle() {
@@ -77,6 +80,44 @@ describe('HexBackground waits for idle before any canvas work (MTC-102)', () => 
       unmount()
       expect(pendingIdle.size).toBe(0)
       expect(getContext).not.toHaveBeenCalled()
+    } finally {
+      getContext.mockRestore()
+    }
+  })
+  test('mounted while the document is still loading: it waits for load, then for idle', () => {
+    Object.defineProperty(document, 'readyState', {
+      configurable: true,
+      get: () => 'loading',
+    })
+    try {
+      const { unmount } = render(<HexBackground />)
+      expect(pendingIdle.size).toBe(0)
+      act(() => {
+        window.dispatchEvent(new Event('load'))
+      })
+      expect(pendingIdle.size).toBe(1)
+      unmount()
+    } finally {
+      delete (document as unknown as Record<string, unknown>).readyState
+    }
+    expect(document.readyState).toBe('complete')
+  })
+
+  test('without requestIdleCallback it starts on the fallback timer', async () => {
+    const w = window as unknown as Record<string, unknown>
+    delete w.requestIdleCallback
+    const getContext = spyOn(HTMLCanvasElement.prototype, 'getContext')
+    try {
+      const { unmount } = render(<HexBackground />)
+      expect(getContext).not.toHaveBeenCalled()
+      await act(
+        () =>
+          new Promise(resolve =>
+            setTimeout(resolve, START_FALLBACK_DELAY_MS + 50)
+          )
+      )
+      expect(getContext).toHaveBeenCalled()
+      unmount()
     } finally {
       getContext.mockRestore()
     }

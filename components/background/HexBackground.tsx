@@ -36,7 +36,7 @@ export function HexBackground() {
   // Set by the animation effect; lets the other effects and listeners restart
   // a loop that has parked itself (see the idle policy below).
   const wakeRef = useRef<(() => void) | null>(null)
-  const mountedRef = useRef(false)
+  const entrancePlayedRef = useRef(false)
   const reducedMotionRef = useRef(false)
   const veiledRef = useRef(false)
   const themeRef = useRef<string | undefined>(undefined)
@@ -179,10 +179,10 @@ export function HexBackground() {
       }
       veilQuery.addEventListener('change', onVeilChange)
 
-      // Fire entrance wave on first mount (not under reduced motion: it would
-      // sit unplayed until the preference changed)
-      if (!mountedRef.current && !motionQuery.matches) {
-        mountedRef.current = true
+      // Play the entrance wave the first time drawing starts (not under
+      // reduced motion: it would sit unplayed until the preference changed)
+      if (!entrancePlayedRef.current && !motionQuery.matches) {
+        entrancePlayedRef.current = true
         waveRef.current = {
           active: true,
           originX: width / 2,

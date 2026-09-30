@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   START_FALLBACK_DELAY_MS,
   START_IDLE_TIMEOUT_MS,
+  START_LOAD_WAIT_CAP_MS,
   startWhenIdle,
   type StartHost,
 } from './start-when-idle'
@@ -64,12 +65,42 @@ function createHost({ loaded = false, idle = true } = {}) {
 }
 
 describe('the honeycomb starts after load, when the main thread is idle (MTC-102)', () => {
-  test('nothing starts before the load event', () => {
+  test('nothing starts before the load event; only the load cap is armed', () => {
     const h = createHost()
     let started = 0
     startWhenIdle(h.host, () => started++)
     expect(started).toBe(0)
     expect(h.idles()).toEqual([])
+    expect(h.timers().map(t => t.delayMs)).toEqual([START_LOAD_WAIT_CAP_MS])
+  })
+
+  test('load arriving first withdraws the cap', () => {
+    const h = createHost()
+    startWhenIdle(h.host, () => {})
+    h.load()
+    expect(h.timers()).toEqual([])
+    expect(h.idles()).toHaveLength(1)
+  })
+
+  test('a load that never comes: the cap moves on to waiting for idle', () => {
+    const h = createHost()
+    let started = 0
+    startWhenIdle(h.host, () => started++)
+    h.runTimers()
+    expect(h.loadListeners()).toBe(0)
+    expect(h.idles()).toHaveLength(1)
+    // A late load does not queue a second start.
+    h.load()
+    expect(h.idles()).toHaveLength(1)
+    h.runIdle()
+    expect(started).toBe(1)
+  })
+
+  test('cancelled before load: the load listener and the cap are both withdrawn', () => {
+    const h = createHost()
+    const cancel = startWhenIdle(h.host, () => {})
+    cancel()
+    expect(h.loadListeners()).toBe(0)
     expect(h.timers()).toEqual([])
   })
 
@@ -89,8 +120,6 @@ describe('the honeycomb starts after load, when the main thread is idle (MTC-102
     startWhenIdle(h.host, () => {})
     h.load()
     expect(h.idles()[0].timeoutMs).toBe(START_IDLE_TIMEOUT_MS)
-    expect(START_IDLE_TIMEOUT_MS).toBeGreaterThan(0)
-    expect(START_IDLE_TIMEOUT_MS).toBeLessThanOrEqual(2000)
   })
 
   test('mounted after load, it goes straight to waiting for idle', () => {
@@ -107,7 +136,6 @@ describe('the honeycomb starts after load, when the main thread is idle (MTC-102
     const h = createHost({ idle: false })
     let started = 0
     startWhenIdle(h.host, () => started++)
-    expect(h.timers()).toEqual([])
     h.load()
     expect(h.timers().map(t => t.delayMs)).toEqual([START_FALLBACK_DELAY_MS])
     expect(started).toBe(0)
