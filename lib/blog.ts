@@ -144,31 +144,3 @@ export function getAllBlogPosts(): BlogPostMeta[] {
 
   return posts
 }
-
-/**
- * Get all unique categories from blog posts
- */
-export function getAllCategories(): string[] {
-  const posts = getAllBlogPosts()
-  const categoriesSet = new Set<string>()
-
-  for (const post of posts) {
-    for (const category of post.categories) {
-      categoriesSet.add(category)
-    }
-  }
-
-  return Array.from(categoriesSet).sort()
-}
-
-/**
- * Get all posts for a specific category
- */
-export function getPostsByCategory(category: string): BlogPostMeta[] {
-  const posts = getAllBlogPosts()
-  return posts.filter(post =>
-    post.categories.some(
-      cat => cat.toLowerCase().replace(/\s+/g, '-') === category
-    )
-  )
-}
