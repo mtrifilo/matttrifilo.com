@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu } from 'lucide-react'
-import { ModeToggle } from '@/components/layout'
+import { ModeToggle } from './mode-toggle'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
