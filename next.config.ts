@@ -67,6 +67,27 @@ const nextConfig: NextConfig = {
               'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
           },
           { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+          /**
+           * 'unsafe-inline' stays in script-src because the pages are
+           * prerendered. Next inlines its bootstrap and flight-data scripts
+           * (self.__next_f) in every page, and next-themes inlines the script
+           * that sets the theme class before first paint. A prerendered page
+           * cannot carry a per-request nonce, and those scripts differ by page
+           * and by build, so hashes do not fit either. The JSON-LD tag is a
+           * data block the browser never runs, so it needs none of this.
+           *
+           * Removing it takes a proxy.ts that mints a nonce per request and
+           * puts it in script-src here (Next reads it from this header and
+           * stamps its own scripts), and that nonce passed to ThemeProvider.
+           * Every page then renders per request instead of being served
+           * prerendered. What keeps an injected script out meanwhile: a
+           * question renders as React text, and the model's Markdown goes
+           * through Streamdown's sanitizer.
+           *
+           * object-src 'none' refuses plugins outright rather than inheriting
+           * default-src. upgrade-insecure-requests has the browser fetch any
+           * http:// URL a page names over https:// instead.
+           */
           {
             key: 'Content-Security-Policy',
             value: [
@@ -77,12 +98,14 @@ const nextConfig: NextConfig = {
               "font-src 'self'",
               "worker-src 'self' blob:",
               "connect-src 'self'",
+              "object-src 'none'",
               // 'self' for BotID's same-origin challenge path (MTC-34), which
               // the wrapper below marks frameable by this origin.
               "frame-src 'self' https://vercel.live",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
+              'upgrade-insecure-requests',
             ].join('; '),
           },
         ],
