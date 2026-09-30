@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { ThemeProvider, Footer } from '@/components/layout'
 import { HideOnRoutes } from '@/components/layout/hide-on-routes'
+import { MAIN_CONTENT_ID, SkipLink } from '@/components/layout/skip-link'
 import Nav from '@/app/nav'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { JsonLd } from '@/components/seo/JsonLd'
@@ -62,8 +63,17 @@ export default function RootLayout({
               phone with the toolbar out the two differ by the toolbar, which
               would give that page exactly the scroll it exists to avoid. */}
           <div className="flex flex-col min-h-svh relative z-10">
+            <SkipLink />
             <Nav assistantDisabled={isChatDisabled()} />
-            <main className="flex-1">{children}</main>
+            {/* The skip link's target: it takes focus, but Tab never stops
+                on it. Not a control, so it draws no ring around the page. */}
+            <main
+              className="flex-1 outline-none"
+              id={MAIN_CONTENT_ID}
+              tabIndex={-1}
+            >
+              {children}
+            </main>
             {/* /ask fills the viewport exactly (see --nav-height in
                 globals.css); a footer below it would make the page scroll
                 and carry the composer off screen. The approved design has
