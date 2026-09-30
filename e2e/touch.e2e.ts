@@ -138,9 +138,10 @@ async function dragFirstRow(
     [-distance / 4, 0],
     [-distance, 0],
   ])
-  // Playwright's WebKit sends these rows no scroll event for a scroll made
-  // by script, where a phone sends one for a finger's, and the linked scroll
-  // runs from that event; so the event the drag would have sent goes with it.
+  // Headless WebKit delivers the scroll event for a scroll made by script
+  // late, hundreds of milliseconds on, where a finger's scroll sends one as
+  // it moves, and the linked scroll runs from that event; so the event the
+  // drag would have sent goes with it.
   await page.evaluate(pixels => {
     const viewport = document.querySelector('.starter-ticker-row')
     if (!viewport) return
@@ -281,14 +282,14 @@ for (const [name, offsets] of [
     ],
   ],
 ] as const) {
-  test(`${name} leaves both rows moving`, async ({ page, browserName }) => {
-    // Chromium sends a scroll event for the freeze's own write at touchstart,
-    // and the rows read it as a drag (MTC-104). Marked rather than skipped,
-    // so the check still runs there and a pass fails the job, which is when
-    // this line goes.
+  test(`${name} leaves both rows moving`, async ({ page }) => {
+    // Both engines send a scroll event for the freeze's own write at
+    // touchstart, and the rows read it as a drag (MTC-104). Marked rather
+    // than skipped, so the check still runs and a pass fails the job, which
+    // is when this line goes.
     test.fail(
-      browserName === 'chromium',
-      'MTC-104: the freeze write at touchstart hands the rows over in Chromium'
+      true,
+      'MTC-104: the freeze write at touchstart hands the rows over'
     )
     await page.goto('/ask')
     await waitForRows(page)
