@@ -118,7 +118,7 @@ describe('the loader on fixture posts', () => {
       path.join(FIXTURES, 'valid')
     )
     // Unquoted dates would parse as Date objects; both come from the raw
-    // lines as the strings the author wrote. `draft` is not a field the
+    // lines as the strings the author wrote. `notes` is not a field the
     // site reads, so it does not reach the page.
     expect(post?.frontmatter).toEqual({
       title: 'A valid post, with "quotes"',
@@ -181,6 +181,9 @@ describe('the frontmatter guard', () => {
     expect(
       load('empty-description', 'title: t\ndate: 2026-03-01\ndescription:')
     ).toThrow(/empty-description\.md: .*\(got nothing\)/)
+    expect(
+      load('blank-description', "title: t\ndate: 2026-03-01\ndescription: '  '")
+    ).toThrow(/blank-description\.md: frontmatter description must be text/)
   })
 
   test('categories must be a list of text values', () => {

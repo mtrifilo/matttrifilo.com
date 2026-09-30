@@ -84,6 +84,18 @@ export interface PostDraft {
 }
 
 /**
+ * The draft for a post started at `now`, dated with the local day. main
+ * dates a post only through this, so the per-zone tests cover the date a
+ * new post is written with.
+ */
+export function newPostDraft(
+  fields: Omit<PostDraft, 'date' | 'body'>,
+  now: Date = new Date()
+): PostDraft {
+  return { ...fields, date: localDateStamp(now) }
+}
+
+/**
  * A YAML double-quoted scalar that reads back as exactly `value`.
  *
  * JSON's string syntax is a subset of YAML's double-quoted style, so
@@ -224,14 +236,13 @@ async function main() {
     process.exit(1)
   }
 
-  const today = localDateStamp()
-  const draft: PostDraft = { title, date: today, categories, description }
+  const draft = newPostDraft({ title, categories, description })
   const summaryProblem = draftSummaryProblem(draft)
   if (summaryProblem) {
     console.error(summaryProblem)
     process.exit(1)
   }
-  const slug = postSlug(title, today)
+  const slug = postSlug(title, draft.date)
   const filepath = path.join(BLOG_DIR, `${slug}.md`)
   const knowledgePath = path.join(KNOWLEDGE_BLOG_DIR, `${slug}.md`)
 

@@ -154,7 +154,9 @@ function validateFrontmatter(
   const frontmatter: BlogPostFrontmatter = { title, date }
 
   if ('description' in data) {
-    if (typeof description !== 'string') {
+    // Blank is refused too: the pages fall back to the excerpt only when
+    // the description is falsy, so '  ' would ship an empty meta tag.
+    if (typeof description !== 'string' || description.trim() === '') {
       throw new Error(
         `${source}: frontmatter description must be text (got ${describeValue(description)})`
       )

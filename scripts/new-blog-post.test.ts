@@ -21,15 +21,15 @@ import {
 
 describe('the date a new post carries', () => {
   /**
-   * localDateStamp at `instant`, computed in a fresh process running in
-   * `timeZone`. Bun does not reliably apply a TZ changed mid-process, so
-   * each zone gets its own process, and the result does not depend on the
-   * zone this suite runs in.
+   * The date newPostDraft gives a post started at `instant`, computed in a
+   * fresh process running in `timeZone`. Bun does not reliably apply a TZ
+   * changed mid-process, so each zone gets its own process, and the result
+   * does not depend on the zone this suite runs in.
    */
-  const stampIn = (timeZone: string, instant: string): string => {
+  const draftDateIn = (timeZone: string, instant: string): string => {
     const script = path.join(import.meta.dir, 'new-blog-post.ts')
-    const code = `const { localDateStamp } = await import(${JSON.stringify(script)})
-console.log(localDateStamp(new Date(${JSON.stringify(instant)})))`
+    const code = `const { newPostDraft } = await import(${JSON.stringify(script)})
+console.log(newPostDraft({ title: 't' }, new Date(${JSON.stringify(instant)})).date)`
     const result = Bun.spawnSync({
       cmd: [process.execPath, '-e', code],
       env: { ...process.env, TZ: timeZone },
@@ -41,8 +41,8 @@ console.log(localDateStamp(new Date(${JSON.stringify(instant)})))`
   test('a post started at 20:00 in Phoenix carries that day, not UTC tomorrow', () => {
     // 20:00 on 2026-09-29 in Phoenix (UTC-7) is 03:00 on 2026-09-30 UTC.
     const phoenixEvening = '2026-09-30T03:00:00Z'
-    expect(stampIn('America/Phoenix', phoenixEvening)).toBe('2026-09-29')
-    expect(stampIn('UTC', phoenixEvening)).toBe('2026-09-30')
+    expect(draftDateIn('America/Phoenix', phoenixEvening)).toBe('2026-09-29')
+    expect(draftDateIn('UTC', phoenixEvening)).toBe('2026-09-30')
   })
 
   test('the stamp is the local calendar day, zero-padded', () => {
