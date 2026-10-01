@@ -81,7 +81,7 @@ export function HexBackground() {
   // On a phone (a coarse primary pointer) none of it runs until
   // startWhenIdle says so (see start-when-idle.ts): until then the canvas is
   // as blank as it is before hydration, and nothing is measured, drawn or
-  // listened to. On a desktop it starts at mount (Matt, 2026-10-01, PR #92).
+  // listened to. On a desktop it starts at mount (Matt, 2026-10-01, MTC-102).
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return

@@ -5,7 +5,7 @@ import { START_FALLBACK_DELAY_MS } from './start-when-idle'
 import { setTouchDevice } from '@/test/touch-device'
 
 /**
- * The component's side of the start (MTC-102; Matt, 2026-10-01, PR #92). On
+ * The component's side of the start (MTC-102; Matt, 2026-10-01). On
  * a phone, until the browser reports an idle moment after load, the
  * honeycomb measures nothing, asks for no context and schedules no frame; on
  * a desktop it starts at mount. start-when-idle.test.ts covers the timing
