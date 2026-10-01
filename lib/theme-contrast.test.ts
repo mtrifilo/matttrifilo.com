@@ -161,18 +161,12 @@ describe('text over the honeycomb canvas, where nothing veils it', () => {
     }
   )
 
-  test('the dark theme keeps the muted text readable', () => {
-    expect(shortOverCanvas('dark', ['--muted-foreground'])).toEqual([])
-  })
-
-  // Known short, and left for Matt (MTC-88, 2026-09-28): on the light theme
-  // the muted text crossing the brightest resting stroke is 4.36:1. Either a
-  // darker light --muted-foreground or a fainter full-bleed canvas clears
-  // it, and which is a design call. `failing` keeps the gap on record: when
-  // either lands this turns red, and it becomes an ordinary test.
-  test.failing('the light theme keeps the muted text readable', () => {
-    expect(shortOverCanvas('light', ['--muted-foreground'])).toEqual([])
-  })
+  test.each([['light'], ['dark']] as const)(
+    'the %s theme keeps the muted text readable',
+    theme => {
+      expect(shortOverCanvas(theme, ['--muted-foreground'])).toEqual([])
+    }
+  )
 })
 
 /** The most opaque stroke the resting field draws, and its color. */

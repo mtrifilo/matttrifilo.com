@@ -532,15 +532,29 @@ const TRAILER_LINE = new RegExp(`^\\s*${SOURCES_TRAILER_PREFIX.trimEnd()}`)
  *
  * Empty until there is something to report, so a page that has only just
  * loaded announces nothing at all.
+ *
+ * `undefined` means there is nothing new to say, and the region keeps the
+ * words it holds. That is the moment between the route's `done` part and the
+ * end of the stream: the run is over, but how it ended rides on the `finish`
+ * chunk that follows, so the step last named still stands until the status
+ * settles. "Responding" there would say the run had started over.
+ *
+ * `noticeWords` are the words of the notice under a finished answer that was
+ * cut short or never came (`noticeFor`), spoken in place of "Response
+ * complete" so a reader who cannot see the notice is told what it says
+ * (Matt, 2026-09-30, MTC-102). The caller passes them because the words are
+ * copy, which lives in components/assistant and this module may not import.
  */
 export function announcementFor(
   status: ChatStatus,
   hasAnswer: boolean,
   progress?: ProgressView,
-  stopped = false
-): string {
+  stopped = false,
+  noticeWords?: string
+): string | undefined {
   if (status === 'error') return 'Error'
   if (status === 'submitted' || status === 'streaming') {
+    if (progress?.phase === 'done') return undefined
     return stepAnnouncement(progress) ?? 'Responding'
   }
   // A run that was cut off is never reported as finished. The reader has no
@@ -558,13 +572,12 @@ export function announcementFor(
   if (stopped) return 'Response stopped'
   if (!hasAnswer) return ''
   if (wasCutOff(progress)) return 'Response stopped'
-  return 'Response complete'
+  return noticeWords ?? 'Response complete'
 }
 
 /**
  * The current step, said plainly. `undefined` when the run has not narrated
- * anything yet, or has already reported itself done. In both cases the
- * caller's "Responding" is the truthful thing to say.
+ * anything yet, and the caller's "Responding" is the truthful thing to say.
  *
  * These three verbs are the spoken half of what
  * components/assistant/copy.ts shows on screen as "Reading {title}…",

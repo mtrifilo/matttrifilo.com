@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { AlertCircle, Clock, Scissors } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { ChatErrorView } from '@/lib/chat/answer'
+import type { AnswerNotice, ChatErrorView } from '@/lib/chat/answer'
 import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
 import {
@@ -60,10 +60,23 @@ function Notice({
   )
 }
 
+/**
+ * The words of the notice under an answer that did not end cleanly. The
+ * notices below show them, and the status region speaks them in place of
+ * "Response complete" (Matt, 2026-09-30, MTC-102): one map, so what a
+ * screen reader hears and what the page shows cannot drift apart.
+ */
+export const ANSWER_NOTICE_WORDS: Readonly<Record<AnswerNotice, string>> = {
+  truncated: TRUNCATED_NOTICE,
+  incomplete: INCOMPLETE_NOTICE,
+}
+
 /** An answer that stopped mid-sentence on the model's output cap. */
 export function TruncatedNotice() {
   return (
-    <Notice icon={<Scissors className="size-4" />}>{TRUNCATED_NOTICE}</Notice>
+    <Notice icon={<Scissors className="size-4" />}>
+      {ANSWER_NOTICE_WORDS.truncated}
+    </Notice>
   )
 }
 
@@ -71,7 +84,7 @@ export function TruncatedNotice() {
 export function IncompleteNotice() {
   return (
     <Notice icon={<AlertCircle className="size-4" />}>
-      {INCOMPLETE_NOTICE}
+      {ANSWER_NOTICE_WORDS.incomplete}
     </Notice>
   )
 }

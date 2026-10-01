@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { answered, openStream, type OpenStream } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
+import { INCOMPLETE_NOTICE, TRUNCATED_NOTICE } from './copy'
 
 /**
  * What a screen reader is told while an answer arrives (MTC-88).
@@ -132,25 +133,19 @@ describe('a streamed answer', () => {
     expect(repeats).toEqual([])
   })
 
-  // Known, and left for a ticket (MTC-88, 2026-09-28): the route sends the
-  // `done` part just before `finish`, and `announcementFor` in
-  // lib/chat/answer.ts has no step to name for `done` while the run is
-  // still streaming, so the region says "Responding" again for the moment
-  // between the two. A screen reader may speak it before "Response
-  // complete". The fix is in lib/chat, which this ticket does not touch;
-  // when it lands this turns red and becomes an ordinary test.
-  test.failing(
-    'goes straight from the last step to "Response complete"',
-    async () => {
-      const { said } = await streamOneAnswer()
-      expect(said).toEqual([
-        'Responding',
-        'Reading Résumé',
-        'Writing answer',
-        'Response complete',
-      ])
-    }
-  )
+  // The route sends the `done` part just before `finish`, and the stream
+  // closes a moment after. In that gap the region keeps the step it last
+  // named: "Responding" there would tell a screen reader the run had
+  // started over, just before "Response complete".
+  test('goes straight from the last step to "Response complete"', async () => {
+    const { said } = await streamOneAnswer()
+    expect(said).toEqual([
+      'Responding',
+      'Reading Résumé',
+      'Writing answer',
+      'Response complete',
+    ])
+  })
 
   test('sits in no live region, so the answer is never read as it grows', async () => {
     stubRoute(() =>
@@ -169,6 +164,199 @@ describe('a streamed answer', () => {
     )
     expect(answer.closest(LIVE)).toBeNull()
     expect(answer.closest('[aria-atomic]')).toBeNull()
+  })
+})
+
+describe('an answer that did not end cleanly', () => {
+  // The region speaks the notice's own words in place of "Response
+  // complete" (Matt, 2026-09-30, MTC-102), so a reader who cannot see the
+  // notice is told what it says, once.
+  async function endWith(chunks: unknown[]): Promise<{
+    said: string[]
+    status: HTMLElement
+  }> {
+    stubRoute(() => answered(chunks))
+    render(<AssistantChat />)
+    const status = screen.getByRole('status')
+    const said: string[] = []
+    const observer = new MutationObserver(() => {
+      said.push(status.textContent ?? '')
+    })
+    observer.observe(status, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+    ask('Who is Matt?')
+    await waitFor(() => expect(status.textContent).not.toBe('Responding'))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Send question' })).toBeTruthy()
+    )
+    observer.disconnect()
+    return { said, status }
+  }
+
+  /** The notice drawn under the answer, as opposed to the status region. */
+  function visibleNotice(words: string): HTMLElement | undefined {
+    return screen
+      .getAllByText(words)
+      .find(element => element.closest('[role="status"]') === null)
+  }
+
+  test('a cut-short answer is announced in the words of its notice', async () => {
+    const { said, status } = await endWith([
+      { type: 'start' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'writing', steps: STEPS },
+      },
+      { type: 'text-start', id: 't' },
+      { type: 'text-delta', id: 't', delta: 'Matt led the platform team and' },
+      { type: 'text-end', id: 't' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'done', steps: STEPS, ms: 9_000 },
+      },
+      {
+        type: 'finish',
+        messageMetadata: { truncated: true, incomplete: true },
+      },
+    ])
+    await waitFor(() => expect(status.textContent).toBe(TRUNCATED_NOTICE))
+    expect(visibleNotice(TRUNCATED_NOTICE)).toBeDefined()
+    expect(said).not.toContain('Response complete')
+    expect(said.slice(1)).not.toContain('Responding')
+    expect(said.filter(text => text === TRUNCATED_NOTICE)).toHaveLength(1)
+  })
+
+  test('a run with no answer is announced in the words of its notice', async () => {
+    const { said, status } = await endWith([
+      { type: 'start' },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'reading', steps: STEPS },
+      },
+      {
+        type: 'data-progress',
+        id: 'progress',
+        data: { phase: 'done', steps: STEPS, ms: 9_000 },
+      },
+      { type: 'finish', messageMetadata: { incomplete: true } },
+    ])
+    await waitFor(() => expect(status.textContent).toBe(INCOMPLETE_NOTICE))
+    expect(visibleNotice(INCOMPLETE_NOTICE)).toBeDefined()
+    expect(said).not.toContain('Response complete')
+    expect(said.slice(1)).not.toContain('Responding')
+    expect(said.filter(text => text === INCOMPLETE_NOTICE)).toHaveLength(1)
+  })
+})
+
+describe('the next question', () => {
+  // The SDK reports a send a step after it is made, so the page renders
+  // once with the last run's status first. The region says nothing new in
+  // that render: it goes from how the last run ended straight to
+  // "Responding".
+  function listen(status: HTMLElement): {
+    said: string[]
+    stop: () => void
+  } {
+    const said: string[] = []
+    const observer = new MutationObserver(() => {
+      said.push(status.textContent ?? '')
+    })
+    observer.observe(status, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    })
+    return { said, stop: () => observer.disconnect() }
+  }
+
+  test('after a stop, is never preceded by "Response complete"', async () => {
+    const streams: OpenStream[] = []
+    globalThis.fetch = (() => {
+      const stream = openStream()
+      streams.push(stream)
+      return Promise.resolve(stream.response)
+    }) as unknown as typeof fetch
+    render(<AssistantChat />)
+    const status = screen.getByRole('status')
+    const { said, stop } = listen(status)
+
+    ask('Who is Matt?')
+    await waitFor(() => expect(status.textContent).toBe('Responding'))
+    await send(
+      streams[0],
+      { type: 'start' },
+      { type: 'text-start', id: 't' },
+      { type: 'text-delta', id: 't', delta: 'Matt led the' }
+    )
+    await waitFor(() => screen.getByText(/Matt led the/))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+    await waitFor(() => expect(status.textContent).toBe('Response stopped'))
+
+    ask('What does he lead now?')
+    await waitFor(() => expect(status.textContent).toBe('Responding'))
+    stop()
+    expect(said).toEqual(['Responding', 'Response stopped', 'Responding'])
+  })
+
+  test('after a refusal, does not repeat an earlier notice', async () => {
+    let calls = 0
+    globalThis.fetch = (() => {
+      calls += 1
+      if (calls === 1) {
+        return Promise.resolve(
+          answered([
+            { type: 'start' },
+            {
+              type: 'data-progress',
+              id: 'progress',
+              data: { phase: 'writing', steps: STEPS },
+            },
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: 'Matt led the team and' },
+            { type: 'text-end', id: 't' },
+            {
+              type: 'data-progress',
+              id: 'progress',
+              data: { phase: 'done', steps: STEPS, ms: 9_000 },
+            },
+            {
+              type: 'finish',
+              messageMetadata: { truncated: true, incomplete: true },
+            },
+          ])
+        )
+      }
+      if (calls === 2) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: { code: 'message_too_long', message: 'Too long.' },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } }
+          )
+        )
+      }
+      return new Promise<Response>(() => {})
+    }) as unknown as typeof fetch
+    render(<AssistantChat />)
+    const status = screen.getByRole('status')
+    const { said, stop } = listen(status)
+
+    ask('Who is Matt?')
+    await waitFor(() => expect(status.textContent).toBe(TRUNCATED_NOTICE))
+    ask('What did he lead?')
+    await waitFor(() => expect(status.textContent).toBe('Error'))
+    ask('What does he lead now?')
+    await waitFor(() => expect(status.textContent).toBe('Responding'))
+    stop()
+    const afterError = said.slice(said.indexOf('Error'))
+    expect(afterError).toEqual(['Error', 'Responding'])
   })
 })
 

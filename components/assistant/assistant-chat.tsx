@@ -21,6 +21,7 @@ import {
   announcementFor,
   discardsQuestion,
   joinTextParts,
+  noticeFor,
   saysNothingYet,
   showsFollowUps,
   toAnswerView,
@@ -37,7 +38,7 @@ import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantEmptyState } from './assistant-empty-state'
 import { AssistantHeader } from './assistant-header'
-import { ChatErrorNotice } from './assistant-notice'
+import { ANSWER_NOTICE_WORDS, ChatErrorNotice } from './assistant-notice'
 import { AssistantProgress } from './assistant-progress'
 import { ASSISTANT_NAME, RESET_LABEL } from './copy'
 import { hasPendingQuestion, takePendingQuestion } from './pending-question'
@@ -103,6 +104,14 @@ export function AssistantChat() {
   // and the placeholder row has to stay behind and say so itself.
   const [stopped, setStopped] = useState(false)
 
+  // A question or a regenerate has been sent and the SDK has not yet said
+  // so. It awaits a step before it reports `submitted`, so the page renders
+  // once in between with the last run's status and the stop flag already
+  // cleared. The status region says nothing new in that render: the last
+  // run's words again, or "Response complete" for a run that was stopped,
+  // would be read out just as the next one starts.
+  const [sending, setSending] = useState(false)
+
   // The question just sent, until the route has answered or refused it. It is
   // what stops the rollback in `onError` from touching a question that was
   // answered and then failed on a regenerate.
@@ -143,6 +152,7 @@ export function AssistantChat() {
     // later send and the conversation is stuck. `setMessages` is bound by
     // the time this runs: the SDK calls it well after the hook returns.
     onError: failure => {
+      setSending(false)
       const question = askedRef.current
       askedRef.current = null
       if (question === null) return
@@ -159,6 +169,7 @@ export function AssistantChat() {
   })
 
   const busy = status === 'submitted' || status === 'streaming'
+  if (sending && busy) setSending(false)
   const errorView = useMemo(() => toChatErrorView(error), [error])
   const hasTranscript = messages.length > 0
   // Whether the composer is docked under a transcript, or centred with the
@@ -177,6 +188,7 @@ export function AssistantChat() {
       // discard it.
       setInput(current => (current.trim() === question ? '' : current))
       setStopped(false)
+      setSending(true)
       askedRef.current = question
       void sendMessage({ text: question })
     },
@@ -242,6 +254,7 @@ export function AssistantChat() {
     clearError()
     setMessages([])
     setStopped(false)
+    setSending(false)
     askedRef.current = null
     focusStatusOnceRunning.current = false
     if (activatedByTouch()) focusHeadingOnceEmpty.current = true
@@ -258,6 +271,7 @@ export function AssistantChat() {
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
     setStopped(false)
+    setSending(true)
     void regenerate()
     if (activatedByTouch()) focusStatusOnceRunning.current = true
     else textareaRef.current?.focus()
@@ -313,12 +327,29 @@ export function AssistantChat() {
   // The run in flight, for the announcement only. A screen reader hears the
   // steps as they change instead of one flat "Responding" for twenty seconds.
   const lastProgress = lastView?.progress
-  const announcement = announcementFor(
-    status,
-    messages.some(message => message.role === 'assistant'),
-    stopped && awaitingFirstContent ? STOPPED_BEFORE_FIRST_STEP : lastProgress,
-    stopped
-  )
+  // The notice under the last answer, chosen as AssistantAnswer chooses it,
+  // so the region speaks the words the page shows.
+  const lastNotice = lastView && !busy ? noticeFor(lastView) : null
+  const nextAnnouncement =
+    sending && !busy
+      ? undefined
+      : announcementFor(
+          status,
+          messages.some(message => message.role === 'assistant'),
+          stopped && awaitingFirstContent
+            ? STOPPED_BEFORE_FIRST_STEP
+            : lastProgress,
+          stopped,
+          lastNotice ? ANSWER_NOTICE_WORDS[lastNotice] : undefined
+        )
+  // `undefined` is "nothing new to say", so the region keeps its words: a
+  // change, even back to an earlier one, is read out again. Adjusted during
+  // render, React's pattern for keeping something from an earlier render, so
+  // the region never commits a frame with the stale words.
+  const [announcement, setAnnouncement] = useState('')
+  if (nextAnnouncement !== undefined && nextAnnouncement !== announcement) {
+    setAnnouncement(nextAnnouncement)
+  }
 
   const stopRun = useCallback(() => {
     setStopped(true)

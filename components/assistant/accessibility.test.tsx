@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MessageResponse } from '@/components/ai-elements/message'
 import type { AnswerView } from '@/lib/chat/answer'
 import { answered, openStream } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
@@ -181,5 +182,38 @@ describe('controls drawn under 44 px', () => {
     expect(
       hasTouchTarget(screen.getByRole('link', { name: 'Matt himself' }))
     ).toBe(false)
+  })
+})
+
+describe('a link inside an answer', () => {
+  // Streamdown's link check is off (Matt, 2026-09-30, MTC-102): its overlay
+  // has no dialog role or label and takes no focus. A link is a plain
+  // new-tab link.
+  const REPOSITORY = 'https://github.com/mtrifilo/matttrifilo.com'
+
+  test('is a plain link that opens in a new tab, with no overlay', () => {
+    const { container } = render(
+      <MessageResponse>{`See [the repository](${REPOSITORY}).`}</MessageResponse>
+    )
+    const link = screen.getByRole('link', { name: 'the repository' })
+    expect(link.getAttribute('href')).toBe(REPOSITORY)
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')?.split(' ')).toContain('noopener')
+    expect(screen.queryByRole('button')).toBeNull()
+
+    const before = container.innerHTML
+    fireEvent.click(link)
+    expect(container.innerHTML).toBe(before)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  test('is drawn as its text until its URL has arrived', () => {
+    // Mid-stream, or in an answer cut short by the output cap, Streamdown
+    // would otherwise link the text to a placeholder URL.
+    render(
+      <MessageResponse>{`See [the repository](${REPOSITORY.slice(0, 20)}`}</MessageResponse>
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText(/the repository/)).toBeTruthy()
   })
 })

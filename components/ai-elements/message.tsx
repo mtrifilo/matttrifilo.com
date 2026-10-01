@@ -16,6 +16,13 @@ import { Streamdown } from "streamdown";
  * packages for content the corpus never contains. The answers are prose and
  * bullets, which core Streamdown renders, and it still sanitises the HTML it
  * is handed.
+ *
+ * Also cut: Streamdown's link check. Its overlay has no dialog role or label
+ * and takes no focus, so a screen reader is not told it opened. A link in an
+ * answer opens directly, in a new tab (Matt, 2026-09-30, MTC-102). A link
+ * whose URL has not arrived, while it streams or in an answer cut short, is
+ * drawn as its text: without the check Streamdown would render it as a live
+ * link to a placeholder URL.
  */
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -63,7 +70,15 @@ export const MessageContent = ({
   </div>
 );
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = Omit<
+  ComponentProps<typeof Streamdown>,
+  "linkSafety" | "remend"
+>;
+
+// Module scope, so every render hands Streamdown the same objects: its memo
+// compares `linkSafety` by identity.
+const LINK_CHECK_OFF = { enabled: false } as const;
+const UNFINISHED_LINK_AS_TEXT = { linkMode: "text-only" } as const;
 
 /**
  * Spacing is spelled out here because the site has no typography plugin: the
@@ -80,6 +95,8 @@ export const MessageResponse = memo(
         className
       )}
       {...props}
+      linkSafety={LINK_CHECK_OFF}
+      remend={UNFINISHED_LINK_AS_TEXT}
     />
   ),
   (prevProps, nextProps) =>

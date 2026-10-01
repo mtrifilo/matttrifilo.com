@@ -255,11 +255,18 @@ export const RESET_LABEL = 'New conversation'
  */
 export const FOLLOW_UPS_LABEL = 'Follow-up questions'
 
-/** Shown under an answer the model started but the output cap cut off. */
+/**
+ * Shown under an answer the model started but the output cap cut off, and
+ * spoken by the status region when the run ends (ANSWER_NOTICE_WORDS in
+ * ./assistant-notice).
+ */
 export const TRUNCATED_NOTICE =
   'That answer was cut short. Ask a narrower question and the assistant can finish it.'
 
-/** Shown when a run ended with no answer at all. */
+/**
+ * Shown when a run ended with no answer at all, and spoken by the status
+ * region when it does (ANSWER_NOTICE_WORDS in ./assistant-notice).
+ */
 export const INCOMPLETE_NOTICE =
   "The assistant couldn't finish that one. Try asking again."
 
