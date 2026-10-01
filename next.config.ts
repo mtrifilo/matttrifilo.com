@@ -73,6 +73,43 @@ const nextConfig: NextConfig = {
               'geolocation=(), microphone=(), camera=(), payment=(), usb=()',
           },
           { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+          /**
+           * 'unsafe-inline' stays in script-src because the pages are
+           * prerendered. Next inlines its bootstrap and flight-data scripts
+           * (self.__next_f) in every page, and next-themes inlines the script
+           * that sets the theme class before first paint. A prerendered page
+           * cannot carry a per-request nonce, and those scripts differ by page
+           * and by build, so hashes do not fit either. Next's experimental
+           * SRI does not help: it hashes the external chunks only, not these
+           * inline scripts. The JSON-LD tag is a data block the browser never
+           * runs, so it needs none of this.
+           *
+           * Removing it takes a proxy.ts that mints a nonce per request and
+           * sets the policy, with 'nonce-...' in script-src, on the forwarded
+           * request as well as the response: Next reads the nonce from the
+           * request's Content-Security-Policy header and stamps its own
+           * scripts with it. This fixed header cannot carry a per-request
+           * value, so the policy moves there. The same nonce goes to
+           * ThemeProvider. Every page then renders per request instead of
+           * being served prerendered. What keeps an injected script out
+           * meanwhile: a question renders as React text, and the model's
+           * Markdown goes through Streamdown's sanitizer.
+           *
+           * object-src 'none' refuses plugins outright rather than inheriting
+           * default-src. upgrade-insecure-requests has the browser request a
+           * page's subresources, frames and form posts over https://, so none
+           * of them travels in the clear. On a page served over plain http
+           * the page's own files are upgraded too, and Safari then loads none
+           * of its scripts, styles or images, so a local `next start` on
+           * http://127.0.0.1 opened in Safari or any WebKit browser would
+           * break. It is therefore sent only where VERCEL is set, the test
+           * app/layout.tsx uses for the analytics script. `next build` fixes
+           * the value in routes-manifest.json (`next dev` reads it live), and
+           * Vercel's builds set VERCEL, as do `vercel dev` and a local
+           * `vercel build`, so those carry it too. On production it is a
+           * second safeguard, since Vercel already sends
+           * Strict-Transport-Security there.
+           */
           {
             key: 'Content-Security-Policy',
             value: [
@@ -83,12 +120,14 @@ const nextConfig: NextConfig = {
               "font-src 'self'",
               "worker-src 'self' blob:",
               "connect-src 'self'",
+              "object-src 'none'",
               // 'self' for BotID's same-origin challenge path (MTC-34), which
               // the wrapper below marks frameable by this origin.
               "frame-src 'self' https://vercel.live",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
+              ...(process.env.VERCEL ? ['upgrade-insecure-requests'] : []),
             ].join('; '),
           },
         ],
