@@ -35,16 +35,19 @@ import {
   DECLINE_SENTENCE,
   READ_DOCUMENT_TOOL_NAME,
   RECENT_ACTIVITY_TOOL_NAME,
+  REPOSITORY_BLOCK,
   SYSTEM_PROMPT,
   TRANSCRIPT_HEADING,
 } from './prompt'
 import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
+  CHAT_MAX_ANSWER_CHARS,
   CHAT_MAX_INPUT_TOKENS,
   CHAT_MAX_MESSAGE_CHARS,
   CHAT_MAX_OUTPUT_TOKENS,
   CHAT_MAX_TURNS,
   chatErrorBody,
+  estimateTokens,
 } from './validate'
 
 const QUESTION = 'What did Matt build at Thryv?'
@@ -430,6 +433,30 @@ const loggedText = () =>
 
 const HUMAN = { isBot: false, isVerifiedBot: false, bypassed: false }
 
+/**
+ * A replayed conversation ending on QUESTION whose input, as validate.ts
+ * counts it at the door against `index`, is exactly `doorTokens`: one-token
+ * questions and answers as long as the answer cap allows.
+ */
+function conversationAt(doorTokens: number) {
+  let remaining =
+    doorTokens -
+    index.tokenEstimate -
+    estimateTokens(SYSTEM_PROMPT) -
+    estimateTokens(REPOSITORY_BLOCK) -
+    estimateTokens(QUESTION)
+  const messages: ReturnType<typeof uiMessage>[] = []
+  while (remaining > 1) {
+    messages.push(uiMessage('user', 'q'))
+    remaining -= 1
+    const answerTokens = Math.min(remaining, CHAT_MAX_ANSWER_CHARS / 4)
+    messages.push(uiMessage('assistant', 'a'.repeat(answerTokens * 4)))
+    remaining -= answerTokens
+  }
+  if (remaining !== 0) throw new Error('conversationAt cannot hit that total')
+  return [...messages, uiMessage('user', QUESTION)]
+}
+
 const handlerWith = (
   model: MockLanguageModelV4,
   env: Record<string, string | undefined> = {},
@@ -807,6 +834,32 @@ describe('rejections', () => {
     expect(response.status).toBe(400)
     expect((await response.json()).error.code).toBe('message_too_long')
     expect(model.doStreamCalls).toHaveLength(0)
+  })
+
+  test('a conversation over the input budget gets the budget notice, its log line, and no model call', async () => {
+    // The door (validateChatRequest) refuses before anything is billed: the
+    // browser shows this envelope's copy with its reset control, and the
+    // question goes back to the composer.
+    const model = readingModel()
+    const response = await handlerWith(model)(
+      post({ messages: conversationAt(CHAT_MAX_INPUT_TOKENS + 1) })
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual(chatErrorBody('budget_exceeded'))
+    expect(logged).toEqual([['[chat]', { rejected: 'budget_exceeded' }]])
+    expect(model.doStreamCalls).toHaveLength(0)
+  })
+
+  test('a conversation exactly at the input budget is still answered', async () => {
+    const model = readingModel()
+    const response = await handlerWith(model)(
+      post({ messages: conversationAt(CHAT_MAX_INPUT_TOKENS) })
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain('He led the platform migration.')
+    expect(model.doStreamCalls.length).toBeGreaterThan(0)
   })
 
   test('a body that is not JSON returns 400 invalid', async () => {
