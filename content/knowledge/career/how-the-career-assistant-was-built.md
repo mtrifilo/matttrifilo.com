@@ -78,9 +78,8 @@ writes: a conversation lives only in the visitor's browser tab.
 These three run inside the server, so a request still reaches it before
 it is refused; the runbook says plainly that BotID stops model spend,
 not traffic. The layer that would refuse traffic at the edge is not yet
-in place as of October 2026: the runbook specifies it for launch as one
-rate-limit rule on Vercel's firewall, 20 chat requests a minute per
-client, keyed on the IP address and the TLS fingerprint.
+in place as of October 2026: the runbook specifies a per-client
+rate-limit rule on Vercel's firewall for launch.
 
 ## What it declines, and why
 
