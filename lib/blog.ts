@@ -128,13 +128,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * `descripton:` is a post that loads and is wrong, and an ignored
  * `draft: true` publishes a post its author meant to hold back.
  */
-const FRONTMATTER_KEYS: readonly (keyof BlogPostFrontmatter)[] = [
-  'title',
-  'date',
-  'description',
-  'categories',
-  'updated',
-]
+const DECLARED_KEYS = {
+  title: true,
+  date: true,
+  description: true,
+  categories: true,
+  updated: true,
+} satisfies Record<keyof BlogPostFrontmatter, true>
+
+// From an object `satisfies` checks in both directions, so a field added
+// to BlogPostFrontmatter without a key here fails typecheck.
+const FRONTMATTER_KEYS = Object.keys(DECLARED_KEYS)
 
 /**
  * Checks parsed frontmatter against BlogPostFrontmatter and returns the
@@ -159,7 +163,7 @@ function validateFrontmatter(
     )
   }
   for (const key of Object.keys(data)) {
-    if (!(FRONTMATTER_KEYS as readonly string[]).includes(key)) {
+    if (!FRONTMATTER_KEYS.includes(key)) {
       throw new Error(
         `${source}: unknown frontmatter key "${key}". A post declares ${FRONTMATTER_KEYS.join(', ')} and nothing else.`
       )
