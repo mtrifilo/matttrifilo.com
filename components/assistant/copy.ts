@@ -22,8 +22,13 @@ export const ASSISTANT_NAME = "Matt's Career Assistant"
 /** The persistent AI disclosure. Present on every surface, never dismissible. */
 export const ASSISTANT_LABEL = 'AI assistant · answers about Matt Trifilo'
 
+/**
+ * Matt's words (MTC-108, 2026-10-01): it says he built the assistant and
+ * where its answers come from, which a hiring manager reading it as a work
+ * sample needs to know before asking anything.
+ */
 export const ASSISTANT_INTRO =
-  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work. Email him if you want to talk."
+  'Matt built this assistant to answer questions about his projects, teams, and engineering leadership, from write-ups he wrote about his work, his résumé, and his GitHub activity. Email him if you want to talk.'
 
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
