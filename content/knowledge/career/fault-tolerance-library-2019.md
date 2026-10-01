@@ -129,9 +129,9 @@ record.
   and 2020, which are not in evidence.
 - A senior engineer's review comments shaped the library's design directly.
   This was not a solo design.
-- That the library has been superseded comes from Matt, not from the
-  engineering record, which does not show when that happened or what the
-  move involved.
+- Matt is the source for the library being superseded and for what
+  superseded it; the engineering record does not show when that happened
+  or what the move involved.
 
 ## Why this matters
 

@@ -79,8 +79,8 @@ Matt has written:
 > find a gap, rather than letting it stay tribal knowledge. Early on, that
 > meant building a troubleshooting page for a monolith's most common setup
 > errors. Later, it meant writing new technical interview questions when we
-> needed to scale up hiring, and, more recently,
-> recording a walkthrough video and updating a runbook so that one person's
-> knowledge wouldn't become a single point of failure for on-call triage.
+> needed to scale up hiring, and, more recently, recording a walkthrough
+> video and updating a runbook so that one person's knowledge wouldn't
+> become a single point of failure for on-call triage.
 > None of these are individually large projects, but they're a consistent
 > pattern of turning "ask the one person who knows" into "read the doc."
