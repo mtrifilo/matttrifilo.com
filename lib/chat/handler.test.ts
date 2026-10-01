@@ -1619,6 +1619,98 @@ describe('reading documents', () => {
   })
 })
 
+describe('each model call is held to the input cap (MTC-107)', () => {
+  // The door counts the posted conversation once. Each later call re-sends
+  // it with every document read so far, and the call also carries the index
+  // frame, the transcript labels and the tool definitions, so the read
+  // budget refuses a read that would carry the next call past the cap.
+  const big: KnowledgeDocument = {
+    ...documents[1],
+    id: 'big',
+    title: 'Big',
+    // Well inside the read budget, so only the per-call bound can refuse it.
+    text: 'b'.repeat(5_000 * 4),
+  }
+  const handlerWithBig = (model: MockLanguageModelV4) =>
+    createChatHandler({
+      verifyVisitor: () => Promise.resolve(HUMAN),
+      loadKnowledgeIndex: () => ({
+        ...index,
+        entries: [...index.entries, asEntry(big)],
+      }),
+      readKnowledgeDocument: (id: string) =>
+        id === 'big' ? big : readKnowledgeDocument(id),
+      model: () => model,
+      env: {},
+      now: () => 1_000,
+    })
+  // Under a thousand tokens of frame, labels and tool definitions on top of
+  // this leaves room for a small document and none for `big`.
+  const roomForASmallRead = CHAT_MAX_INPUT_TOKENS - 3_000
+
+  test('a read the next call has no room for is refused like an exhausted budget', async () => {
+    const model = modelOf(readsAll('big', 'resume'), answers())
+    const response = await handlerWithBig(model)(
+      post({ messages: conversationAt(roomForASmallRead) })
+    )
+    const body = await response.text()
+
+    const next = JSON.stringify(model.doStreamCalls[1].prompt)
+    // The model is told in the words of today's budget refusal.
+    expect(next).toContain('"error":"read_budget_exhausted"')
+    expect(next).not.toContain(big.text)
+    expect(next).not.toContain('"error":"document_too_large"')
+    // A read that fits is unaffected, in the same step.
+    expect(next).toContain(documents[0].text)
+    expect(body).toContain('He led the platform migration.')
+
+    // Counted with the budget refusals, the same as an exhausted budget.
+    const entry = logged.find(
+      args => args[0] === '[chat]' && 'documentsRead' in (args[1] as object)
+    )
+    expect(entry?.[1]).toMatchObject({
+      documentsRead: 1,
+      readsRefusedBudget: 1,
+      readsRefusedTooLarge: 0,
+      answered: true,
+    })
+    // And the visitor is left with the row for the read that happened only.
+    expect(progressFrom(body).at(-1)?.steps).toEqual([
+      { id: 'resume', title: 'Résumé', topic: 'resume' },
+    ])
+  })
+
+  test('the same reads are both served in a conversation with room for them', async () => {
+    const model = modelOf(readsAll('big', 'resume'), answers())
+    const response = await handlerWithBig(model)(
+      post({ messages: [uiMessage('user', QUESTION)] })
+    )
+    await response.text()
+
+    const next = JSON.stringify(model.doStreamCalls[1].prompt)
+    expect(next).toContain(big.text)
+    expect(next).toContain(documents[0].text)
+    expect(next).not.toContain('"error":"read_budget_exhausted"')
+  })
+
+  test('a conversation the door just admits is answered, with every read refused', async () => {
+    // At the cap by the door's count, the first call already carries more
+    // than the cap by this one (the frame, the labels and the tools), so no
+    // read fits. The visitor still gets an answer, written from the index.
+    const model = modelOf(reads('resume'), answers())
+    const response = await handlerWithBig(model)(
+      post({ messages: conversationAt(CHAT_MAX_INPUT_TOKENS) })
+    )
+    const body = await response.text()
+
+    expect(response.status).toBe(200)
+    const next = JSON.stringify(model.doStreamCalls[1].prompt)
+    expect(next).toContain('"error":"read_budget_exhausted"')
+    expect(next).not.toContain(documents[0].text)
+    expect(body).toContain('He led the platform migration.')
+  })
+})
+
 describe('a tool call on the step forced to answer', () => {
   // The shape of the measured run (MTC-87, 2026-09-28): two reads and a
   // GitHub check spend the first three steps, and the fourth, sent

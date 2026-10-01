@@ -182,6 +182,9 @@ export function createReadDocumentSession({
       refused.tooLarge += 1
       return { error: 'document_too_large' }
     }
+    // Also refused here, in the same words: a read that fits the budget but
+    // would carry the next model call past CHAT_MAX_INPUT_TOKENS. To the
+    // model both mean "answer from what you have".
     if (!budget.charge(tokens)) {
       refused.budget += 1
       return { error: 'read_budget_exhausted' }
