@@ -53,13 +53,13 @@ That runs `scripts/new-blog-post.ts`. It asks for a title, optional comma-separa
 
 Read by `lib/blog.ts`, which accepts these keys and no others: any other key, such as a misspelled `descripton` or a `draft` flag, fails the build with the file name and the key. A YAML error or a field that breaks its rule below also fails the build with the file name. The type is `lib/types/blog.ts`.
 
-| Field         | Rule                                                                                                      |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| `title`       | Required, non-empty text.                                                                                 |
-| `date`        | A plain `YYYY-MM-DD` that is a real calendar date, with no time or offset; anything else fails the build. |
-| `categories`  | Optional list of text values; quote one YAML would read as a number or a boolean, such as `'2026'`.       |
-| `description` | Optional; when present, text that is not blank.                                                           |
-| `updated`     | Optional, with the same rule as `date`. No page shows it.                                                 |
+| Field         | Rule                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`       | Required, text that is not blank.                                                                                                                          |
+| `date`        | A plain `YYYY-MM-DD` that is a real calendar date, with no time or offset; anything else fails the build.                                                  |
+| `categories`  | Optional list of text values that are not blank; quote one YAML would read as something other than text (a number, a boolean or a date), such as `'2026'`. |
+| `description` | Optional; when present, text that is not blank.                                                                                                            |
+| `updated`     | Optional, with the same rule as `date`. No page shows it.                                                                                                  |
 
 ### The twin's frontmatter
 
