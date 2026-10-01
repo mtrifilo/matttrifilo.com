@@ -110,7 +110,7 @@ function submit(): void {
 }
 
 /** The announced copy of a starter pill; the decorative copies are hidden. */
-function pill(question = STARTER_QUESTIONS[0]): HTMLElement {
+function pill(question: string = STARTER_QUESTIONS[0]): HTMLElement {
   return screen.getByRole('button', { name: question })
 }
 
