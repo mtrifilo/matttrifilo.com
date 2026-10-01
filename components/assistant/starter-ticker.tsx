@@ -15,6 +15,7 @@ import {
 import { Suggestion } from '@/components/ai-elements/suggestion'
 import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
+import type { StarterSource } from './analytics'
 import {
   seeAllQuestionsLabel,
   SHOW_FEWER_LABEL,
@@ -128,7 +129,10 @@ export interface StarterTickerProps {
    * stays whole. Required, because only the surface knows its own outline.
    */
   listHeadingLevel: StarterListHeadingLevel
-  onPick: (question: string) => void
+  /** A question picked, and whether from the rows or the list. */
+  onPick: (question: string, source: StarterSource) => void
+  /** The "See all questions" list was opened. */
+  onListOpen?: () => void
   /**
    * Which pill each row opens on, as an index into the row. Each surface
    * passes its own, from ticker-geometry.ts, so where a surface opens is
@@ -148,6 +152,7 @@ const TICKER_LABEL = 'Starter questions'
 export function StarterTicker({
   listHeadingLevel,
   onPick,
+  onListOpen,
   startAt = 0,
   className,
 }: StarterTickerProps) {
@@ -168,7 +173,17 @@ export function StarterTicker({
     // animation to ask where it was and no scroll position to keep.
     if (!listOpen) unparkRef.current = sharedScroll.park()
     setListOpen(!listOpen)
-  }, [listOpen, sharedScroll])
+    if (!listOpen) onListOpen?.()
+  }, [listOpen, onListOpen, sharedScroll])
+
+  const pickFromRow = useCallback(
+    (question: string) => onPick(question, 'pill'),
+    [onPick]
+  )
+  const pickFromList = useCallback(
+    (question: string) => onPick(question, 'list'),
+    [onPick]
+  )
 
   // Before the paint that shows the rows again, so they never appear for a
   // frame at scroll zero or at the start of their loop.
@@ -227,7 +242,7 @@ export function StarterTicker({
           {ROWS.map((questions, index) => (
             <TickerRow
               key={index}
-              onPick={onPick}
+              onPick={pickFromRow}
               questions={questions}
               sharedScroll={sharedScroll}
               startAt={startAt}
@@ -237,7 +252,7 @@ export function StarterTicker({
         {listOpen && (
           <StarterQuestionList
             headingLevel={listHeadingLevel}
-            onPick={onPick}
+            onPick={pickFromList}
           />
         )}
       </div>

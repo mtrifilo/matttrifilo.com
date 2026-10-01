@@ -1,6 +1,7 @@
 'use client'
 
 import type { Ref } from 'react'
+import type { StarterSource } from './analytics'
 import { ASSISTANT_INTRO, ASSISTANT_NAME } from './copy'
 import { StarterTicker } from './starter-ticker'
 import { ASK_START_AT } from './ticker-geometry'
@@ -23,10 +24,12 @@ import { ASK_START_AT } from './ticker-geometry'
  */
 export function AssistantEmptyState({
   headingRef,
+  onListOpen,
   onPick,
 }: {
   headingRef?: Ref<HTMLHeadingElement>
-  onPick: (question: string) => void
+  onListOpen?: () => void
+  onPick: (question: string, source: StarterSource) => void
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -45,6 +48,7 @@ export function AssistantEmptyState({
       <StarterTicker
         // The page's h1 above names the assistant.
         listHeadingLevel={2}
+        onListOpen={onListOpen}
         onPick={onPick}
         startAt={ASK_START_AT}
       />

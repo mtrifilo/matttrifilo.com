@@ -20,6 +20,7 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import {
   announcementFor,
   discardsQuestion,
+  isDecline,
   joinTextParts,
   noticeFor,
   saysNothingYet,
@@ -33,6 +34,14 @@ import { STOPPED_BEFORE_FIRST_STEP } from '@/lib/chat/progress'
 import { createChatFetch } from '@/lib/chat/transport'
 import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
+import {
+  trackAsked,
+  trackDeclined,
+  trackOpened,
+  trackRateLimited,
+  type AssistantSurface,
+  type QuestionSource,
+} from './analytics'
 import { AssistantAnswer } from './assistant-answer'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
@@ -117,6 +126,11 @@ export function AssistantChat() {
   // answered and then failed on a regenerate.
   const askedRef = useRef<string | null>(null)
 
+  // Where the question behind the run in flight was asked, which is the
+  // surface a decline or the rate limit is counted against (MTC-35): the
+  // homepage for the question it handed over, /ask for everything else.
+  const askedOnRef = useRef<AssistantSurface>('ask')
+
   // True while a question handed over from the homepage is waiting to be
   // asked. It is read during render, so on the client-side navigation the
   // homepage makes, the first frame is already a conversation: without it
@@ -153,10 +167,11 @@ export function AssistantChat() {
     // the time this runs: the SDK calls it well after the hook returns.
     onError: failure => {
       setSending(false)
+      const view = toChatErrorView(failure)
+      if (view?.code === 'rate_limited') trackRateLimited(askedOnRef.current)
       const question = askedRef.current
       askedRef.current = null
       if (question === null) return
-      const view = toChatErrorView(failure)
       if (!view || !discardsQuestion(view.code)) return
       setMessages(current =>
         current.at(-1)?.role === 'user' ? current.slice(0, -1) : current
@@ -165,6 +180,15 @@ export function AssistantChat() {
       setInput(current =>
         current.length > 0 ? `${question}\n\n${current}` : question
       )
+    },
+    // Once per run, stopped or failed ones included, with the message as the
+    // visitor was left with it.
+    onFinish: ({ message }) => {
+      if (
+        message.role === 'assistant' &&
+        isDecline(joinTextParts(message.parts))
+      )
+        trackDeclined(askedOnRef.current)
     },
   })
 
@@ -190,6 +214,7 @@ export function AssistantChat() {
       setStopped(false)
       setSending(true)
       askedRef.current = question
+      askedOnRef.current = 'ask'
       void sendMessage({ text: question })
     },
     [clearError, sendMessage]
@@ -201,6 +226,7 @@ export function AssistantChat() {
     (question: string) => {
       ask(question)
       textareaRef.current?.focus()
+      trackAsked('ask', 'typed')
     },
     [ask]
   )
@@ -221,12 +247,17 @@ export function AssistantChat() {
   const { pressHandlers, activatedByTouch } = useActivationPress()
   const focusStatusOnceRunning = useRef(false)
   const askPicked = useCallback(
-    (question: string) => {
+    (question: string, source: Exclude<QuestionSource, 'typed'>) => {
       ask(question)
       if (activatedByTouch()) focusStatusOnceRunning.current = true
       else textareaRef.current?.focus()
+      trackAsked('ask', source)
     },
     [ask, activatedByTouch]
+  )
+  const askFollowUp = useCallback(
+    (question: string) => askPicked(question, 'follow-up'),
+    [askPicked]
   )
   useLayoutEffect(() => {
     if (!focusStatusOnceRunning.current || status === 'ready') return
@@ -270,6 +301,7 @@ export function AssistantChat() {
   // finished answer), so its focus moves by the rule a pick follows.
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
+    askedOnRef.current = 'ask'
     setStopped(false)
     setSending(true)
     void regenerate()
@@ -303,6 +335,7 @@ export function AssistantChat() {
     const pending = takePendingQuestion()
     if (pending) {
       askedRef.current = pending.question
+      askedOnRef.current = 'home'
       void sendMessage({ text: pending.question })
     }
     if (pending?.askedBy === 'touch-pick') focusStatusOnceRunning.current = true
@@ -447,7 +480,7 @@ export function AssistantChat() {
                           stopped,
                           view,
                         })
-                          ? askPicked
+                          ? askFollowUp
                           : undefined
                       }
                       pending={isLast && busy}
@@ -476,7 +509,11 @@ export function AssistantChat() {
           <ConversationScrollButton afterScroll={focusAfterJump} />
         </Conversation>
       ) : (
-        <AssistantEmptyState headingRef={headingRef} onPick={askPicked} />
+        <AssistantEmptyState
+          headingRef={headingRef}
+          onListOpen={openedHere}
+          onPick={askPicked}
+        />
       )}
 
       <div className="space-y-2">
@@ -487,6 +524,7 @@ export function AssistantChat() {
           />
         )}
         <AssistantComposer
+          onEngage={openedHere}
           onStop={stopRun}
           onSubmit={askTyped}
           onValueChange={setInput}
@@ -500,6 +538,10 @@ export function AssistantChat() {
       {!docked && <div aria-hidden="true" className="flex-1" />}
     </div>
   )
+}
+
+function openedHere(): void {
+  trackOpened('ask')
 }
 
 // The pending question lives in sessionStorage, which announces nothing to

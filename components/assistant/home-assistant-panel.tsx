@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { trackAsked, trackOpened, type StarterSource } from './analytics'
 import { AssistantComposer } from './assistant-composer'
 import { AssistantDisclosure } from './assistant-disclosure'
 import { AssistantHeader } from './assistant-header'
@@ -10,6 +11,10 @@ import { handOffQuestion, type PendingQuestion } from './pending-question'
 import { useActivationPress } from './pointer'
 import { StarterTicker } from './starter-ticker'
 import { HOME_START_AT } from './ticker-geometry'
+
+function openedHere(): void {
+  trackOpened('home')
+}
 
 /**
  * The assistant's doorway on the homepage (MTC-33).
@@ -56,16 +61,24 @@ export function RoutedHomeAssistantPanel({ router }: { router: PanelRouter }) {
   // arrival after a touch, and puts the caret in the composer after any
   // other pick.
   const { pressHandlers, activatedByTouch } = useActivationPress()
+
+  // A question asked here is counted here, as the homepage's (MTC-35); /ask
+  // does not count it again when it sends it.
   const pick = useCallback(
-    (question: string) =>
+    (question: string, source: StarterSource) => {
       start({
         question,
         askedBy: activatedByTouch() ? 'touch-pick' : 'other-pick',
-      }),
+      })
+      trackAsked('home', source)
+    },
     [activatedByTouch, start]
   )
   const submit = useCallback(
-    (question: string) => start({ question, askedBy: 'typing' }),
+    (question: string) => {
+      start({ question, askedBy: 'typing' })
+      trackAsked('home', 'typed')
+    },
     [start]
   )
 
@@ -83,10 +96,12 @@ export function RoutedHomeAssistantPanel({ router }: { router: PanelRouter }) {
       <StarterTicker
         // The panel's h2 above names the assistant.
         listHeadingLevel={3}
+        onListOpen={openedHere}
         onPick={pick}
         startAt={HOME_START_AT}
       />
       <AssistantComposer
+        onEngage={openedHere}
         onSubmit={submit}
         onValueChange={setInput}
         value={input}
