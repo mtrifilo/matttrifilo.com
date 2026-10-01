@@ -474,8 +474,9 @@ describe('a row handed over to the visitor by touch or wheel', () => {
    * the same pitch, both copies end to end, and the freeze's lead pushing
    * every pill right while the track is frozen. Happy DOM lays nothing out,
    * so these offsets are what give "the pill at the left edge" a meaning.
-   * Each row's copy is as wide as its own pills, so the second row, one
-   * question shorter, is the shorter strip, as it is in a browser.
+   * Each row's copy is as wide as its own pills, so when the pool is odd
+   * the second row, one question shorter, is the shorter strip, as it is
+   * in a browser.
    *
    * The returned `copyWidth` is the first row's.
    */
@@ -582,12 +583,19 @@ describe('a row handed over to the visitor by touch or wheel', () => {
 
   /**
    * Whether two positions of a row show the same pixels: equal, or a whole
-   * copy apart, which is the same pills in the other copy.
+   * copy apart, which is the same pills in the other copy. Within half a
+   * pixel by default; a row whose scrollLeft is kept to whole pixels and is
+   * written twice on the way there can be up to a pixel out.
    */
-  function samePixels(track: HTMLElement, a: number, b: number): boolean {
+  function samePixels(
+    track: HTMLElement,
+    a: number,
+    b: number,
+    tolerance = 0.5
+  ): boolean {
     const copy = copyWidthOf(track)
     const apart = Math.abs(a - b)
-    return apart < 0.5 || Math.abs(apart - copy) < 0.5
+    return apart < tolerance || Math.abs(apart - copy) < tolerance
   }
 
   /** The fade width the row reads off the stylesheet. */
@@ -1518,11 +1526,14 @@ describe('a row handed over to the visitor by touch or wheel', () => {
       expect(isHandedOver(second.viewport)).toBe(true)
       // Joining trims the first row again; it does not move it.
       expect(positionOf(first)).toBeCloseTo(firstBefore)
+      // Its scrollLeft is rounded twice on the way (its freeze, then the
+      // shared scroll it joins), so a pixel rather than half of one.
       expect(
         samePixels(
           second.track,
           positionOf(second),
-          frozenAt(second.track, 0.6)
+          frozenAt(second.track, 0.6),
+          1
         )
       ).toBe(true)
       const joinedAt = positionOf(second)
