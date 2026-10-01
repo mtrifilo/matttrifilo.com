@@ -73,6 +73,23 @@ Vercel function logs for `/api/chat`, one line per request, all numeric:
 - `[chat] { stage: 'github', repository, status }`: a GitHub call that did not answer. A run of them on one repository means the rate limit or an outage; see the activity section below.
 - Vercel Firewall overview: hits on the rate-limit rule and BotID's blocked count.
 
+### Analytics events (MTC-35)
+
+Four Vercel Analytics custom events count how the assistant is used (Matt, 2026-09-30 and 2026-10-01). They are sent from the browser by `components/assistant/analytics.ts`, and only where `<Analytics />` renders, which is wherever `VERCEL` is set (`app/layout.tsx`); locally and in CI they do nothing.
+
+| Event              | Sent when                                                                                                                                                                              | Properties                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `Assistant opened` | The first interaction with a surface in a page load: a press on or typing in the composer, opening the "See all questions" list, or asking. Not focus: `/ask` focuses its own composer | `surface`                                         |
+| `Question asked`   | Every question submitted, on the surface it was submitted from. A question asked on the homepage counts there once; `/ask` sending it after the hand-off does not count it again       | `surface`, `source`                               |
+| `Answer declined`  | A run ends with the decline sentence (`DECLINE_SENTENCE` in `lib/chat/answer.ts`) in its answer                                                                                        | `surface` of the question that drew it            |
+| `Rate limit hit`   | A request is refused at the rate limit, which is when the rate-limit notice shows                                                                                                      | `surface` of the question or regenerate behind it |
+
+`surface` is `home` or `ask`; `source` is `pill` (a starter pill in the rows), `typed`, `follow-up` (a pill under an answer) or `list` (the "See all questions" list). A regenerate is not a question asked, and counts against `ask`.
+
+Nothing a visitor writes leaves the page: every property is built from those fixed values, never from the question, the answer, or anything typed, and `components/assistant/analytics.test.tsx` compares each payload, as the script receives it, with the exact JSON expected. The script itself adds what it adds to every page view (the page and the referrer); the question never travels in a URL (`pending-question.ts`).
+
+Where to read them: the project's Analytics page, the Events panel; select an event to break it down by its properties. The environment menu at the top right of that page chooses Production, Preview or All Environments, and Production is the default, so preview traffic stays out of the default view. Per Vercel's pricing page (read 2026-10-01), custom events are a Pro and Enterprise feature, not a Hobby one, and Pro carries two properties per event, which `Question asked` uses. Useful ratios: declined over asked (how often a visitor asks what the corpus cannot answer), rate limited over asked, asked by `source`, and asked over opened per surface.
+
 ### Vertex first-byte latency, measured (MTC-47)
 
 `vertexFirstByteMs` on a `[chat]` line is the slowest wait before Vertex sent a byte on any model call of that request. It is the only number that can move the two deadlines in `lib/ai/bounded-fetch.ts`; the value of the last-attempt ceiling is fixed by the budget arithmetic in that file, so a measurement can show it is too small but cannot be what sets it.
