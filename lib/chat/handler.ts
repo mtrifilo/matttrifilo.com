@@ -32,9 +32,13 @@ import {
   type ChatProgressPhase,
   type ChatProgressStep,
 } from './progress'
-import { findSourcesTrailer, parseFollowUps, stripTrailers } from './answer'
 import {
-  DECLINE_SENTENCE,
+  findSourcesTrailer,
+  isDecline,
+  parseFollowUps,
+  stripTrailers,
+} from './answer'
+import {
   READ_DOCUMENT_TOOL_NAME,
   RECENT_ACTIVITY_TOOL_NAME,
   buildMessages,
@@ -708,7 +712,7 @@ class StepText {
  * narration in the bubble.
  */
 function readsAsFinishedAnswer(text: string): boolean {
-  if (text.includes(DECLINE_SENTENCE)) return true
+  if (isDecline(text)) return true
   if (!hasProse(text)) return false
   return (
     findSourcesTrailer(text) !== undefined || parseFollowUps(text).length > 0
@@ -767,7 +771,7 @@ const FORCED_ANSWER_TEXT_ID = 'forced-step-answer'
  * said there was nothing to say.
  */
 function followUpsFrom(tail: string): string[] {
-  if (tail.includes(DECLINE_SENTENCE)) return []
+  if (isDecline(tail)) return []
   return parseFollowUps(tail)
 }
 

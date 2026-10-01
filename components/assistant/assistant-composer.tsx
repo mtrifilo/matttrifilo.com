@@ -41,8 +41,10 @@ export interface AssistantComposerProps {
   /** Present only where an answer can be interrupted. */
   onStop?: () => void
   /**
-   * The visitor pressed on or typed in the box. Not called on focus: a page
-   * that focuses the box itself has not been used by anyone yet.
+   * The visitor clicked or tapped the box, or typed in it. Not called on
+   * focus, since a page that focuses the box itself has not been used by
+   * anyone yet, nor on a press, since a touch that starts a page scroll on
+   * the box presses it without meaning to.
    */
   onEngage?: () => void
   /** Swaps the send button for a stop button. */
@@ -140,7 +142,7 @@ export function AssistantComposer({
           onCompositionEnd={() => setComposing(false)}
           onCompositionStart={() => setComposing(true)}
           onKeyDown={handleKeyDown}
-          onPointerDown={() => onEngage?.()}
+          onClick={() => onEngage?.()}
           placeholder={ASSISTANT_PLACEHOLDER}
           ref={ref}
           rows={1}

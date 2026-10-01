@@ -16,8 +16,11 @@ import { useEvalsPublished } from './evals-published'
  * something a visitor can open, so the disclosure does not send them to it.
  *
  * "Conversations aren't saved" is a statement about the whole system, not a
- * nicety: nothing about a conversation is written down on the server, and the
- * transcript lives only until the tab is closed.
+ * nicety: no word of a conversation is written down anywhere, and the
+ * transcript lives only until the tab is closed. What does leave the page is
+ * counts without content: Vercel Analytics events for an open, a question, a
+ * decline and the rate limit, carrying only the surface and how a question
+ * was asked (./analytics.ts, MTC-35).
  *
  * The link to the published eval results is offered only when a run has
  * been published, because a link to a page that can only say "no published

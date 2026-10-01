@@ -128,7 +128,8 @@ export function AssistantChat() {
 
   // Where the question behind the run in flight was asked, which is the
   // surface a decline or the rate limit is counted against (MTC-35): the
-  // homepage for the question it handed over, /ask for everything else.
+  // homepage for the question it handed over, /ask for everything else. A
+  // regenerate asks the last question again, so it leaves this as it is.
   const askedOnRef = useRef<AssistantSurface>('ask')
 
   // True while a question handed over from the homepage is waiting to be
@@ -301,7 +302,6 @@ export function AssistantChat() {
   // finished answer), so its focus moves by the rule a pick follows.
   const handleRegenerate = useCallback(() => {
     askedRef.current = null
-    askedOnRef.current = 'ask'
     setStopped(false)
     setSending(true)
     void regenerate()

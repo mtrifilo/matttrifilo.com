@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DECLINE_SENTENCE } from '@/lib/chat/answer'
-import { answered } from '@/test/chat-stream'
+import { answered, openStream, type OpenStream } from '@/test/chat-stream'
 import { forgetOpenedSurfaces } from './analytics'
 import { AssistantChat } from './assistant-chat'
 import {
@@ -40,9 +40,16 @@ const realConsoleError = console.error
 let consoleErrors: unknown[][] = []
 
 /** The route's reply to the next question. */
-let reply: 'answer' | 'decline' | 'rate limit' = 'answer'
+let reply: 'answer' | 'decline' | 'rate limit' | 'held open' = 'answer'
+
+/** The stream of the last request answered 'held open', sent by the test. */
+let held: OpenStream | undefined
 
 function routeFetch(): Promise<Response> {
+  if (reply === 'held open') {
+    held = openStream()
+    return Promise.resolve(held.response)
+  }
   if (reply === 'rate limit') {
     // The WAF's own body; the transport turns any 429 into the notice.
     return Promise.resolve(new Response('Too Many Requests', { status: 429 }))
@@ -66,6 +73,7 @@ beforeEach(() => {
   sent = []
   consoleErrors = []
   reply = 'answer'
+  held = undefined
   forgetOpenedSurfaces()
   sessionStorage.clear()
   globalThis.fetch = routeFetch as unknown as typeof fetch
@@ -169,10 +177,20 @@ describe('on the homepage', () => {
     expect(sent).toEqual([opened('home')])
   })
 
-  test('a press on the composer opens the assistant', () => {
+  test('a click or tap on the composer opens the assistant', () => {
     renderPanel()
     fireEvent.pointerDown(composer(), { pointerType: 'touch' })
+    fireEvent.click(composer())
     expect(sent).toEqual([opened('home')])
+  })
+
+  test('a touch that starts a page scroll on the composer is not an open', () => {
+    // The browser fires pointerdown, then pointercancel once it takes the
+    // gesture as a pan, and no click.
+    renderPanel()
+    fireEvent.pointerDown(composer(), { pointerType: 'touch' })
+    fireEvent.pointerCancel(composer(), { pointerType: 'touch' })
+    expect(sent).toEqual([])
   })
 
   test('a typed question is asked from the homepage, typed', () => {
@@ -301,6 +319,102 @@ describe('on /ask', () => {
     ])
   })
 
+  test('coming back to /ask in the same page load is not another open', async () => {
+    const { unmount } = render(<AssistantChat />)
+    type('W')
+    unmount()
+    render(<AssistantChat />)
+    type('Wh')
+    expect(sent).toEqual([opened('ask')])
+  })
+
+  test('a regenerate is not a question asked; its decline counts again, against the surface of its question', async () => {
+    reply = 'decline'
+    render(<AssistantChat />)
+    type(TYPED)
+    submit()
+    await settled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await settled()
+    expect(sent).toEqual([
+      opened('ask'),
+      asked('ask', 'typed'),
+      declined('ask'),
+      declined('ask'),
+    ])
+  })
+
+  test('a regenerate refused at the rate limit is counted', async () => {
+    render(<AssistantChat />)
+    type(TYPED)
+    submit()
+    await settled()
+    reply = 'rate limit'
+    fireEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await screen.findByRole('alert')
+    expect(sent).toEqual([
+      opened('ask'),
+      asked('ask', 'typed'),
+      rateLimited('ask'),
+    ])
+  })
+
+  describe('a decline that does not finish cleanly', () => {
+    async function declineArriving(text: string): Promise<OpenStream> {
+      reply = 'held open'
+      render(<AssistantChat />)
+      type(TYPED)
+      submit()
+      await waitFor(() => expect(held).toBeDefined())
+      const stream = held as OpenStream
+      stream.push({ type: 'start' })
+      stream.push({ type: 'text-start', id: 't' })
+      stream.push({ type: 'text-delta', id: 't', delta: text })
+      await screen.findByText(text.slice(0, 30), { exact: false })
+      return stream
+    }
+
+    function stop(): void {
+      fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+    }
+
+    test('stopped part way through the sentence is not a decline', async () => {
+      await declineArriving(DECLINE_SENTENCE.slice(0, 50))
+      stop()
+      await settled()
+      expect(sent).toEqual([opened('ask'), asked('ask', 'typed')])
+    })
+
+    test('stopped after the whole sentence is one decline', async () => {
+      await declineArriving(DECLINE_SENTENCE)
+      stop()
+      await settled()
+      expect(sent).toEqual([
+        opened('ask'),
+        asked('ask', 'typed'),
+        declined('ask'),
+      ])
+    })
+
+    test('failed after the whole sentence is one decline', async () => {
+      const stream = await declineArriving(DECLINE_SENTENCE)
+      stream.push({
+        type: 'error',
+        errorText: JSON.stringify({
+          error: { code: 'interrupted', message: 'The answer was cut off.' },
+        }),
+      })
+      stream.close()
+      await screen.findByRole('alert')
+      expect(sent).toEqual([
+        opened('ask'),
+        asked('ask', 'typed'),
+        declined('ask'),
+      ])
+      expectNoVisitorText('cut off')
+    })
+  })
+
   describe('a question handed over from the homepage', () => {
     test('is not asked again, and its decline is the homepage’s', async () => {
       reply = 'decline'
@@ -309,6 +423,16 @@ describe('on /ask', () => {
       await settled()
       expect(sent).toEqual([declined('home')])
       expectNoVisitorText(TYPED)
+    })
+
+    test('a regenerate of its declined answer is the homepage’s too', async () => {
+      reply = 'decline'
+      handOffQuestion({ question: TYPED, askedBy: 'typing' })
+      render(<AssistantChat />)
+      await settled()
+      fireEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+      await settled()
+      expect(sent).toEqual([declined('home'), declined('home')])
     })
 
     test('hitting the rate limit is the homepage’s', async () => {

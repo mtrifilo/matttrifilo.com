@@ -24,7 +24,7 @@ import { track } from '@vercel/analytics'
  * Where the visitor is using the assistant: the homepage panel or /ask. For
  * a declined answer or the rate limit, it is where the question that drew it
  * was asked, so a question asked on the homepage and answered on /ask counts
- * as the homepage's.
+ * as the homepage's, and so does a regenerate of its answer.
  */
 export type AssistantSurface = 'home' | 'ask'
 
@@ -61,10 +61,10 @@ type EventProperties =
 const openedSurfaces = new Set<AssistantSurface>()
 
 /**
- * The visitor's first interaction with a surface in this page load: a press
- * on or typing in the composer, opening the "See all questions" list, or
- * asking. Focus alone is not one, because /ask focuses its composer itself
- * on a desktop, which would make every visit to /ask count as opened.
+ * The visitor's first interaction with a surface in this page load: a click
+ * or tap on the composer or typing in it, opening the "See all questions"
+ * list, or asking. Focus alone is not one, because /ask focuses its composer
+ * itself on a desktop, which would make every visit to /ask count as opened.
  */
 export function trackOpened(surface: AssistantSurface): void {
   if (openedSurfaces.has(surface)) return
@@ -73,10 +73,12 @@ export function trackOpened(surface: AssistantSurface): void {
 }
 
 /**
- * A question submitted, on the surface it was submitted from. A question
- * asked on the homepage counts there, once; /ask sending it after the
- * hand-off does not count it again. Asking is an interaction, so it opens
- * the surface first if nothing else has.
+ * A question submitted, on the surface it was submitted from, counted at the
+ * submission. A question asked on the homepage counts there, once; /ask
+ * sending it after the hand-off does not count it again. A regenerate is not
+ * a question asked. A question the route refused and handed back to the
+ * composer counts again when it is sent again, as typed. Asking is an
+ * interaction, so it opens the surface first if nothing else has.
  */
 export function trackAsked(
   surface: AssistantSurface,
@@ -86,12 +88,19 @@ export function trackAsked(
   send(ASSISTANT_EVENTS.asked, { surface, source })
 }
 
-/** An answer that is the decline sentence (`isDecline`). */
+/**
+ * A run whose answer holds the whole decline sentence (`isDecline`), whether
+ * it finished, was stopped, or failed after the sentence was written. A
+ * regenerate that declines again counts again.
+ */
 export function trackDeclined(surface: AssistantSurface): void {
   send(ASSISTANT_EVENTS.declined, { surface })
 }
 
-/** A request refused at the rate limit, which shows the rate-limit notice. */
+/**
+ * A request refused at the rate limit, which shows the rate-limit notice: a
+ * question or a regenerate, each refusal counted.
+ */
 export function trackRateLimited(surface: AssistantSurface): void {
   send(ASSISTANT_EVENTS.rateLimited, { surface })
 }
