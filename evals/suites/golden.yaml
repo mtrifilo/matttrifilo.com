@@ -4703,12 +4703,14 @@
             read budget, and states as fact only what those documents say; a
             protection layer such as the kill switch, Vercel's BotID, or the
             per-request limits; eval suites (golden, refusals, injection,
-            groundedness) whose runs are published at /ask/evals. It does not
-            say the edge rate-limit rule is live, which the document gives as
-            specified for launch, and it names no vendor, model or service the
-            document does not. It is written about Matt in the third person,
-            and it must not present an inferred characterization as a
-            documented one.
+            groundedness) whose runs are published at /ask/evals. The
+            document itself names Gemini 3.8 Flash, Google Vertex AI, the AI
+            SDK, Vercel, Vercel's BotID and GitHub, so naming any of them is
+            correct. It fails if it presents the edge firewall's rate-limit
+            rule as in place, which the document says is specified for launch
+            and not yet in place; leaving that rule out is fine. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterization as a documented one.
         - type: llm-rubric
           value: *a1
         - type: llm-rubric
