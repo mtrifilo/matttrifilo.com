@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
-import { GeistMono } from 'geist/font/mono'
+import { GeistMono } from '@/app/fonts'
 import './globals.css'
 import { ThemeProvider, Footer } from '@/components/layout'
 import { HideOnRoutes } from '@/components/layout/hide-on-routes'
