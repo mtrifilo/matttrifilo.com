@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Download, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { JOB_TITLE } from '@/lib/seo/identity'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 import { MDXContent } from '@/components/blog/mdx-content'
 import { getResumeMarkdown } from '@/lib/resume'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
@@ -10,7 +11,7 @@ import { isChatDisabled } from '@/lib/chat/kill-switch'
 export const metadata: Metadata = {
   title: 'Résumé',
   description: `Résumé of Matt Trifilo, ${JOB_TITLE}. Download as PDF.`,
-  alternates: { canonical: '/resume' },
+  alternates: { canonical: '/resume', types: FEED_ALTERNATE_TYPES },
 }
 
 /**

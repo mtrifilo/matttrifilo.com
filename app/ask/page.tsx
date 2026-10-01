@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { hasPublishedEvalRun } from '@/lib/evals/results'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 import { AssistantChat } from '@/components/assistant/assistant-chat'
 import { EvalsPublishedProvider } from '@/components/assistant/evals-published'
 
@@ -15,7 +16,7 @@ export function generateMetadata(): Metadata {
     title: 'Ask',
     description:
       "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his own documents, and says which ones it read.",
-    alternates: { canonical: '/ask' },
+    alternates: { canonical: '/ask', types: FEED_ALTERNATE_TYPES },
   }
 }
 

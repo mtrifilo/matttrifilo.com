@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { JsonLd } from '@/components/seo/JsonLd'
 import { generateBlogPostingSchema } from '@/lib/seo/jsonld'
 import { formatDate } from '@/lib/format-date'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>
@@ -30,6 +31,7 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
     description: post.frontmatter.description || post.excerpt,
     alternates: {
       canonical: `https://matttrifilo.com/blog/${slug}`,
+      types: FEED_ALTERNATE_TYPES,
     },
     openGraph: {
       title: cleanTitle,
