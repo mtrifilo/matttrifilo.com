@@ -32,9 +32,9 @@ has repeated for seven years.
 not optional features; they are how systems stay up when the world goes
 sideways. Built for a peak sending season in 2019, validated during a
 cloud-provider outage in 2024, and now baked into the
-independent-deployment gates. The 2019 fault-tolerance library itself has
-been superseded in more recent years by the organization's shared
-Micronaut libraries.
+independent-deployment gates. By Matt's account, the 2019 fault-tolerance
+library itself has been superseded in more recent years by the
+organization's shared Micronaut libraries.
 
 **3. Rapid experimentation with throw-away criteria defined up front.**
 
