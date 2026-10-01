@@ -73,12 +73,13 @@ writes: a conversation lives only in the visitor's browser tab.
   characters a question, 80,000 input tokens, three documents and
   20,000 tokens read, three GitHub checks, 8,192 output tokens per model
   call, and four model calls per answer.
-- A rate-limit rule at Vercel's edge firewall, specified in the runbook
-  for launch: 20 chat requests a minute per client, keyed on the IP
-  address and the TLS fingerprint. It is the only layer that refuses
-  traffic before it reaches the server; the others run inside it, which
-  is why the runbook treats BotID as a limit on model spend rather than
-  on traffic.
+
+These three run inside the server, so a request still reaches it before
+it is refused; the runbook says plainly that BotID stops model spend,
+not traffic. The layer that would refuse traffic at the edge is not yet
+in place as of October 2026: the runbook specifies it for launch as one
+rate-limit rule on Vercel's firewall, 20 chat requests a minute per
+client, keyed on the IP address and the TLS fingerprint.
 
 ## What it declines, and why
 
