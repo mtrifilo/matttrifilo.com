@@ -5,6 +5,7 @@ import path from 'path'
 import {
   getAllBlogPosts,
   getBlogPost,
+  getBlogSlugs,
   parseFrontmatterDate,
   rawFrontmatterBlock,
 } from './blog'
@@ -112,14 +113,13 @@ describe('the loader on fixture posts', () => {
     expect(posts.map(post => post.slug)).toEqual(['2026-03-01-a-valid-post'])
   })
 
-  test('the frontmatter carries only the typed fields, dates as written', () => {
+  test('every declared field loads, dates as written', () => {
     const post = getBlogPost(
       '2026-03-01-a-valid-post',
       path.join(FIXTURES, 'valid')
     )
     // Unquoted dates would parse as Date objects; both come from the raw
-    // lines as the strings the author wrote. `notes` is not a field the
-    // site reads, so it does not reach the page.
+    // lines as the strings the author wrote.
     expect(post?.frontmatter).toEqual({
       title: 'A valid post, with "quotes"',
       date: '2026-03-01',
@@ -130,8 +130,13 @@ describe('the loader on fixture posts', () => {
   })
 
   test('the posts the site publishes all pass the guard', () => {
-    // CI's `next build` is the real proof; this fails `bun test` first.
-    expect(getAllBlogPosts().length).toBeGreaterThan(0)
+    // CI's `next build` is the real proof; this fails `bun test` first,
+    // with the file name, for any post under content/blog.
+    const slugs = getBlogSlugs()
+    expect(slugs.length).toBeGreaterThan(0)
+    for (const slug of slugs) {
+      expect(getBlogPost(slug)?.slug).toBe(slug)
+    }
   })
 })
 
@@ -219,5 +224,21 @@ describe('the frontmatter guard', () => {
     expect(load('list-frontmatter', '- date: 2026-03-01')).toThrow(
       /list-frontmatter\.md: frontmatter/
     )
+  })
+
+  test('a key the post does not declare is refused, naming the file and the key', () => {
+    // A typo would otherwise drop the field it meant, and `draft` would
+    // publish a post its author meant to hold back.
+    expect(
+      load('typo-key', "title: t\ndate: 2026-03-01\ndescripton: 'meant'")
+    ).toThrow(
+      'typo-key.md: unknown frontmatter key "descripton". A post declares title, date, description, categories, updated and nothing else.'
+    )
+    expect(
+      load('draft-key', 'title: t\ndate: 2026-03-01\ndraft: true')
+    ).toThrow(/draft-key\.md: unknown frontmatter key "draft"/)
+    expect(
+      load('category-key', 'title: t\ndate: 2026-03-01\ncategory: [a]')
+    ).toThrow(/category-key\.md: unknown frontmatter key "category"/)
   })
 })
