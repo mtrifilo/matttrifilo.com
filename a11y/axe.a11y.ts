@@ -57,7 +57,43 @@ async function open(page: Page, path: string): Promise<void> {
     .waitFor()
 }
 
+/**
+ * True once every animation and transition that has an end has reached it.
+ * The starter rows loop forever, and an animation driven by the scroll
+ * rather than the clock ends only when the visitor scrolls, so neither
+ * ever ends; both count as settled as they stand. An animation held paused
+ * counts too, since that frame is what the visitor sees.
+ *
+ * Runs in the page, so it closes over nothing.
+ */
+function isAtRest(): boolean {
+  return document.getAnimations().every(animation => {
+    const end = animation.effect?.getComputedTiming().endTime
+    const ends =
+      animation.timeline === document.timeline &&
+      typeof end === 'number' &&
+      Number.isFinite(end)
+    return !ends || (animation.playState !== 'running' && !animation.pending)
+  })
+}
+
+/**
+ * axe reads colors as they are drawn at the moment it runs. The post list
+ * fades in (`.animate-fade-in-up`, 300 ms from transparent), so a scan
+ * inside that window measures the muted date line part way to full opacity,
+ * under 4.5:1 on the light theme although it is 4.76:1 at rest. Every scan
+ * therefore waits for the page to come to rest first: what is measured is
+ * the page a visitor reads, with the default motion setting, once its
+ * entrance is over. Emulating reduced motion would also stop the fade, but
+ * it turns the starter rows into scrolled strips with other padding and
+ * drops their looped copy, so it would scan a page most visitors never see.
+ */
+async function waitForRest(page: Page): Promise<void> {
+  await page.waitForFunction(isAtRest, undefined, { polling: 'raf' })
+}
+
 async function expectNoViolations(page: Page, label: string): Promise<void> {
+  await waitForRest(page)
   const results = await new AxeBuilder({ page }).withTags(WCAG).analyze()
   await test.info().attach(`axe ${label}`, {
     body: JSON.stringify(results.violations, null, 2),
