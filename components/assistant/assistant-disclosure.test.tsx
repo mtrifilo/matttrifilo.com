@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AssistantDisclosure } from './assistant-disclosure'
-import { ASSISTANT_EVALS_TITLE, MATT_EMAIL } from './copy'
+import {
+  ASSISTANT_EVALS_TITLE,
+  ASSISTANT_HOW_BUILT_TEXT,
+  ASSISTANT_HOW_BUILT_URL,
+  MATT_EMAIL,
+} from './copy'
 import { EvalsPublishedProvider } from './evals-published'
 
 /**
@@ -35,6 +40,23 @@ describe('the disclosure', () => {
     )
     expect(html).toContain('/ask/evals')
     expect(html).toContain(ASSISTANT_EVALS_TITLE)
+  })
+
+  test('always offers how it was built, in a new tab, published run or not', () => {
+    for (const published of [false, true]) {
+      const html = renderToStaticMarkup(
+        <EvalsPublishedProvider published={published}>
+          <AssistantDisclosure />
+        </EvalsPublishedProvider>
+      )
+      const anchor = html.match(
+        new RegExp(`<a [^>]*href="${ASSISTANT_HOW_BUILT_URL}"[^>]*>([^<]*)</a>`)
+      )
+      expect(anchor, `published: ${published}`).not.toBeNull()
+      expect(anchor?.[1]).toBe(ASSISTANT_HOW_BUILT_TEXT)
+      expect(anchor?.[0]).toContain('target="_blank"')
+      expect(anchor?.[0]).toContain('rel="noopener noreferrer"')
+    }
   })
 
   test('withholds them when a surface says no run is published', () => {

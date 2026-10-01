@@ -40,6 +40,16 @@ export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
 
 /**
+ * The link beside ASSISTANT_EVALS_TITLE to the assistant's section of the
+ * public repository's README (Matt, MTC-108, 2026-10-01; the text is his).
+ * The anchor is GitHub's slug for the README heading "The Career
+ * Assistant", so renaming that heading breaks the link.
+ */
+export const ASSISTANT_HOW_BUILT_TEXT = 'How it was built'
+export const ASSISTANT_HOW_BUILT_URL =
+  'https://github.com/mtrifilo/matttrifilo.com#the-career-assistant'
+
+/**
  * The starter questions both surfaces offer (MTC-39).
  *
  * One pool, one order, shown by the ticker on the homepage panel and at

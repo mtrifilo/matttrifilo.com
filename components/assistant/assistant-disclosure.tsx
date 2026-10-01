@@ -3,7 +3,12 @@
 import Link from 'next/link'
 import { FOCUS_RING } from '@/lib/focus-ring'
 import { cn } from '@/lib/utils'
-import { ASSISTANT_EVALS_TITLE, MATT_MAILTO } from './copy'
+import {
+  ASSISTANT_EVALS_TITLE,
+  ASSISTANT_HOW_BUILT_TEXT,
+  ASSISTANT_HOW_BUILT_URL,
+  MATT_MAILTO,
+} from './copy'
 import { useEvalsPublished } from './evals-published'
 
 /**
@@ -24,6 +29,11 @@ import { useEvalsPublished } from './evals-published'
  * run yet" is worse than no link. Whether one has been is filesystem
  * knowledge, and this renders in the browser, so the server pages provide
  * it through ./evals-published.
+ *
+ * "How it was built" sits beside it and is always offered: it points at the
+ * public repository, which exists whether or not a run has been published.
+ * It opens in a new tab, as the site's other links to GitHub do, which here
+ * also keeps the conversation, since a transcript lives only in its tab.
  */
 const LINK_CLASS = cn(
   'underline underline-offset-2 hover:text-foreground',
@@ -49,18 +59,27 @@ export function AssistantDisclosure({ className }: { className?: string }) {
         .
       </p>
       <p>Conversations aren&rsquo;t saved.</p>
-      {evalsPublished && (
-        <p>
-          {/* On a line of its own, so not a link inside a sentence: it
-              takes the 44 px hit area the other small controls have. */}
+      {/* Links on a line of their own, not inside a sentence, so each
+          takes the 44 px hit area the other small controls have. When a
+          narrow column wraps them, the row gap keeps those areas apart. */}
+      <p className="flex flex-wrap gap-x-4 gap-y-7">
+        {evalsPublished && (
           <Link
             className={cn(LINK_CLASS, 'touch-target relative')}
             href="/ask/evals"
           >
             {ASSISTANT_EVALS_TITLE}
           </Link>
-        </p>
-      )}
+        )}
+        <a
+          className={cn(LINK_CLASS, 'touch-target relative')}
+          href={ASSISTANT_HOW_BUILT_URL}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {ASSISTANT_HOW_BUILT_TEXT}
+        </a>
+      </p>
     </div>
   )
 }
