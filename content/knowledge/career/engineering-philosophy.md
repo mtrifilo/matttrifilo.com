@@ -3,7 +3,7 @@ id: engineering-philosophy
 title: How Matt thinks about software, AI, and leading engineers
 summary: The patterns Matt runs deliberately, his beliefs about agentic engineering and complexity, and the leadership principles behind them.
 tags: [philosophy, leadership, agentic-engineering, complexity, voice]
-updated: 2026-09-15
+updated: 2026-10-01
 ---
 
 # How Matt thinks about software, AI, and leading engineers
@@ -32,7 +32,9 @@ has repeated for seven years.
 not optional features; they are how systems stay up when the world goes
 sideways. Built for a peak sending season in 2019, validated during a
 cloud-provider outage in 2024, and now baked into the
-independent-deployment gates.
+independent-deployment gates. The 2019 fault-tolerance library itself has
+been superseded in more recent years by the organization's shared
+Micronaut libraries.
 
 **3. Rapid experimentation with throw-away criteria defined up front.**
 

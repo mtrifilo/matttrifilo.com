@@ -3,15 +3,17 @@ id: fault-tolerance-library-2019
 title: The fault-tolerance library, 2019 to 2020
 summary: How Matt turned two hand-built circuit breakers into a shared resilience library with its own failure-injection test harness.
 tags: [resilience, resilience4j, circuit-breaker, java, platform, peak-traffic]
-updated: 2026-09-21
+updated: 2026-10-01
 ---
 
 # The fault-tolerance library, 2019 to 2020
 
-The origin point of the resilience pattern the email platform has repeated
-every peak season since, and the clearest early example of Matt noticing
-that the same design had been built twice and turning it into one shared
-tool.
+The origin point of the resilience pattern the email platform built for
+its 2019 peak season, and the clearest early example of Matt noticing that
+the same design had been built twice and turning it into one shared tool.
+In more recent years the library has been superseded by the organization's
+shared Micronaut libraries, with more modern tooling for its Micronaut
+stack.
 
 ## The problem
 
@@ -127,8 +129,9 @@ record.
   and 2020, which are not in evidence.
 - A senior engineer's review comments shaped the library's design directly.
   This was not a solo design.
-- Whether this library is still the company's standard resilience tool
-  today is an open question.
+- That the library has been superseded comes from Matt, not from the
+  engineering record, which does not show when that happened or what the
+  move involved.
 
 ## Why this matters
 
