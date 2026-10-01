@@ -106,6 +106,9 @@ export const STARTER_QUESTIONS = [
   "How does Matt run his team's delivery process, and how did it change with AI agents?",
   'How does Matt handle performance management and growth conversations?',
   'How does Matt communicate a change or a reorganization to a team?',
+  // Matt's wording (MTC-108). Last, so no other pill moves; it is listed
+  // under More until he places it in STARTER_LIST_THEMES.
+  'How did Matt build this assistant?',
 ] as const
 
 /**
