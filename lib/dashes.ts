@@ -94,7 +94,7 @@ export interface DashHit {
  * `&mdash;` and `&#8212;` are found the way the rendered page shows them.
  * Entities for anything else are left as written.
  */
-export function decodeDashEntities(text: string): string {
+function decodeDashEntities(text: string): string {
   return text.replace(
     DASH_ENTITY,
     (entity, name?: string, decimal?: string, hex?: string) => {

@@ -35,7 +35,7 @@ export type RepoFetchResult =
 const REVALIDATE_SECONDS = 60 * 60
 const FETCH_TIMEOUT_MS = 5000
 
-export const repoSlug = (r: Pick<CuratedRepo, 'owner' | 'name'>) =>
+const repoSlug = (r: Pick<CuratedRepo, 'owner' | 'name'>) =>
   `${r.owner}/${r.name}`
 
 /**
