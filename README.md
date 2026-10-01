@@ -39,26 +39,27 @@ After any change under `content/knowledge` or `lib/knowledge`, also run `bun run
 ## Write a blog post
 
 ```sh
-bun run scripts/new-blog-post.ts
+bun run new-post
 ```
 
-It asks for a title, optional comma-separated categories and an optional description, then writes two files with the same body:
+That runs `scripts/new-blog-post.ts`. It asks for a title, optional comma-separated categories and an optional description, then writes two files with the same body:
 
 - `content/blog/<date>-<slug>.md`, the post. The file name is the URL: `/blog/<date>-<slug>`.
 - `content/knowledge/blog/<date>-<slug>.md`, its knowledge twin, which the Career Assistant reads. `bun test` fails when a post has no twin or when the two bodies differ, so edit both.
 
-`<date>` is today's date in UTC (the script uses `toISOString`), so in the evening in US time zones it can already be tomorrow's.
+`<date>` is today's date in your machine's local time zone, so a post started in the evening in a US time zone carries that day's date, not tomorrow's.
 
 ### The post's frontmatter
 
-Read by `lib/blog.ts`; the type is `lib/types/blog.ts`.
+Read by `lib/blog.ts`, which accepts these keys and no others: any other key, such as a misspelled `descripton` or a `draft` flag, fails the build with the file name and the key. A YAML error or a field that breaks its rule below also fails the build with the file name. The type is `lib/types/blog.ts`.
 
 | Field         | Rule                                                                                                      |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| `title`       | Required by the script.                                                                                   |
+| `title`       | Required, non-empty text.                                                                                 |
 | `date`        | A plain `YYYY-MM-DD` that is a real calendar date, with no time or offset; anything else fails the build. |
-| `categories`  | Optional list.                                                                                            |
-| `description` | Optional.                                                                                                 |
+| `categories`  | Optional list of text values; quote one YAML would read as a number or a boolean, such as `'2026'`.       |
+| `description` | Optional; when present, text that is not blank.                                                           |
+| `updated`     | Optional, with the same rule as `date`. No page shows it.                                                 |
 
 ### The twin's frontmatter
 
