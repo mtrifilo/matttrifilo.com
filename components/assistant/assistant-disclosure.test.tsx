@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AssistantDisclosure } from './assistant-disclosure'
 import {
@@ -66,5 +67,30 @@ describe('the disclosure', () => {
       </EvalsPublishedProvider>
     )
     expect(html).not.toContain('/ask/evals')
+  })
+})
+
+describe('the How it was built link', () => {
+  test('lands on a heading the README still has', () => {
+    // GitHub's anchor for a heading: lower case, punctuation other than
+    // hyphens dropped, spaces as hyphens. The README is what the link is
+    // for, so a renamed section must fail here rather than on GitHub.
+    const anchor = new URL(ASSISTANT_HOW_BUILT_URL).hash.slice(1)
+    const readme = readFileSync(
+      new URL('../../README.md', import.meta.url),
+      'utf8'
+    )
+    const slugs = readme
+      .split('\n')
+      .filter(line => /^#{1,6} /.test(line))
+      .map(line =>
+        line
+          .replace(/^#+ /, '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N} -]/gu, '')
+          .replace(/ /g, '-')
+      )
+    expect(slugs).toContain(anchor)
   })
 })
