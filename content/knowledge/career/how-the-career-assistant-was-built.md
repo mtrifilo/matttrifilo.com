@@ -85,8 +85,8 @@ client, keyed on the IP address and the TLS fingerprint.
 
 The assistant answers only from the documents, so when the documents it
 read do not answer a question, it declines with one fixed sentence
-rather than filling the gap with what is typical for the role. It declines the same way, whatever a document
-says, for:
+rather than filling the gap with what is typical for the role. It
+declines the same way, whatever a document says, for:
 
 - what Matt is paid, including rates and equity;
 - whether Matt is employed, job hunting, or available to start;
