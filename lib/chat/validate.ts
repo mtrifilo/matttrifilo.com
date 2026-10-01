@@ -90,17 +90,32 @@ export const CHAT_MAX_STEPS = KNOWLEDGE_READ_BUDGET.maxDocuments + 1
 export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
 
 /**
- * Ceiling on the estimated input tokens of the request the client posts:
- * document index plus system policy plus the conversation so far.
+ * Ceiling on the estimated input tokens of a model call, applied twice.
  *
- * 80,000 fits every conversation a visitor can have with ordinary answers:
- * KNOWLEDGE_INDEX_TOKEN_CEILING caps the index at 8,000, the policy is about
- * 1,800 after the briefing rewrite, CHAT_MAX_TURNS questions at
- * CHAT_MAX_MESSAGE_CHARS are ~3,000 tokens, and as many answers of one
- * step's worth of text (CHAT_MAX_OUTPUT_TOKENS each) are ~65,500: about
- * 78,300 in all against this cap. "A conversation of full-length answers still
- * fits" in validate.test.ts pins that, and it is the test that should fail
- * if the policy or the index ceiling grows past the margin.
+ * At the door, validateChatRequest compares the request the client posts
+ * with it once, before any model call: the index estimate, the policy, the
+ * repository list and the conversation's turns. Over it, the visitor gets
+ * `budget_exceeded` and nothing is billed. Then each call after the first is
+ * held to it as well (MTC-107): the read budget (lib/chat/read-budget.ts)
+ * refuses a document or digest that would carry the next call past it,
+ * counting the messages as sent and the tool definitions
+ * (lib/chat/call-input.ts), in the words it uses for an exhausted budget.
+ *
+ * A design sum, not a measurement, says 80,000 fits every conversation a
+ * visitor can have with ordinary answers: KNOWLEDGE_INDEX_TOKEN_CEILING caps
+ * the index at 8,000, the policy is ~2,858, the repository list ~152,
+ * CHAT_MAX_TURNS questions at CHAT_MAX_MESSAGE_CHARS ~3,000, and as many
+ * answers at CHAT_MAX_OUTPUT_TOKENS ~65,536: ~79,546 in all. "A conversation
+ * of full-length answers still fits" in validate.test.ts pins that sum, and
+ * it is the test that should fail if the policy or the index ceiling grows
+ * past the margin. With the real index (~2,728) the same body is ~74,274.
+ * Figures by estimateTokens, 2026-10-01.
+ *
+ * Real calls sit far below it. Measured by Vertex's own counts over 889
+ * model calls in two full eval runs (MTC-107, 2026-09-30, the MTC-103 and
+ * MTC-102 runs): the largest call was 18,391 tokens, the p99 of each
+ * request's largest call 16,364 and 18,359, and no call came within 2,000 of
+ * this cap. The longest answer measured was about 1,020 tokens, not 8,192.
  *
  * It is deliberately below the sum of the caps, though. CHAT_MAX_ANSWER_CHARS
  * allows an answer that narrated through every step, and eight of those in
@@ -108,9 +123,6 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * has no rate limit until MTC-34. A conversation like that is refused with
  * `budget_exceeded`, whose copy and reset control already say the right
  * thing; the test that pins it is beside the one above.
- *
- * It does not bound the whole generation. Documents arrive mid-loop as tool
- * results, and KNOWLEDGE_READ_BUDGET is what caps those.
  */
 export const CHAT_MAX_INPUT_TOKENS = 80_000
 
@@ -280,13 +292,14 @@ export function validateChatRequest({
   // REPOSITORY_BLOCK rides in the same system message as the index but is not
   // part of its token estimate, so it is counted here rather than left out.
   //
-  // What is still not counted: the two tool definitions, which the SDK sends
-  // on every model call. They are a few hundred tokens, and
-  // `recent_activity`'s description interpolates the allowlist, so they grow
-  // when a repository is added. That is a knowing omission rather than an
-  // oversight, and it is why CHAT_MAX_INPUT_TOKENS is set below the sum of
-  // the caps rather than at it; if the allowlist ever grows past a handful,
-  // count them here instead of widening the margin again.
+  // Not counted here: the two tool definitions, the index frame and the
+  // transcript's labels, a few hundred tokens that grow when a repository is
+  // added (`recent_activity`'s description interpolates the allowlist). The
+  // per-call bound counts them (lib/chat/call-input.ts), so a conversation
+  // this check only just admits sends its first call those few hundred
+  // tokens past the cap by that count, has every read refused, and is
+  // answered from the index. Counting them here would move the line a
+  // visitor's conversation is refused at, which this check keeps where it is.
   const inputTokens =
     indexTokenEstimate +
     estimateTokens(SYSTEM_PROMPT) +

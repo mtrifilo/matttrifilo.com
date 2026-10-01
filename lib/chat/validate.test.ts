@@ -354,6 +354,13 @@ describe('rejecting a request', () => {
     // must never see budget_exceeded. Failing here means the policy or the
     // index ceiling grew: raise the cap deliberately rather than shrinking
     // what a visitor may ask.
+    //
+    // A design sum, not a measurement. It assumes the index at its 8,000
+    // ceiling (KNOWLEDGE_INDEX_TOKEN_CEILING, not the real ~2,728) and eight
+    // answers at the 8,192-token output cap (real answers peak near 1,020),
+    // which comes to ~79,546 against 80,000. No request ever measured was
+    // near it: the largest model call in two full eval runs was 18,391
+    // tokens (MTC-107, 2026-09-30).
     const fullQuestion = 'x'.repeat(CHAT_MAX_MESSAGE_CHARS)
     const fullAnswer = 'x'.repeat(CHAT_MAX_OUTPUT_TOKENS * 4)
     // Sixteen messages, assistant first so a user turn is last: the longest
