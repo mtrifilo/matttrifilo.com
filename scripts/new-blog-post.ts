@@ -3,7 +3,7 @@
 /**
  * Interactive script to scaffold a new blog post.
  *
- * Usage: bun run scripts/new-blog-post.ts
+ * Usage: bun run new-post
  *
  * Writes two files: the post itself, and its twin in
  * content/knowledge/blog so the career assistant can answer from it. The
@@ -58,6 +58,20 @@ export function postSlug(title: string, date: string): string {
   return `${date}-${slugify(title)}`
 }
 
+/**
+ * Today on the machine running the script, as `YYYY-MM-DD`.
+ *
+ * The local calendar day rather than UTC's: from 17:00 in Phoenix (UTC-7)
+ * the UTC date is already tomorrow, and a post would carry a date its
+ * author never saw.
+ */
+export function localDateStamp(now: Date = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 /** The body both files start life with; they must never diverge. */
 export const STARTER_BODY = 'Write your post here.\n'
 
@@ -69,18 +83,42 @@ export interface PostDraft {
   body?: string
 }
 
+/**
+ * The draft for a post started at `now`, dated with the local day. main
+ * dates a post only through this, so the per-zone tests cover the date a
+ * new post is written with.
+ */
+export function newPostDraft(
+  fields: Omit<PostDraft, 'date' | 'body'>,
+  now: Date = new Date()
+): PostDraft {
+  return { ...fields, date: localDateStamp(now) }
+}
+
+/**
+ * A YAML double-quoted scalar that reads back as exactly `value`.
+ *
+ * JSON's string syntax is a subset of YAML's double-quoted style, so
+ * JSON.stringify escapes quotes, backslashes and control characters the
+ * way the post's YAML parser expects. Only the post file is YAML; the
+ * twin's frontmatter is read by its own parser and quoted by `quoted`.
+ */
+function yamlString(value: string): string {
+  return JSON.stringify(value)
+}
+
 export function buildPostFile(draft: PostDraft): string {
   const categories = draft.categories ?? []
   const categoriesYaml =
     categories.length > 0
-      ? `categories:\n${categories.map(c => `  - ${c}`).join('\n')}\n`
+      ? `categories:\n${categories.map(c => `  - ${yamlString(c)}`).join('\n')}\n`
       : ''
   const descriptionYaml = draft.description
-    ? `description: "${draft.description}"\n`
+    ? `description: ${yamlString(draft.description)}\n`
     : ''
   return `---
-title: "${draft.title}"
-date: "${draft.date}"
+title: ${yamlString(draft.title)}
+date: ${yamlString(draft.date)}
 ${categoriesYaml}${descriptionYaml}---
 
 ${draft.body ?? STARTER_BODY}`
@@ -198,14 +236,13 @@ async function main() {
     process.exit(1)
   }
 
-  const today = new Date().toISOString().split('T')[0]
-  const draft: PostDraft = { title, date: today, categories, description }
+  const draft = newPostDraft({ title, categories, description })
   const summaryProblem = draftSummaryProblem(draft)
   if (summaryProblem) {
     console.error(summaryProblem)
     process.exit(1)
   }
-  const slug = postSlug(title, today)
+  const slug = postSlug(title, draft.date)
   const filepath = path.join(BLOG_DIR, `${slug}.md`)
   const knowledgePath = path.join(KNOWLEDGE_BLOG_DIR, `${slug}.md`)
 

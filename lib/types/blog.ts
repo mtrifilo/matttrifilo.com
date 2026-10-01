@@ -3,6 +3,8 @@ export interface BlogPostFrontmatter {
   date: string
   categories?: string[]
   description?: string
+  /** `YYYY-MM-DD`, validated like `date`; no page renders it. */
+  updated?: string
 }
 
 export interface BlogPost {

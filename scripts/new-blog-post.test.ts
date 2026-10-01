@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import { getBlogPost } from '@/lib/blog'
 import {
   buildKnowledgeCorpus,
   INDEX_TITLE_SEPARATOR,
@@ -12,10 +13,44 @@ import {
   draftSummary,
   draftSummaryProblem,
   frontmatterProblem,
+  localDateStamp,
   postSlug,
   STARTER_BODY,
   type PostDraft,
 } from './new-blog-post'
+
+describe('the date a new post carries', () => {
+  /**
+   * The date newPostDraft gives a post started at `instant`, computed in a
+   * fresh process running in `timeZone`. Bun does not reliably apply a TZ
+   * changed mid-process, so each zone gets its own process, and the result
+   * does not depend on the zone this suite runs in.
+   */
+  const draftDateIn = (timeZone: string, instant: string): string => {
+    const script = path.join(import.meta.dir, 'new-blog-post.ts')
+    const code = `const { newPostDraft } = await import(${JSON.stringify(script)})
+console.log(newPostDraft({ title: 't' }, new Date(${JSON.stringify(instant)})).date)`
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, '-e', code],
+      env: { ...process.env, TZ: timeZone },
+    })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+    return result.stdout.toString().trim()
+  }
+
+  test('a post started at 20:00 in Phoenix carries that day, not UTC tomorrow', () => {
+    // 20:00 on 2026-09-29 in Phoenix (UTC-7) is 03:00 on 2026-09-30 UTC.
+    const phoenixEvening = '2026-09-30T03:00:00Z'
+    expect(draftDateIn('America/Phoenix', phoenixEvening)).toBe('2026-09-29')
+    expect(draftDateIn('UTC', phoenixEvening)).toBe('2026-09-30')
+  })
+
+  test('the stamp is the local calendar day, zero-padded', () => {
+    // Built from local fields, so this holds in any zone the suite runs in.
+    expect(localDateStamp(new Date(2026, 0, 5, 23, 59))).toBe('2026-01-05')
+    expect(localDateStamp(new Date(2026, 11, 31, 0, 0))).toBe('2026-12-31')
+  })
+})
 
 /**
  * A new post and its knowledge twin are written together, and the sync
@@ -47,6 +82,33 @@ describe('new-blog-post scaffold', () => {
     const twin = stripFrontmatter(buildKnowledgeTwin(draft))
     expect(post).toBe(twin)
     expect(post.trim()).toBe(STARTER_BODY.trim())
+  })
+
+  test('the post loads through the site loader with every value as typed', () => {
+    // Quotes, a backslash, a colon and a leading `#` or `-` each broke or
+    // changed the hand-quoted YAML; categories YAML would read as a
+    // boolean, a number or a mapping must stay text.
+    const tricky: PostDraft = {
+      title: 'He said "ship it": a \\ note',
+      date: '2026-09-14',
+      categories: ['yes', '2026', 'a: b', '- x', '#tag'],
+      description: '"Quoted" at the start, # and \' inside, and a trailing \\',
+    }
+    const slug = postSlug(tricky.title, tricky.date)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'new-post-'))
+    try {
+      fs.writeFileSync(path.join(dir, `${slug}.md`), buildPostFile(tricky))
+      const post = getBlogPost(slug, dir)
+      expect(post?.frontmatter).toEqual({
+        title: tricky.title,
+        date: tricky.date,
+        categories: tricky.categories,
+        description: tricky.description,
+      })
+      expect(post?.content.trim()).toBe(STARTER_BODY.trim())
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test('the twin loads as a blog document under content/knowledge/blog', () => {
