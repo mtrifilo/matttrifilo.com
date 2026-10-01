@@ -12,7 +12,8 @@ Matt's Career Assistant is the AI assistant at matttrifilo.com/ask, with
 a compact panel on the homepage. Matt built it himself, every piece of
 it: the chat route, the instructions the model follows, the documents it
 reads, the protection layers, the eval suites and the pages it runs on.
-It is not a vendor chatbot product. The code is in his public repository,
+It is not a vendor chatbot product. He builds it with AI coding agents,
+as the last section describes. The code is in his public repository,
 https://github.com/mtrifilo/matttrifilo.com, and the runbook that
 records how it is operated is docs/career-assistant-operations.md in the
 same repository.
@@ -111,11 +112,13 @@ assistant will not answer still has somewhere to go.
   model grader scores it three times and two of the three have to pass.
 - Every starter question on the site has its own golden test, and the
   unit tests fail when one does not.
-- The suites run before any change to the instructions or the documents
-  ships. A run is published at matttrifilo.com/ask/evals with the commit
-  it ran against, and the publishing step refuses a run that passed
-  under 95 percent of its tests, under 90 percent of any one suite, or
-  in which any test produced no answer to grade.
+- Matt runs the suites on his own machine before opening a pull request
+  that changes the instructions or the documents. They do not run
+  automatically on a pull request and do not block a deploy.
+- A run can be published at matttrifilo.com/ask/evals with the commit it
+  ran against. Among other checks, the publishing step refuses a run
+  that passed under 95 percent of its tests or under 90 percent of any
+  one suite, or in which any test produced no answer to grade.
 - The site's own tests, browser checks at phone and desktop widths in
   two browser engines, and accessibility checks run on every pull
   request.

@@ -51,7 +51,9 @@ describe('the disclosure', () => {
         </EvalsPublishedProvider>
       )
       const anchor = html.match(
-        new RegExp(`<a [^>]*href="${ASSISTANT_HOW_BUILT_URL}"[^>]*>([^<]*)</a>`)
+        new RegExp(
+          `<a [^>]*href="${RegExp.escape(ASSISTANT_HOW_BUILT_URL)}"[^>]*>([^<]*)</a>`
+        )
       )
       expect(anchor, `published: ${published}`).not.toBeNull()
       expect(anchor?.[1]).toBe(ASSISTANT_HOW_BUILT_TEXT)
@@ -73,24 +75,27 @@ describe('the disclosure', () => {
 describe('the How it was built link', () => {
   test('lands on a heading the README still has', () => {
     // GitHub's anchor for a heading: lower case, punctuation other than
-    // hyphens dropped, spaces as hyphens. The README is what the link is
-    // for, so a renamed section must fail here rather than on GitHub.
+    // hyphens and underscores dropped, spaces as hyphens. A `#` line inside
+    // a fenced block is not a heading. The README is what the link is for,
+    // so a renamed section must fail here rather than on GitHub.
     const anchor = new URL(ASSISTANT_HOW_BUILT_URL).hash.slice(1)
     const readme = readFileSync(
       new URL('../../README.md', import.meta.url),
       'utf8'
     )
-    const slugs = readme
-      .split('\n')
-      .filter(line => /^#{1,6} /.test(line))
-      .map(line =>
-        line
-          .replace(/^#+ /, '')
-          .trim()
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N} -]/gu, '')
-          .replace(/ /g, '-')
-      )
+    let fenced = false
+    const headings = readme.split('\n').filter(line => {
+      if (/^ {0,3}(```|~~~)/.test(line)) fenced = !fenced
+      return !fenced && /^#{1,6} /.test(line)
+    })
+    const slugs = headings.map(line =>
+      line
+        .replace(/^#+ /, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N} _-]/gu, '')
+        .replace(/ /g, '-')
+    )
     expect(slugs).toContain(anchor)
   })
 })
