@@ -78,11 +78,19 @@ import {
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat.
  * The read budget refuses a document or digest that would carry the next call
- * past the 80k input cap, so each of the CHAT_MAX_STEPS = 4 calls stays under
- * it by estimate, before what the model wrote in earlier steps: roughly 320k
- * input tokens for one question at worst. Vertex's implicit cache covers the
- * stable prefix and should take a large bite out of what is billed, but the
- * ceiling is real and it is why MTC-34's rate limit is not optional.
+ * past the 80k input cap; a digest handed again to a repeated check in the
+ * same step is counted for later charges but never itself refused. The
+ * conversation itself is bounded only at the door, which does not count the
+ * index frame, the transcript labels, the tool definitions or the rewriting
+ * `neutralise` does: a few hundred tokens for ordinary text, and up to about
+ * a ninth more history for text made of speaker labels. Nor is what the
+ * model wrote in earlier steps counted, up to CHAT_MAX_OUTPUT_TOKENS a step.
+ * So by estimate one question costs four calls of about 80k each, plus up to
+ * ~49k of the model's own earlier text re-sent (8,192 x (1 + 2 + 3)), plus
+ * the history's growth on each call: roughly 400k input tokens at worst.
+ * Vertex's implicit cache covers the stable prefix and should take a large
+ * bite out of what is billed, but the ceiling is real and it is why MTC-34's
+ * rate limit is not optional.
  *
  * Privacy rule for this whole module: no message text is ever written
  * anywhere. Not to the log, not into an error response, not into a header.
@@ -317,11 +325,12 @@ export function createChatHandler(deps: ChatHandlerDeps) {
       // may send is the number written down rather than the sum of the tools
       // that happen to exist.
       //
-      // The same ledger holds each model call to CHAT_MAX_INPUT_TOKENS. It
-      // asks for the call's input before tools when a tool charges, which is
-      // after the line below that measures it; until then the figure is
-      // infinite, so a charge that somehow came first would be refused
-      // rather than let through unmeasured.
+      // The same ledger refuses tool text that would carry the next model
+      // call past CHAT_MAX_INPUT_TOKENS. It asks for the call's input before
+      // tools when a tool charges, which is after the line below that
+      // measures it; until then the figure is infinite, so a charge that
+      // somehow came first would be refused rather than let through
+      // unmeasured.
       let callInputTokens = Number.POSITIVE_INFINITY
       const budget = createReadBudget(
         KNOWLEDGE_READ_BUDGET.maxTokens,

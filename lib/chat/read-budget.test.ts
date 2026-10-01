@@ -13,7 +13,7 @@ import {
   createRecentActivitySession,
 } from './recent-activity'
 import { ASSISTANT_REPOSITORIES } from './repositories'
-import { CHAT_MAX_INPUT_TOKENS } from './validate'
+import { CHAT_MAX_INPUT_TOKENS, estimateTokens } from './validate'
 
 /**
  * The ceiling on what one question may send is one number, not one per tool
@@ -89,6 +89,17 @@ describe('each model call is held to the input cap (MTC-107)', () => {
     expect(budget.charge(1)).toBe(false)
     before = 0
     expect(budget.charge(1)).toBe(true)
+  })
+
+  test('carried text counts for the next call but not against the read budget', () => {
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => nearTheCap
+    )
+    budget.carry(600)
+    expect(budget.spent()).toBe(0)
+    expect(budget.charge(401)).toBe(false)
+    expect(budget.charge(400)).toBe(true)
   })
 
   test('with no input before tools the read budget alone decides', () => {
@@ -225,6 +236,48 @@ describe('the two tools share one ledger', () => {
     // Spend the rest by hand, then prove the read tool sees the shared state.
     budget.charge(budget.maxTokens - budget.spent())
 
+    const reading = createReadDocumentSession({
+      entries: [entry],
+      readKnowledgeDocument: () => document,
+      budget,
+    })
+    expect(await call(reading.tool, { id: 'resume' })).toEqual({
+      error: 'read_budget_exhausted',
+    })
+  })
+
+  test('a digest handed to a repeated check is carried for the next call', async () => {
+    // Two checks of one repository in one step share a fetch and are charged
+    // once, but the model is handed the digest twice, and the next call
+    // carries both copies. A read that fits beside one copy and not beside
+    // two is refused.
+    const raw = {
+      pushedAt: '2026-09-20T11:00:00Z',
+      release: null,
+      pullRequests: [{ title: 'Ship it', mergedAt: '2026-09-18T10:00:00Z' }],
+      commits: [],
+    }
+    let room = 100_000
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => CHAT_MAX_INPUT_TOKENS - room
+    )
+    const checking = createRecentActivitySession({
+      budget,
+      fetchActivity: async () => ({ kind: 'ok', raw }),
+    })
+    const repository = ASSISTANT_REPOSITORIES[0].id
+
+    const [first, second] = await Promise.all([
+      call(checking.tool, { repository }),
+      call(checking.tool, { repository }),
+    ])
+    expect(first).toEqual(second)
+    const digestTokens = checking.activityTokens()
+    expect(budget.spent()).toBe(digestTokens)
+
+    // Room for one copy of the digest and the document, not for two copies.
+    room = digestTokens * 2 + estimateTokens(document.text) - 1
     const reading = createReadDocumentSession({
       entries: [entry],
       readKnowledgeDocument: () => document,
