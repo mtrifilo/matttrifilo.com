@@ -3,7 +3,7 @@ id: ai-tooling-leadership
 title: AI tooling leadership across the engineering organization
 summary: The talks, demos, forums, skills library, trials, and proposals behind Matt's push for AI-agent adoption across roughly fifty engineers.
 tags: [ai, agentic-engineering, claude-code, talks, enablement, leadership]
-updated: 2026-09-28
+updated: 2026-10-01
 ---
 
 # AI tooling leadership across the engineering organization
@@ -32,7 +32,7 @@ Matt's:
 
 Earlier: a July 2025 lunch-and-learn on practical use of Cursor, an April
 2026 demo to the company's AI guild, and a quarterly AI tech-talk cadence
-agreed with leadership.
+agreed with his director.
 
 ## Recurring demos and forums
 
@@ -44,9 +44,9 @@ agreed with leadership.
   framing at the last of them: any of the experiments can be adapted to
   many other use cases.
 - **The organization's AI-tools forum:** founded by Matt in February 2026
-  as the cross-organization channel for questions, access requests,
-  troubleshooting, and knowledge sharing. It is where the marketplace alpha
-  was announced and where the marketplace governance feedback landed.
+  as the cross-organization channel for questions, troubleshooting, and
+  knowledge sharing. It is where the marketplace alpha was announced and
+  where the marketplace governance feedback landed.
 - **A short-lived newsletter:** three monthly editions covering models,
   tools, and industry articles, retired in early 2026 in favor of sharing
   updates as they happen. Lower ceremony, higher frequency, more

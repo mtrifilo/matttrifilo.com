@@ -3,7 +3,7 @@ id: owned-systems-and-operations
 title: What the Email Reliability team runs, and how it runs it
 summary: The systems Matt's team owns, the scale they run at, on-call, and how the team ships to production.
 tags: [operations, on-call, sre, architecture, ownership, incident-response]
-updated: 2026-09-15
+updated: 2026-10-01
 ---
 
 # What the Email Reliability team runs, and how it runs it
@@ -87,8 +87,9 @@ alone, which is the intended outcome.
   and refined each time.
 - **2023, sending-limit hardening.** Hardened sending limits ahead of peak
   season.
-- **2025, contact-engagement hygiene.** Led a contact-engagement hygiene
-  program, coordinated with another team on the transactional path.
+- **2025, contact-engagement hygiene.** An engagement limit to stop sending
+  to long-dormant contacts, coordinated with another team on the
+  transactional path.
 - **A short-lived delivery slowdown** that self-resolved; Matt wrote the
   follow-up proposal and used it to argue for accelerating planned platform
   work.
