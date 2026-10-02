@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import path from 'path'
-import { hardBreaks, linkify } from './resume'
+import { getResumeMarkdown, hardBreaks, linkify } from './resume'
 
 const md = fs.readFileSync(
   path.join(process.cwd(), 'content', 'resume.md'),
@@ -65,9 +65,35 @@ describe('hardBreaks', () => {
       '# Name\na · b  \nc · d  \nlast\n\nnext · x\nmore'
     )
   })
-  test('ignores " · " lines outside the header block', () => {
-    expect(hardBreaks('# Name\n\n**Role · 2025**\n- bullet')).toBe(
-      '# Name\n\n**Role · 2025**\n- bullet'
+  test('a blank line between the title and the header block does not defeat it', () => {
+    // The published copy's shape: the name, a blank line, then the block.
+    expect(hardBreaks('# Name\n\na · b\nc · d\nlast\n\nnext · x\nmore')).toBe(
+      '# Name\n\na · b  \nc · d  \nlast\n\nnext · x\nmore'
     )
+  })
+  test('ignores " · " lines outside the header block', () => {
+    expect(
+      hardBreaks('# Name\n\na · b\nlast\n\n**Role · 2025**\nmore · x\n- bullet')
+    ).toBe('# Name\n\na · b  \nlast\n\n**Role · 2025**\nmore · x\n- bullet')
+  })
+})
+
+describe('the published header, as /resume renders it', () => {
+  test('is three lines: the tagline, the location, the contact line', async () => {
+    const { evaluate } = await import('@mdx-js/mdx')
+    const runtime = await import('react/jsx-runtime')
+    const { createElement } = await import('react')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const { default: Content } = await evaluate(getResumeMarkdown(), runtime)
+    const html = renderToStaticMarkup(createElement(Content))
+
+    // The first paragraph after the name heading is the header block.
+    const header = html.match(/<\/h1>\s*<p>([\s\S]*?)<\/p>/)
+    expect(header).not.toBeNull()
+    const lines = header![1].split(/<br\s*\/?>\s*/)
+    expect(lines).toHaveLength(3)
+    expect(lines[0]).toMatch(/^<strong>[^<]+<\/strong>$/)
+    expect(lines[1]).not.toMatch(/<a |<strong>/)
+    expect(lines[2]).toContain('href="mailto:matt.trifilo@gmail.com"')
   })
 })
