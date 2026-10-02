@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import { Mail } from 'lucide-react'
 import { Github, Linkedin } from '@/components/icons/brand-icons'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 export const metadata: Metadata = {
   title: 'Contact',
   description: 'Get in touch with Matt Trifilo.',
+  alternates: { canonical: '/contact', types: FEED_ALTERNATE_TYPES },
 }
 
 const contactLinks = [
