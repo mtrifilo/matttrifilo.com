@@ -2,10 +2,10 @@ import Link from 'next/link'
 import { Github, Linkedin, Mail } from 'lucide-react'
 import { EvalsPublishedProvider } from '@/components/assistant/evals-published'
 import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
+import { PostListItem } from '@/components/blog/PostListItem'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { getAllBlogPosts } from '@/lib/blog'
 import { hasPublishedEvalRun } from '@/lib/evals/results'
-import { formatDate } from '@/lib/format-date'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
 
 export default function Home() {
@@ -16,12 +16,7 @@ export default function Home() {
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
         {/* Hero */}
         <section className="mb-16 hero-glow">
-          <h1
-            className="font-bold mb-1"
-            style={{ fontSize: 'clamp(2rem, 5vw + 0.5rem, 3.5rem)' }}
-          >
-            Matt Trifilo
-          </h1>
+          <h1 className="font-bold mb-1 text-display">Matt Trifilo</h1>
           <p className="text-xl text-muted-foreground">{JOB_TITLE}</p>
           <p className="text-base leading-relaxed text-foreground/90 max-w-2xl mt-6">
             {TAGLINE}
@@ -68,31 +63,18 @@ export default function Home() {
         {/* Latest Posts */}
         {recentPosts.length > 0 && (
           <section>
-            <h2
-              className="font-semibold mb-6"
-              style={{ fontSize: 'clamp(1.5rem, 3vw + 0.25rem, 2rem)' }}
-            >
+            <h2 className="font-semibold mb-6 text-section-title">
               Latest Posts
             </h2>
             <div className="space-y-6">
               {recentPosts.map((post, i) => (
-                <article
+                <PostListItem
                   key={post.slug}
-                  className="animate-fade-in-up border-b border-border pb-6 last:border-0"
-                  style={{ '--index': i } as React.CSSProperties}
-                >
-                  <h3 className="text-lg font-medium leading-tight">
-                    <Link
-                      href={`/blog/${post.slug}`}
-                      className="hover:text-muted-foreground transition-colors"
-                    >
-                      {post.title}
-                    </Link>
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {formatDate(post.date)}
-                  </p>
-                </article>
+                  post={post}
+                  headingLevel={3}
+                  index={i}
+                  className="last:border-0"
+                />
               ))}
             </div>
             <Link

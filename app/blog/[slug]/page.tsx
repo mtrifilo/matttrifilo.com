@@ -65,10 +65,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       <div className="flex min-h-screen items-start justify-center">
         <article className="w-full max-w-3xl px-4 py-8 md:px-8">
           <header className="mb-8">
-            <h1
-              className="font-bold leading-tight mb-3"
-              style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-            >
+            <h1 className="font-bold leading-tight mb-3 text-page-title">
               {post.frontmatter.title
                 .split('\n')
                 .map((line: string, i: number, arr: string[]) => (

@@ -1,6 +1,5 @@
-import Link from 'next/link'
+import { PostListItem } from '@/components/blog/PostListItem'
 import { getAllBlogPosts } from '@/lib/blog'
-import { formatDate } from '@/lib/format-date'
 
 export const metadata = {
   title: 'Blog',
@@ -21,34 +20,17 @@ export default function BlogPage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-8 md:px-8">
-        <h1
-          className="font-bold text-center mb-8"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
-          Blog
-        </h1>
+        <h1 className="font-bold text-center mb-8 text-page-title">Blog</h1>
 
         <section className="w-full">
           {posts.map((post, i) => (
-            <article
+            <PostListItem
               key={post.slug}
-              className="animate-fade-in-up border-b border-border pb-6 mt-6 first:mt-0"
-              style={{ '--index': i } as React.CSSProperties}
-            >
-              <h2 className="text-xl font-semibold leading-tight">
-                <Link
-                  href={`/blog/${post.slug}`}
-                  className="hover:text-muted-foreground transition-colors"
-                >
-                  {post.title}
-                </Link>
-              </h2>
-
-              <div className="text-sm text-muted-foreground mt-1">
-                {formatDate(post.date)}
-              </div>
-
-            </article>
+              post={post}
+              headingLevel={2}
+              index={i}
+              className="mt-6 first:mt-0"
+            />
           ))}
 
           {posts.length === 0 && (

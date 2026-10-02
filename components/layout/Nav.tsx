@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu } from 'lucide-react'
-import { ModeToggle } from '@/components/layout'
+import { ModeToggle } from './mode-toggle'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -39,6 +39,8 @@ export default function Nav({
   }, [])
 
   return (
+    // --nav-height in app/globals.css is this bar's height (py-3, the 36px
+    // controls, the unscrolled border); change them together.
     <nav
       data-scrolled={scrolled}
       className={cn(

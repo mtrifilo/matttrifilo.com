@@ -33,12 +33,7 @@ export default function ContactPage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
-        <h1
-          className="font-bold mb-4"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
-          Contact
-        </h1>
+        <h1 className="font-bold mb-4 text-page-title">Contact</h1>
         <p className="text-muted-foreground mb-8">
           Want to get in touch? Reach out through any of the channels below.
         </p>

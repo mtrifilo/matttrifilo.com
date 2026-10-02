@@ -89,12 +89,7 @@ export default function BooksPage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
-        <h1
-          className="font-bold mb-8"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
-          Recommended Books
-        </h1>
+        <h1 className="font-bold mb-8 text-page-title">Recommended Books</h1>
 
         <div className="space-y-10">
           {bookCategories.map((category, i) => (
@@ -105,11 +100,8 @@ export default function BooksPage() {
             >
               <h2 className="text-xl font-semibold mb-4">{category.title}</h2>
               <ul className="space-y-3">
-                {category.books.map((book) => (
-                  <li
-                    key={book.title}
-                    className=""
-                  >
+                {category.books.map(book => (
+                  <li key={book.title} className="">
                     <Link
                       href={book.url}
                       target="_blank"

@@ -66,10 +66,7 @@ export default function EvalResultsPage() {
   return (
     <div className="flex min-h-screen items-start justify-center">
       <div className="w-full max-w-3xl px-4 py-12 md:px-8">
-        <h1
-          className="mb-6 font-bold"
-          style={{ fontSize: 'clamp(1.75rem, 4vw + 0.25rem, 3rem)' }}
-        >
+        <h1 className="mb-6 font-bold text-page-title">
           {ASSISTANT_EVALS_TITLE}
         </h1>
 
