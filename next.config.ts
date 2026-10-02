@@ -60,6 +60,8 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', 'radix-ui'],
   },
   async headers() {
+    const previewOnly = (sources: string) =>
+      process.env.VERCEL_ENV === 'preview' ? ` ${sources}` : ''
     return [
       {
         source: '/(.*)',
@@ -91,9 +93,11 @@ const nextConfig: NextConfig = {
            * scripts with it. This fixed header cannot carry a per-request
            * value, so the policy moves there. The same nonce goes to
            * ThemeProvider. Every page then renders per request instead of
-           * being served prerendered. What keeps an injected script out
-           * meanwhile: a question renders as React text, and the model's
-           * Markdown goes through Streamdown's sanitizer.
+           * being served prerendered. Keeping it is acceptable with /ask live
+           * (Matt, 2026-10-01): a visitor's question renders as React text,
+           * and any HTML in the model's Markdown is parsed and then stripped
+           * of scripts and event handlers by Streamdown's sanitizer, so
+           * neither opens a path to an inline script.
            *
            * object-src 'none' refuses plugins outright rather than inheriting
            * default-src. upgrade-insecure-requests has the browser request a
@@ -109,17 +113,29 @@ const nextConfig: NextConfig = {
            * `vercel build`, so those carry it too. On production it is a
            * second safeguard, since Vercel already sends
            * Strict-Transport-Security there.
+           *
+           * vercel.live and vercel.com in script-src, img-src and frame-src
+           * serve the Vercel toolbar and Comments. The rest of what Vercel's
+           * toolbar documentation lists ("Using a Content Security Policy",
+           * vercel.com/docs/vercel-toolbar/managing-toolbar) is added only
+           * where VERCEL_ENV is 'preview' (Matt, 2026-10-01), so production
+           * keeps the narrower policy: the hosts previewOnly adds to
+           * style-src, font-src and connect-src below. VERCEL_ENV, like
+           * VERCEL, is fixed at `next build`.
            */
           {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' https://vercel.live",
-              "style-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'" +
+                previewOnly('https://vercel.live'),
               "img-src 'self' data: blob: https://vercel.com https://vercel.live",
-              "font-src 'self'",
+              "font-src 'self'" +
+                previewOnly('https://vercel.live https://assets.vercel.com'),
               "worker-src 'self' blob:",
-              "connect-src 'self'",
+              "connect-src 'self'" +
+                previewOnly('https://vercel.live wss://ws-us3.pusher.com'),
               "object-src 'none'",
               // 'self' for BotID's same-origin challenge path (MTC-34), which
               // the wrapper below marks frameable by this origin.

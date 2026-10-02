@@ -32,12 +32,14 @@ describe('the Turbopack build cache switch', () => {
  * (BotID's wrapper included) rather than from the source text. Every
  * directive is pinned to its exact sources, so a new host is a deliberate
  * edit here as well as in next.config.ts, not something a refactor slips in.
- * The policy has two shapes: upgrade-insecure-requests is sent only where
- * VERCEL is set, so a build served over plain http (a local `next start`
- * opened in Safari) keeps its own files.
+ * The policy has three shapes, by where `next build` runs: off Vercel it
+ * has no upgrade-insecure-requests, so a build served over plain http (a
+ * local `next start` opened in Safari) keeps its own files; on a Vercel
+ * production build it adds that directive; on a Vercel preview it also
+ * allows the hosts the Vercel toolbar needs.
  */
 const SITE_WIDE = '/(.*)'
-const POLICY_EVERYWHERE: Record<string, string[]> = {
+const POLICY_OFF_VERCEL: Record<string, string[]> = {
   'default-src': ["'self'"],
   'script-src': ["'self'", "'unsafe-inline'", 'https://vercel.live'],
   'style-src': ["'self'", "'unsafe-inline'"],
@@ -57,10 +59,25 @@ const POLICY_EVERYWHERE: Record<string, string[]> = {
   'base-uri': ["'self'"],
   'form-action': ["'self'"],
 }
-const POLICY_ON_VERCEL: Record<string, string[]> = {
-  ...POLICY_EVERYWHERE,
+const POLICY_ON_PRODUCTION: Record<string, string[]> = {
+  ...POLICY_OFF_VERCEL,
   'upgrade-insecure-requests': [],
 }
+const POLICY_ON_PREVIEW: Record<string, string[]> = {
+  ...POLICY_ON_PRODUCTION,
+  'style-src': ["'self'", "'unsafe-inline'", 'https://vercel.live'],
+  'font-src': ["'self'", 'https://vercel.live', 'https://assets.vercel.com'],
+  'connect-src': ["'self'", 'https://vercel.live', 'wss://ws-us3.pusher.com'],
+}
+
+/** The two variables the policy reads, as a build would see them. */
+interface BuildEnv {
+  VERCEL?: string
+  VERCEL_ENV?: string
+}
+const OFF_VERCEL: BuildEnv = {}
+const PRODUCTION: BuildEnv = { VERCEL: '1', VERCEL_ENV: 'production' }
+const PREVIEW: BuildEnv = { VERCEL: '1', VERCEL_ENV: 'preview' }
 
 type HeaderRules = Awaited<
   ReturnType<
@@ -68,24 +85,29 @@ type HeaderRules = Awaited<
   >
 >
 
-/** The config's header rules as Next would build them with VERCEL as given. */
-async function headerRules(vercel: string | undefined): Promise<HeaderRules> {
+/** The config's header rules as Next would build them in `env`. */
+async function headerRules(env: BuildEnv): Promise<HeaderRules> {
   const { default: config } = await import('../next.config')
-  const saved = process.env.VERCEL
-  if (vercel === undefined) delete process.env.VERCEL
-  else process.env.VERCEL = vercel
+  const keys = ['VERCEL', 'VERCEL_ENV'] as const
+  const saved = keys.map(key => process.env[key])
+  for (const key of keys) {
+    if (env[key] === undefined) delete process.env[key]
+    else process.env[key] = env[key]
+  }
   try {
     return (await config.headers?.()) ?? []
   } finally {
-    if (saved === undefined) delete process.env.VERCEL
-    else process.env.VERCEL = saved
+    keys.forEach((key, i) => {
+      if (saved[i] === undefined) delete process.env[key]
+      else process.env[key] = saved[i]
+    })
   }
 }
 
 async function siteWidePolicy(
-  vercel: string | undefined
+  env: BuildEnv
 ): Promise<Record<string, string[]>> {
-  const rule = (await headerRules(vercel)).find(r => r.source === SITE_WIDE)
+  const rule = (await headerRules(env)).find(r => r.source === SITE_WIDE)
   const header = rule?.headers.find(h => h.key === 'Content-Security-Policy')
   if (!header) throw new Error(`no Content-Security-Policy on ${SITE_WIDE}`)
   const policy: Record<string, string[]> = {}
@@ -99,17 +121,22 @@ async function siteWidePolicy(
 }
 
 describe('the Content-Security-Policy', () => {
-  test('on Vercel is exactly the pinned set, upgrade-insecure-requests included', async () => {
-    expect(await siteWidePolicy('1')).toEqual(POLICY_ON_VERCEL)
+  test('on Vercel production is the strict set with upgrade-insecure-requests', async () => {
+    expect(await siteWidePolicy(PRODUCTION)).toEqual(POLICY_ON_PRODUCTION)
   })
 
-  test('off Vercel is the same set without upgrade-insecure-requests', async () => {
-    expect(await siteWidePolicy(undefined)).toEqual(POLICY_EVERYWHERE)
+  test('on a Vercel preview also allows the toolbar hosts', async () => {
+    expect(await siteWidePolicy(PREVIEW)).toEqual(POLICY_ON_PREVIEW)
   })
 
-  test('refuses plugins on and off Vercel', async () => {
-    expect((await siteWidePolicy('1'))['object-src']).toEqual(["'none'"])
-    expect((await siteWidePolicy(undefined))['object-src']).toEqual(["'none'"])
+  test('off Vercel has neither upgrade-insecure-requests nor the toolbar hosts', async () => {
+    expect(await siteWidePolicy(OFF_VERCEL)).toEqual(POLICY_OFF_VERCEL)
+  })
+
+  test('refuses plugins in every shape', async () => {
+    for (const env of [PRODUCTION, PREVIEW, OFF_VERCEL]) {
+      expect((await siteWidePolicy(env))['object-src']).toEqual(["'none'"])
+    }
   })
 
   // Next keeps the last matching rule's value for a header key, so on
@@ -117,7 +144,7 @@ describe('the Content-Security-Policy', () => {
   // the site-wide one. frame-src 'self' relies on that value; a BotID
   // upgrade that changes it, or a new rule that sets the header, fails here.
   test('is replaced only on BotID challenge paths, by frame-ancestors', async () => {
-    const others = (await headerRules('1'))
+    const others = (await headerRules(PREVIEW))
       .filter(r => r.source !== SITE_WIDE)
       .flatMap(r =>
         r.headers
