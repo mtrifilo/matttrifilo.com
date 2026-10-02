@@ -30,8 +30,9 @@ const require = createRequire(import.meta.url)
  *
  * typescript-eslint is not on that list because package.json's `overrides`
  * holds it at 8.56.0 or later, the first release that supports ESLint 10.
- * eslint-config-next 16.1.6 asks only for ^8.46.0, and 8.55.0 and earlier
- * crash on ESLint 10 in rules such as no-deprecated and no-magic-numbers.
+ * eslint-config-next 16.1.6 asks only for ^8.46.0, and 8.55.0, which it
+ * resolved before, crashes on ESLint 10 in rules such as no-deprecated and
+ * no-magic-numbers.
  * The override can go when eslint-config-next requires 8.56.0 or later.
  */
 const { version: installedReactVersion } = require('react/package.json')
