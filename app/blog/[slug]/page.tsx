@@ -91,7 +91,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             </div>
           </header>
 
-          <div className="text-base leading-relaxed">
+          <div className="text-base leading-relaxed max-w-measure">
             <MDXContent source={post.content} />
           </div>
 

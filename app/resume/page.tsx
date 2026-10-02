@@ -60,7 +60,7 @@ export default function ResumePage() {
         </div>
 
         {/* Same Markdown the PDF is rendered from; see scripts/render-resume.sh. */}
-        <article className="mt-12 border-t border-border pt-8 text-base leading-relaxed">
+        <article className="mt-12 border-t border-border pt-8 text-base leading-relaxed max-w-measure">
           <MDXContent source={markdown} />
         </article>
       </div>

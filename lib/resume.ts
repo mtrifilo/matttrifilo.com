@@ -16,20 +16,24 @@ export function getResumeMarkdown(): string {
 }
 
 /**
- * The header block is the run of non-blank lines right after the `# Name`
- * title. It is written as short lines separated by " · "; in Markdown those
- * soft breaks would collapse into one line, while the PDF pipeline keeps
- * them as <br>. Mirror that with Markdown hard breaks, header block only.
+ * The header block is the first run of non-blank lines after the `# Name`
+ * title, whether or not blank lines separate the two (the published copy
+ * has one). It is written as short lines separated by " · "; in Markdown
+ * those soft breaks would collapse into one line, while the PDF pipeline
+ * keeps them as <br>. Mirror that with Markdown hard breaks, header block
+ * only; its last line needs none.
  */
 export function hardBreaks(markdown: string): string {
   const lines = markdown.split('\n')
   const title = lines.findIndex(l => l.startsWith('# '))
   if (title < 0) return markdown
-  let end = title + 1
+  let start = title + 1
+  while (start < lines.length && lines[start].trim() === '') start++
+  let end = start
   while (end < lines.length && lines[end].trim() !== '') end++
   return lines
     .map((line, i) =>
-      i > title && i < end - 1 && line.includes(' · ')
+      i >= start && i < end - 1 && line.includes(' · ')
         ? line.replace(/\s*$/, '  ')
         : line
     )

@@ -113,6 +113,31 @@
   --glow-strong: rgba(59, 130, 246, 0.25);
 }
 
+/*
+ * The reading measure: the most width the rendered Markdown on /resume and
+ * blog posts may take, set for about 70 characters per line of body text
+ * (Matt, 2026-10-01, MTC-37). Everything the Markdown renders takes it,
+ * code blocks and rules included; a code block wider than it scrolls.
+ *
+ * It is in em, not ch. A `ch` is the width of the "0" glyph, which in Geist
+ * is 0.66em, while an average character of running English is about 0.46em,
+ * so 70ch would be about 100 characters to a line and wider than the column
+ * it sits in. 34em is 544 px at the 16 px body size: about 74 characters of
+ * raw text, which breaking at word boundaries brings to about 70 on a full
+ * line of the blog and about 66 in the résumé's indented bullets. In em, the
+ * count of characters holds if the body size changes.
+ *
+ * It caps the text inside the page column (max-w-3xl, the width
+ * --reading-column below tracks for the honeycomb veil), left-aligned; the
+ * veil stays the page column's width. It binds only where that column is
+ * wider than 544 px, which is any viewport wider than 576 px: portrait
+ * phones keep their layout, landscape phones and tablets get the measure.
+ * lib/reading-measure.test.ts holds the value and the elements that wear it.
+ */
+@utility max-w-measure {
+  max-width: 34em;
+}
+
 @layer base {
   /* The outline every focusable element falls back to is the ring token at
      full strength: at half strength it was under 3:1 on both themes (WCAG
