@@ -58,7 +58,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.3.6",
     "happy-dom": "20.14.5",
     "promptfoo": "0.123.1",
