@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { getBlogPost, getBlogSlugs } from '@/lib/blog'
+import { getBlogPost, getBlogSlugs, singleLineTitle } from '@/lib/blog'
 import { MDXContent } from '@/components/blog/mdx-content'
 import Link from 'next/link'
 import { JsonLd } from '@/components/seo/JsonLd'
@@ -24,7 +24,7 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
     return { title: 'Post Not Found' }
   }
 
-  const cleanTitle = post.frontmatter.title.replace(/\n/g, ' ')
+  const cleanTitle = singleLineTitle(post.frontmatter.title)
 
   return {
     title: cleanTitle,
@@ -58,6 +58,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         data={generateBlogPostingSchema({
           title: post.frontmatter.title,
           date: post.frontmatter.date,
+          updated: post.frontmatter.updated,
           description: post.frontmatter.description || post.excerpt,
           slug,
         })}
