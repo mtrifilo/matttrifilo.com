@@ -283,14 +283,6 @@ for (const [name, offsets] of [
   ],
 ] as const) {
   test(`${name} leaves both rows moving`, async ({ page }) => {
-    // Both engines send a scroll event for the freeze's own write at
-    // touchstart, and the rows read it as a drag (MTC-104). Marked rather
-    // than skipped, so the check still runs and a pass fails the job, which
-    // is when this line goes.
-    test.fail(
-      true,
-      'MTC-104: the freeze write at touchstart hands the rows over'
-    )
     await page.goto('/ask')
     await waitForRows(page)
 
