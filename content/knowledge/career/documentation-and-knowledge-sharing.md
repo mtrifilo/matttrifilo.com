@@ -3,7 +3,7 @@ id: documentation-and-knowledge-sharing
 title: Documentation, runbooks, and hiring materials, 2018 to 2025
 summary: A seven-year habit of writing the fix down rather than leaving it as tribal knowledge: wikis, interview questions, and runbooks.
 tags: [documentation, runbooks, hiring, knowledge-sharing, craft]
-updated: 2026-09-21
+updated: 2026-10-01
 ---
 
 # Documentation, runbooks, and hiring materials, 2018 to 2025
@@ -78,9 +78,9 @@ Matt has written:
 > Across my career I've made a habit of writing down the fix the moment I
 > find a gap, rather than letting it stay tribal knowledge. Early on, that
 > meant building a troubleshooting page for a monolith's most common setup
-> errors. Later, as a player-coach, it meant writing new technical interview
-> questions when we needed to scale up hiring, and, more recently,
-> recording a walkthrough video and updating a runbook so that one person's
-> knowledge wouldn't become a single point of failure for on-call triage.
+> errors. Later, it meant writing new technical interview questions when we
+> needed to scale up hiring, and, more recently, recording a walkthrough
+> video and updating a runbook so that one person's knowledge wouldn't
+> become a single point of failure for on-call triage.
 > None of these are individually large projects, but they're a consistent
 > pattern of turning "ask the one person who knows" into "read the doc."

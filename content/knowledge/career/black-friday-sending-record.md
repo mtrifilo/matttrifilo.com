@@ -3,7 +3,7 @@ id: black-friday-sending-record
 title: Peak sending season track record, 2019 to 2025
 summary: Matt's role in seven peak sending seasons, from the 2019 resilience library to owning readiness as player-coach and then as manager.
 tags: [reliability, incident-response, email, peak-traffic, on-call]
-updated: 2026-09-21
+updated: 2026-10-01
 ---
 
 # Peak sending season track record, 2019 to 2025
@@ -77,8 +77,8 @@ manually retry any backend send attempts."
 He was the team's point of contact, fielded the reliability team's
 escalations, wrote the initial customer-facing status-page comms,
 identified a duplicate-send side effect caused by layered retry logic,
-checked the scope against the warehouse logs, and drove the post-outage
-analysis across the reliability and product organizations.
+checked the scope against the warehouse logs, and coordinated the
+post-outage analysis across the reliability and product organizations.
 
 ## Adjacent peak-season protections
 
