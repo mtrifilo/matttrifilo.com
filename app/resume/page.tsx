@@ -66,7 +66,10 @@ export default function ResumePage() {
 
         {/* Same Markdown the PDF is rendered from; see scripts/render-resume.sh. */}
         <article className="mt-12 border-t border-border pt-8 text-base leading-relaxed">
-          <MDXContent source={markdown} />
+          {/* The rule above spans the page; only the text takes the measure. */}
+          <div className="max-w-measure">
+            <MDXContent source={markdown} />
+          </div>
         </article>
       </div>
     </div>
