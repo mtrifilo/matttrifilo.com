@@ -7,7 +7,9 @@ import {
   getBlogPost,
   getBlogSlugs,
   parseFrontmatterDate,
+  postLastModified,
   rawFrontmatterBlock,
+  singleLineTitle,
 } from './blog'
 
 /** The raw frontmatter block as getBlogPost slices it from a post file. */
@@ -129,6 +131,12 @@ describe('the loader on fixture posts', () => {
     })
   })
 
+  test('the listing carries the updated date the sitemap reads', () => {
+    const [post] = getAllBlogPosts(path.join(FIXTURES, 'valid'))
+    expect(post.updated).toBe('2026-03-15')
+    expect(postLastModified(post)).toBe('2026-03-15')
+  })
+
   test('the posts the site publishes all pass the guard', () => {
     // CI's `next build` is the real proof; this fails `bun test` first,
     // with the file name, for any post under content/blog.
@@ -240,5 +248,26 @@ describe('the frontmatter guard', () => {
     expect(
       load('category-key', 'title: t\ndate: 2026-03-01\ncategory: [a]')
     ).toThrow(/category-key\.md: unknown frontmatter key "category"/)
+  })
+})
+
+describe('postLastModified', () => {
+  test('is the updated date when there is one, else the publish date', () => {
+    expect(
+      postLastModified({ date: '2026-03-01', updated: '2026-04-15' })
+    ).toBe('2026-04-15')
+    expect(postLastModified({ date: '2026-03-01' })).toBe('2026-03-01')
+  })
+})
+
+describe('singleLineTitle', () => {
+  test('turns each line break, LF or CRLF, into one space', () => {
+    expect(singleLineTitle('One.\nTwo.')).toBe('One. Two.')
+    expect(singleLineTitle('One. \r\n Two.\nThree.')).toBe('One. Two. Three.')
+  })
+  test('leaves a one-line title as it is', () => {
+    expect(singleLineTitle('A title, with a comma')).toBe(
+      'A title, with a comma'
+    )
   })
 })

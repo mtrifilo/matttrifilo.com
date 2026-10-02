@@ -231,6 +231,28 @@ function parseMatter(fileContents: string, source: string) {
 }
 
 /**
+ * The date a post last changed: its `updated` date when it has one, else
+ * the date it was published. The sitemap's lastmod and the post's
+ * dateModified both use it, so a search engine is told the same date in
+ * both places.
+ */
+export function postLastModified(post: {
+  date: string
+  updated?: string
+}): string {
+  return post.updated ?? post.date
+}
+
+/**
+ * A post title on one line. A title may carry a line break for the page's
+ * own heading, which nothing else (the <title>, og:title, the structured
+ * data headline) can show, so there it becomes a space.
+ */
+export function singleLineTitle(title: string): string {
+  return title.replace(/[ \t]*\r?\n[ \t]*/g, ' ').trim()
+}
+
+/**
  * Get a single blog post by slug
  */
 export function getBlogPost(
@@ -282,6 +304,7 @@ export function getAllBlogPosts(
       date: post.frontmatter.date,
       categories: post.frontmatter.categories || [],
       description: post.frontmatter.description,
+      updated: post.frontmatter.updated,
       excerpt: post.excerpt,
     })
   }

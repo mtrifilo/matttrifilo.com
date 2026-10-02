@@ -3,7 +3,10 @@ export interface BlogPostFrontmatter {
   date: string
   categories?: string[]
   description?: string
-  /** `YYYY-MM-DD`, validated like `date`; no page renders it. */
+  /**
+   * `YYYY-MM-DD`, validated like `date`. Not shown on the page; the sitemap
+   * and the post's structured data read it through postLastModified().
+   */
   updated?: string
 }
 
@@ -20,5 +23,7 @@ export interface BlogPostMeta {
   date: string
   categories: string[]
   description?: string
+  /** As in BlogPostFrontmatter. */
+  updated?: string
   excerpt: string
 }
