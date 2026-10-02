@@ -107,7 +107,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     label: 'Résumé',
     changeFrequency: 'yearly',
     priority: 0.5,
-    contentUpdated: '2026-09-29',
+    contentUpdated: '2026-10-01',
   },
   {
     href: '/contact',
