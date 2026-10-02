@@ -61,17 +61,55 @@ describe('the reading measure', () => {
   test.each(PAGES)(
     '%s: a portrait phone column is narrower than the measure',
     async page => {
-      // The page frame's mobile padding, from its own classes: px-N is
-      // N quarter-rems a side.
-      const frame = source(page).match(/className="w-full max-w-3xl ([^"]*)"/)
-      if (!frame) throw new Error('no max-w-3xl page frame')
-      const px = frame[1].match(/(?:^|\s)px-(\d+)(?:\s|$)/)
-      if (!px) throw new Error('the page frame sets no px-N padding')
-      const phoneColumn = WIDEST_PORTRAIT_PHONE_PX - 2 * Number(px[1]) * 4
-
-      const em = (await emittedMeasure()).match(/max-width:([\d.]+)em/)
-      if (!em) throw new Error('the measure is not in em')
-      expect(phoneColumn).toBeLessThan(Number(em[1]) * BODY_PX)
+      const phoneColumn = WIDEST_PORTRAIT_PHONE_PX - 2 * mobileGutterPx(page)
+      expect(phoneColumn).toBeLessThan(await measurePx())
     }
   )
+
+  test('MDX titles balance from the viewport at which the measure binds', async () => {
+    // The title renderers in mdx-content.tsx (h2 to h5) balance their lines
+    // so a role line or title does not end on a lone word at the measure.
+    // Their breakpoint has to sit where the column reaches the measure: any
+    // later leaves a band of widths with the measure and without balancing,
+    // and any earlier would change portrait phones.
+    const mdx = source('components/blog/mdx-content.tsx')
+    const rems = [...mdx.matchAll(/min-\[([\d.]+)rem\]:text-balance/g)].map(
+      m => m[1]
+    )
+    expect(rems).toHaveLength(4)
+    expect(new Set(rems).size).toBe(1)
+    const viewport = Number(rems[0]) * BODY_PX
+
+    // Below md, the column is the viewport less the frame's mobile padding.
+    for (const page of PAGES) {
+      const column = viewport - 2 * mobileGutterPx(page)
+      expect(column).toBeLessThanOrEqual(await measurePx())
+    }
+    expect(viewport).toBeGreaterThan(WIDEST_PORTRAIT_PHONE_PX)
+
+    // Tailwind turns the arbitrary breakpoint into a min-width query.
+    const compiled = await compile(css, {
+      base: fileURLToPath(new URL('../app', import.meta.url)),
+      onDependency: () => {},
+    })
+    const built = compiled.build([`min-[${rems[0]}rem]:text-balance`])
+    expect(built).toContain(`@media (width >= ${rems[0]}rem)`)
+    expect(built).toContain('text-wrap: balance;')
+  })
 })
+
+/** The page frame's mobile padding a side, from its own classes (px-N). */
+function mobileGutterPx(page: string): number {
+  const frame = source(page).match(/className="w-full max-w-3xl ([^"]*)"/)
+  if (!frame) throw new Error(`no max-w-3xl page frame in ${page}`)
+  const px = frame[1].match(/(?:^|\s)px-(\d+)(?:\s|$)/)
+  if (!px) throw new Error(`the page frame in ${page} sets no px-N padding`)
+  return Number(px[1]) * 4
+}
+
+/** The measure in px at the body size, from the compiled rule. */
+async function measurePx(): Promise<number> {
+  const em = (await emittedMeasure()).match(/max-width:([\d.]+)em/)
+  if (!em) throw new Error('the measure is not in em')
+  return Number(em[1]) * BODY_PX
+}

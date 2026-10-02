@@ -18,23 +18,28 @@ const DeepestHeading = (props: HeadingProps) => (
   <h6 className={labelHeadingClass} {...props} />
 )
 
-// Titles balance their lines from md up. There the text runs at the
-// reading measure (max-w-measure in app/globals.css), and a long title such
-// as a résumé role line would otherwise end on a lone year or word. Phones
-// keep the browser's default breaks.
+// Titles balance their lines from 36rem (576 px) up, the viewport at which
+// the page column reaches the reading measure (max-w-measure in
+// app/globals.css); there a long title such as a résumé role line would
+// otherwise end on a lone year or word. Below it, portrait phones keep the
+// browser's default breaks. lib/reading-measure.test.ts keeps the two
+// widths together.
 const components = {
   h1: (props: HeadingProps) => (
-    <h2 className="text-2xl font-bold mt-6 mb-4 md:text-balance" {...props} />
+    <h2
+      className="text-2xl font-bold mt-6 mb-4 min-[36rem]:text-balance"
+      {...props}
+    />
   ),
   h2: (props: HeadingProps) => (
     <h3
-      className="text-xl font-semibold mt-5 mb-3 md:text-balance"
+      className="text-xl font-semibold mt-5 mb-3 min-[36rem]:text-balance"
       {...props}
     />
   ),
   h3: (props: HeadingProps) => (
     <h4
-      className="text-lg font-semibold mt-4 mb-2 md:text-balance"
+      className="text-lg font-semibold mt-4 mb-2 min-[36rem]:text-balance"
       {...props}
     />
   ),
@@ -43,7 +48,7 @@ const components = {
   // the gap between two roles reads wider than a role's sub-group gaps.
   h4: (props: HeadingProps) => (
     <h5
-      className="text-base font-semibold mt-8 mb-2 md:text-balance"
+      className="text-base font-semibold mt-8 mb-2 min-[36rem]:text-balance"
       {...props}
     />
   ),
