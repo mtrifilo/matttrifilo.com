@@ -1,5 +1,7 @@
 import {
   ASSISTANT_EVALS_TITLE,
+  ASSISTANT_HOW_BUILT_TEXT,
+  ASSISTANT_HOW_BUILT_URL,
   STARTER_QUESTIONS,
 } from '@/components/assistant/copy'
 import {
@@ -90,6 +92,16 @@ for (const surface of SURFACES) {
       } else {
         await expect(evalsLink).toHaveCount(0)
       }
+
+      const howBuiltLink = page.getByRole('link', {
+        name: ASSISTANT_HOW_BUILT_TEXT,
+      })
+      await expect(howBuiltLink).toBeVisible()
+      await expect(howBuiltLink).toHaveAttribute(
+        'href',
+        ASSISTANT_HOW_BUILT_URL
+      )
+      await expect(howBuiltLink).toHaveAttribute('target', '_blank')
     })
 
     test('has no sideways scroll on a phone', async ({ page, isMobile }) => {

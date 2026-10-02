@@ -12,6 +12,7 @@ import { answered } from '@/test/chat-stream'
 import { setTouchDevice } from '@/test/touch-device'
 import { AssistantChat } from './assistant-chat'
 import {
+  ASSISTANT_HOW_BUILT_TEXT,
   progressSummary,
   RESET_LABEL,
   seeAllQuestionsLabel,
@@ -167,6 +168,7 @@ describe('/ask before the first question', () => {
       COMPOSER,
       // The send button is disabled until there is a question to send.
       'Matt himself',
+      ASSISTANT_HOW_BUILT_TEXT,
     ])
   })
 
@@ -231,6 +233,7 @@ describe('/ask after an answer', () => {
       FOLLOW_UP,
       COMPOSER,
       'Matt himself',
+      ASSISTANT_HOW_BUILT_TEXT,
     ])
   })
 
@@ -316,6 +319,7 @@ describe('the homepage panel', () => {
       ...ROW_QUESTIONS,
       COMPOSER,
       'Matt himself',
+      ASSISTANT_HOW_BUILT_TEXT,
     ])
   })
 

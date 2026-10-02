@@ -1,6 +1,6 @@
 # matttrifilo.com
 
-The source of [matttrifilo.com](https://matttrifilo.com), Matt Trifilo's personal site: a blog, his résumé, a curated list of open-source projects, recommended books, a contact page, and Matt's Career Assistant, an AI assistant that answers questions about his published work.
+The source of [matttrifilo.com](https://matttrifilo.com), Matt Trifilo's personal site: a blog, his résumé, a curated list of open-source projects, recommended books, a contact page, and Matt's Career Assistant, an AI assistant he built that answers questions about his work from write-ups he wrote about it, his résumé, and his GitHub activity.
 
 The repository is public, so a push publishes. That includes this file.
 

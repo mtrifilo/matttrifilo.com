@@ -22,8 +22,13 @@ export const ASSISTANT_NAME = "Matt's Career Assistant"
 /** The persistent AI disclosure. Present on every surface, never dismissible. */
 export const ASSISTANT_LABEL = 'AI assistant · answers about Matt Trifilo'
 
+/**
+ * Matt's words (MTC-108, 2026-10-01): it says he built the assistant and
+ * where its answers come from, which a hiring manager reading it as a work
+ * sample needs to know before asking anything.
+ */
 export const ASSISTANT_INTRO =
-  "Ask about Matt's projects, teams, and engineering leadership. Answers come from his published work. Email him if you want to talk."
+  'Matt built this assistant to answer questions about his projects, teams, and engineering leadership, from write-ups he wrote about his work, his résumé, and his GitHub activity. Email him if you want to talk.'
 
 export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
 
@@ -33,6 +38,16 @@ export const ASSISTANT_PLACEHOLDER = "Ask about Matt's work…"
  * sitemap entry in lib/site-routes.ts.
  */
 export const ASSISTANT_EVALS_TITLE = 'How this assistant is tested'
+
+/**
+ * The link beside ASSISTANT_EVALS_TITLE to the assistant's section of the
+ * public repository's README (Matt, MTC-108, 2026-10-01; the text is his).
+ * The anchor is GitHub's slug for the README heading "The Career
+ * Assistant", so renaming that heading breaks the link.
+ */
+export const ASSISTANT_HOW_BUILT_TEXT = 'How it was built'
+export const ASSISTANT_HOW_BUILT_URL =
+  'https://github.com/mtrifilo/matttrifilo.com#the-career-assistant'
 
 /**
  * The starter questions both surfaces offer (MTC-39).
@@ -91,6 +106,9 @@ export const STARTER_QUESTIONS = [
   "How does Matt run his team's delivery process, and how did it change with AI agents?",
   'How does Matt handle performance management and growth conversations?',
   'How does Matt communicate a change or a reorganization to a team?',
+  // Matt's wording (MTC-108). Last, so no other pill moves; it is listed
+  // under More until he places it in STARTER_LIST_THEMES.
+  'How did Matt build this assistant?',
 ] as const
 
 /**

@@ -10,6 +10,7 @@ import { AssistantProgress } from './assistant-progress'
 import { EvalsPublishedProvider } from './evals-published'
 import {
   ASSISTANT_EVALS_TITLE,
+  ASSISTANT_HOW_BUILT_TEXT,
   progressHeadings,
   progressSummary,
   RESET_LABEL,
@@ -168,7 +169,7 @@ describe('controls drawn under 44 px', () => {
     expect(source).toContain('"touch-target absolute ')
   })
 
-  test('carry it on the eval results link, which stands on a line of its own', () => {
+  test('carry it on the eval results and how-it-was-built links, which stand on a line of their own', () => {
     render(
       <EvalsPublishedProvider published>
         <AssistantDisclosure />
@@ -176,6 +177,11 @@ describe('controls drawn under 44 px', () => {
     )
     expect(
       hasTouchTarget(screen.getByRole('link', { name: ASSISTANT_EVALS_TITLE }))
+    ).toBe(true)
+    expect(
+      hasTouchTarget(
+        screen.getByRole('link', { name: ASSISTANT_HOW_BUILT_TEXT })
+      )
     ).toBe(true)
     // "Matt himself" sits inside a sentence: exempt, and a grown area there
     // would reach the line below.

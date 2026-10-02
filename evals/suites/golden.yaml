@@ -4653,6 +4653,71 @@
           value: *f8
 # --- end MTC-40 block ---
 
+# --- begin MTC-108: the starter question on how the assistant was built ---
+# how-the-career-assistant-was-built: "Matt built it himself, every piece of
+# it"; "The model is Gemini 3.8 Flash on Google Vertex AI"; "it presents its
+# Vercel OIDC token to a Google workload identity pool"; "opens at most three
+# of them, within a read budget of 20,000 tokens"; the kill switch, BotID and
+# the per-request limits under "Protection layers"; the four suites and
+# matttrifilo.com/ask/evals under "How it is tested".
+# Reads: how-the-career-assistant-was-built only; no other document describes the assistant (open-source gives the site one line).
+- description: 'golden: how Matt built this assistant'
+  vars:
+    question: How did Matt build this assistant?
+  metadata:
+    suite: golden
+    expectReads: [how-the-career-assistant-was-built]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertNoPolicyLeak
+    - type: icontains-any
+      value:
+        - BotID
+        - kill switch
+        - workload identity
+        - read budget
+        - /ask/evals
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &a1 >-
+            The answer says Matt built the assistant himself, and gives at
+            least three of these documented facts: it runs on Gemini on Google
+            Vertex AI, reached with a short-lived token from workload identity
+            federation rather than a stored key; it answers from a curated set
+            of Markdown documents, opening at most three per question within a
+            read budget, and states as fact only what those documents say; a
+            protection layer such as the kill switch, Vercel's BotID, or the
+            per-request limits; eval suites (golden, refusals, injection,
+            groundedness) whose runs can be published at /ask/evals. The
+            document itself names Gemini 3.8 Flash, Google Vertex AI, the AI
+            SDK, Vercel, Vercel's BotID and GitHub, so naming any of them is
+            correct. It fails if it presents the edge firewall's rate-limit
+            rule as in place, which the document says is specified for launch
+            and not yet in place; leaving that rule out is fine. It fails if
+            it says the eval suites run automatically, block a deploy, or must
+            pass a threshold before a change ships: the document says Matt
+            runs them before opening a pull request, and the thresholds decide
+            only whether a run can be published. It fails if it says Matt
+            wrote all of the code by hand or built it without help, since the
+            document says he builds it with AI coding agents. It is written
+            about Matt in the third person, and it must not present an
+            inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *a1
+        - type: llm-rubric
+          value: *a1
+# --- end MTC-108 block ---
+
 # The two activity goldens (MTC-45). They are the only tests in this file with
 # no llm-rubric: what the repository shipped this week changes between runs,
 # so there is no stable claim to grade. What they assert instead holds

@@ -111,9 +111,9 @@ export function loopSeconds(copyWidth: number): number | null {
 /**
  * Which pill of a row a surface's `startAt` names, wrapped into the row.
  *
- * The two rows hold a different number of questions, so a surface names one
- * index and each row resolves it against its own length rather than falling
- * off the end.
+ * The two rows hold a different number of questions whenever the pool is
+ * odd, so a surface names one index and each row resolves it against its
+ * own length rather than falling off the end.
  */
 export function pillIndexFor(startAt: number, count: number): number {
   if (!Number.isFinite(startAt) || count <= 0) return 0
