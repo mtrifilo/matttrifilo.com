@@ -54,7 +54,7 @@
  */
 import { createLucideIcon, type LucideIconNode } from 'lucide-react'
 
-export const githubIconNode: LucideIconNode[] = [
+const githubIconNode: LucideIconNode[] = [
   [
     'path',
     {
@@ -65,7 +65,7 @@ export const githubIconNode: LucideIconNode[] = [
   ['path', { d: 'M9 18c-4.51 2-5-2-7-2', key: '9comsn' }],
 ]
 
-export const linkedinIconNode: LucideIconNode[] = [
+const linkedinIconNode: LucideIconNode[] = [
   [
     'path',
     {
@@ -77,5 +77,13 @@ export const linkedinIconNode: LucideIconNode[] = [
   ['circle', { cx: '4', cy: '4', r: '2', key: 'bt5ra8' }],
 ]
 
-export const Github = createLucideIcon('github', githubIconNode)
-export const Linkedin = createLucideIcon('linkedin', linkedinIconNode)
+export const Github = createLucideIcon({
+  name: 'github',
+  size: 24,
+  node: githubIconNode,
+})
+export const Linkedin = createLucideIcon({
+  name: 'linkedin',
+  size: 24,
+  node: linkedinIconNode,
+})
