@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { getBlogPost, getBlogSlugs } from '@/lib/blog'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { hasPublishedEvalRun } from '@/lib/evals/results'
-import { sitemapRoutes } from '@/lib/site-routes'
+import { sitemapRoutes, visibleSiteRoutes } from '@/lib/site-routes'
 import sitemap from './sitemap'
 
 /**
@@ -40,5 +40,24 @@ describe('the sitemap as a whole', () => {
     const postUrls = getBlogSlugs().map(slug => `${POST_PREFIX}${slug}`)
     expect(new Set(urls).size).toBe(urls.length)
     expect([...urls].sort()).toEqual([...routeUrls, ...postUrls].sort())
+  })
+
+  test('every route the nav links is offered, in every kill-switch and eval-run state', () => {
+    // app/nav.tsx links visibleSiteRoutes minus hideFromNav. The sitemap
+    // drops a route only while it has nothing worth indexing, so that
+    // route must stay out of the nav too, or the nav links a page the
+    // sitemap withholds.
+    for (const assistantDisabled of [false, true]) {
+      const navHrefs = visibleSiteRoutes({ assistantDisabled })
+        .filter(route => !route.hideFromNav)
+        .map(route => route.href)
+      for (const evalResultsPublished of [false, true]) {
+        const offered = sitemapRoutes({
+          assistantDisabled,
+          evalResultsPublished,
+        }).map(route => route.href)
+        for (const href of navHrefs) expect(offered).toContain(href)
+      }
+    }
   })
 })

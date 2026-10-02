@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import fs from 'fs'
 import path from 'path'
 import { getAllBlogPosts, getBlogSlugs } from './blog'
 
@@ -6,7 +7,8 @@ import { getAllBlogPosts, getBlogSlugs } from './blog'
  * listing/ holds four posts on three dates, two of them on the same day,
  * with file names whose alphabetical order is neither newest first nor
  * oldest first. Beside them sit `_draft.md`, valid and dated after every
- * post, and `notes.txt`.
+ * post, `notes.txt`, and `e-later.md.bak`, whose name contains `.md`
+ * without ending in it.
  */
 const LISTING_FIXTURES = path.join(
   process.cwd(),
@@ -46,15 +48,28 @@ describe('getAllBlogPosts ordering', () => {
     ])
   })
 
-  test('posts on the same date keep the order getBlogSlugs read them in', () => {
+  test('posts on the same date keep directory order, whichever way it runs', () => {
     // The comparator looks only at the date and Array.prototype.sort is
-    // stable, so a tie falls back to directory order, whatever the file
-    // system returns; this pins that no other tiebreak is applied.
-    const sameDay = (slugs: string[]) =>
-      slugs.filter(slug => slug === 'a-spring' || slug === 'd-spring-again')
-    expect(sameDay(posts.map(post => post.slug))).toEqual(
-      sameDay(getBlogSlugs(LISTING_FIXTURES))
-    )
+    // stable, so a tie falls back to the order readdirSync returns, which
+    // no file system promises. Serving the real names in both orders makes
+    // any added tiebreak, by slug or anything else, fail one of the two
+    // runs on every machine.
+    const realReaddir = fs.readdirSync.bind(fs) as (dir: string) => string[]
+    const sameDayInListing = (direction: 1 | -1) => {
+      const spy = spyOn(fs, 'readdirSync').mockImplementation(((dir: string) =>
+        realReaddir(dir).sort(
+          (a, b) => direction * a.localeCompare(b)
+        )) as unknown as typeof fs.readdirSync)
+      try {
+        return getAllBlogPosts(LISTING_FIXTURES)
+          .map(post => post.slug)
+          .filter(slug => slug === 'a-spring' || slug === 'd-spring-again')
+      } finally {
+        spy.mockRestore()
+      }
+    }
+    expect(sameDayInListing(1)).toEqual(['a-spring', 'd-spring-again'])
+    expect(sameDayInListing(-1)).toEqual(['d-spring-again', 'a-spring'])
   })
 })
 
