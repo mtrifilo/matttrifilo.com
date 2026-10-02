@@ -73,8 +73,11 @@ describe('app/globals.css through the build optimiser', () => {
     // MTC-95: the standard properties on the rows' class, and the WebKit
     // pseudo-elements kept to browsers without `scrollbar-color`. Dropping
     // or merging either would leave a classic bar in the browser's colors.
-    expect(emitted(ruleFor('.edge-faded-row {'))).toContain(
-      'scrollbar-width:thin;scrollbar-color:var(--muted-foreground)transparent'
+    // Lightning CSS keeps the space between `var(...)` and the next token
+    // from 1.31 on and dropped it before; both forms are valid CSS, so the
+    // space is optional here.
+    expect(emitted(ruleFor('.edge-faded-row {'))).toMatch(
+      /scrollbar-width:thin;scrollbar-color:var\(--muted-foreground\) ?transparent/
     )
     const legacy = emitted(ruleFor('@supports not (scrollbar-color: auto)'))
     expect(legacy).toStartWith('@supports not (scrollbar-color:auto){')
