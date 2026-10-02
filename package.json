@@ -63,7 +63,7 @@
     "happy-dom": "20.14.5",
     "promptfoo": "0.123.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^7"
   },
   "trustedDependencies": [
     "sharp",
