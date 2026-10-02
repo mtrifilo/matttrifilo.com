@@ -199,6 +199,23 @@ describe('the frontmatter guard', () => {
     ).toThrow(/blank-description\.md: frontmatter description must be text/)
   })
 
+  test('an updated date before the publish date is refused', () => {
+    expect(
+      load(
+        'updated-early',
+        "title: t\ndate: '2026-03-01'\nupdated: '2026-02-28'"
+      )
+    ).toThrow(
+      /updated-early\.md: frontmatter updated \(2026-02-28\) is before date \(2026-03-01\)/
+    )
+    expect(
+      load(
+        'updated-same',
+        "title: t\ndate: '2026-03-01'\nupdated: '2026-03-01'"
+      )()?.frontmatter.updated
+    ).toBe('2026-03-01')
+  })
+
   test('categories must be a list of text values', () => {
     expect(
       load('string-categories', 'title: t\ndate: 2026-03-01\ncategories: a')
@@ -264,6 +281,9 @@ describe('singleLineTitle', () => {
   test('turns each line break, LF or CRLF, into one space', () => {
     expect(singleLineTitle('One.\nTwo.')).toBe('One. Two.')
     expect(singleLineTitle('One. \r\n Two.\nThree.')).toBe('One. Two. Three.')
+  })
+  test('collapses a run of spaces or tabs, as the feed title does', () => {
+    expect(singleLineTitle('  One.  \tTwo.  ')).toBe('One. Two.')
   })
   test('leaves a one-line title as it is', () => {
     expect(singleLineTitle('A title, with a comma')).toBe(

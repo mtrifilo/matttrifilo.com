@@ -1,4 +1,5 @@
 import { postLastModified, singleLineTitle } from '@/lib/blog'
+import type { BlogPost } from '@/lib/types/blog'
 import { JOB_TITLE } from './identity'
 
 const SITE_URL = 'https://matttrifilo.com'
@@ -83,4 +84,20 @@ export function generateBlogPostingSchema(post: {
       '@id': canonicalUrl,
     },
   }
+}
+
+/**
+ * The schema for a loaded post, with the fields the post page shows: the
+ * description falls back to the excerpt as the page's meta description
+ * does. The page and the tests both call this, so a field the page stops
+ * passing fails a test.
+ */
+export function blogPostingSchemaFor(post: BlogPost): BlogPostingSchema {
+  return generateBlogPostingSchema({
+    title: post.frontmatter.title,
+    date: post.frontmatter.date,
+    updated: post.frontmatter.updated,
+    description: post.frontmatter.description || post.excerpt,
+    slug: post.slug,
+  })
 }

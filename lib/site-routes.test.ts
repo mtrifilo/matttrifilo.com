@@ -123,7 +123,10 @@ describe('sitemap lastmod', () => {
 
   test('each static page is dated by its own content, or what it lists', () => {
     const newest = {
-      post: getAllBlogPosts().map(postLastModified).sort().at(-1),
+      post: getAllBlogPosts()
+        .map(post => post.date)
+        .sort()
+        .at(-1),
       evalRun: latestEvalSummary()?.ranAt.slice(0, 10),
     }
     const listed = sitemapRoutes({

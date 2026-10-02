@@ -4,8 +4,9 @@ export interface BlogPostFrontmatter {
   categories?: string[]
   description?: string
   /**
-   * `YYYY-MM-DD`, validated like `date`. Not shown on the page; the sitemap
-   * and the post's structured data read it through postLastModified().
+   * `YYYY-MM-DD`, validated like `date` and never before it. Not shown on
+   * the page; the sitemap, the structured data and og modifiedTime read it
+   * through postLastModified().
    */
   updated?: string
 }

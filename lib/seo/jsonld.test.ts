@@ -4,6 +4,7 @@ import path from 'path'
 import { getAllBlogPosts, getBlogPost } from '@/lib/blog'
 import { JOB_TITLE } from './identity'
 import {
+  blogPostingSchemaFor,
   generateBlogPostingSchema,
   generatePersonSchema,
   postImageUrl,
@@ -70,6 +71,39 @@ describe('BlogPosting schema', () => {
   })
 })
 
+describe('blogPostingSchemaFor', () => {
+  const loaded = {
+    slug: 'my-post',
+    frontmatter: {
+      title: 'First line.\nSecond line.',
+      date: '2026-03-01',
+      updated: '2026-04-15',
+    },
+    content: 'Body.',
+    excerpt: 'The excerpt.',
+  }
+
+  test('passes the updated date through to dateModified', () => {
+    expect(blogPostingSchemaFor(loaded).dateModified).toBe('2026-04-15')
+  })
+
+  test('uses the description, else the excerpt, as the page does', () => {
+    expect(blogPostingSchemaFor(loaded).description).toBe('The excerpt.')
+    expect(
+      blogPostingSchemaFor({
+        ...loaded,
+        frontmatter: { ...loaded.frontmatter, description: 'Described.' },
+      }).description
+    ).toBe('Described.')
+  })
+
+  test('carries the slug and the one-line headline', () => {
+    const schema = blogPostingSchemaFor(loaded)
+    expect(schema.url).toBe('https://matttrifilo.com/blog/my-post')
+    expect(schema.headline).toBe('First line. Second line.')
+  })
+})
+
 describe('BlogPosting schema for each published post', () => {
   const posts = getAllBlogPosts()
 
@@ -78,15 +112,8 @@ describe('BlogPosting schema for each published post', () => {
   })
 
   for (const meta of posts) {
-    // Built from the same fields app/blog/[slug]/page.tsx passes.
-    const full = getBlogPost(meta.slug)!
-    const schema = generateBlogPostingSchema({
-      title: full.frontmatter.title,
-      date: full.frontmatter.date,
-      updated: full.frontmatter.updated,
-      description: full.frontmatter.description || full.excerpt,
-      slug: meta.slug,
-    })
+    // The same call app/blog/[slug]/page.tsx makes.
+    const schema = blogPostingSchemaFor(getBlogPost(meta.slug)!)
 
     test(`${meta.slug}: carries the fields the Article rich result reads`, () => {
       expect(schema['@context']).toBe('https://schema.org')

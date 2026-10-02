@@ -20,16 +20,19 @@ export interface SiteRoute {
    */
   needsPublishedEvalRun?: true
   /**
-   * `YYYY-MM-DD`, the day the page's own content last changed: the merge
-   * date on main of the last change to its page file or the content it
-   * renders (tests and head-only metadata do not count). It is the
-   * sitemap's lastmod, so it is a fact about the page rather than the
-   * build time; move it forward with any change a visitor would see.
+   * `YYYY-MM-DD`, the day the page's own content last changed: the day
+   * the last change to its page file, or the content it renders, merged
+   * to main. Tests, head-only metadata and the shared layout (nav, footer,
+   * skip link) do not count. It is the sitemap's lastmod, so it is a fact
+   * about the page rather than the build time; move it forward in the
+   * pull request that changes what a visitor sees on the page. Nothing
+   * checks it against git.
    */
   contentUpdated: string
   /**
-   * The page lists the blog posts or the published eval runs, so adding
+   * The page lists the blog posts or the published eval runs, so a new
    * one changes the page too and its lastmod is the later of the two.
+   * A post counts by its publish date, the date the listing shows.
    */
   lists?: 'posts' | 'evalRuns'
 }
