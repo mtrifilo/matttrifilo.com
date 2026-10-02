@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Github, Linkedin, Mail, Rss } from 'lucide-react'
+import { Mail, Rss } from 'lucide-react'
+import { Github, Linkedin } from '@/components/icons/brand-icons'
 import { FEED_PATH } from '@/lib/seo/feed'
 import { CopyrightYear } from './copyright-year'
 
