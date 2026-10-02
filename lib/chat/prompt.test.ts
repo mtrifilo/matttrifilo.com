@@ -45,6 +45,17 @@ const history: ChatTurn[] = [
   { role: 'assistant', text: 'He led a platform migration at Thryv.' },
 ]
 
+describe('the decline sentence', () => {
+  test("is Matt's wording, written out", () => {
+    // Every other check reads the constant, so a merge that kept an older
+    // copy of it would pass them all. This one is written out on purpose
+    // (Matt, MTC-108, 2026-10-01).
+    expect(DECLINE_SENTENCE).toBe(
+      "That isn't something I can answer from Matt's documents. For questions like this, email him at matt.trifilo@gmail.com."
+    )
+  })
+})
+
 describe('SYSTEM_PROMPT', () => {
   test('carries the decline sentence verbatim', () => {
     expect(SYSTEM_PROMPT).toContain(DECLINE_SENTENCE)

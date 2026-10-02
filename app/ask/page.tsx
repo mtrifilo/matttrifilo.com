@@ -15,7 +15,7 @@ export function generateMetadata(): Metadata {
   return {
     title: 'Ask',
     description:
-      "Matt's Career Assistant answers questions about Matt Trifilo's projects, teams and engineering leadership, from his own documents, and says which ones it read.",
+      'Matt Trifilo built this assistant to answer questions about his projects, teams and engineering leadership, from write-ups he wrote about his work, his résumé and his GitHub activity, and it says which documents it read.',
     alternates: { canonical: '/ask', types: FEED_ALTERNATE_TYPES },
   }
 }
