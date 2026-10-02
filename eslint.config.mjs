@@ -17,18 +17,20 @@ const require = createRequire(import.meta.url)
  *
  * The setting makes the rules this config turns on work; it does not make
  * the plugins ESLint 10 compatible. Until they are, before turning on a
- * rule, lint a file it should flag and check the run does not crash:
- * - eslint-plugin-react 7.37.5: react/jsx-curly-spacing,
- *   jsx-equals-spacing, jsx-tag-spacing, jsx-one-expression-per-line,
- *   forward-ref-uses-ref and jsx-filename-extension crash the run, and a
- *   class marked only by a JSDoc `@extends React.Component` is no longer
- *   recognized as a component (the site has no class components).
+ * rule, lint a file it should flag and check the run does not crash. The
+ * rules named below are examples, not a complete list:
+ * - eslint-plugin-react 7.37.5: rules such as react/jsx-curly-spacing,
+ *   jsx-equals-spacing, jsx-tag-spacing, jsx-space-before-closing,
+ *   jsx-one-expression-per-line, forward-ref-uses-ref and
+ *   jsx-filename-extension crash the run, and a class marked only by a
+ *   JSDoc `@extends React.Component` is no longer recognized as a component
+ *   (the site has no class components).
  * - eslint-plugin-import 2.32.0: rules that read the source type, such as
  *   import/no-default-export, crash the run.
  * - typescript-eslint 8.55.0, the version this lockfile resolves, declares
- *   ESLint up to 9; rules that read parser options, such as
- *   @typescript-eslint/consistent-generic-constructors and no-deprecated,
- *   crash the run. 8.56.0 and later support ESLint 10.
+ *   ESLint up to 9, and rules such as
+ *   @typescript-eslint/consistent-generic-constructors, no-deprecated and
+ *   no-magic-numbers crash the run. 8.56.0 and later support ESLint 10.
  */
 const { version: installedReactVersion } = require('react/package.json')
 
