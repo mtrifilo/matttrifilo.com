@@ -123,15 +123,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Checks parsed frontmatter against BlogPostFrontmatter and returns only
- * the fields the site reads. This is where a post file stops being
- * untrusted input: past it, every field has the type the pages assume, so
- * a post that would render "undefined" or break a category page fails the
- * build here instead, with the file name.
+ * Every key a post may declare. Anything else is an error rather than
+ * something ignored, as in the knowledge twin's loader: a silently ignored
+ * `descripton:` is a post that loads and is wrong, and an ignored
+ * `draft: true` publishes a post its author meant to hold back.
+ */
+const DECLARED_KEYS = {
+  title: true,
+  date: true,
+  description: true,
+  categories: true,
+  updated: true,
+} satisfies Record<keyof BlogPostFrontmatter, true>
+
+// From an object `satisfies` checks in both directions, so a field added
+// to BlogPostFrontmatter without a key here fails typecheck.
+const FRONTMATTER_KEYS = Object.keys(DECLARED_KEYS)
+
+/**
+ * Checks parsed frontmatter against BlogPostFrontmatter and returns the
+ * typed fields. This is where a post file stops being untrusted input:
+ * past it, every field has the type the pages assume, so a post that
+ * would render "undefined" or break a category page fails the build here
+ * instead, with the file name.
  *
  * Present means valid: an optional field that is written must hold the
  * right type, because an empty or mistyped field is an authoring slip,
- * not a request to leave it out. Keys the site does not read are ignored.
+ * not a request to leave it out.
  */
 function validateFrontmatter(
   data: unknown,
@@ -143,6 +161,13 @@ function validateFrontmatter(
     throw new Error(
       `${source}: frontmatter must be "key: value" lines (got ${describeValue(data)})`
     )
+  }
+  for (const key of Object.keys(data)) {
+    if (!FRONTMATTER_KEYS.includes(key)) {
+      throw new Error(
+        `${source}: unknown frontmatter key "${key}". A post declares ${FRONTMATTER_KEYS.join(', ')} and nothing else.`
+      )
+    }
   }
 
   const { title, description, categories } = data

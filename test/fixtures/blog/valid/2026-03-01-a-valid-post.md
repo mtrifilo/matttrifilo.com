@@ -6,7 +6,6 @@ description: 'A description: with a colon.'
 categories:
   - engineering
   - '2026'
-notes: 'A key the site does not read.'
 ---
 
 # A section
