@@ -8,9 +8,11 @@ import {
 } from 'react'
 
 /**
- * How the visitor is pointing, for the one decision that depends on it:
+ * How the visitor is pointing, for the two decisions that depend on it:
  * where focus goes after a control asks a question for them or starts a new
- * conversation.
+ * conversation, and whether the honeycomb background waits for load and an
+ * idle moment before it starts (`hasCoarsePointer`, read by
+ * components/background/HexBackground.tsx).
  *
  * Focusing the composer parks the caret for the next question, which is what
  * a mouse or keyboard visitor wants. On a touch device the same call raises

@@ -15,6 +15,7 @@ import {
   type HexWaveState,
 } from './hex-renderer'
 import { browserStartHost, startWhenIdle } from './start-when-idle'
+import { hasCoarsePointer } from '@/components/assistant/pointer'
 
 export function HexBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -77,9 +78,10 @@ export function HexBackground() {
 
   // The canvas element renders identically on server and client, so no
   // mount gate is needed; everything window-dependent lives in this effect.
-  // None of it runs until startWhenIdle says so (see start-when-idle.ts):
-  // until then the canvas is as blank as it is before hydration, and nothing
-  // is measured, drawn or listened to.
+  // On a phone (a coarse primary pointer) none of it runs until
+  // startWhenIdle says so (see start-when-idle.ts): until then the canvas is
+  // as blank as it is before hydration, and nothing is measured, drawn or
+  // listened to. On a desktop it starts at mount (Matt, 2026-10-01, MTC-102).
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -292,6 +294,8 @@ export function HexBackground() {
         veilQuery.removeEventListener('change', onVeilChange)
       }
     }
+
+    if (!hasCoarsePointer()) return startDrawing()
 
     let stopDrawing: (() => void) | undefined
     const cancelStart = startWhenIdle(browserStartHost(), () => {

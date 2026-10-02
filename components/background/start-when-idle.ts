@@ -1,6 +1,7 @@
 /**
- * When the honeycomb starts: after the document's load event, at the first
- * moment the main thread is idle.
+ * When the honeycomb starts on a phone: after the document's load event, at
+ * the first moment the main thread is idle. HexBackground uses this only
+ * where the primary pointer is coarse; a desktop starts at mount.
  *
  * The canvas is decoration drawn on the client, so it adds nothing to the
  * first paint, and on a phone its entrance wave is 60 frames a second of
