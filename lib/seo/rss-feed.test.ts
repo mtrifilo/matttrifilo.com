@@ -242,7 +242,7 @@ type PageMetadata = {
 /**
  * The page modules under app/, each with the metadata Next would resolve
  * for it: the static `metadata` export, or `generateMetadata` called with
- * the first static params of a dynamic route.
+ * each static params entry of a dynamic route.
  */
 async function pageMetadata(): Promise<PageMetadata[]> {
   const resolved: PageMetadata[] = []
@@ -251,22 +251,27 @@ async function pageMetadata(): Promise<PageMetadata[]> {
     if (mod.metadata)
       resolved.push({ page, metadata: mod.metadata, params: {} })
     if (!mod.generateMetadata) continue
-    const [params = {}] = mod.generateStaticParams
+    const allParams: Record<string, string>[] = mod.generateStaticParams
       ? await mod.generateStaticParams()
-      : []
-    try {
-      const metadata = await mod.generateMetadata({
-        params: Promise.resolve(params),
-      })
-      resolved.push({ page, metadata, params })
-    } catch (error) {
-      // A page behind the assistant's kill switch 404s instead; the
-      // not-found metadata is the layout's, which carries the feed.
-      if (!String((error as { digest?: string }).digest).includes('404'))
-        throw error
+      : [{}]
+    for (const params of allParams) {
+      try {
+        const metadata = await mod.generateMetadata({
+          params: Promise.resolve(params),
+        })
+        resolved.push({ page, metadata, params })
+      } catch (error) {
+        // A page behind the assistant's kill switch 404s instead; the
+        // not-found metadata is the layout's, which carries the feed.
+        if (!isNotFound(error)) throw error
+      }
     }
   }
   return resolved
+}
+
+function isNotFound(error: unknown): boolean {
+  return String((error as { digest?: string }).digest).includes('404')
 }
 
 describe('feed autodiscovery', () => {
@@ -338,7 +343,7 @@ describe('canonical links', () => {
     } finally {
       if (saved !== undefined) process.env.CHAT_DISABLED = saved
     }
-    expect(pages.map(p => p.page)).toEqual(pageFiles())
+    expect([...new Set(pages.map(p => p.page))]).toEqual(pageFiles())
 
     const config = (await import('../../next.config')).default
     const context = {
@@ -363,8 +368,31 @@ describe('canonical links', () => {
     }
   })
 
-  test('no page or component writes a canonical link of its own', () => {
-    const sources = ['app', 'components'].flatMap(dir =>
+  test('a page behind the kill switch 404s, so it carries no canonical', async () => {
+    // A static `metadata` export would resolve on the 404 as well and give
+    // it a self-canonical; generateMetadata throwing notFound() prevents it.
+    const saved = process.env.CHAT_DISABLED
+    process.env.CHAT_DISABLED = '1'
+    try {
+      for (const page of ['app/ask/page.tsx', 'app/ask/evals/page.tsx']) {
+        const mod = await import(join(ROOT, page))
+        expect(`${page}: ${'metadata' in mod}`).toBe(`${page}: false`)
+        let thrown: unknown
+        try {
+          await mod.generateMetadata({ params: Promise.resolve({}) })
+        } catch (error) {
+          thrown = error
+        }
+        expect(`${page}: ${isNotFound(thrown)}`).toBe(`${page}: true`)
+      }
+    } finally {
+      if (saved === undefined) delete process.env.CHAT_DISABLED
+      else process.env.CHAT_DISABLED = saved
+    }
+  })
+
+  test('nothing writes a canonical link of its own', () => {
+    const sources = ['app', 'components', 'lib'].flatMap(dir =>
       readdirSync(join(ROOT, dir), { recursive: true })
         .map(String)
         .filter(file => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
@@ -372,9 +400,8 @@ describe('canonical links', () => {
     )
     for (const file of sources) {
       const text = readFileSync(file, 'utf8')
-      expect(`${file}: ${/rel=\{?["']canonical["']/.test(text)}`).toBe(
-        `${file}: false`
-      )
+      const writesOne = /rel\s*[=:]\s*\{?\s*["'`]canonical/.test(text)
+      expect(`${file}: ${writesOne}`).toBe(`${file}: false`)
     }
   })
 })
