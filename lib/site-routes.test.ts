@@ -2,10 +2,15 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'fs'
 import path from 'path'
 import sitemap from '@/app/sitemap'
-import { getBlogSlugs } from './blog'
-import { siteRoutes, sitemapRoutes, visibleSiteRoutes } from './site-routes'
+import { getAllBlogPosts, getBlogSlugs, postLastModified } from './blog'
+import {
+  routeLastModified,
+  siteRoutes,
+  sitemapRoutes,
+  visibleSiteRoutes,
+} from './site-routes'
 import { isChatDisabled } from './chat/kill-switch'
-import { hasPublishedEvalRun } from './evals/results'
+import { hasPublishedEvalRun, latestEvalSummary } from './evals/results'
 
 const BASE = 'https://matttrifilo.com'
 const toUrl = (href: string) => (href === '/' ? BASE : `${BASE}${href}`)
@@ -81,6 +86,105 @@ describe('sitemap', () => {
     for (const entry of sitemap()) {
       expect(entry.url).not.toContain('/knowledge')
     }
+  })
+})
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/** A real calendar day, not a pattern match like 2026-02-30. */
+function isRealDay(value: string): boolean {
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  )
+}
+
+describe('sitemap lastmod', () => {
+  const entries = sitemap()
+  const byUrl = new Map(entries.map(entry => [entry.url, entry.lastModified]))
+
+  test('every entry has a calendar day, never the build time', () => {
+    for (const { url, lastModified } of entries) {
+      expect(typeof lastModified, url).toBe('string')
+      expect(lastModified as string, url).toMatch(ISO_DAY)
+      expect(isRealDay(lastModified as string), url).toBe(true)
+    }
+  })
+
+  test('each post is dated by its updated date, else its publish date', () => {
+    const posts = getAllBlogPosts()
+    expect(posts.length).toBeGreaterThan(0)
+    for (const post of posts)
+      expect(byUrl.get(`${BASE}/blog/${post.slug}`)).toBe(
+        postLastModified(post)
+      )
+  })
+
+  test('each static page is dated by its own content, or what it lists', () => {
+    const newest = {
+      post: getAllBlogPosts().map(postLastModified).sort().at(-1),
+      evalRun: latestEvalSummary()?.ranAt.slice(0, 10),
+    }
+    const listed = sitemapRoutes({
+      assistantDisabled: isChatDisabled(),
+      evalResultsPublished: hasPublishedEvalRun(),
+    })
+    for (const route of listed)
+      expect(byUrl.get(toUrl(route.href)), route.href).toBe(
+        routeLastModified(route, newest)
+      )
+  })
+
+  test('the entries do not all share one date, as a build time would', () => {
+    // Two pages whose content changed on the same day share a lastmod, so
+    // the check is that the dates are per page, not that each is unique.
+    expect(new Set(byUrl.values()).size).toBeGreaterThan(1)
+  })
+})
+
+describe('contentUpdated', () => {
+  test('every route has a real day that is not in the future', () => {
+    const today = new Date().toISOString().slice(0, 10)
+    for (const route of siteRoutes) {
+      expect(route.contentUpdated, route.href).toMatch(ISO_DAY)
+      expect(isRealDay(route.contentUpdated), route.href).toBe(true)
+      expect(route.contentUpdated <= today, route.href).toBe(true)
+    }
+  })
+})
+
+describe('routeLastModified', () => {
+  const page = { contentUpdated: '2026-09-13' }
+
+  test('is the content date for a page that lists nothing', () => {
+    expect(
+      routeLastModified(page, { post: '2026-12-01', evalRun: '2026-12-01' })
+    ).toBe('2026-09-13')
+  })
+
+  test('is the newest listed item when that is later', () => {
+    expect(
+      routeLastModified(
+        { ...page, lists: 'posts' },
+        { post: '2026-10-02', evalRun: '2026-12-01' }
+      )
+    ).toBe('2026-10-02')
+    expect(
+      routeLastModified(
+        { ...page, lists: 'evalRuns' },
+        { evalRun: '2026-10-02' }
+      )
+    ).toBe('2026-10-02')
+  })
+
+  test('is the content date when it is later, or nothing is listed yet', () => {
+    expect(
+      routeLastModified({ ...page, lists: 'posts' }, { post: '2026-03-01' })
+    ).toBe('2026-09-13')
+    expect(routeLastModified({ ...page, lists: 'evalRuns' }, {})).toBe(
+      '2026-09-13'
+    )
   })
 })
 
