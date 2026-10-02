@@ -62,7 +62,7 @@ export const RECENT_ACTIVITY_TOOL_NAME = 'recent_activity'
  * recognise a decline without re-typing it.
  */
 export const DECLINE_SENTENCE =
-  "That isn't something I can answer from Matt's published work. For questions like this, email him at matt.trifilo@gmail.com."
+  "That isn't something I can answer from Matt's documents. For questions like this, email him at matt.trifilo@gmail.com."
 
 /**
  * Prefix of the machine-readable citation trailer.
