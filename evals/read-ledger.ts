@@ -10,9 +10,10 @@ import type { ProgressView } from '@/lib/chat/progress'
  * The store record is every id `readKnowledgeDocument` resolved. It is
  * written before the route decides anything: read-document.ts looks the
  * document up first and only then refuses it for being larger than the
- * whole read budget (`document_too_large`) or for not fitting what is left
- * of it (`read_budget_exhausted`). So it lists documents whose text the
- * model never received.
+ * whole read budget (`document_too_large`), or for not fitting what is left
+ * of it or for carrying the next model call past CHAT_MAX_INPUT_TOKENS
+ * (both `read_budget_exhausted`). So it lists documents whose text the model
+ * never received.
  *
  * The progress record is the route's own account of the reads that
  * succeeded: the `data-progress` part it streams to the browser. A read's
@@ -31,7 +32,8 @@ export interface ReadLedger {
   readIds: string[]
   /**
    * Documents the store resolved and the route then refused on every call,
-   * for their size or the read budget. The model saw only the refusal.
+   * for their size, the read budget, or the next call's room under the input
+   * cap. The model saw only the refusal.
    * When `readsUnproven` is set, this holds every id resolved instead,
    * because nothing on the stream says which of them were read.
    */

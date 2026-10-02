@@ -237,7 +237,12 @@ export function createRecentActivitySession({
     const running = repository ? inFlight.get(repository.id) : undefined
     if (running) {
       refused.duplicate += 1
-      return running
+      return running.then(result => {
+        // Not charged (see the charge below), but handed over again, so the
+        // next model call carries this copy too.
+        if ('activity' in result) budget.carry(estimateTokens(result.activity))
+        return result
+      })
     }
 
     // Before the id is looked at, like the read budget: once the calls are
@@ -305,7 +310,8 @@ export function createRecentActivitySession({
     // model emits in a step, against a budget twelve times a digest's size,
     // so the ledger is short rather than wrong in a way that matters. The
     // alternative, charging each delivery, can refuse the second copy, which
-    // puts a failure and a digest for one repository back in one step.
+    // puts a failure and a digest for one repository back in one step. The
+    // repeat is still carried for the per-call input bound, in `check`.
     if (!budget.charge(tokens)) {
       return refuse(repository.id, 'activity_budget_exhausted')
     }

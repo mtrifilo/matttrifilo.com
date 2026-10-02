@@ -13,6 +13,7 @@ import {
   createRecentActivitySession,
 } from './recent-activity'
 import { ASSISTANT_REPOSITORIES } from './repositories'
+import { CHAT_MAX_INPUT_TOKENS, estimateTokens } from './validate'
 
 /**
  * The ceiling on what one question may send is one number, not one per tool
@@ -38,6 +39,72 @@ describe('createReadBudget', () => {
 
   test('defaults to the knowledge read budget', () => {
     expect(createReadBudget().maxTokens).toBe(KNOWLEDGE_READ_BUDGET.maxTokens)
+  })
+})
+
+describe('each model call is held to the input cap (MTC-107)', () => {
+  // The next call re-sends its input before tools plus everything charged
+  // so far, so a charge is refused once that sum would pass the cap.
+  const nearTheCap = CHAT_MAX_INPUT_TOKENS - 1_000
+
+  test('a charge that would carry the next call past the cap is refused', () => {
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => nearTheCap
+    )
+    // Well inside the read budget, so only the per-call bound refuses it.
+    expect(budget.charge(1_001)).toBe(false)
+    expect(budget.spent()).toBe(0)
+  })
+
+  test('a charge that brings the next call exactly to the cap fits', () => {
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => nearTheCap
+    )
+    expect(budget.charge(600)).toBe(true)
+    expect(budget.charge(400)).toBe(true)
+    expect(budget.spent()).toBe(1_000)
+    expect(budget.charge(1)).toBe(false)
+  })
+
+  test('a refusal there is not a closed ledger either', () => {
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => nearTheCap
+    )
+    expect(budget.charge(5_000)).toBe(false)
+    expect(budget.charge(500)).toBe(true)
+    expect(budget.spent()).toBe(500)
+  })
+
+  test('the input before tools is asked for at each charge, not when the budget is built', () => {
+    // The handler measures the tool definitions after the tools are built
+    // over this budget, so the figure has to be read late.
+    let before = Number.POSITIVE_INFINITY
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => before
+    )
+    expect(budget.charge(1)).toBe(false)
+    before = 0
+    expect(budget.charge(1)).toBe(true)
+  })
+
+  test('carried text counts for the next call but not against the read budget', () => {
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => nearTheCap
+    )
+    budget.carry(600)
+    expect(budget.spent()).toBe(0)
+    expect(budget.charge(401)).toBe(false)
+    expect(budget.charge(400)).toBe(true)
+  })
+
+  test('with no input before tools the read budget alone decides', () => {
+    const budget = createReadBudget()
+    expect(budget.charge(KNOWLEDGE_READ_BUDGET.maxTokens)).toBe(true)
   })
 })
 
@@ -177,5 +244,88 @@ describe('the two tools share one ledger', () => {
     expect(await call(reading.tool, { id: 'resume' })).toEqual({
       error: 'read_budget_exhausted',
     })
+  })
+
+  test('a digest handed to a repeated check is carried for the next call', async () => {
+    // Two checks of one repository in one step share a fetch and are charged
+    // once, but the model is handed the digest twice, and the next call
+    // carries both copies. A read that fits beside one copy and not beside
+    // two is refused.
+    const raw = {
+      pushedAt: '2026-09-20T11:00:00Z',
+      release: null,
+      pullRequests: [{ title: 'Ship it', mergedAt: '2026-09-18T10:00:00Z' }],
+      commits: [],
+    }
+    let room = 100_000
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => CHAT_MAX_INPUT_TOKENS - room
+    )
+    const checking = createRecentActivitySession({
+      budget,
+      fetchActivity: async () => ({ kind: 'ok', raw }),
+    })
+    const repository = ASSISTANT_REPOSITORIES[0].id
+
+    const [first, second] = await Promise.all([
+      call(checking.tool, { repository }),
+      call(checking.tool, { repository }),
+    ])
+    expect(first).toEqual(second)
+    const digestTokens = checking.activityTokens()
+    expect(budget.spent()).toBe(digestTokens)
+
+    // Room for one copy of the digest and the document, not for two copies.
+    room = digestTokens * 2 + estimateTokens(document.text) - 1
+    const reading = createReadDocumentSession({
+      entries: [entry],
+      readKnowledgeDocument: () => document,
+      budget,
+    })
+    expect(await call(reading.tool, { id: 'resume' })).toEqual({
+      error: 'read_budget_exhausted',
+    })
+  })
+
+  test('both tools refuse at the per-call bound in the words of an exhausted budget', async () => {
+    // A conversation so long that nothing more fits in the next call: each
+    // tool answers as it does when the budget is spent, and counts it the
+    // same way, so the model and the log line cannot tell the two apart.
+    const budget = createReadBudget(
+      KNOWLEDGE_READ_BUDGET.maxTokens,
+      () => CHAT_MAX_INPUT_TOKENS
+    )
+    const reading = createReadDocumentSession({
+      entries: [entry],
+      readKnowledgeDocument: () => document,
+      budget,
+    })
+    const checking = createRecentActivitySession({
+      budget,
+      fetchActivity: async () => ({
+        kind: 'ok',
+        raw: {
+          pushedAt: null,
+          release: null,
+          pullRequests: [],
+          commits: [],
+        },
+      }),
+    })
+
+    expect(await call(reading.tool, { id: 'resume' })).toEqual({
+      error: 'read_budget_exhausted',
+    })
+    expect(
+      await call(checking.tool, { repository: ASSISTANT_REPOSITORIES[0].id })
+    ).toEqual({ error: 'activity_budget_exhausted' })
+    expect(reading.readsRefused()).toEqual({
+      unknown: 0,
+      budget: 1,
+      tooLarge: 0,
+    })
+    expect(checking.activityRefused()).toMatchObject({ budget: 1 })
+    expect(budget.spent()).toBe(0)
   })
 })

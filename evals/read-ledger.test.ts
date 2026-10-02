@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { MockLanguageModelV4, simulateReadableStream } from 'ai/test'
 import { createChatHandler } from '@/lib/chat/handler'
-import { READ_DOCUMENT_TOOL_NAME } from '@/lib/chat/prompt'
+import {
+  READ_DOCUMENT_TOOL_NAME,
+  REPOSITORY_BLOCK,
+  SYSTEM_PROMPT,
+} from '@/lib/chat/prompt'
 import type { ProgressView } from '@/lib/chat/progress'
 import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
+import {
+  CHAT_MAX_ANSWER_CHARS,
+  CHAT_MAX_INPUT_TOKENS,
+  estimateTokens,
+} from '@/lib/chat/validate'
 import {
   KNOWLEDGE_READ_BUDGET,
   loadKnowledgeIndex,
@@ -12,7 +21,7 @@ import {
   type KnowledgeIndex,
 } from '@/lib/knowledge'
 import { createReadLedger, splitReadLedger } from './read-ledger'
-import { chatRequest } from './route-request'
+import { chatRequest, type HistoryTurn } from './route-request'
 import { parseUiMessageStream } from './route-stream'
 
 /** A final progress part holding the given steps. */
@@ -200,6 +209,15 @@ async function ledgerAfter(...ids: string[]) {
 }
 
 async function ledgerAfterSteps(...steps: string[][]) {
+  return ledgerAfterStepsWith([], ...steps)
+}
+
+const QUESTION = 'What did Matt build?'
+
+async function ledgerAfterStepsWith(
+  history: HistoryTurn[],
+  ...steps: string[][]
+) {
   const ledger = createReadLedger(id => store.find(doc => doc.id === id))
   const handler = createChatHandler({
     loadKnowledgeIndex: () => index,
@@ -210,8 +228,31 @@ async function ledgerAfterSteps(...steps: string[][]) {
     env: {},
     now: () => 1_000,
   })
-  const response = await handler(chatRequest('What did Matt build?', []))
+  const response = await handler(chatRequest(QUESTION, history))
   return ledger.split(parseUiMessageStream(await response.text()).progress)
+}
+
+/**
+ * Replayed turns that bring the request, as validate.ts counts it at the
+ * door against this file's index, to exactly `doorTokens`.
+ */
+function historyAt(doorTokens: number): HistoryTurn[] {
+  let remaining =
+    doorTokens -
+    index.tokenEstimate -
+    estimateTokens(SYSTEM_PROMPT) -
+    estimateTokens(REPOSITORY_BLOCK) -
+    estimateTokens(QUESTION)
+  const turns: HistoryTurn[] = []
+  while (remaining > 1) {
+    turns.push({ role: 'user', text: 'q' })
+    remaining -= 1
+    const answerTokens = Math.min(remaining, CHAT_MAX_ANSWER_CHARS / 4)
+    turns.push({ role: 'assistant', text: 'a'.repeat(answerTokens * 4) })
+    remaining -= answerTokens
+  }
+  if (remaining !== 0) throw new Error('historyAt cannot hit that total')
+  return turns
 }
 
 // The route logs a line per step and per request; this file asserts on
@@ -259,6 +300,19 @@ describe('the read ledger, against the route', () => {
       readIds: ['first-large'],
       refusedIds: [],
     })
+  })
+
+  test('a document the next model call has no room for is refused', async () => {
+    // MTC-107: a conversation long enough that the read would carry the next
+    // call past CHAT_MAX_INPUT_TOKENS, though it fits the read budget. The
+    // store resolved it, so it lands in the refused list exactly as a
+    // document refused for the budget does.
+    expect(
+      await ledgerAfterStepsWith(historyAt(CHAT_MAX_INPUT_TOKENS - 3_000), [
+        'first-large',
+        'small',
+      ])
+    ).toEqual({ readIds: ['small'], refusedIds: ['first-large'] })
   })
 
   test('a read past the document cap never reaches the store', async () => {
