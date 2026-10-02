@@ -5,20 +5,22 @@ import { compile, optimize } from '@tailwindcss/node'
 
 /**
  * The reading measure (MTC-37): the prose on /resume and blog posts runs
- * about 70 characters to a line at desktop width, and phones are left as
- * they were. The value lives in one utility in app/globals.css; these tests
- * hold what it emits, which element on each page wears it, and that a
- * phone's column is already narrower than it.
+ * about 70 characters to a line at desktop width, and portrait phones keep
+ * their layout. The value lives in one utility in app/globals.css; these
+ * tests hold what it emits, which element on each page wears it, and that a
+ * portrait phone's column is narrower than it.
  */
 
 const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
 const source = (path: string) =>
   readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
-/** The body text size both pages set on the prose, in px (`text-base`). */
+const PAGES = ['app/resume/page.tsx', 'app/blog/[slug]/page.tsx']
+
+/** `text-base`, which each wrapper sets and its em measure resolves against. */
 const BODY_PX = 16
-/** The narrowest common phone the site is checked at, in CSS px. */
-const PHONE_PX = 390
+/** The widest portrait phone in common use (the largest iPhones), CSS px. */
+const WIDEST_PORTRAIT_PHONE_PX = 440
 
 async function emittedMeasure(): Promise<string> {
   const compiled = await compile(css, {
@@ -31,12 +33,11 @@ async function emittedMeasure(): Promise<string> {
   return optimize(rule[0], { minify: true }).code
 }
 
-/** The opening tag of the element that directly wraps `<MDXContent`. */
-function wrapperOfMdx(page: string): string {
-  const at = page.indexOf('<MDXContent')
-  if (at < 0) throw new Error('no <MDXContent in the page')
-  const open = page.lastIndexOf('<', at - 1)
-  return page.slice(open, page.indexOf('>', open) + 1)
+/** The classes of the element whose first child is `<MDXContent`. */
+function wrapperClassesOfMdx(page: string): string[] {
+  const wrapper = page.match(/<\w+\s+className="([^"]*)"\s*>\s*<MDXContent\b/)
+  if (!wrapper) throw new Error('no element directly wraps <MDXContent')
+  return wrapper[1].split(/\s+/)
 }
 
 describe('the reading measure', () => {
@@ -46,30 +47,31 @@ describe('the reading measure', () => {
     expect(await emittedMeasure()).toBe('.max-w-measure{max-width:34em}')
   })
 
-  test.each(['app/resume/page.tsx', 'app/blog/[slug]/page.tsx'])(
-    '%s: the element wrapping the Markdown wears it',
+  test.each(PAGES)(
+    '%s: the element wrapping the Markdown wears it, at the body size',
     page => {
-      const tag = wrapperOfMdx(source(page))
-      expect(tag).toMatch(/className="[^"]*\bmax-w-measure\b[^"]*"/)
+      const classes = wrapperClassesOfMdx(source(page))
+      expect(classes).toContain('max-w-measure')
+      // The measure is in em, so its width in px is only what the comment
+      // and the phone test below say while this element is at text-base.
+      expect(classes).toContain('text-base')
     }
   )
 
-  test.each(['app/resume/page.tsx', 'app/blog/[slug]/page.tsx'])(
-    '%s: a phone column is narrower than the measure',
-    page => {
+  test.each(PAGES)(
+    '%s: a portrait phone column is narrower than the measure',
+    async page => {
       // The page frame's mobile padding, from its own classes: px-N is
       // N quarter-rems a side.
       const frame = source(page).match(/className="w-full max-w-3xl ([^"]*)"/)
-      expect(frame).not.toBeNull()
-      const px = frame![1].match(/(?:^|\s)px-(\d+)(?:\s|$)/)
-      expect(px).not.toBeNull()
-      const gutter = Number(px![1]) * 4
-      const phoneColumn = PHONE_PX - 2 * gutter
+      if (!frame) throw new Error('no max-w-3xl page frame')
+      const px = frame[1].match(/(?:^|\s)px-(\d+)(?:\s|$)/)
+      if (!px) throw new Error('the page frame sets no px-N padding')
+      const phoneColumn = WIDEST_PORTRAIT_PHONE_PX - 2 * Number(px[1]) * 4
 
-      const em = Number(
-        css.match(/@utility max-w-measure \{\s*max-width: ([\d.]+)em;/)![1]
-      )
-      expect(phoneColumn).toBeLessThan(em * BODY_PX)
+      const em = (await emittedMeasure()).match(/max-width:([\d.]+)em/)
+      if (!em) throw new Error('the measure is not in em')
+      expect(phoneColumn).toBeLessThan(Number(em[1]) * BODY_PX)
     }
   )
 })
