@@ -1,13 +1,14 @@
 name: evals
 
-# On demand only. The suites are run locally during development
-# (`bun run evals`, see docs/career-assistant-operations.md); every pull
-# request paying for a full run spent more on tokens than it caught, and a
-# one-in-a-hundred model flake reddened most runs. This workflow stays so a
-# branch can be evaluated under the deployment's own identity when that
-# question matters: an IAM or federation change, or a contributor's branch
-# after its .github/ and evals/ changes have been reviewed (see the runbook).
-# A dependency bump is exercised locally like any other change.
+# On demand only. The suites run locally (`bun run evals`), and live runs are
+# budgeted: a few a month, scheduled by Matt (2026-10-02; "When they run" in
+# docs/career-assistant-operations.md). A pull request that changes what the
+# answers depend on merges on its deterministic gates, and the next scheduled
+# run covers it. This workflow stays so a branch can be evaluated under the
+# deployment's own identity when that question matters: an IAM or federation
+# change, or a contributor's branch after its .github/ and evals/ changes have
+# been reviewed (see the runbook). A dispatch spends the same budget as a
+# local run and needs the same go-ahead.
 #
 # Never `pull_request` or `pull_request_target` here. This job holds
 # `id-token: write` and a path to a live Google credential; a pull request
