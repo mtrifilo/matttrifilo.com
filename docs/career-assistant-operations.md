@@ -458,7 +458,9 @@ Seven goldens carry `assertFollowUpsAnswerable`, which is the only assertion in 
 
 ### When they run
 
-Locally, during development, by decision of 2026-09-21 (Matt): a full run on every pull request cost more in tokens than it caught, and a one-in-a-hundred model flake reddened most runs. Run `bun run evals:smoke` while iterating and `bun run evals` before opening a pull request that changes anything the answers depend on (both write `evals/out/results.json`, then print the per-suite table and write `evals/out/summary.json`; the table is what goes in the pull request): `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or a bump of `ai` or `@ai-sdk/google-vertex`. Paste that table into the pull request body; a reviewer should see the counts, not take them on faith. `bun run evals:report` regenerates the table from an existing `results.json` without spending anything.
+Live runs are budgeted, by decision of 2026-10-02 (Matt, MTC-35): a few a month, scheduled by Matt at strategic points, for example before the launch flip, after a batch of chat changes, or when a new record for `/ask/evals` is wanted. The reason is spend: a full run costs about $3.83 by the measured figure under "Cost of a run", against the $50 monthly budget on the `matttrifilo-com` GCP project ("GCP budget and quota"), and twelve full runs on 2026-10-01 and 2026-10-02 came to about $45 of it at that figure. This replaces the decision of 2026-09-21, which took the suites off every pull request but still asked for a local full run before every pull request that changed what the answers depend on.
+
+A pull request that changes anything the answers depend on (`content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or a bump of `ai` or `@ai-sdk/google-vertex`) merges on its deterministic gates: `bun run typecheck`, `bun run lint`, and `bun test`, which carries the eval config tests (`evals/config.test.ts`) and the recorded-answer drift check (`e2e/fixtures/chat-answer.test.ts`), plus `bun run knowledge:check` after a change under `content/knowledge` or `lib/knowledge`. Its body says that the next scheduled run covers it. `bun run evals:smoke`, `bun run evals:compare` (three smoke runs) and a filtered run come out of the same budget and need Matt's go-ahead, as a full run does. A scheduled `bun run evals` writes `evals/out/results.json`, then prints the per-suite table and writes `evals/out/summary.json`; `bun run evals:report` regenerates the table from an existing `results.json` and costs nothing.
 
 `.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change). It dispatches only a ref in this repository and runs the workflow file at that ref with `id-token: write`, so never dispatch it on a branch whose `.github/` or `evals/` changes you have not read: a contributor's branch is evaluated by cherry-picking its content changes onto a branch you own, or by reviewing those two directories first. It is not a required check and must not become one.
 
@@ -486,17 +488,19 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
 
 The site publishes eval results at `/ask/evals`, linked from the line under the chat pane. It reads them from `evals/results/`, which is committed: one file per recorded run, named `<YYYY-MM-DD>-<7-char sha>.json`, holding exactly the `summary.json` above.
 
-After a local `bun run evals` that accompanies a corpus, prompt or suite change:
+A record is published from a scheduled run on main when the gate below accepts it, never from a branch.
+
+After a scheduled `bun run evals` on a clean checkout of main:
 
 ```
-git commit ...                   # the change the run covers, first
 bun run evals:publish            # writes evals/results/<date>-<sha>.json
+git switch -c <a branch for the record>
 git add evals/results/<the file it named>
 ```
 
-Commit the tested change **before** publishing. A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`; with the change still uncommitted that names its parent, which is not the code that ran. The script refuses to publish from a dirty working copy for exactly this reason.
+A local run records `"commit": "local"` because it has no `GITHUB_SHA`, so the script substitutes `git rev-parse HEAD`, the main commit the run walked. With a change uncommitted, that commit is not the code that ran, so the script refuses to publish from a dirty working copy.
 
-Commit the record in the same pull request as the change. Older files stay: the page shows the newest run and a history of the last ten, so a reader can see the trend. A committed record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists. Two runs on the same day at the same commit collide on the name: if the earlier file has not been committed yet, delete it and publish again; if it has, it stands.
+Commit the record in a pull request of its own that holds only the record. Older files stay: the page shows the newest run and a history of the last ten, so a reader can see the trend. A committed record is never edited afterwards; a new run adds a new file, and `evals:publish` refuses rather than overwrite one that already exists. Two runs on the same day at the same commit collide on the name: if the earlier file has not been committed yet, delete it and publish again; if it has, it stands.
 
 What it refuses, and why each refusal exists (MTC-54). `/ask/evals` is a credibility page: a hiring manager reads it as evidence that the assistant is tested, so a record of a bad run is worse than no record, because it is published under the same claim as a good one. There is deliberately no force flag and no environment variable that lifts any of this.
 
@@ -517,7 +521,7 @@ What it refuses, and why each refusal exists (MTC-54). `/ask/evals` is a credibi
 
 What it does not do is stop a false record written on purpose: `evals/out/` is not committed, so a hand-edited `summary.json` reaches the script as a summary, and reviewing the record in the diff is what catches that. The gate is against publishing a run that went badly.
 
-When it refuses, the answer is another run, not a way around the script: re-run when Vertex is healthy (a clean `bun run evals:smoke` first, as below), or dispatch `.github/workflows/evals.yml` by hand to get a record from GitHub's network as the deployment's own identity. A refusal on the pass rate is not a flake to route around; it is the suites saying the change is not ready.
+When it refuses, the answer is another run, scheduled with Matt like any other, not a way around the script: re-run when Vertex is healthy (a clean `bun run evals:smoke` first, as below), or dispatch `.github/workflows/evals.yml` by hand to get a record from GitHub's network as the deployment's own identity. A refusal on the pass rate is not a flake to route around; it is the suites saying the change is not ready.
 
 The record it writes is built field by field rather than copied, so a new field in `summary.json` is published only when someone adds it to `evals/publish.ts` on purpose; `results.json`, which holds every question and every answer, is never the thing being copied.
 
@@ -531,7 +535,7 @@ A summary that never reaches `evals/results/` is not published; the page shows t
 
 ### A red run
 
-`bun run evals/summarize.ts` exits non-zero when any test failed. Nothing enforces that on a merge; the person opening the pull request does, by running the suites and pasting the result.
+`bun run evals/summarize.ts` exits non-zero when any test failed. Nothing enforces that on a merge: a pull request merges on its deterministic gates (see "When they run"), so a red row shows up in the next scheduled run, after the changes it covers have merged.
 
 `bun run evals` and `bun run evals:smoke` go through `evals/run-and-report.ts`, which runs the suites and then writes the summary whatever the run's exit status, so a red run still prints its table and leaves a `summary.json` (or `smoke-summary.json`) with the three counters for `evals:publish` to refuse on the merits. The exit code still says the run was red:
 
@@ -570,12 +574,12 @@ GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals:smoke
 
 `evals:smoke` is the first three tests of each suite, twelve in all, for a few cents, and it writes `evals/out/smoke-results.json` and `evals/out/smoke-summary.json` rather than the files a full run writes, so a filtered run can never become the summary `evals:publish` reads. `bun run evals` is the whole thing.
 
-How to spend a session (MTC-54):
+How to spend a session Matt has scheduled (MTC-54):
 
 1. Start with `bun run evals:smoke`. If rows come back as `CHAT_ERROR: interrupted` or `unavailable`, **stop and come back later** (the clean smoke run of 2026-09-21 passed 12 of 12 in under six minutes at concurrency 2, so wall time alone is a weak signal; the error rows are the reliable one). Vertex not answering from this machine is a bad hour upstream, not a suite to debug, and a full run in that state burns the budget for a record that cannot be published anyway. The alternative path is dispatching `.github/workflows/evals.yml` by hand, which runs from GitHub's network as the deployment's own identity.
-2. Iterate on the tests you are actually changing rather than the whole suite: `bunx promptfoo eval -c evals/promptfooconfig.yaml --filter-pattern '<regex on the description>'`, or `--filter-metadata suite=groundedness` (`evals:smoke` uses the same flag on `smoke=true`). Both cost only what they run.
-3. Run the full `bun run evals` once, at concurrency 8, before opening the pull request, and paste its table into the body.
-4. If the published record should cover this change: commit the change first, then `bun run evals:publish`, then commit the record it writes. Publishing from a working copy with uncommitted changes is refused, for the reason under "Publishing a run".
+2. Iterate on the tests you are actually changing rather than the whole suite: `bunx promptfoo eval -c evals/promptfooconfig.yaml --filter-pattern '<regex on the description>'`, or `--filter-metadata suite=groundedness` (`evals:smoke` uses the same flag on `smoke=true`). Both cost only what they run, and both need Matt's go-ahead like any other run.
+3. Run the full `bun run evals` once, at concurrency 8, on a clean checkout of main.
+4. If the gate accepts it, publish the record as under "Publishing a run". Publishing from a working copy with uncommitted changes is refused, for the reason given there.
 
 `CHAT_REASONING=low|medium|high bun run evals:smoke` points the route at a different Gemini 3.8 Flash thinking level; `bun run evals:compare` runs the smoke subset at all three and prints a table (it sets its own `--max-concurrency 8`, the same as the suites, since no quota or queue error surfaced in the 2026-09-28 full run at 8). The live route defaults to `medium`. Run both from the repository root: the provider imports through the `@/` alias, and promptfoo resolves it relative to the working directory, so running from inside `evals/` turns every test into a module-not-found error row.
 
@@ -621,7 +625,7 @@ Those two prices come from secondary sources, not from Google's own pricing page
 2. Add at least one `golden` test that only that document can answer, with `metadata.expectReads` naming its id, a `contains-any` or `icontains-any` on wording distinctive to it, and a rubric in an `assert-set` of three at `threshold: 0.6`.
 3. If the document introduces a topic the policy declines, add the refusal too.
 4. Run `bun test` first: `evals/config.test.ts` catches a bad id or a missing metadata key without spending anything.
-5. Then `bun run evals:smoke` while iterating, and `bun run evals` before the pull request; paste the summary in its body.
+5. The pull request merges on its deterministic gates and says in its body that the next scheduled run covers it (see "When they run").
 
 A new document can make an existing golden's pin stale: the run opens the new document, answers correctly, and fails `assertReadsExpected` because the test still names the résumé. So when a document lands, check every test in `evals/suites/` whose reads name a document it overlaps, and choose each pin by what the reader needs. Pin the new document alone in `expectReads` when the question is about the subject that document is written about (its title names the programme or feature) and the older source gives it a line; the prompt tells the model to prefer that document, so a run that skips it is a worse run. Use `expectReadsAny` with `assertReadsAnyOf` when two documents each hold every fact the rubric requires, so either is a correct read. Keep the old pin when only it holds a fact the rubric grades. Never list two documents under `expectReads` to mean "either": that requires both. Whichever you choose, reword the rubric so an answer drawn only from any document the test accepts can pass, never by lowering the threshold or dropping a fact that document states, and record the choice in a one-line comment above the test, `# Reads:` for a pin or `# Reads any of:` for a set.
 
@@ -721,4 +725,4 @@ gh variable set GCP_PROJECT_ID --body "$GCP_PROJECT_ID"
 
 ### 5. Do not make the check required
 
-The workflow runs only on `workflow_dispatch` (decision of 2026-09-21), so there is no check to require; a required `evals` check would block every pull request forever. An outside contribution that changes the corpus or the prompt is evaluated by running `bun run evals` locally on its branch, or by cherry-picking its content changes onto a branch you own and dispatching the workflow there, never by dispatching on a branch whose `.github/` or `evals/` you have not reviewed.
+The workflow runs only on `workflow_dispatch` (decision of 2026-09-21), so there is no check to require; a required `evals` check would block every pull request forever. An outside contribution that changes the corpus or the prompt is covered by the next scheduled run like any other change (see "When they run"). When Matt wants one evaluated on its own, run `bun run evals` locally on its branch, or evaluate it by cherry-picking its content changes onto a branch you own and dispatching the workflow there, never by dispatching on a branch whose `.github/` or `evals/` you have not reviewed.
