@@ -99,6 +99,12 @@ declines the same way, whatever a document says, for:
 The fixed sentence carries Matt's email address, so a question the
 assistant will not answer still has somewhere to go.
 
+A question with several parts is answered part by part: the assistant
+answers the parts the documents cover and ends with one sentence saying
+what they do not give. It declines the whole question only when no part
+can be answered, and it never answers a part from the list above,
+whatever else the question asks.
+
 ## How it is tested
 
 - Four eval suites run the chat route's own code against the real
@@ -130,3 +136,7 @@ change has a ticket, every pull request gets an adversarial review
 before it opens, and a change to anything the answers depend on merges
 once the deterministic tests pass; the next scheduled eval run covers
 it.
+
+The assistant took about three weeks to build with AI coding agents
+under Matt's direction, from a research spike on September 13, 2026, to
+its launch on October 3, 2026.

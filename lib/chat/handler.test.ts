@@ -38,6 +38,7 @@ import {
   REPOSITORY_BLOCK,
   SYSTEM_PROMPT,
   TRANSCRIPT_HEADING,
+  WITHHELD_PART_SENTENCE,
 } from './prompt'
 import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
@@ -2791,6 +2792,36 @@ describe('the follow-ups the answer proposes', () => {
     const body = await response.text()
 
     expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test('a partial answer keeps them: its closing sentence is not a decline', async () => {
+    // MTC-112: a question with several parts gets the parts the documents
+    // answer and a closing sentence for the rest. That answer is an answer,
+    // so the proposals under it must survive the decline check above.
+    const model = modelOf(
+      reads('resume'),
+      answers(
+        [
+          'He led the platform migration.',
+          WITHHELD_PART_SENTENCE,
+          '',
+          'Sources: resume',
+          FOLLOW_UPS_TRAILER_PREFIX,
+          ...FOLLOW_UPS,
+        ].join('\n')
+      )
+    )
+    const response = await handlerWith(model)(
+      post({
+        messages: [
+          uiMessage('user', 'What does Matt earn, and what did he build?'),
+        ],
+      })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toEqual(FOLLOW_UPS)
+    expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
   test('an answer cut off on the output cap carries none', async () => {

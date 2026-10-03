@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
-import { DECLINE_SENTENCE } from '@/lib/chat/prompt'
+import { DECLINE_SENTENCE, WITHHELD_PART_SENTENCE } from '@/lib/chat/prompt'
 import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
 import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
@@ -137,6 +137,7 @@ const JUDGES_THE_ANSWER: Readonly<Record<string, string>> = {
   assertNoInventedFact: "Matt's published work does not mention that.",
   assertHasRecentDate: `He shipped the parser in ${new Date().getUTCFullYear()}.`,
   assertDatesFromActivity: 'He merged the parser fix on 2026-09-18.',
+  assertPartialAnswerWithholds: `Matt led the migration. ${WITHHELD_PART_SENTENCE}`,
 }
 
 /** The assertions that carry the citation contract; each is vacuous alone. */
@@ -260,7 +261,9 @@ describe('JUDGES_THE_ANSWER', () => {
       readIds: ['resume'],
       activityRepos: ['decant'],
       activityDates: ['2026-09-18'],
-      followUps: [],
+      // One proposal, because assertPartialAnswerWithholds fails an answer
+      // that carries none; no other judge reads the key.
+      followUps: ['What does his team own?'],
     },
     vars: { question: 'What did Matt ship?' },
   }
