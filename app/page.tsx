@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Github, Linkedin, Mail } from 'lucide-react'
+import { Mail } from 'lucide-react'
+import { Github, Linkedin } from '@/components/icons/brand-icons'
 import { EvalsPublishedProvider } from '@/components/assistant/evals-published'
 import { HomeAssistantPanel } from '@/components/assistant/home-assistant-panel'
 import { PostListItem } from '@/components/blog/PostListItem'

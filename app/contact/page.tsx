@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { Github, Linkedin, Mail } from 'lucide-react'
+import { Mail } from 'lucide-react'
+import { Github, Linkedin } from '@/components/icons/brand-icons'
 
 export const metadata: Metadata = {
   title: 'Contact',
