@@ -41,7 +41,7 @@ describe('the DOM the preload registers', () => {
   })
 
   test('leaves every Bun global it replaced as Bun had it', () => {
-    // By identity, not behaviour: Happy DOM's `Request`, `Response`, `URL`
+    // By identity, not behavior: Happy DOM's `Request`, `Response`, `URL`
     // and `fetch` behave like Bun's in a smoke test, and differ where the
     // route handlers and the AI SDK depend on them.
     expect(BUN_GLOBALS.has('document')).toBe(false)
@@ -124,7 +124,7 @@ describe('the cleanup the preload registers', () => {
 })
 
 describe('an error a DOM listener throws', () => {
-  // The Happy DOM behaviour the preload's error hook is built on. A listener's
+  // The Happy DOM behavior the preload's error hook is built on. A listener's
   // error never leaves `dispatchEvent`: Happy DOM catches it and dispatches it
   // on `window` as an `ErrorEvent`. So no wrapper around `dispatchEvent` could
   // see it, and a test that fired the event would pass. If a Happy DOM bump
@@ -210,13 +210,16 @@ describe('an error a DOM listener throws', () => {
   // that throws and one that rejects, which Bun catches) and two that should
   // stay green after them.
   test('fails the test that fired it, with the stack of the listener', () => {
-    // Bun lets FORCE_COLOR win over NO_COLOR, and a coloured report marks a
-    // failure with a glyph rather than `(fail)`.
+    // Bun lets FORCE_COLOR win over NO_COLOR, and a colored report marks a
+    // failure with a glyph rather than `(fail)`. Under GITHUB_ACTIONS the
+    // child adds workflow commands to its report, which the runner would read
+    // as the parent's own annotations if the report below were printed.
     const env: Record<string, string | undefined> = {
       ...process.env,
       NO_COLOR: '1',
     }
     delete env.FORCE_COLOR
+    delete env.GITHUB_ACTIONS
     const run = Bun.spawnSync(
       [
         process.execPath,
@@ -245,6 +248,7 @@ describe('an error a DOM listener throws', () => {
       pass: output.match(/^ (\d+) pass$/m)?.[1],
       fail: output.match(/^ (\d+) fail$/m)?.[1],
     }
+    const expectedTally = { pass: '2', fail: '5' }
     const expectedFailures = [
       'red: a listener added with addEventListener throws',
       'red: a listener added with addEventListener rejects',
@@ -253,17 +257,20 @@ describe('an error a DOM listener throws', () => {
       'red: a React onClick rejects',
     ]
     if (
-      tally.pass !== '2' ||
-      tally.fail !== '5' ||
+      !Bun.deepEquals(tally, expectedTally) ||
       !Bun.deepEquals(failed, expectedFailures)
     ) {
       // The child's whole report, because the assertions below say only
-      // what is missing, not what Bun printed in its place.
-      console.error(`The child run's report:\n${output}`)
+      // what is missing, not what Bun printed in its place. Indented, so no
+      // line of it starts where a CI runner looks for a workflow command.
+      console.error(`The child run's report:\n${output.replace(/^/gm, '  ')}`)
     }
-    // Bun's own count first: it says whether every red test failed before
-    // the name list says whether each was reported as itself.
-    expect(tally).toEqual({ pass: '2', fail: '5' })
+    // Bun's own count first. A wrong count means a test did not end as the
+    // fixture means it to (a red one passed, say, because its error was
+    // reported late or charged to the next test); a right count with a name
+    // missing means a result line was printed in a form the pattern above
+    // does not read.
+    expect(tally).toEqual(expectedTally)
     expect(failed).toEqual(expectedFailures)
     expect(run.exitCode).toBe(1)
     // Each failure carries the stack from the handler. The hook's report
