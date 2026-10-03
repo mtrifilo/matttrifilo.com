@@ -59,8 +59,8 @@ describe('sitemap', () => {
     // The environment decides whether the assistant's pages exist, and the
     // published records decide whether the eval results page has anything
     // on it, so the expectation reads the same two things the sitemap does
-    // (a `vercel env pull` puts production's CHAT_DISABLED=1 into
-    // .env.local).
+    // (a `vercel env pull` from an environment where CHAT_DISABLED=1 is set
+    // puts it into .env.local).
     const expected = sitemapRoutes({
       assistantDisabled: isChatDisabled(),
       evalResultsPublished: hasPublishedEvalRun(),

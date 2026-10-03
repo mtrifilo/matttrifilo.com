@@ -3,7 +3,7 @@ id: how-the-career-assistant-was-built
 title: How Matt built the Career Assistant on his site
 summary: The architecture of the assistant on matttrifilo.com: its model and hosting, the documents it reads, protection layers, eval suites, and what it declines.
 tags: [ai, llm, assistant, evals, security, architecture]
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # How Matt built the Career Assistant on his site
@@ -77,9 +77,9 @@ writes: a conversation lives only in the visitor's browser tab.
 
 These three run inside the server, so a request still reaches it before
 it is refused; the runbook says plainly that BotID stops model spend,
-not traffic. The layer that would refuse traffic at the edge is not yet
-in place as of October 2026: the runbook specifies a per-client
-rate-limit rule on Vercel's firewall for launch.
+not traffic. The layer at the edge is a per-client rate-limit rule on
+Vercel's firewall, in place since October 2026: it refuses a client's
+requests past a set limit before they reach the server.
 
 ## What it declines, and why
 
@@ -111,9 +111,9 @@ assistant will not answer still has somewhere to go.
   model grader scores it three times and two of the three have to pass.
 - Every starter question on the site has its own golden test, and the
   unit tests fail when one does not.
-- Matt runs the suites on his own machine before opening a pull request
-  that changes the instructions or the documents. They do not run
-  automatically on a pull request and do not block a deploy.
+- Matt runs the suites on his own machine on a schedule he sets, a few
+  times a month. They do not run automatically on a pull request and do
+  not block a deploy.
 - A run can be published at matttrifilo.com/ask/evals with the commit it
   ran against. Among other checks, the publishing step refuses a run
   that passed under 95 percent of its tests or under 90 percent of any
@@ -127,5 +127,6 @@ assistant will not answer still has somewhere to go.
 Matt builds the assistant with AI coding agents working under written
 rules kept in the repository (its CLAUDE.md and a project skill). Every
 change has a ticket, every pull request gets an adversarial review
-before it opens, and a change to anything the answers depend on gets a
-full eval run first.
+before it opens, and a change to anything the answers depend on merges
+once the deterministic tests pass; the next scheduled eval run covers
+it.
