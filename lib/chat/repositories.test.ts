@@ -49,7 +49,7 @@ describe('the assistant allowlist', () => {
   })
 
   test('an id is the curated repository name and never a path', () => {
-    // The id is the only thing the model is given, and it is also the name
+    // The id is the only thing the model may hand back, and it is also the name
     // the visitor sees in the progress row, so it has to be the repository's
     // real name and nothing that could be read as a location.
     for (const repo of ASSISTANT_REPOSITORIES) {
@@ -57,6 +57,19 @@ describe('the assistant allowlist', () => {
       expect(curated).toBeDefined()
       expect(repo.id).not.toContain('/')
       expect(repo.slug).toBe(`${repo.owner}/${repo.id}`)
+    }
+  })
+
+  test("every URL is the repository's public GitHub page, built from its slug", () => {
+    // The model is shown this URL in the sentence a decline about the
+    // repository ends with (MTC-115), so it has to be the real page.
+    expect(ASSISTANT_REPOSITORIES.map(repo => repo.url)).toEqual([
+      'https://github.com/mtrifilo/decant',
+      'https://github.com/mtrifilo/psychic-homily-web',
+      'https://github.com/mtrifilo/matttrifilo.com',
+    ])
+    for (const repo of ASSISTANT_REPOSITORIES) {
+      expect(repo.url).toBe(`https://github.com/${repo.slug}`)
     }
   })
 })
@@ -83,6 +96,7 @@ describe('assistantRepository', () => {
 
   test.each([
     'mtrifilo/decant',
+    'https://github.com/mtrifilo/decant',
     'Decant',
     'decant ',
     '',

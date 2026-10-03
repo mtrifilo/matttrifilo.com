@@ -33,6 +33,7 @@ const repository: AssistantRepository = {
   id: 'decant',
   owner: 'mtrifilo',
   slug: 'mtrifilo/decant',
+  url: 'https://github.com/mtrifilo/decant',
   description: 'CLI to transform your clipboard into markdown.',
 }
 

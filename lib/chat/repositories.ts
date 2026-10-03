@@ -14,10 +14,13 @@ import { openSourceRepos, type CuratedRepo } from '@/content/open-source'
  *
  * Two boundaries it draws:
  *
- *   - `id` is the only thing the model is given and the only thing it may
- *     hand back. It is never an owner, a slug, or a URL, so nothing the model
- *     says can widen what is fetched; `slug` is assembled here from the
- *     curated owner and name.
+ *   - `id` is the only thing the model may hand back. It is never an owner,
+ *     a slug, or a URL, so nothing the model says can widen what is fetched;
+ *     `slug` and `url` are assembled here from the curated owner and name.
+ *     The model is shown `url` too, inside the sentence a decline about the
+ *     repository ends with (MTC-115), but the tool resolves an id and
+ *     nothing else, so a URL handed back is refused like any other unknown
+ *     id.
  *   - `description` is Matt's reviewed `summary`, not GitHub's description.
  *     The one line the model is shown about a repository is therefore text a
  *     person wrote, not text fetched from a third party.
@@ -35,6 +38,8 @@ export interface AssistantRepository {
   owner: string
   /** "owner/id", assembled here so no caller builds a path of its own. */
   slug: string
+  /** The repository's public page on GitHub, built from `slug`. */
+  url: string
   /** Matt's reviewed one-line description from the curated list. */
   description: string
 }
@@ -51,10 +56,12 @@ function toAssistantRepository(
 ): AssistantRepository | undefined {
   const description = repo.summary?.trim()
   if (repo.assistant !== true || !description) return undefined
+  const slug = `${repo.owner}/${repo.name}`
   return {
     id: repo.name,
     owner: repo.owner,
-    slug: `${repo.owner}/${repo.name}`,
+    slug,
+    url: `https://github.com/${slug}`,
     description,
   }
 }
