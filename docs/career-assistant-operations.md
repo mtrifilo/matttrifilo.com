@@ -458,7 +458,9 @@ Seven goldens carry `assertFollowUpsAnswerable`, which is the only assertion in 
 
 ### When they run
 
-Locally, during development, by decision of 2026-09-21 (Matt): a full run on every pull request cost more in tokens than it caught, and a one-in-a-hundred model flake reddened most runs. Run `bun run evals:smoke` while iterating and `bun run evals` before opening a pull request that changes anything the answers depend on (both write `evals/out/results.json`, then print the per-suite table and write `evals/out/summary.json`; the table is what goes in the pull request): `content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or a bump of `ai` or `@ai-sdk/google-vertex`. Paste that table into the pull request body; a reviewer should see the counts, not take them on faith. `bun run evals:report` regenerates the table from an existing `results.json` without spending anything.
+Live runs are budgeted, by decision of 2026-10-02 (Matt, MTC-35): a few a month, scheduled by Matt at strategic points, for example before the launch flip, after a batch of chat changes, or when a new record for `/ask/evals` is wanted. The reason is spend: a full run costs about $3.83 by the measured figure under "Cost of a run", against the $50 monthly budget on the `matttrifilo-com` GCP project ("GCP budget and quota"), and twelve full runs on 2026-10-01 and 2026-10-02 spent about $45 of it. This replaces the decision of 2026-09-21, which took the suites off every pull request but still asked for a local full run before every pull request that changed what the answers depend on.
+
+A pull request that changes anything the answers depend on (`content/knowledge/**`, `lib/chat/**`, `lib/knowledge/**`, `lib/ai/**`, `lib/env.ts`, `app/api/chat/**`, `evals/**`, or a bump of `ai` or `@ai-sdk/google-vertex`) merges on its deterministic gates: `bun run typecheck`, `bun run lint`, and `bun test`, which carries the eval config tests (`evals/config.test.ts`) and the recorded-answer drift check (`e2e/fixtures/chat-answer.test.ts`), plus `bun run knowledge:check` after a change under `content/knowledge` or `lib/knowledge`. Its body says that the next scheduled run covers it. `bun run evals:smoke` and a filtered run come out of the same budget and need Matt's go-ahead, as a full run does. A scheduled `bun run evals` writes `evals/out/results.json`, then prints the per-suite table and writes `evals/out/summary.json`; `bun run evals:report` regenerates the table from an existing `results.json` and costs nothing.
 
 `.github/workflows/evals.yml` still exists and runs only on `workflow_dispatch`. Use it when the question is whether the deployment's own identity can run the suites (an IAM or federation change). It dispatches only a ref in this repository and runs the workflow file at that ref with `id-token: write`, so never dispatch it on a branch whose `.github/` or `evals/` changes you have not read: a contributor's branch is evaluated by cherry-picking its content changes onto a branch you own, or by reviewing those two directories first. It is not a required check and must not become one.
 
@@ -485,6 +487,8 @@ Outputs, locally and in CI: `evals/out/results.json` and a compact `evals/out/su
 ### Publishing a run (MTC-44)
 
 The site publishes eval results at `/ask/evals`, linked from the line under the chat pane. It reads them from `evals/results/`, which is committed: one file per recorded run, named `<YYYY-MM-DD>-<7-char sha>.json`, holding exactly the `summary.json` above.
+
+A record is published from a scheduled run on main when the gate below accepts it, never from a branch.
 
 After a local `bun run evals` that accompanies a corpus, prompt or suite change:
 
