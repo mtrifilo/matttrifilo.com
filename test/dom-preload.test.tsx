@@ -236,14 +236,30 @@ describe('an error a DOM listener throws', () => {
     const failed = [...output.matchAll(/^\(fail\) (.+?) \[/gm)].map(
       match => match[1]
     )
-    expect(failed).toEqual([
+    const tally = {
+      pass: output.match(/^ (\d+) pass$/m)?.[1],
+      fail: output.match(/^ (\d+) fail$/m)?.[1],
+    }
+    const expectedFailures = [
       'red: a listener added with addEventListener throws',
       'red: a listener added with addEventListener rejects',
       'red: a listener on window throws',
       'red: a React onClick throws',
       'red: a React onClick rejects',
-    ])
-    expect(output).toMatch(/^ 2 pass$/m)
+    ]
+    if (
+      tally.pass !== '2' ||
+      tally.fail !== '5' ||
+      !Bun.deepEquals(failed, expectedFailures)
+    ) {
+      // The child's whole report, because the assertions below say only
+      // what is missing, not what Bun printed in its place.
+      console.error(`The child run's report:\n${output}`)
+    }
+    // Bun's own count first: it says whether every red test failed before
+    // the name list says whether each was reported as itself.
+    expect(tally).toEqual({ pass: '2', fail: '5' })
+    expect(failed).toEqual(expectedFailures)
     expect(run.exitCode).toBe(1)
     // Each failure carries the stack from the handler. The hook's report
     // quotes `error.stack`, which reads `Error: ...`; Bun's own report of a
