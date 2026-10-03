@@ -206,6 +206,113 @@ The full-run rows are extracted with the recipe above from the `[chat]` lines of
 3. If automation is getting past BotID Basic, turn on Deep Analysis (above).
 4. Re-enable once the pattern stops. Write down what happened in the MTC-34 ticket.
 
+## Launch, rehearsal and rollback (MTC-90)
+
+The launch day, in order, for Matt. Tick each box and note the time; the record at the end is built from those notes. Run every `vercel` command from the main checkout, which is linked to the project: the CLI in an unlinked worktree creates a new project. Nothing here calls the model except the questions asked from a browser in step 3.
+
+### 1. Before the flip
+
+- [ ] **`GITHUB_TOKEN` on Production.** Any token with public read access, such as a fine-grained personal access token limited to public repositories with no permissions added. It is the same variable the open-source page reads at build time (`lib/github.ts`). Why (MTC-45, "Rate limits without a token" above): without it, the activity tool shares GitHub's anonymous limit, 60 requests an hour per egress IP, with every other tenant on that IP; with it, 5,000 an hour. Check the token first, because a wrong or expired one is worse than none: every activity check then fails and the assistant says current activity could not be checked.
+
+  ```
+  read -rs T && curl -s -H "Authorization: Bearer $T" https://api.github.com/rate_limit | grep -m1 '"limit"'; unset T
+  # expect "limit": 5000
+  vercel env add GITHUB_TOKEN production --sensitive   # paste the token at the prompt
+  ```
+
+  If the token has an expiry date, put that date on the calendar.
+
+- [ ] **The WAF rate-limit rule**, exactly as the table under "WAF rate-limit rule" says. Project, Firewall, Configure, New Rule:
+  - Name: `chat: 20 requests a minute per client`
+  - If: Request Path equals `/api/chat`, and Method equals `POST` (two conditions; all must be true)
+  - Then: Rate Limit, Fixed Window
+  - Time Window: 60 s; Request Limit: 20
+  - Keys: IP and JA4 Digest
+  - Action: Default (429)
+  - Save Rule, then Review Changes, then Publish.
+
+- [ ] **Rehearse the rule while the assistant is still off.** The rule counts at the edge whether or not the function is switched off, so it can be proven before the flip:
+
+  ```
+  scripts/rate-limit-probe.sh
+  # expect: 1 to 20 answer 503 (the kill switch), 21 to 25 answer 429 (the edge); exit 0
+  ```
+
+  No 429: wait a minute and run it once more (a fixed window can turn over mid-run). Two runs with no 429 mean the rule is not counting: check its conditions before going on.
+
+- [ ] **Optional: the Vertex quota cap** ("GCP budget and quota"): a requests-per-minute cap on the Gemini model the rule cannot exceed, read from the console. MTC-90's ticket lists it; the budget and the rule bound spend without it.
+
+- [ ] **A scheduled eval run on main**, if Matt chooses one before the flip (his 2026-10-02 policy on MTC-35 proposes the first run there). Nothing below depends on it.
+
+### 2. The flip
+
+```
+vercel env rm CHAT_DISABLED production -y
+vercel env ls production   # the source of truth: CHAT_DISABLED absent, GITHUB_TOKEN present
+```
+
+- [ ] Merge the launch pull request (the wording that becomes true at the flip: README, decisions, the build document and its golden, the WAF heading here).
+- [ ] Environment variables are baked into a deployment when it builds, so the assistant appears only on a production deployment built after the `env rm`. When the merge's production deployment is Ready, check:
+
+  ```
+  curl -s -o /dev/null -w '%{http_code}\n' https://matttrifilo.com/ask
+  # 200: live. 404: that deployment still carries the flag, so redeploy:
+  vercel ls --environment production       # the newest production deployment's URL
+  vercel redeploy <that URL> --target production
+  ```
+
+  The dashboard's Redeploy on the current production deployment does the same.
+
+### 3. Within the hour
+
+- [ ] **Phone**, a real browser: open https://matttrifilo.com, tap a starter question. An answer arrives with the documents it read listed above it and follow-up questions below it.
+- [ ] **Desktop**, a real browser: the same, from `/ask`. Keep the developer console open: no CSP violation, in particular none on BotID's challenge path (see "BotID").
+- [ ] **The self question**: ask "How did Matt build this assistant?". It answers from "How Matt built the Career Assistant on his site", in the third person, and if it mentions the edge rate-limit rule it calls it in place.
+- [ ] **The rate-limit probe**, now with the assistant on:
+
+  ```
+  scripts/rate-limit-probe.sh
+  # expect: 1 to 20 answer 403, 21 to 25 answer 429; exit 0
+  ```
+
+  The 403s are BotID refusing a request with no classification header (`blocked`), the behavior the BotID section calls expected but unverified, and MTC-34's acceptance check ("a curl without the BotID challenge is refused in production"). Any 400 means BotID let a header-less request through: roll back (step 4) and read "BotID".
+
+- [ ] **The limit notice in the page.** The probe's curl may not share a counter with a browser (the rule keys on IP and JA4, and curl's JA4 is not the browser's; Vercel's documentation does not say how two keys combine), so trip it from the browser itself. On https://matttrifilo.com/ask, in the developer console:
+
+  ```
+  for (let i = 1; i <= 21; i++) console.log(i, (await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"messages":[]}' })).status)
+  ```
+
+  Then, within the same minute, tap a starter question. Expect 20 statuses of 400 or 403 then a 429 in the console (the page's fetch carries BotID's header, so a 400 is the validator refusing the empty body; neither reaches the model), and the notice "You've reached the limit for now." with the résumé and email links in place of an answer. If the window turned over first, wait a minute and repeat.
+
+- [ ] **Vercel Firewall overview**: grouped by the rule, the hits from both probes; and BotID's blocked count ("What to watch"), which should include the probe's 20. If the overview shows no BotID figure, the function logs' `[chat] { rejected: 'blocked', verifiedBot: false }` lines are the record.
+- [ ] **Function logs** (Project, Logs, filtered to `/api/chat`; or `vercel logs <production deployment URL>`, which streams for five minutes):
+  - each question asked wrote a `[chat]` completion line carrying `cacheHit` and `vertexFirstByteMs`;
+  - no `botIdBypassed` line; one in production means a request was served without a classification;
+  - the probe left `rejected: 'blocked'` lines, the console loop `rejected: 'invalid'` or `'blocked'` lines, and nothing else from either.
+
+### 4. The first day
+
+- [ ] Through the day, the "What to watch" lines: `rejected` counts by code; completion lines with `answered: false`, or `cacheHit: false` on every line; `[chat] truncated` and `[chat] incomplete`; `finalStepToolCall: true`; `[chat] { stage: 'github' }`, which should be rare with the token set; the Firewall overview.
+- A rising `blocked` count from real browsers (visitors reporting "That request looked automated", or `blocked` rising alongside `Question asked` in Analytics, where the plan collects custom events), or a CSP violation on the challenge path, is the signal the BotID section names for its escalated script being refused, which turns real visitors away. Roll back; the fix is the CSP (`script-src` has no `'unsafe-eval'`, the one unverified directive), and that change is Matt's call.
+- A rising `blocked` count with no matching rise in visitors is BotID doing its job. Deep Analysis is for the opposite signal: `blocked` stays low while requests or token spend climb ("BotID", upgrade path).
+- A GCP budget email at 100 percent: roll back; the budget does not stop spend by itself.
+- **Rollback:**
+
+  ```
+  vercel env add CHAT_DISABLED production   # value: 1
+  vercel redeploy <the current production deployment URL> --target production
+  curl -s -o /dev/null -w '%{http_code}\n' https://matttrifilo.com/ask   # 404: off
+  ```
+
+  The README and the decision log say the assistant is live from the launch pull request on; if a rollback outlasts the day, revert that wording too.
+
+### 5. Record
+
+- [ ] A dated comment on MTC-90: the flip time, the production deployment, each box above with its result, the probe's last line from both runs, and anything that surprised.
+- [ ] A comment on MTC-35 closing its launch item with the date the assistant went live.
+- [ ] One line on MTC-34 that the rule is in place and the header-less request was refused in production, its acceptance check.
+
 ## Recent GitHub activity (MTC-45)
 
 The assistant has a second tool, `recent_activity`. The corpus is a snapshot, so a question like "what is Matt working on right now?" is answered from GitHub instead of from a document written in September.
