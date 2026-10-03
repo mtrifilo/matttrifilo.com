@@ -92,7 +92,7 @@ Vercel builds from Git with `bun install` and `bun run build` (`vercel.json`). A
 
 ## The Career Assistant
 
-Matt's Career Assistant lives at `/ask`, with a compact panel on the homepage. It is switched off in production until launch (see [The kill switch](#the-kill-switch)). It is written for a hiring manager or recruiter deciding whether to talk to Matt about a hands-on engineering-manager role. It answers from a curated corpus in `content/knowledge/`, names the documents it read, and speaks about Matt in the third person, never as Matt. Nothing a visitor writes is stored.
+Matt's Career Assistant lives at `/ask`, with a compact panel on the homepage. It is live in production, and one environment variable switches it off (see [The kill switch](#the-kill-switch)). It is written for a hiring manager or recruiter deciding whether to talk to Matt about a hands-on engineering-manager role. It answers from a curated corpus in `content/knowledge/`, names the documents it read, and speaks about Matt in the third person, never as Matt. Nothing a visitor writes is stored.
 
 The chat route is `app/api/chat`, and `app/api/ask/health` is a Vertex health probe served only on previews and in local development; the pages are under `app/ask`; the code is under `lib/chat`, `lib/knowledge`, `lib/ai` and `components/assistant`; the evals are under `evals`. Read the skill and the runbook before changing any of it.
 
@@ -126,7 +126,7 @@ The runbook's "Eval suites" section has the traps (a `.env` from `vercel env pul
 
 ### The kill switch
 
-`CHAT_DISABLED=1` on a Vercel environment makes `/api/chat` answer 503 and removes the assistant from the site: `/ask` returns 404 and the homepage panel and nav entry go. It takes effect on the next deploy. It was set on Production on 2026-09-15 and stays there until the launch checklist in Linear (MTC-35) is done; `vercel env ls production` is the source of truth. The commands are in the runbook's "Kill switch" section.
+`CHAT_DISABLED=1` on a Vercel environment makes `/api/chat` answer 503 and removes the assistant from the site: `/ask` returns 404 and the homepage panel and nav entry go. It takes effect on the next deploy. It was set on Production from 2026-09-15 until the launch in October 2026 (MTC-90), and setting it again is the rollback; `vercel env ls production` is the source of truth. The commands are in the runbook's "Kill switch" section.
 
 ### Nothing to rotate
 
