@@ -6,14 +6,14 @@ Rows marked "as of" are point-in-time observations. `vercel env ls`, the Vercel 
 
 ## The layers (MTC-34)
 
-| Layer            | Where                                                                                                                                                                                                                                                                                                                                                           | State                                                                                                                           |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Kill switch      | `CHAT_DISABLED=1` env var on Vercel, read before the body                                                                                                                                                                                                                                                                                                       | As of the launch, October 2026 (MTC-90): unset on production, preview and development; setting it on production is the rollback |
-| BotID Basic      | `instrumentation-client.ts` (client), `withBotId` in `next.config.ts` (rewrites), `checkBotId` in `app/api/chat/route.ts` (server)                                                                                                                                                                                                                              | In code; free on every plan                                                                                                     |
-| WAF rate limit   | Vercel dashboard, Firewall, one rule (Hobby allows one)                                                                                                                                                                                                                                                                                                         | In place since October 2026 (MTC-90); spec below                                                                                |
-| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 80k input tokens (at the door, and on what the tools add to each model call), 3 documents / 20k tokens read (shared with the GitHub digests), 3 GitHub checks, 8,192 output tokens per step (shared with Gemini 3.8 Flash thought tokens at thinking `medium`), 4 steps | In code since MTC-31; output raised so medium-thinking briefings are not cut short                                              |
-| GCP budget       | Billing budget on project `matttrifilo-com`, $50 a month                                                                                                                                                                                                                                                                                                        | As of 2026-09-14 (MTC-30)                                                                                                       |
-| Vertex quota cap | GCP console, IAM & Admin, Quotas, `aiplatform.googleapis.com`                                                                                                                                                                                                                                                                                                   | **Not yet applied**; see below                                                                                                  |
+| Layer            | Where                                                                                                                                                                                                                                                                                                                                                           | State                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Kill switch      | `CHAT_DISABLED=1` env var on Vercel, read before the body                                                                                                                                                                                                                                                                                                       | As of the launch, October 2026 (MTC-90): unset on production; setting it there is the rollback |
+| BotID Basic      | `instrumentation-client.ts` (client), `withBotId` in `next.config.ts` (rewrites), `checkBotId` in `app/api/chat/route.ts` (server)                                                                                                                                                                                                                              | In code; free on every plan                                                                    |
+| WAF rate limit   | Vercel dashboard, Firewall, one rule (Hobby allows one)                                                                                                                                                                                                                                                                                                         | In place since October 2026 (MTC-90); spec below                                               |
+| Per-request caps | `lib/chat/validate.ts` and `lib/knowledge` budgets: 8 turns, 1,500-character questions, 80k input tokens (at the door, and on what the tools add to each model call), 3 documents / 20k tokens read (shared with the GitHub digests), 3 GitHub checks, 8,192 output tokens per step (shared with Gemini 3.8 Flash thought tokens at thinking `medium`), 4 steps | In code since MTC-31; output raised so medium-thinking briefings are not cut short             |
+| GCP budget       | Billing budget on project `matttrifilo-com`, $50 a month                                                                                                                                                                                                                                                                                                        | As of 2026-09-14 (MTC-30)                                                                      |
+| Vertex quota cap | GCP console, IAM & Admin, Quotas, `aiplatform.googleapis.com`                                                                                                                                                                                                                                                                                                   | Applied before the launch, October 2026 (MTC-90); name and value in the console                |
 
 The 80k input cap is checked twice (MTC-107). `validateChatRequest` compares the posted conversation with it before any model call and refuses with the 400 `budget_exceeded` notice; after that, the read budget refuses a document or GitHub digest that would carry the next model call past it, counting the messages as sent and the tool definitions (`lib/chat/call-input.ts`), and the model is told in the words of an exhausted budget. It bounds what the tools add, not the admitted conversation: a call also carries what the door does not count (the index frame, the transcript labels, the tool definitions and the rewriting of replayed turns: a few hundred tokens for ordinary text, and up to about a ninth more history for text made of speaker labels), and whatever the model wrote in earlier steps; a digest handed again to a repeated check in one step is counted for later reads but is never itself refused. Measured on 2026-09-30, no call in two full eval runs came within 2,000 tokens of the cap (largest 18,391 by Vertex's count), so in practice only a long conversation meets it.
 
@@ -51,7 +51,7 @@ Per [Vercel's WAF rate-limiting documentation](https://vercel.com/docs/vercel-fi
 | Window | 60 s                                                     |                                                                                                                                              |
 | Limit  | 20                                                       | A conversation is at most 8 questions; a regenerate or a retry after a stall doubles it; 20 leaves room for a person and none for a loop     |
 | Keys   | IP and JA4 digest                                        | Both included on Hobby per the documentation above; JA4 catches one client behind many residential IPs, which is the attack the ticket cites |
-| Action | Default (429)                                            | The UI turns a bare 429 into the rate-limit notice with the résumé, project and email links                                                  |
+| Action | Default (429)                                            | The UI turns a bare 429 into the rate-limit notice with the résumé and email links                                                           |
 
 Counters are per region (documentation above), so a distributed caller can exceed the limit somewhat; the per-request caps and the budget bound what that costs. After publishing, watch Firewall, overview, grouped by the rule, for a week; if real visitors trip it, raise the limit before lowering anything else.
 
@@ -60,7 +60,7 @@ The corpus document `content/knowledge/career/how-the-career-assistant-was-built
 ## GCP budget and quota
 
 - The $50 monthly budget on `matttrifilo-com` emails at 50, 90 and 100 percent. At 100 percent, set the kill switch; the budget does not stop spend by itself.
-- To cap spend hard, lower the Vertex AI request quota for the Gemini model in the GCP console (IAM & Admin, Quotas, filter on `aiplatform.googleapis.com` and the model's requests-per-minute quota) to a number the rate-limit rule cannot exceed. Not applied yet; the exact quota name depends on the model family and is best read from the console.
+- To cap spend hard, lower the Vertex AI request quota for the Gemini model in the GCP console (IAM & Admin, Quotas, filter on `aiplatform.googleapis.com` and the model's requests-per-minute quota) to a number the rate-limit rule cannot exceed. Applied before the launch (MTC-90); the exact quota name depends on the model family and is best read from the console.
 
 ## What to watch
 
@@ -235,14 +235,15 @@ The launch day, in order, for Matt. Tick each box and note the time; the record 
 
   ```
   scripts/rate-limit-probe.sh
-  # expect: 1 to 20 answer 503 (the kill switch), 21 to 25 answer 429 (the edge); exit 0
+  # expect the last line "statuses: 503x20 429x5": the kill switch, then the edge; exit 0
   ```
 
   No 429: wait a minute and run it once more (a fixed window can turn over mid-run). Two runs with no 429 mean the rule is not counting: check its conditions before going on.
 
-- [ ] **Optional: the Vertex quota cap** ("GCP budget and quota"): a requests-per-minute cap on the Gemini model the rule cannot exceed, read from the console. MTC-90's ticket lists it; the budget and the rule bound spend without it.
-
-- [ ] **A scheduled eval run on main**, if Matt chooses one before the flip (his 2026-10-02 policy on MTC-35 proposes the first run there). Nothing below depends on it.
+- [ ] **The Vertex quota cap** ("GCP budget and quota"): a requests-per-minute cap on the Gemini model that the rule cannot exceed, its name and value read from the console. Matt's before the flip (MTC-35, 2026-10-02); the launch pull request says it is applied.
+- [ ] **The Figma and decision-page item** of the MTC-35 checklist: Matt's before the flip (MTC-35, 2026-10-02).
+- [ ] **The December 2026 model and price review** is on the calendar (MTC-35).
+- No eval run before the flip (Matt, 2026-10-02, MTC-35); runs resume after launch, when he chooses. `/ask/evals` keeps showing the newest published record.
 
 ### 2. The flip
 
@@ -251,7 +252,7 @@ vercel env rm CHAT_DISABLED production -y
 vercel env ls production   # the source of truth: CHAT_DISABLED absent, GITHUB_TOKEN present
 ```
 
-- [ ] Merge the launch pull request (the wording that becomes true at the flip: README, decisions, the build document and its golden, the WAF heading here).
+- [ ] Merge the launch pull request (the wording that becomes true at the flip: README, decisions, the build document and its golden, the WAF heading, the layers table and the quota line here). Merge it only once the rule, the token and the quota cap exist, since it says they do. It dates the rule "October 2026"; if the flip slips past October, change that month in the build document, its golden and this file before merging.
 - [ ] Environment variables are baked into a deployment when it builds, so the assistant appears only on a production deployment built after the `env rm`. When the merge's production deployment is Ready, check:
 
   ```
@@ -272,21 +273,22 @@ vercel env ls production   # the source of truth: CHAT_DISABLED absent, GITHUB_T
 
   ```
   scripts/rate-limit-probe.sh
-  # expect: 1 to 20 answer 403, 21 to 25 answer 429; exit 0
+  # expect the last line "statuses: 403x20 429x5"; exit 0
   ```
 
-  The 403s are BotID refusing a request with no classification header (`blocked`), the behavior the BotID section calls expected but unverified, and MTC-34's acceptance check ("a curl without the BotID challenge is refused in production"). Any 400 means BotID let a header-less request through: roll back (step 4) and read "BotID".
+  A 503 in that line means the deployment still carries the flag (step 2). The 403s are BotID refusing a request with no classification header (`blocked`), the behavior the BotID section calls expected but unverified, and MTC-34's acceptance check ("a curl without the BotID challenge is refused in production"). Any 400 means BotID let a header-less request through (the probe exits 3): roll back (step 4) and read "BotID".
 
-- [ ] **The limit notice in the page.** The probe's curl may not share a counter with a browser (the rule keys on IP and JA4, and curl's JA4 is not the browser's; Vercel's documentation does not say how two keys combine), so trip it from the browser itself. On https://matttrifilo.com/ask, in the developer console:
+- [ ] **The limit notice in the page.** The probe's curl may not share a counter with a browser (the rule keys on IP and JA4, and curl's JA4 is not the browser's; Vercel's documentation does not say how two keys combine), so trip it from the browser itself. Wait a minute after the probe, so its window has closed, then on https://matttrifilo.com/ask, in the developer console:
 
   ```
   for (let i = 1; i <= 21; i++) console.log(i, (await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"messages":[]}' })).status)
   ```
 
-  Then, within the same minute, tap a starter question. Expect 20 statuses of 400 or 403 then a 429 in the console (the page's fetch carries BotID's header, so a 400 is the validator refusing the empty body; neither reaches the model), and the notice "You've reached the limit for now." with the résumé and email links in place of an answer. If the window turned over first, wait a minute and repeat.
+  Then, within the same minute, tap a starter question. Expect 20 statuses of 400 or 403 then a 429 in the console (the page's fetch carries BotID's header, so a 400 is the validator refusing the empty body; neither reaches the model), and the notice "You've reached the limit for now." with the résumé and email links in place of an answer. If the window turned over first, wait a minute and repeat. A 429 on the first few console requests means the browser shared the probe's counter, which is worth recording: it says how the two keys combine.
 
 - [ ] **Vercel Firewall overview**: grouped by the rule, the hits from both probes; and BotID's blocked count ("What to watch"), which should include the probe's 20. If the overview shows no BotID figure, the function logs' `[chat] { rejected: 'blocked', verifiedBot: false }` lines are the record.
-- [ ] **Function logs** (Project, Logs, filtered to `/api/chat`; or `vercel logs <production deployment URL>`, which streams for five minutes):
+- [ ] **Analytics** (the project's Analytics page, Events, Production): `Question asked` from the phone and the desktop questions, and `Rate limit hit` from the limit notice (see "Analytics events").
+- [ ] **Function logs** (Project, Logs, filtered to `/api/chat`; or `vercel logs <production deployment URL>`, which shows only what arrives in the five minutes after it starts, so start it before the questions and the probe):
   - each question asked wrote a `[chat]` completion line carrying `cacheHit` and `vertexFirstByteMs`;
   - no `botIdBypassed` line; one in production means a request was served without a classification;
   - the probe left `rejected: 'blocked'` lines, the console loop `rejected: 'invalid'` or `'blocked'` lines, and nothing else from either.
@@ -294,13 +296,13 @@ vercel env ls production   # the source of truth: CHAT_DISABLED absent, GITHUB_T
 ### 4. The first day
 
 - [ ] Through the day, the "What to watch" lines: `rejected` counts by code; completion lines with `answered: false`, or `cacheHit: false` on every line; `[chat] truncated` and `[chat] incomplete`; `finalStepToolCall: true`; `[chat] { stage: 'github' }`, which should be rare with the token set; the Firewall overview.
-- A rising `blocked` count from real browsers (visitors reporting "That request looked automated", or `blocked` rising alongside `Question asked` in Analytics, where the plan collects custom events), or a CSP violation on the challenge path, is the signal the BotID section names for its escalated script being refused, which turns real visitors away. Roll back; the fix is the CSP (`script-src` has no `'unsafe-eval'`, the one unverified directive), and that change is Matt's call.
+- A rising `blocked` count from real browsers (visitors reporting "That request looked automated", or `blocked` rising alongside `Question asked` in Analytics), or a CSP violation on the challenge path, is the signal the BotID section names for its escalated script being refused, which turns real visitors away. Roll back; the fix is the CSP (`script-src` has no `'unsafe-eval'`, the one unverified directive), and that change is Matt's call.
 - A rising `blocked` count with no matching rise in visitors is BotID doing its job. Deep Analysis is for the opposite signal: `blocked` stays low while requests or token spend climb ("BotID", upgrade path).
 - A GCP budget email at 100 percent: roll back; the budget does not stop spend by itself.
 - **Rollback:**
 
   ```
-  vercel env add CHAT_DISABLED production   # value: 1
+  printf 1 | vercel env add CHAT_DISABLED production   # exactly 1; the switch reads no other value
   vercel redeploy <the current production deployment URL> --target production
   curl -s -o /dev/null -w '%{http_code}\n' https://matttrifilo.com/ask   # 404: off
   ```
@@ -309,8 +311,9 @@ vercel env ls production   # the source of truth: CHAT_DISABLED absent, GITHUB_T
 
 ### 5. Record
 
-- [ ] A dated comment on MTC-90: the flip time, the production deployment, each box above with its result, the probe's last line from both runs, and anything that surprised.
-- [ ] A comment on MTC-35 closing its launch item with the date the assistant went live.
+- [ ] A dated comment on MTC-90: the flip time, the production deployment, each box above with its result, the probe's `statuses:` line from both runs, and anything that surprised. Matt then closes MTC-90 with the date the assistant went live.
+- [ ] A comment on MTC-35 closing its launch item with that date, and its last item: the spike closed out with a link to the shipped route and the eval results.
+- [ ] The two agent-instruction lines that still say production stays off until launch: `CLAUDE.md` ("Production is protected") and `.claude/skills/career-assistant-context/SKILL.md` ("Production stays off"). The rule against agents changing Vercel environment variables or deploying to production stays; the state clause is Matt's to reword.
 - [ ] One line on MTC-34 that the rule is in place and the header-less request was refused in production, its acceptance check.
 
 ## Recent GitHub activity (MTC-45)

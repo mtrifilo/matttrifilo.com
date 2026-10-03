@@ -35,9 +35,15 @@
 # not counting this client. Counters are per region, and one machine is
 # served by one region.
 #
+# The last line tallies the statuses (`statuses: 403x20 429x5`); that line
+# is what goes in the launch record, since a first 429 alone cannot tell a
+# BotID refusal from the kill switch.
+#
 # Exit status: 0 when a 429 was seen, 1 when none was, 2 when the endpoint
 # answered something that makes the run unreadable (a redirect, or no
-# response at all).
+# response at all), 3 when any request answered 400, whatever else the run
+# saw, because that means BotID let a request with no classification
+# through.
 set -euo pipefail
 
 readonly URL='https://matttrifilo.com/api/chat'
@@ -46,6 +52,7 @@ readonly REQUESTS=25
 
 first_429=''
 reached_validator=0
+statuses=''
 started=$(date +%s)
 
 for i in $(seq 1 "$REQUESTS"); do
@@ -59,6 +66,7 @@ for i in $(seq 1 "$REQUESTS"); do
     "$URL") || status='000'
   elapsed=$(($(date +%s) - started))
   printf '%2d  %s  (%ds)\n' "$i" "$status" "$elapsed"
+  statuses="$statuses $status"
 
   case "$status" in
   000)
@@ -79,10 +87,12 @@ for i in $(seq 1 "$REQUESTS"); do
 done
 
 elapsed=$(($(date +%s) - started))
+# One "403x20" entry per distinct status, in numeric order.
+# shellcheck disable=SC2086 # split on the spaces between statuses on purpose
+tally=$(printf '%s\n' $statuses | sort | uniq -c |
+  awk '{ printf "%s%sx%s", (NR > 1 ? " " : ""), $2, $1 }')
+
 echo
-if [ "$reached_validator" -gt 0 ]; then
-  echo "$reached_validator request(s) answered 400: BotID let a request with no classification reach the validator. Set the kill switch and read the runbook's BotID section." >&2
-fi
 if [ -n "$first_429" ]; then
   echo "First 429 at request $first_429 of $REQUESTS, ${elapsed}s for the run."
   if [ "$first_429" -lt 21 ]; then
@@ -90,12 +100,20 @@ if [ -n "$first_429" ]; then
   elif [ "$first_429" -gt 21 ]; then
     echo "Expected request 21. Later means the window turned over during the run."
   fi
-  exit 0
+  outcome=0
+else
+  echo "No 429 in $REQUESTS requests over ${elapsed}s."
+  if [ "$elapsed" -ge 60 ]; then
+    echo "The run took a minute or more, so it spanned more than one window; that alone can explain it."
+  fi
+  echo "Wait a minute and run it once more; two runs with no 429 mean the rule is not counting this client."
+  outcome=1
 fi
 
-echo "No 429 in $REQUESTS requests over ${elapsed}s."
-if [ "$elapsed" -ge 60 ]; then
-  echo "The run took a minute or more, so it spanned more than one window; that alone can explain it."
+if [ "$reached_validator" -gt 0 ]; then
+  echo "$reached_validator request(s) answered 400: BotID let a request with no classification reach the validator. Set the kill switch and read the runbook's BotID section." >&2
+  outcome=3
 fi
-echo "Wait a minute and run it once more; two runs with no 429 mean the rule is not counting this client."
-exit 1
+
+echo "statuses: $tally"
+exit "$outcome"

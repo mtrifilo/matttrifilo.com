@@ -4704,9 +4704,12 @@
             correct. It fails if it says the edge firewall's rate-limit rule
             is missing, planned or not yet in place, since the document says a
             per-client rate-limit rule on Vercel's firewall has been in place
-            since October 2026; it also fails if it gives that rule a limit, a
-            window or keys, which the document does not state. Leaving the
-            rule out is fine. It fails if
+            since October 2026 and refuses a client's requests past a set
+            limit. It also fails if it gives that rule a number (a limit or a
+            window) or says what it counts clients by, which the document does
+            not state; calling it per-client, as the document does, is fine.
+            It fails if it says the rule detects bots or stops all abuse.
+            Leaving the rule out is fine. It fails if
             it says the eval suites run automatically, block a deploy, or must
             pass a threshold before a change ships: the document says Matt
             runs them before opening a pull request, and the thresholds decide
