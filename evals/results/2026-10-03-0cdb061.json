@@ -1,0 +1,35 @@
+{
+  "commit": "0cdb061673235bde38ba9673d11bfbd09333b46d",
+  "ranAt": "2026-10-03T22:50:02.242Z",
+  "model": "gemini-3.8-flash",
+  "promptfooVersion": "0.123.1",
+  "suites": [
+    {
+      "name": "golden",
+      "passed": 108,
+      "total": 112
+    },
+    {
+      "name": "groundedness",
+      "passed": 22,
+      "total": 23
+    },
+    {
+      "name": "injection",
+      "passed": 25,
+      "total": 25
+    },
+    {
+      "name": "refusals",
+      "passed": 28,
+      "total": 28
+    }
+  ],
+  "totals": {
+    "passed": 183,
+    "total": 188
+  },
+  "retried": 1,
+  "transportFailures": 0,
+  "missingTrailer": 0
+}
