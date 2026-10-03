@@ -134,4 +134,4 @@ The deployment holds no Google service-account key. It presents its Vercel OIDC 
 
 ## Where the work is tracked
 
-Linear, team MTC, in two projects: "Ask Matt AI chat" for the Career Assistant, and the September 2026 site audit (Site Audit & Foundations) for the rest of the site. Every change has a ticket, and commit subjects and pull request titles carry its ID in parentheses at the end, for example `(MTC-19)`.
+Linear, team MTC, in two projects: "Ask Matt AI chat" for the Career Assistant, and the September 2026 site audit (Site Audit & Foundations) for the rest of the site. Every change has a ticket, and commit subjects and pull request titles carry its ID in parentheses at the end, for example `(MTC-19)`. The site's durable decisions, one paragraph each with its ticket, are collected in [`docs/decisions.md`](docs/decisions.md).
