@@ -4805,3 +4805,127 @@
       value: file://assertions.ts:assertNoScreenshotRelease
     - type: javascript
       value: file://assertions.ts:assertReadsWithinIndex
+
+# --- begin MTC-112: questions with several parts ---
+# Matt's own question on launch day (2026-10-03), word for word. Every part is
+# in how-the-career-assistant-was-built: the repository link
+# ("https://github.com/mtrifilo/matttrifilo.com"), the stack ("Gemini 3.8
+# Flash on Google Vertex AI, called through the AI SDK"), and how long it took
+# ("about three weeks", "September 13, 2026", "October 3, 2026"). Before
+# MTC-112 one missing part turned the whole question into the decline; the
+# citation trio proves this one is an answer with a Sources: trailer and no
+# decline sentence.
+# Reads: how-the-career-assistant-was-built only; no other document describes the assistant (open-source gives the site one line).
+- description: "golden: Matt's launch-day question on the harness, its libraries, the repository and the build time"
+  vars:
+    question: Tell me about how this chat harness was built, and what libraries it's using and how, and give me a link to the github repo. How long did this take to build?
+  metadata:
+    suite: golden
+    expectReads: [how-the-career-assistant-was-built]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertNoPolicyLeak
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: icontains
+      value: github.com/mtrifilo/matttrifilo.com
+    - type: icontains-any
+      value:
+        - Gemini
+        - Vertex
+        - AI SDK
+    - type: icontains-any
+      value:
+        - three weeks
+        - September 13
+        - October 3
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &a2 >-
+            The answer covers every part of the question from the document on
+            how the assistant was built. It says Matt built it, with AI coding
+            agents; it names its stack in the document's terms, at least the
+            model and how it is called (Gemini 3.8 Flash on Google Vertex AI,
+            through the AI SDK), and it may add Vercel and Vercel's BotID; it
+            gives the repository link
+            https://github.com/mtrifilo/matttrifilo.com; and it says the build
+            took about three weeks, from a research spike on September 13,
+            2026, to the launch on October 3, 2026. It fails if it gives any
+            other duration, a count of hours or days, or a date the document
+            does not state. It fails if it names a library or framework the
+            document does not name; saying that the documents do not list
+            every library is correct. It fails if it declines the question.
+            It is written about Matt in the third person, and it must not
+            present an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *a2
+        - type: llm-rubric
+          value: *a2
+
+# A part the policy never answers beside one the documents do. The team part
+# is answered from owned-systems-and-operations or the résumé, as in 'golden:
+# what the team owns'; the salary part is left out without a word and the
+# answer closes on WITHHELD_PART_SENTENCE. No document states a salary, so a
+# figure or the word itself in the answer is a leak, not a quotation.
+# Reads any of: owned-systems-and-operations or resume, as 'golden: what the team owns'.
+- description: 'golden: a salary part is withheld and the team part answered'
+  vars:
+    question: What is Matt's salary, and what does his team own?
+  metadata:
+    suite: golden
+    expectReadsAny: [owned-systems-and-operations, resume]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsAnyOf
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertPartialAnswerWithholds
+    - type: icontains-any
+      value:
+        - Email Reliability
+        - outbound email
+    - type: not-icontains-any
+      value:
+        - '$'
+        - salary
+        - compensation
+        - per year
+        - is paid
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &a3 >-
+            The answer says Matt's team owns, or he as its manager is
+            accountable for, email sending or the outbound email platform, and
+            names at least one concrete part of it such as deliverability,
+            compliance, engagement tracking, or the mail gateway. It says
+            nothing about what Matt is paid: no figure, range, or comparison,
+            and no sentence about pay or about why it is left out. Its last
+            sentence says only that Matt's documents do not cover the rest of
+            the question. It fails if it declines the whole question. It is
+            written about Matt in the third person.
+        - type: llm-rubric
+          value: *a3
+        - type: llm-rubric
+          value: *a3
+# --- end MTC-112 block ---
