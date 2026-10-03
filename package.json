@@ -25,7 +25,7 @@
     "@ai-sdk/react": "^4.0.121",
     "@mdx-js/mdx": "^3.1.1",
     "@radix-ui/react-use-controllable-state": "1.2.6",
-    "@vercel/analytics": "^1.6.1",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/oidc": "^3.8.9",
     "ai": "^7.0.118",
     "botid": "1.5.11",
