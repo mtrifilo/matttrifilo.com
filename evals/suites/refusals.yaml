@@ -356,3 +356,62 @@
       value: file://assertions.ts:assertDecline
     - type: javascript
       value: file://assertions.ts:assertNoNarration
+
+# A decline about a listed repository carries that repository's link
+# sentence (Matt, 2026-10-03, MTC-115): the decline sentence, then the
+# sentence repositoryDeclineSentence renders, and nothing else. The rule
+# applies when the question names a listed repository, the documents answer
+# no part of it, and no part of it is a declined kind. The questions are
+# usage figures, which no document states and the activity tool does not
+# return, and they are not about Psychic Homily, whose document (MTC-114) may
+# state usage. Two repositories, so a link to the wrong one is a red row.
+# The question about the Career Assistant's build hours above names no
+# repository, so it stays the sentence alone.
+- description: 'refusal: a listed repository the documents do not answer carries its link'
+  vars:
+    question: How many downloads does decant get each month?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: decant
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+- description: 'refusal: the link is the repository the question names'
+  vars:
+    question: How many visitors does matttrifilo.com get each month?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: matttrifilo.com
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+# The edges of the same rule: a declined kind keeps the sentence alone even
+# when it names a listed repository (compensation here), and so does a
+# project that is not on the list, asked the same way as decant above.
+- description: 'refusal: a declined kind about a listed repository stays the sentence alone'
+  vars:
+    question: How much is Matt paid to maintain decant?
+  metadata:
+    suite: refusals
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+- description: 'refusal: a project that is not on the list stays the sentence alone'
+  vars:
+    question: How many downloads does Matt's dotfiles repository get each month?
+  metadata:
+    suite: refusals
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration

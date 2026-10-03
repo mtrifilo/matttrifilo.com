@@ -3,8 +3,15 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { STARTER_QUESTIONS } from '@/components/assistant/copy'
 import { DEFAULT_GEMINI_MODEL } from '@/lib/ai/vertex'
-import { DECLINE_SENTENCE, WITHHELD_PART_SENTENCE } from '@/lib/chat/prompt'
-import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
+import {
+  DECLINE_SENTENCE,
+  WITHHELD_PART_SENTENCE,
+  repositoryDeclineSentence,
+} from '@/lib/chat/prompt'
+import {
+  ASSISTANT_REPOSITORIES,
+  assistantRepository,
+} from '@/lib/chat/repositories'
 import { listKnowledgeDocuments, loadKnowledgeIndex } from '@/lib/knowledge'
 import * as assertions from './assertions'
 import type {
@@ -138,6 +145,9 @@ const JUDGES_THE_ANSWER: Readonly<Record<string, string>> = {
   assertHasRecentDate: `He shipped the parser in ${new Date().getUTCFullYear()}.`,
   assertDatesFromActivity: 'He merged the parser fix on 2026-09-18.',
   assertPartialAnswerWithholds: `Matt led the migration. ${WITHHELD_PART_SENTENCE}`,
+  assertRepositoryDecline: `${DECLINE_SENTENCE} ${repositoryDeclineSentence(
+    ASSISTANT_REPOSITORIES[0]
+  )}`,
 }
 
 /** The assertions that carry the citation contract; each is vacuous alone. */
@@ -256,7 +266,13 @@ describe('JUDGES_THE_ANSWER', () => {
   // there is nothing to read, so each one is made to prove it, in one context
   // that it must also pass its own answer in.
   const context: AssertionContext = {
-    test: { metadata: { forbidden: [] } },
+    // The repository assertRepositoryDecline's answer above links to.
+    test: {
+      metadata: {
+        forbidden: [],
+        expectDeclineRepository: ASSISTANT_REPOSITORIES[0].id,
+      },
+    },
     metadata: {
       readIds: ['resume'],
       activityRepos: ['decant'],
@@ -502,12 +518,36 @@ for (const name of SUITES) {
         if (names.includes('assertCheckedActivity')) {
           expect(Array.isArray(metadata.expectActivity)).toBe(true)
         }
+        if (names.includes('assertRepositoryDecline')) {
+          // One id, not a list: the assertion fails a row whose value is
+          // anything but an allowlisted id, on every run.
+          const id = metadata.expectDeclineRepository
+          expect({
+            description: item.description,
+            allowlisted:
+              typeof id === 'string' && assistantRepository(id) !== undefined,
+          }).toEqual({ description: item.description, allowlisted: true })
+        }
         if (
           names.includes('assertDeclineOrWithholds') ||
           names.includes('assertNoInventedFact')
         ) {
           expect(Array.isArray(metadata.forbidden)).toBe(true)
         }
+      }
+    })
+
+    test('no test asks for both the bare decline and the one with a link', () => {
+      // assertDecline fails the link the other one requires (MTC-115), so a
+      // test carrying both could never pass.
+      for (const item of suite) {
+        const names = assertionNames([item])
+        expect({
+          description: item.description,
+          both:
+            names.includes('assertDecline') &&
+            names.includes('assertRepositoryDecline'),
+        }).toEqual({ description: item.description, both: false })
       }
     })
 
