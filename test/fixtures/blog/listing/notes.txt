@@ -1,0 +1,1 @@
+Not Markdown, so getBlogSlugs never lists it and the sitemap never links it.
