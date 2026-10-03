@@ -206,7 +206,15 @@ function validateFrontmatter(
   }
 
   if ('updated' in data) {
-    frontmatter.updated = readDateLine(rawFrontmatter, 'updated', source)
+    const updated = readDateLine(rawFrontmatter, 'updated', source)
+    // Both are YYYY-MM-DD, so string order is date order. An earlier
+    // `updated` would give the post a lastmod before it was published.
+    if (updated < date) {
+      throw new Error(
+        `${source}: frontmatter updated (${updated}) is before date (${date})`
+      )
+    }
+    frontmatter.updated = updated
   }
 
   return frontmatter
@@ -228,6 +236,29 @@ function parseMatter(fileContents: string, source: string) {
       cause: error,
     })
   }
+}
+
+/**
+ * The date a post last changed: its `updated` date when it has one, else
+ * the date it was published. The post's sitemap lastmod, its
+ * structured data dateModified and its og modifiedTime all use it, so a
+ * search engine is told the same date in each place.
+ */
+export function postLastModified(post: {
+  date: string
+  updated?: string
+}): string {
+  return post.updated ?? post.date
+}
+
+/**
+ * A post title on one line. A title may carry a line break for the page's
+ * own heading, which nothing else (the <title>, og:title, the structured
+ * data headline, the feed) can show, so there each run of whitespace,
+ * line breaks included, becomes one space.
+ */
+export function singleLineTitle(title: string): string {
+  return title.replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -282,6 +313,7 @@ export function getAllBlogPosts(
       date: post.frontmatter.date,
       categories: post.frontmatter.categories || [],
       description: post.frontmatter.description,
+      updated: post.frontmatter.updated,
       excerpt: post.excerpt,
     })
   }

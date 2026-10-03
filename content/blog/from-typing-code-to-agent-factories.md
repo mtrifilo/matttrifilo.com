@@ -1,7 +1,7 @@
 ---
 title: "From Typing Code to Agent Factories.\nA Message of Hope."
 date: '2026-03-01'
-description: 'From Typing Code to Agent Factories. A Message of Hope.'
+description: "We are deep in an inflection point like I've never experienced before. What we're living through right now is bigger than the Personal Computer, the digitization of information, and the Internet itself."
 ---
 
 We are deep in an inflection point like I've never experienced before. The closest comparison I can remember is when the [personal computer](https://medium.com/@madmedic11671/behind-the-spots-the-story-of-gateway-computers-ce3263bcd07f) became affordable to the middle class in the late 90's.

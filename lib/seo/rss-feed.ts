@@ -1,7 +1,7 @@
 import { compile } from '@mdx-js/mdx'
 import { toHtml } from 'hast-util-to-html'
 import type { Element, Root, RootContent } from 'hast'
-import { getAllBlogPosts, getBlogPost } from '@/lib/blog'
+import { getAllBlogPosts, getBlogPost, singleLineTitle } from '@/lib/blog'
 import { FEED_PATH } from './feed'
 
 const SITE_URL = 'https://matttrifilo.com'
@@ -155,16 +155,11 @@ export async function loadFeedItems(): Promise<FeedItem[]> {
   )
 }
 
-/** A title on one line: some post titles break with `\n` on the page. */
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
-}
-
 function renderItem(item: FeedItem): string {
   const url = postUrl(item.slug)
   return [
     '    <item>',
-    `      <title>${escapeXml(oneLine(item.title))}</title>`,
+    `      <title>${escapeXml(singleLineTitle(item.title))}</title>`,
     `      <link>${escapeXml(url)}</link>`,
     `      <guid isPermaLink="true">${escapeXml(url)}</guid>`,
     `      <pubDate>${rfc822Date(item.date)}</pubDate>`,

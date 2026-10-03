@@ -19,6 +19,22 @@ export interface SiteRoute {
    * search engine once there is a published eval run on it.
    */
   needsPublishedEvalRun?: true
+  /**
+   * `YYYY-MM-DD`, the day the page's own content last changed: the day
+   * the last change to its page file, or the content it renders, merged
+   * to main. Tests, head-only metadata and the shared layout (nav, footer,
+   * skip link) do not count. It is the sitemap's lastmod, so it is a fact
+   * about the page rather than the build time; move it forward in the
+   * pull request that changes what a visitor sees on the page. Nothing
+   * checks it against git.
+   */
+  contentUpdated: string
+  /**
+   * The page lists the blog posts or the published eval runs, so a new
+   * one changes the page too and its lastmod is the later of the two.
+   * A post counts by its publish date, the date the listing shows.
+   */
+  lists?: 'posts' | 'evalRuns'
 }
 
 /**
@@ -30,8 +46,22 @@ export interface SiteRoute {
  * from the filesystem.
  */
 export const siteRoutes: readonly SiteRoute[] = [
-  { href: '/', label: 'Home', changeFrequency: 'monthly', priority: 1 },
-  { href: '/blog', label: 'Blog', changeFrequency: 'weekly', priority: 0.8 },
+  {
+    href: '/',
+    label: 'Home',
+    changeFrequency: 'monthly',
+    priority: 1,
+    contentUpdated: '2026-09-22',
+    lists: 'posts',
+  },
+  {
+    href: '/blog',
+    label: 'Blog',
+    changeFrequency: 'weekly',
+    priority: 0.8,
+    contentUpdated: '2026-09-13',
+    lists: 'posts',
+  },
   {
     // Matt's Career Assistant. Labelled "Ask" rather than "Assistant" or
     // "Chat" because the nav reads as a list of what a visitor can do, and
@@ -41,6 +71,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     changeFrequency: 'monthly',
     priority: 0.7,
     assistant: true,
+    contentUpdated: '2026-10-01',
   },
   {
     // The assistant's published eval results (MTC-44). Out of the nav
@@ -54,30 +85,36 @@ export const siteRoutes: readonly SiteRoute[] = [
     assistant: true,
     hideFromNav: true,
     needsPublishedEvalRun: true,
+    contentUpdated: '2026-09-22',
+    lists: 'evalRuns',
   },
   {
     href: '/open-source',
     label: 'Open Source',
     changeFrequency: 'monthly',
     priority: 0.6,
+    contentUpdated: '2026-09-22',
   },
   {
     href: '/books',
     label: 'Recommended Books',
     changeFrequency: 'monthly',
     priority: 0.6,
+    contentUpdated: '2026-02-28',
   },
   {
     href: '/resume',
     label: 'Résumé',
     changeFrequency: 'yearly',
     priority: 0.5,
+    contentUpdated: '2026-10-01',
   },
   {
     href: '/contact',
     label: 'Contact',
     changeFrequency: 'yearly',
     priority: 0.5,
+    contentUpdated: '2026-09-13',
   },
 ]
 
@@ -107,4 +144,24 @@ export function sitemapRoutes(options: {
   return visibleSiteRoutes(options).filter(
     route => options.evalResultsPublished || !route.needsPublishedEvalRun
   )
+}
+
+/**
+ * A static page's sitemap lastmod: its own content date, or the newest
+ * post or eval run it lists when that is later. Dates are `YYYY-MM-DD`,
+ * so the later one is the larger string.
+ */
+export function routeLastModified(
+  route: Pick<SiteRoute, 'contentUpdated' | 'lists'>,
+  newest: { post?: string; evalRun?: string }
+): string {
+  const listed =
+    route.lists === 'posts'
+      ? newest.post
+      : route.lists === 'evalRuns'
+        ? newest.evalRun
+        : undefined
+  return listed !== undefined && listed > route.contentUpdated
+    ? listed
+    : route.contentUpdated
 }

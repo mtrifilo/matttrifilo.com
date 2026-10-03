@@ -1,9 +1,14 @@
 import { notFound } from 'next/navigation'
-import { getBlogPost, getBlogSlugs } from '@/lib/blog'
+import {
+  getBlogPost,
+  getBlogSlugs,
+  postLastModified,
+  singleLineTitle,
+} from '@/lib/blog'
 import { MDXContent } from '@/components/blog/mdx-content'
 import Link from 'next/link'
 import { JsonLd } from '@/components/seo/JsonLd'
-import { generateBlogPostingSchema } from '@/lib/seo/jsonld'
+import { blogPostingSchemaFor } from '@/lib/seo/jsonld'
 import { formatDate } from '@/lib/format-date'
 import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
@@ -24,7 +29,7 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
     return { title: 'Post Not Found' }
   }
 
-  const cleanTitle = post.frontmatter.title.replace(/\n/g, ' ')
+  const cleanTitle = singleLineTitle(post.frontmatter.title)
 
   return {
     title: cleanTitle,
@@ -38,6 +43,7 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
       description: post.frontmatter.description || post.excerpt,
       type: 'article',
       publishedTime: post.frontmatter.date,
+      modifiedTime: postLastModified(post.frontmatter),
       url: `/blog/${slug}`,
     },
   }
@@ -54,14 +60,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   return (
     <>
       <div className="reading-progress-bar" aria-hidden="true" />
-      <JsonLd
-        data={generateBlogPostingSchema({
-          title: post.frontmatter.title,
-          date: post.frontmatter.date,
-          description: post.frontmatter.description || post.excerpt,
-          slug,
-        })}
-      />
+      <JsonLd data={blogPostingSchemaFor(post)} />
       <div className="flex min-h-screen items-start justify-center">
         <article className="w-full max-w-3xl px-4 py-8 md:px-8">
           <header className="mb-8">
