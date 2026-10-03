@@ -1,6 +1,7 @@
 import type { KnowledgeIndex } from '@/lib/knowledge'
 import { KNOWLEDGE_READ_BUDGET } from '@/lib/knowledge'
 import {
+  DECLINE_SENTENCE,
   FOLLOW_UPS_TRAILER_PREFIX,
   FOLLOW_UP_MAX_CHARS,
   FOLLOW_UP_MIN_CHARS,
@@ -57,12 +58,12 @@ export const READ_DOCUMENT_TOOL_NAME = 'read_document'
 export const RECENT_ACTIVITY_TOOL_NAME = 'recent_activity'
 
 /**
- * The one sentence the assistant is allowed to decline with. It is quoted
- * verbatim inside SYSTEM_PROMPT and re-exported so the UI and the tests can
- * recognise a decline without re-typing it.
+ * The one sentence the assistant is allowed to decline with, quoted verbatim
+ * inside SYSTEM_PROMPT. Defined in ./answer and re-exported here, for the
+ * reason the trailer prefixes below are: the browser recognizes it too, and
+ * cannot import this module.
  */
-export const DECLINE_SENTENCE =
-  "That isn't something I can answer from Matt's documents. For questions like this, email him at matt.trifilo@gmail.com."
+export { DECLINE_SENTENCE }
 
 /**
  * Prefix of the machine-readable citation trailer.

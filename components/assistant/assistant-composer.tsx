@@ -40,6 +40,13 @@ export interface AssistantComposerProps {
   onSubmit: (question: string) => void
   /** Present only where an answer can be interrupted. */
   onStop?: () => void
+  /**
+   * The visitor clicked or tapped the box, or typed in it. Not called on
+   * focus, since a page that focuses the box itself has not been used by
+   * anyone yet, nor on a press, since a touch that starts a page scroll on
+   * the box presses it without meaning to.
+   */
+  onEngage?: () => void
   /** Swaps the send button for a stop button. */
   streaming?: boolean
   /**
@@ -60,6 +67,7 @@ export function AssistantComposer({
   onValueChange,
   onSubmit,
   onStop,
+  onEngage,
   streaming = false,
   textareaRef,
   className,
@@ -127,10 +135,14 @@ export function AssistantComposer({
             'max-h-40 min-h-9 flex-1 resize-none bg-transparent py-2 text-base',
             'leading-5 outline-none placeholder:text-muted-foreground'
           )}
-          onChange={event => onValueChange(event.target.value)}
+          onChange={event => {
+            onValueChange(event.target.value)
+            onEngage?.()
+          }}
           onCompositionEnd={() => setComposing(false)}
           onCompositionStart={() => setComposing(true)}
           onKeyDown={handleKeyDown}
+          onClick={() => onEngage?.()}
           placeholder={ASSISTANT_PLACEHOLDER}
           ref={ref}
           rows={1}

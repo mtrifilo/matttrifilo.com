@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import {
   CHAT_UNKNOWN_ERROR_MESSAGE,
+  DECLINE_SENTENCE,
   FOLLOW_UPS_TRAILER_PREFIX,
   FOLLOW_UP_MAX_CHARS,
   SOURCES_TRAILER_PREFIX,
   announcementFor,
   discardsQuestion,
   findSourcesTrailer,
+  isDecline,
   joinTextParts,
   noticeFor,
   parseFollowUps,
@@ -47,6 +49,25 @@ describe('joinTextParts', () => {
         { type: 'text' },
       ])
     ).toBe('Answer.')
+  })
+})
+
+describe('isDecline (MTC-35)', () => {
+  test('is the whole sentence, alone or with words around it', () => {
+    expect(isDecline(DECLINE_SENTENCE)).toBe(true)
+    expect(isDecline(`  ${DECLINE_SENTENCE}\n`)).toBe(true)
+    expect(isDecline(`Sorry. ${DECLINE_SENTENCE}`)).toBe(true)
+  })
+
+  test('is not part of the sentence, a rewording, or an answer', () => {
+    expect(isDecline(DECLINE_SENTENCE.slice(0, 40))).toBe(false)
+    expect(
+      isDecline(
+        "That isn't something I can answer. Email him at matt.trifilo@gmail.com."
+      )
+    ).toBe(false)
+    expect(isDecline('Matt led the platform team.')).toBe(false)
+    expect(isDecline('')).toBe(false)
   })
 })
 

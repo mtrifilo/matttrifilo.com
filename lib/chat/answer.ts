@@ -46,6 +46,27 @@ export const SOURCES_TRAILER_PREFIX = 'Sources: '
  */
 export const FOLLOW_UPS_TRAILER_PREFIX = 'Follow-ups:'
 
+/**
+ * The one sentence the assistant is allowed to decline with. The policy
+ * quotes it verbatim, and prompt.ts re-exports it so the policy prose reads
+ * from this constant.
+ *
+ * It lives here for the reason the trailer prefixes do: the browser is the
+ * other end of it. The page counts a decline (MTC-35) by recognizing this
+ * sentence in the answer, and a client component cannot import prompt.ts.
+ */
+export const DECLINE_SENTENCE =
+  "That isn't something I can answer from Matt's documents. For questions like this, email him at matt.trifilo@gmail.com."
+
+/**
+ * Whether an answer's text is the decline: it holds the whole sentence. The
+ * route recognizes a decline the same way, so a model that adds words around
+ * the sentence still counts, and one that rewords it does not.
+ */
+export function isDecline(text: string): boolean {
+  return text.includes(DECLINE_SENTENCE)
+}
+
 /** How many proposals a visitor is offered, whatever the model wrote. */
 export const FOLLOW_UPS_MAX = 3
 
