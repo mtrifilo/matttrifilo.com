@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DECLINE_SENTENCE } from '@/lib/chat/answer'
+import { repositoryDeclineSentence } from '@/lib/chat/prompt'
+import { assistantRepository } from '@/lib/chat/repositories'
 import { answered, openStream, type OpenStream } from '@/test/chat-stream'
 import { forgetOpenedSurfaces } from './analytics'
 import { AssistantChat } from './assistant-chat'
@@ -32,6 +34,11 @@ const TYPED = 'What did Matt ship in 2025?'
 const ANSWER = 'Matt led the platform team.'
 const FOLLOW_UP = 'What did the platform team ship next?'
 
+/** The decline about a listed repository (MTC-115): the sentence, then its link. */
+const DECANT = assistantRepository('decant')
+if (!DECANT) throw new Error('decant is no longer on the assistant allowlist')
+const DECLINE_WITH_LINK = `${DECLINE_SENTENCE} ${repositoryDeclineSentence(DECANT)}`
+
 /** What the script was handed, one JSON string per call, in order. */
 let sent: string[] = []
 
@@ -40,7 +47,9 @@ const realConsoleError = console.error
 let consoleErrors: unknown[][] = []
 
 /** The route's reply to the next question. */
-let reply: 'answer' | 'decline' | 'rate limit' | 'held open' = 'answer'
+let reply:
+  'answer' | 'decline' | 'decline with link' | 'rate limit' | 'held open' =
+  'answer'
 
 /** The stream of the last request answered 'held open', sent by the test. */
 let held: OpenStream | undefined
@@ -54,12 +63,18 @@ function routeFetch(): Promise<Response> {
     // The WAF's own body; the transport turns any 429 into the notice.
     return Promise.resolve(new Response('Too Many Requests', { status: 429 }))
   }
-  const text = reply === 'decline' ? DECLINE_SENTENCE : ANSWER
+  const declines = reply === 'decline' || reply === 'decline with link'
+  const text =
+    reply === 'decline'
+      ? DECLINE_SENTENCE
+      : reply === 'decline with link'
+        ? DECLINE_WITH_LINK
+        : ANSWER
   return Promise.resolve(
     answered([
       {
         type: 'start',
-        messageMetadata: reply === 'decline' ? {} : { followUps: [FOLLOW_UP] },
+        messageMetadata: declines ? {} : { followUps: [FOLLOW_UP] },
       },
       { type: 'text-start', id: 't' },
       { type: 'text-delta', id: 't', delta: text },
@@ -304,6 +319,20 @@ describe('on /ask', () => {
       declined('ask'),
     ])
     expectNoVisitorText(TYPED, DECLINE_SENTENCE.slice(0, 20))
+  })
+
+  test("a decline that carries a repository's link is counted once, as a decline", async () => {
+    reply = 'decline with link'
+    render(<AssistantChat />)
+    type(TYPED)
+    submit()
+    await settled()
+    expect(sent).toEqual([
+      opened('ask'),
+      asked('ask', 'typed'),
+      declined('ask'),
+    ])
+    expectNoVisitorText(TYPED, 'github.com')
   })
 
   test('the rate limit is counted once, against /ask, when its notice shows', async () => {
