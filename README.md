@@ -84,7 +84,7 @@ A title or summary must be one line, with no em dash, no en dash used as a sente
 - Posts compile as MDX. Outside inline code or a fenced block, the body may not contain a bare `<` or `{`: wrap it in backticks, or write `&lt;` or `&#123;`. Close every code fence, indent a fence no more than three spaces, and do not open one on a list item or block quote line. `assertMdxSafe` in `lib/knowledge/build.ts` fails `bun test` otherwise.
 - A long post can exceed the corpus's size guards (`KNOWLEDGE_DOCUMENT_TOKEN_CEILING` in `lib/knowledge/build.ts`, and the assistant's read budget). `bun run knowledge:check` prints each document's cost and the headroom left.
 
-Because a post adds a document the assistant can answer from, it is a corpus change: follow [Updating the corpus](#updating-the-corpus) below, including the eval run before the pull request.
+Because a post adds a document the assistant can answer from, it is a corpus change: follow [Updating the corpus](#updating-the-corpus) below. The pull request merges on its deterministic gates, and the next scheduled eval run covers it.
 
 ## Deploys
 
@@ -118,9 +118,9 @@ GCP_PROJECT_ID=<project> VERTEX_PROJECT_ID=<project> bun run evals
 ```
 
 - `GCP_PROJECT_ID` is the project the route calls; `VERTEX_PROJECT_ID` is the one promptfoo's own Vertex grader uses. Both are needed.
-- `evals:smoke` runs a few tests from each suite while you iterate; `bun run evals` is the full run, due before a pull request that changes anything the answers depend on (the list is under "When they run" in the runbook). Paste the table it prints into the pull request.
+- `evals:smoke` runs a few tests from each suite; `bun run evals` is the full run. Live runs are budgeted and scheduled by Matt (2026-10-02): a pull request that changes anything the answers depend on merges on its deterministic gates and says that the next scheduled run covers it. The paths and the rule are under "When they run" in the runbook.
 - They run locally, never in CI on pull requests. `.github/workflows/evals.yml` runs only when dispatched by hand, and is not a required check.
-- Results go to `evals/out/`, which is not committed. To publish a run, commit the change it covers first, then run `bun run evals:publish`, which writes `evals/results/<date>-<sha>.json` and refuses a run that does not meet its bar; commit that file in the same pull request. `/ask/evals` shows the newest record.
+- Results go to `evals/out/`, which is not committed. A record comes from a scheduled run on a clean checkout of main: `bun run evals:publish` writes `evals/results/<date>-<sha>.json`, refuses a run that does not meet its bar, and the file ships in a pull request that holds only the record (the runbook's "Publishing a run"). `/ask/evals` shows the newest record.
 
 The runbook's "Eval suites" section has the traps (a `.env` from `vercel env pull` changes how the suites authenticate), the cost of a run and how to add a golden.
 

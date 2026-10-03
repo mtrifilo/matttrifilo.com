@@ -22,7 +22,7 @@ Matt Trifilo's site: Next.js 16 app router, React 19, Bun, Tailwind v4, deployed
 - Sub-agents run on Opus.
 - No em dashes anywhere a visitor reads (Matt, 2026-09-23): copy, corpus, and the prompt use a comma, a colon, or a period. `lib/site-copy.test.ts` enforces it on the source and `assertNoEmDash` on the answers; see "Copy rules" in `docs/career-assistant-operations.md`.
 - American English anywhere a visitor or the model reads (Matt, 2026-09-28): copy, corpus, the prompt, and the eval rubrics use no British spelling. `lib/site-copy.test.ts` enforces it on the source and the eval suites with the word list in `lib/american-english.ts`, which is Matt's to extend; no check reads the answers. See "Copy rules".
-- Production is protected: `CHAT_DISABLED=1` was set on Vercel Production on 2026-09-15 and stays until MTC-35 is done; `vercel env ls production` is the source of truth. Do not change Vercel environment variables or deploy to production for chat work.
+- Production is live: the assistant has served matttrifilo.com since 2026-10-03 (MTC-90). `CHAT_DISABLED=1` is the rollback, not the state, and `vercel env ls production` is the source of truth for what is set. Do not change Vercel environment variables or deploy to production for chat work; the flip and the rollback are Matt's, and the runbook's "Kill switch" has the commands.
 
 ## Where things are
 
