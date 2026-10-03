@@ -10,6 +10,7 @@ import {
   RECENT_ACTIVITY_TOOL_NAME,
   REPOSITORY_LIST_HEADING,
   SYSTEM_PROMPT,
+  UNSTATED_PART_OPENING,
   WITHHELD_PART_SENTENCE,
 } from '@/lib/chat/prompt'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
@@ -39,6 +40,7 @@ import {
   assertReadsWithinIndex,
   assertThirdPerson,
   followUpToAsk,
+  withoutClosingSentence,
   type AssertionContext,
   type SuiteTestMetadata,
 } from './assertions'
@@ -157,6 +159,56 @@ describe('assertPartialAnswerWithholds (MTC-112)', () => {
     })
     expect(result.pass).toBe(false)
     expect(result.reason).toContain('follow-up')
+  })
+})
+
+describe('a partial answer that dropped its trailer (MTC-112)', () => {
+  const briefing = 'Email Reliability owns the outbound email platform.'
+
+  test('withoutClosingSentence takes off either closing sentence, and only that', () => {
+    expect(
+      withoutClosingSentence(`${briefing} ${WITHHELD_PART_SENTENCE}`)
+    ).toBe(briefing)
+    expect(
+      withoutClosingSentence(
+        `${briefing}\n\n${UNSTATED_PART_OPENING} how long the build took.`
+      )
+    ).toBe(briefing)
+    expect(withoutClosingSentence(briefing)).toBe(briefing)
+    expect(withoutClosingSentence(WITHHELD_PART_SENTENCE)).toBe('')
+  })
+
+  test('is counted as uncited, as any answer that used a document is', () => {
+    for (const closing of [
+      WITHHELD_PART_SENTENCE,
+      `${UNSTATED_PART_OPENING} how long the build took.`,
+    ]) {
+      expect(
+        isUncitedAnswer(`${briefing} ${closing}`, [
+          'owned-systems-and-operations',
+        ])
+      ).toBe(true)
+    }
+  })
+
+  test('a closing sentence alone, or a disclaiming briefing, is not', () => {
+    const read = ['owned-systems-and-operations']
+    expect(isUncitedAnswer(WITHHELD_PART_SENTENCE, read)).toBe(false)
+    expect(
+      isUncitedAnswer(
+        `His documents do not mention it. ${WITHHELD_PART_SENTENCE}`,
+        read
+      )
+    ).toBe(false)
+  })
+
+  test('assertCites tolerates it as a warning when the expected document was read', () => {
+    const result = assertCites(`${briefing} ${WITHHELD_PART_SENTENCE}`, {
+      test: { metadata: { expectReadsAny: ['owned-systems-and-operations'] } },
+      metadata: { readIds: ['owned-systems-and-operations'] },
+    })
+    expect(result.pass).toBe(true)
+    expect(result.reason).toContain('warning')
   })
 })
 

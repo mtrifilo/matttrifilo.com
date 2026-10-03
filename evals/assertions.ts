@@ -12,6 +12,7 @@ import {
   RECENT_ACTIVITY_TOOL_NAME,
   REPOSITORY_LIST_HEADING,
   TRANSCRIPT_HEADING,
+  UNSTATED_PART_OPENING,
   WITHHELD_PART_SENTENCE,
 } from '@/lib/chat/prompt'
 import { findPunctuationDashes } from '@/lib/dashes'
@@ -1127,7 +1128,31 @@ export function isUncitedAnswer(output: string, readIds: string[]): boolean {
   const prose = answerProse(output).trim()
   if (prose.length === 0) return false
   if (prose.includes(DECLINE_SENTENCE)) return false
-  return !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))
+  const briefing = withoutClosingSentence(prose)
+  if (briefing.length === 0) return false
+  return !NOT_IN_THE_MATERIAL.some(pattern => pattern.test(briefing))
+}
+
+/**
+ * The prose without a partial answer's closing sentence (MTC-112).
+ *
+ * That sentence says the documents do not give something, which
+ * NOT_IN_THE_MATERIAL would read as the whole answer disclaiming the
+ * question. The briefing before it is what used a document, so it is what
+ * decides whether a missing trailer was dropped from a real answer. Prose
+ * that is only the closing sentence comes back empty: it used nothing.
+ */
+export function withoutClosingSentence(prose: string): string {
+  const text = prose.trim()
+  if (text.endsWith(WITHHELD_PART_SENTENCE)) {
+    return text.slice(0, -WITHHELD_PART_SENTENCE.length).trim()
+  }
+  const at = text.lastIndexOf(UNSTATED_PART_OPENING)
+  const startsSentence = at === 0 || /\s/.test(text.charAt(at - 1))
+  if (at >= 0 && startsSentence && !text.slice(at).includes('\n')) {
+    return text.slice(0, at).trim()
+  }
+  return text
 }
 
 /**

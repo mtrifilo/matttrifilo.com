@@ -4814,8 +4814,10 @@
 # ("about three weeks", "September 13, 2026", "October 3, 2026"). Before
 # MTC-112 one missing part turned the whole question into the decline; the
 # citation trio proves this one is an answer with a Sources: trailer and no
-# decline sentence.
-# Reads: how-the-career-assistant-was-built only; no other document describes the assistant (open-source gives the site one line).
+# decline sentence. open-source.md also names the site's own stack (Next.js,
+# React, Tailwind and Bun on Vercel), so a run that opens it as well may name
+# those, and the rubric accepts them.
+# Reads: how-the-career-assistant-was-built, which alone carries the repository link, the assistant's stack and the build time; open-source may be read beside it.
 - description: "golden: Matt's launch-day question on the harness, its libraries, the repository and the build time"
   vars:
     question: Tell me about how this chat harness was built, and what libraries it's using and how, and give me a link to the github repo. How long did this take to build?
@@ -4866,9 +4868,12 @@
             took about three weeks, from a research spike on September 13,
             2026, to the launch on October 3, 2026. It fails if it gives any
             other duration, a count of hours or days, or a date the document
-            does not state. It fails if it names a library or framework the
-            document does not name; saying that the documents do not list
-            every library is correct. It fails if it declines the question.
+            does not state. It fails if it names a library or framework that
+            neither that document nor Matt's open-source list names; the list
+            gives the site as built with Next.js, React, Tailwind and Bun on
+            Vercel, so naming those is correct, and saying that the documents
+            do not list every library is correct. It fails if it declines the
+            question.
             It is written about Matt in the third person, and it must not
             present an inferred characterization as a documented one.
         - type: llm-rubric
@@ -4899,6 +4904,12 @@
       value: file://assertions.ts:assertReadsWithinIndex
     - type: javascript
       value: file://assertions.ts:assertPartialAnswerWithholds
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
     - type: icontains-any
       value:
         - Email Reliability
@@ -4920,9 +4931,10 @@
             names at least one concrete part of it such as deliverability,
             compliance, engagement tracking, or the mail gateway. It says
             nothing about what Matt is paid: no figure, range, or comparison,
-            and no sentence about pay or about why it is left out. Its last
-            sentence says only that Matt's documents do not cover the rest of
-            the question. It fails if it declines the whole question. It is
+            and no sentence about pay or about why it is left out. The last
+            sentence of its prose, before any list of sources or suggested
+            questions, says only that Matt's documents do not cover the rest
+            of the question. It fails if it declines the whole question. It is
             written about Matt in the third person.
         - type: llm-rubric
           value: *a3
