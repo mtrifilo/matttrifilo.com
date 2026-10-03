@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type { Metadata } from 'next'
+import { resolveAlternates } from 'next/dist/lib/metadata/resolvers/resolve-basics'
 import { Window } from 'happy-dom'
 import { dynamic, GET } from '@/app/feed.xml/route'
 import sitemap from '@/app/sitemap'
@@ -221,49 +222,63 @@ describe('GET /feed.xml', () => {
   })
 })
 
+const ROOT = join(import.meta.dir, '..', '..')
+
+/** Every page module under app/, as a path from the repository root. */
+function pageFiles(): string[] {
+  return readdirSync(join(ROOT, 'app'), { recursive: true })
+    .map(String)
+    .filter(file => /(^|\/)page\.tsx$/.test(file))
+    .map(file => relative(ROOT, join(ROOT, 'app', file)))
+    .sort()
+}
+
+type PageMetadata = {
+  page: string
+  metadata: Metadata
+  params: Record<string, string>
+}
+
 /**
  * The page modules under app/, each with the metadata Next would resolve
  * for it: the static `metadata` export, or `generateMetadata` called with
- * the first static params of a dynamic route.
+ * each static params entry of a dynamic route.
  */
-async function pageMetadata(): Promise<{ page: string; metadata: Metadata }[]> {
-  const root = join(import.meta.dir, '..', '..')
-  const pages = readdirSync(join(root, 'app'), { recursive: true })
-    .map(String)
-    .filter(file => /(^|\/)page\.tsx$/.test(file))
-    .sort()
-  const resolved: { page: string; metadata: Metadata }[] = []
-  for (const file of pages) {
-    const page = relative(root, join(root, 'app', file))
-    const mod = await import(join(root, page))
-    if (mod.metadata) resolved.push({ page, metadata: mod.metadata })
+async function pageMetadata(): Promise<PageMetadata[]> {
+  const resolved: PageMetadata[] = []
+  for (const page of pageFiles()) {
+    const mod = await import(join(ROOT, page))
+    if (mod.metadata)
+      resolved.push({ page, metadata: mod.metadata, params: {} })
     if (!mod.generateMetadata) continue
-    const [params = {}] = mod.generateStaticParams
+    const allParams: Record<string, string>[] = mod.generateStaticParams
       ? await mod.generateStaticParams()
-      : []
-    try {
-      const metadata = await mod.generateMetadata({
-        params: Promise.resolve(params),
-      })
-      resolved.push({ page, metadata })
-    } catch (error) {
-      // A page behind the assistant's kill switch 404s instead; the
-      // not-found metadata is the layout's, which carries the feed.
-      if (!String((error as { digest?: string }).digest).includes('404'))
-        throw error
+      : [{}]
+    for (const params of allParams) {
+      try {
+        const metadata = await mod.generateMetadata({
+          params: Promise.resolve(params),
+        })
+        resolved.push({ page, metadata, params })
+      } catch (error) {
+        // A page behind the assistant's kill switch 404s instead; the
+        // not-found metadata is the layout's, which carries the feed.
+        if (!isNotFound(error)) throw error
+      }
     }
   }
   return resolved
+}
+
+function isNotFound(error: unknown): boolean {
+  return String((error as { digest?: string }).digest).includes('404')
 }
 
 describe('feed autodiscovery', () => {
   test('the root layout advertises the feed', () => {
     // The layout imports next/font, which Bun cannot load, so its source is
     // read instead of its module.
-    const layout = readFileSync(
-      join(import.meta.dir, '..', '..', 'app', 'layout.tsx'),
-      'utf8'
-    )
+    const layout = readFileSync(join(ROOT, 'app', 'layout.tsx'), 'utf8')
     expect(layout).toContain(`'application/rss+xml': '${FEED_PATH}'`)
   })
 
@@ -278,6 +293,115 @@ describe('feed autodiscovery', () => {
       expect(`${page}: ${types?.['application/rss+xml']}`).toBe(
         `${page}: ${FEED_PATH}`
       )
+    }
+  })
+})
+
+/** The URL path a page module serves, its dynamic segments filled in. */
+function routePath(page: string, params: Record<string, string>): string {
+  const segments = page
+    .replace(/^app\//, '')
+    .replace(/(^|\/)page\.tsx$/, '')
+    .split('/')
+    .filter(segment => segment && !/^\(.*\)$/.test(segment))
+    .map(segment => {
+      const dynamic = /^\[(.+)\]$/.exec(segment)
+      if (!dynamic) return segment
+      const value = params[dynamic[1]]
+      if (!value) throw new Error(`${page}: no static param ${dynamic[1]}`)
+      return value
+    })
+  return `/${segments.join('/')}`
+}
+
+/**
+ * One canonical link per page, at the page's own path on the apex (MTC-13).
+ * Each page's alternates go through Next's own resolver against the root
+ * layout's metadataBase, so a relative path and an absolute URL are judged
+ * by the URL Next would print in the <link>, not by how they are written.
+ * What this cannot see is the rendered HTML; Next prints one
+ * <link rel="canonical"> for the one `alternates.canonical` it resolves.
+ */
+describe('canonical links', () => {
+  const layout = readFileSync(join(ROOT, 'app', 'layout.tsx'), 'utf8')
+
+  test('the root layout sets metadataBase to the apex and no canonical', () => {
+    expect(layout).toContain(`metadataBase: new URL('https://matttrifilo.com')`)
+    // A canonical here would be inherited by every page without its own,
+    // the 404 included.
+    expect(layout).not.toContain('canonical')
+  })
+
+  test('every page declares one canonical, its own path on the apex', async () => {
+    // With the assistant switched off, /ask and /ask/evals 404 and carry no
+    // canonical; this checks the pages as they are when it is on.
+    const saved = process.env.CHAT_DISABLED
+    delete process.env.CHAT_DISABLED
+    let pages: PageMetadata[]
+    try {
+      pages = await pageMetadata()
+    } finally {
+      if (saved !== undefined) process.env.CHAT_DISABLED = saved
+    }
+    expect([...new Set(pages.map(p => p.page))]).toEqual(pageFiles())
+
+    const config = (await import('../../next.config')).default
+    const context = {
+      trailingSlash: Boolean(config.trailingSlash),
+      isStaticMetadataRouteFile: false,
+    }
+    for (const { page, metadata, params } of pages) {
+      const path = routePath(page, params)
+      const canonical = metadata.alternates?.canonical
+      expect(`${page}: ${typeof canonical}`).toBe(`${page}: string`)
+      const resolved = await resolveAlternates(
+        metadata.alternates,
+        new URL('https://matttrifilo.com'),
+        Promise.resolve(path),
+        context
+      )
+      // Next prints the site root as the bare origin.
+      const expected = `https://matttrifilo.com${path === '/' ? '' : path}`
+      expect(`${page}: ${resolved?.canonical?.url}`).toBe(
+        `${page}: ${expected}`
+      )
+    }
+  })
+
+  test('a page behind the kill switch 404s, so it carries no canonical', async () => {
+    // A static `metadata` export would resolve on the 404 as well and give
+    // it a self-canonical; generateMetadata throwing notFound() prevents it.
+    const saved = process.env.CHAT_DISABLED
+    process.env.CHAT_DISABLED = '1'
+    try {
+      for (const page of ['app/ask/page.tsx', 'app/ask/evals/page.tsx']) {
+        const mod = await import(join(ROOT, page))
+        expect(`${page}: ${'metadata' in mod}`).toBe(`${page}: false`)
+        let thrown: unknown
+        try {
+          await mod.generateMetadata({ params: Promise.resolve({}) })
+        } catch (error) {
+          thrown = error
+        }
+        expect(`${page}: ${isNotFound(thrown)}`).toBe(`${page}: true`)
+      }
+    } finally {
+      if (saved === undefined) delete process.env.CHAT_DISABLED
+      else process.env.CHAT_DISABLED = saved
+    }
+  })
+
+  test('nothing writes a canonical link of its own', () => {
+    const sources = ['app', 'components', 'lib'].flatMap(dir =>
+      readdirSync(join(ROOT, dir), { recursive: true })
+        .map(String)
+        .filter(file => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
+        .map(file => join(ROOT, dir, file))
+    )
+    for (const file of sources) {
+      const text = readFileSync(file, 'utf8')
+      const writesOne = /rel\s*[=:]\s*\{?\s*["'`]canonical/.test(text)
+      expect(`${file}: ${writesOne}`).toBe(`${file}: false`)
     }
   })
 })

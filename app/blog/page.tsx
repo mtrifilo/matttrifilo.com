@@ -1,10 +1,12 @@
 import { PostListItem } from '@/components/blog/PostListItem'
 import { getAllBlogPosts } from '@/lib/blog'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 export const metadata = {
   title: 'Blog',
   description:
     'Blog posts about software development, technology, and engineering.',
+  alternates: { canonical: '/blog', types: FEED_ALTERNATE_TYPES },
   openGraph: {
     title: 'Blog | Matt Trifilo',
     description:

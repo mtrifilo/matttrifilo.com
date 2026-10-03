@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { stringify as stringifyQuery } from 'node:querystring'
+import { checkCustomRoutes } from 'next/dist/lib/load-custom-routes'
+import { getRedirectStatus } from 'next/dist/lib/redirect-status'
+import { buildCustomRoute } from 'next/dist/server/lib/router-utils/filesystem'
+import {
+  matchHas,
+  prepareDestination,
+} from 'next/dist/shared/lib/router/utils/prepare-destination'
 
 /**
  * The persistent build cache is off in next.config.ts because a restored
@@ -157,5 +165,149 @@ describe('the Content-Security-Policy', () => {
         value: "frame-ancestors 'self'",
       },
     ])
+  })
+})
+
+/**
+ * The redirect that moves the production alias on vercel.app to the apex
+ * (MTC-13). The rule is run through Next's own route builder and `has`
+ * matcher, the functions its router calls on every request, so a pattern
+ * that also caught a preview deployment or 127.0.0.1 (where the browser and
+ * accessibility checks run) fails here. The query is serialized with the
+ * querystring module Next's stringifyQuery wraps. Not modeled: Next's own
+ * trailing-slash redirect, which runs first, so /blog/ on the alias takes
+ * a hop to /blog before this rule. What this cannot reach: on Vercel the
+ * rule is served by Vercel's routing layer from the build output, not by
+ * these functions, so the production `curl -sI` checks are the proof for
+ * the deployed site.
+ */
+const ALIAS_HOST = 'matttrifilocom.vercel.app'
+
+type RedirectRules = Awaited<
+  ReturnType<
+    NonNullable<(typeof import('../next.config'))['default']['redirects']>
+  >
+>
+
+async function redirectRules(): Promise<RedirectRules> {
+  const { default: config } = await import('../next.config')
+  return (await config.redirects?.()) ?? []
+}
+
+/** Where Next would send a request for `path` on `host`, or null. */
+async function redirectFor(
+  host: string | undefined,
+  path: string,
+  query: Record<string, string | string[]> = {}
+): Promise<{ status: number; location: string } | null> {
+  for (const rule of await redirectRules()) {
+    const params = buildCustomRoute('redirect', rule).match(path)
+    if (!params) continue
+    const request = { headers: host === undefined ? {} : { host } }
+    const hostParams = matchHas(
+      request as unknown as Parameters<typeof matchHas>[0],
+      query,
+      rule.has,
+      rule.missing
+    )
+    if (!hostParams) continue
+    const { parsedDestination } = prepareDestination({
+      appendParamsToQuery: false,
+      destination: rule.destination,
+      params: { ...params, ...hostParams },
+      query,
+    })
+    const { protocol, hostname, port, pathname } = parsedDestination
+    const search = stringifyQuery(parsedDestination.query)
+    const location = new URL(
+      `${protocol}//${hostname}${port ? `:${port}` : ''}${pathname || '/'}${
+        search ? `?${search}` : ''
+      }`
+    )
+    return { status: getRedirectStatus(rule), location: location.href }
+  }
+  return null
+}
+
+describe('the vercel.app alias redirect', () => {
+  test('is the one pinned rule: every path on the alias, permanently, to the apex', async () => {
+    expect(await redirectRules()).toEqual([
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'matttrifilocom\\.vercel\\.app' }],
+        destination: 'https://matttrifilo.com/:path*',
+        permanent: true,
+      },
+    ])
+  })
+
+  test('passes the checks `next build` runs on custom routes', async () => {
+    // checkCustomRoutes logs and calls process.exit(1) on an invalid rule.
+    const exit = process.exit
+    process.exit = ((code?: number) => {
+      throw new Error(`checkCustomRoutes exited with ${code}`)
+    }) as typeof process.exit
+    try {
+      const rules = await redirectRules()
+      expect(() => checkCustomRoutes(rules, 'redirect')).not.toThrow()
+    } finally {
+      process.exit = exit
+    }
+  })
+
+  test('sends the alias to the same path and query on the apex with a 308', async () => {
+    expect(await redirectFor(ALIAS_HOST, '/')).toEqual({
+      status: 308,
+      location: 'https://matttrifilo.com/',
+    })
+    expect(await redirectFor(ALIAS_HOST, '/blog/a-post')).toEqual({
+      status: 308,
+      location: 'https://matttrifilo.com/blog/a-post',
+    })
+    expect(await redirectFor(ALIAS_HOST, '/feed.xml', { a: '1' })).toEqual({
+      status: 308,
+      location: 'https://matttrifilo.com/feed.xml?a=1',
+    })
+    expect(await redirectFor(ALIAS_HOST, '/blog', { tag: ['a', 'b'] })).toEqual(
+      {
+        status: 308,
+        location: 'https://matttrifilo.com/blog?tag=a&tag=b',
+      }
+    )
+  })
+
+  test('matches the alias however the Host header spells it', async () => {
+    // Next lowercases the host and drops the port before matching.
+    expect(await redirectFor('MattTrifiloCom.Vercel.App', '/')).not.toBeNull()
+    expect(await redirectFor(`${ALIAS_HOST}:443`, '/')).not.toBeNull()
+  })
+
+  test.each([
+    ['the apex', 'matttrifilo.com'],
+    ['www', 'www.matttrifilo.com'],
+    // A real branch preview host (PR #110's), and a deployment-hash shape.
+    [
+      'a branch preview',
+      'matttrifilocom-git-feature-mtc-1-c00eab-matts-projects-722d5204.vercel.app',
+    ],
+    [
+      'a deployment preview',
+      'matttrifilocom-abc123def-matts-projects-722d5204.vercel.app',
+    ],
+    ['loopback', '127.0.0.1'],
+    ['loopback with a port', '127.0.0.1:3000'],
+    ['localhost', 'localhost:3000'],
+    // An unescaped dot in the pattern would match any character here.
+    ['the alias with its dots replaced', 'matttrifilocom-vercel-app'],
+    ['a host that starts with the alias', `${ALIAS_HOST}.example.test`],
+    ['a host that ends with the alias', `preview.${ALIAS_HOST}`],
+  ])('leaves %s alone', async (_, host) => {
+    for (const path of ['/', '/blog', '/api/chat']) {
+      expect(await redirectFor(host, path)).toBeNull()
+    }
+  })
+
+  test('leaves a request with no Host header alone', async () => {
+    expect(await redirectFor(undefined, '/')).toBeNull()
   })
 })

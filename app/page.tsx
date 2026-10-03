@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Mail } from 'lucide-react'
 import { Github, Linkedin } from '@/components/icons/brand-icons'
@@ -7,7 +8,13 @@ import { PostListItem } from '@/components/blog/PostListItem'
 import { isChatDisabled } from '@/lib/chat/kill-switch'
 import { getAllBlogPosts } from '@/lib/blog'
 import { hasPublishedEvalRun } from '@/lib/evals/results'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 import { JOB_TITLE, TAGLINE } from '@/lib/seo/identity'
+
+// The title and the rest come from the root layout.
+export const metadata: Metadata = {
+  alternates: { canonical: '/', types: FEED_ALTERNATE_TYPES },
+}
 
 export default function Home() {
   const recentPosts = getAllBlogPosts().slice(0, 3)

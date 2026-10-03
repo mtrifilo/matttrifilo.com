@@ -150,6 +150,30 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  /**
+   * The project's production alias on vercel.app serves the same pages as
+   * the apex, so search engines would index a second copy. Every path on
+   * that one host moves permanently (308) to the same path on the apex.
+   *
+   * Next compiles a `has` value as a regular expression anchored at both
+   * ends (`new RegExp(`^${value}$`)` in matchHas; the `redirects` docs call
+   * it "a regex like string"), and compares it with the request's host,
+   * lowercased and without the port. The dots are escaped so the pattern
+   * matches this one host and nothing else. Preview deployments answer on
+   * other *.vercel.app hosts and the browser and accessibility checks on
+   * 127.0.0.1, so none of them is redirected. lib/next-config.test.ts runs
+   * the rule through Next's own matcher.
+   */
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'matttrifilocom\\.vercel\\.app' }],
+        destination: 'https://matttrifilo.com/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 // Adds the same-origin rewrites that serve BotID's challenge script and

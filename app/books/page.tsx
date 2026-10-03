@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { FEED_ALTERNATE_TYPES } from '@/lib/seo/feed'
 
 export const metadata: Metadata = {
   title: 'Recommended Books',
   description:
     'Books on leadership, software engineering, and management that I recommend.',
+  alternates: { canonical: '/books', types: FEED_ALTERNATE_TYPES },
 }
 
 const bookCategories = [
