@@ -15,9 +15,10 @@ import type { EvalSummary } from './summary'
  *
  * The run output itself is gitignored and per-commit. This is the deliberate
  * step that turns one of those runs into a public record: it is run by hand,
- * after a scheduled `bun run evals` on a clean checkout of main, and the file
- * it writes is committed in a pull request of its own that holds only the
- * record (the runbook's "Publishing a run").
+ * after a scheduled run of the suites on main (`bun run evals` on a clean
+ * checkout, or a dispatched evals.yml), and the file it writes is committed
+ * in a pull request of its own that holds only the record (the runbook's
+ * "Publishing a run").
  *
  * It refuses rather than publishes when the summary is not a summary, when
  * the run is not good enough to stand as evidence (the floor in

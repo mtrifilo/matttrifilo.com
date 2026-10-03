@@ -36,9 +36,9 @@ Decided 2026-09-22 (MTC-62). `experimental.turbopackFileSystemCacheForBuild` is 
 
 These are stated in full in [`CLAUDE.md`](../CLAUDE.md), [`.claude/skills/career-assistant-context/SKILL.md`](../.claude/skills/career-assistant-context/SKILL.md) and the runbook, [`docs/career-assistant-operations.md`](career-assistant-operations.md). The paragraphs below are the rules that reach beyond the assistant and point at those files rather than restating them; the assistant's own product rules (its persona, what it leads with, how the corpus is written) are in the skill.
 
-### The evals run locally, never in CI on pull requests
+### The evals run locally, never in CI on pull requests, and live runs are budgeted
 
-Decided by Matt 2026-09-21 (MTC-35). A full run on every pull request cost more in tokens than it caught, and a one-in-a-hundred model flake reddened most runs. The suites are a local command, run before a pull request that changes anything the answers depend on; `.github/workflows/evals.yml` runs only when dispatched by hand and is not a required check. The runbook's "When they run" lists the paths that make a run due.
+Decided by Matt 2026-09-21 (MTC-35). A full run on every pull request cost more in tokens than it caught, and a one-in-a-hundred model flake reddened most runs. The suites became a local command, run before a pull request that changed anything the answers depend on; `.github/workflows/evals.yml` runs only when dispatched by hand and is not a required check. On 2026-10-02 (MTC-35) Matt went further, because GCP spend had grown too fast: live runs are budgeted at a few a month and scheduled by him at strategic points, and a pull request that changes anything the answers depend on merges on its deterministic gates and says that the next scheduled run covers it. The runbook's "When they run" lists those paths and the gates; a record for `/ask/evals` comes from a scheduled run on main ("Publishing a run").
 
 ### Nothing a visitor writes is stored
 
