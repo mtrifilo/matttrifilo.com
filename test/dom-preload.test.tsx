@@ -233,9 +233,14 @@ describe('an error a DOM listener throws', () => {
       ''
     )
 
-    const failed = [...output.matchAll(/^\(fail\) (.+?) \[/gm)].map(
-      match => match[1]
-    )
+    // Bun ends a result line with the test's duration only when it measured
+    // more than 10 microseconds, and on a Linux runner (sometimes on a loaded
+    // Mac too) it often measures a test that takes under a millisecond as
+    // zero. So the duration is optional here, and the name runs to the end
+    // of its line.
+    const failed = [
+      ...output.matchAll(/^\(fail\) (.+?)(?: \[\d+\.\d{2}ms\])?$/gm),
+    ].map(match => match[1])
     const tally = {
       pass: output.match(/^ (\d+) pass$/m)?.[1],
       fail: output.match(/^ (\d+) fail$/m)?.[1],
