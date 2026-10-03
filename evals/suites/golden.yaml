@@ -4701,9 +4701,12 @@
             groundedness) whose runs can be published at /ask/evals. The
             document itself names Gemini 3.8 Flash, Google Vertex AI, the AI
             SDK, Vercel, Vercel's BotID and GitHub, so naming any of them is
-            correct. It fails if it presents the edge firewall's rate-limit
-            rule as in place, which the document says is specified for launch
-            and not yet in place; leaving that rule out is fine. It fails if
+            correct. It fails if it says the edge firewall's rate-limit rule
+            is missing, planned or not yet in place, since the document says a
+            per-client rate-limit rule on Vercel's firewall has been in place
+            since October 2026; it also fails if it gives that rule a limit, a
+            window or keys, which the document does not state. Leaving the
+            rule out is fine. It fails if
             it says the eval suites run automatically, block a deploy, or must
             pass a threshold before a change ships: the document says Matt
             runs them before opening a pull request, and the thresholds decide

@@ -3,7 +3,7 @@ id: how-the-career-assistant-was-built
 title: How Matt built the Career Assistant on his site
 summary: The architecture of the assistant on matttrifilo.com: its model and hosting, the documents it reads, protection layers, eval suites, and what it declines.
 tags: [ai, llm, assistant, evals, security, architecture]
-updated: 2026-10-01
+updated: 2026-10-03
 ---
 
 # How Matt built the Career Assistant on his site
@@ -77,9 +77,9 @@ writes: a conversation lives only in the visitor's browser tab.
 
 These three run inside the server, so a request still reaches it before
 it is refused; the runbook says plainly that BotID stops model spend,
-not traffic. The layer that would refuse traffic at the edge is not yet
-in place as of October 2026: the runbook specifies a per-client
-rate-limit rule on Vercel's firewall for launch.
+not traffic. The layer that refuses traffic at the edge, before it
+reaches the server, is a per-client rate-limit rule on Vercel's
+firewall, in place since October 2026.
 
 ## What it declines, and why
 
