@@ -130,3 +130,7 @@ change has a ticket, every pull request gets an adversarial review
 before it opens, and a change to anything the answers depend on merges
 once the deterministic tests pass; the next scheduled eval run covers
 it.
+
+The assistant took about three weeks to build with AI coding agents
+under Matt's direction, from a research spike on September 13, 2026, to
+its launch on October 3, 2026.
