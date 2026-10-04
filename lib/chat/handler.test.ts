@@ -2559,6 +2559,12 @@ describe('text streams as it is written, and a call withdraws it (MTC-101)', () 
     expect(resetsIn(early)).toBe(1)
     expect(await textFrom(early)).toBe(LEAD)
     expect(lineWhere(true)).toMatchObject({ textRetractions: 1 })
+    // A step had already finished, yet the abort line stands alone: no
+    // `[chat]`, `[chat] truncated` or `[chat] incomplete` line beside it, so
+    // a stopped request is counted once, as an abort, and never among the
+    // visitors who were shown the incomplete notice.
+    expect(logged.some(args => args[0] === '[chat] step')).toBe(true)
+    expect(lineWhere(false)).toBeUndefined()
   })
 
   describe('through the real Vertex provider', () => {
