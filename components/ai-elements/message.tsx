@@ -5,6 +5,7 @@ import type { UIMessage } from "ai";
 import type { HTMLAttributes, ComponentProps } from "react";
 import { memo } from "react";
 import { Streamdown } from "streamdown";
+import { remarkPluginsFor } from "@/lib/unfinished-address";
 
 /**
  * Vercel AI Elements `message`, trimmed to what this site uses (MTC-33).
@@ -22,7 +23,8 @@ import { Streamdown } from "streamdown";
  * answer opens directly, in a new tab (Matt, 2026-09-30, MTC-102). A link
  * whose URL has not arrived, while it streams or in an answer cut short, is
  * drawn as its text: without the check Streamdown would render it as a live
- * link to a placeholder URL.
+ * link to a placeholder URL. A bare URL or email address is held as text the
+ * same way until the last of it has arrived (lib/unfinished-address.ts).
  */
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -72,7 +74,7 @@ export const MessageContent = ({
 
 export type MessageResponseProps = Omit<
   ComponentProps<typeof Streamdown>,
-  "linkSafety" | "remend"
+  "linkSafety" | "remend" | "remarkPlugins"
 >;
 
 // Module scope, so every render hands Streamdown the same objects: its memo
@@ -84,6 +86,13 @@ const UNFINISHED_LINK_AS_TEXT = { linkMode: "text-only" } as const;
  * Spacing is spelled out here because the site has no typography plugin: the
  * Markdown the model emits is paragraphs and bullets, and those are the only
  * two things that need rhythm.
+ *
+ * `isAnimating` is what tells the answer it is still arriving. It has to be
+ * that prop: Streamdown's memo ignores `remarkPlugins`, so when the stream
+ * ends and only the plugins change, it is the change in `isAnimating` that
+ * makes the last word's address a link. Streamdown also uses it to disable
+ * its code-block and table copy and download buttons until the answer is
+ * whole.
  */
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
@@ -96,6 +105,9 @@ export const MessageResponse = memo(
       )}
       {...props}
       linkSafety={LINK_CHECK_OFF}
+      remarkPlugins={remarkPluginsFor(props.children ?? "", {
+        streaming: props.isAnimating === true,
+      })}
       remend={UNFINISHED_LINK_AS_TEXT}
     />
   ),
