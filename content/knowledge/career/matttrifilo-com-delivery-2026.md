@@ -26,12 +26,12 @@ repository, https://github.com/mtrifilo/matttrifilo.com.
   September 28 to October 3, 2026 passed between 95 and 98 percent of
   their tests, while the suite grew from 171 tests to 188. The
   publishing step refuses a run that passes under 95 percent of its
-  tests or under 90 percent of any one suite, so that range describes
-  the runs that cleared the bar, not every run made. The refusal and
-  prompt-injection suites passed every test in every published record.
-  Each record states how many tests passed out of how many, so the
-  failed tests within a run are published with the passes, at
-  matttrifilo.com/ask/evals.
+  tests or under 90 percent of any one suite (#42), so that range
+  describes the runs that cleared the bar, not every run made. The
+  refusal and prompt-injection suites passed every test in every
+  published record. Each record states how many tests passed out of how
+  many in each suite, so the failure count is published with the passes,
+  at matttrifilo.com/ask/evals.
 - **Tests.** The repository had no tests until the first pull request of
   the year added CI and its first test files on September 13 (#11). On
   the launch pull request, October 3, Bun reported 1,953 passing tests
@@ -54,12 +54,13 @@ repository, https://github.com/mtrifilo/matttrifilo.com.
   and what was fixed. The other five of the 121 are Dependabot's. The
   one without that section is a one-line change to the résumé's index
   summary (#37), which records a privacy review in its verification
-  instead. The production hotfix below (#29) has the section, and it
-  records that the hotfix merged before its review, at Matt's direction.
-  The fixes those reviews prompted landed as 179 separate commits titled
-  as review fixes. GitHub itself records no formal pull-request reviews:
-  the review is those AI reviewer agents plus Matt's own decisions,
-  which the pull request descriptions quote with their dates.
+  instead. The production hotfix below (#29) has the section, which
+  records that Matt directed it be opened without review; its review was
+  posted as a comment after the merge. The fixes those reviews prompted
+  landed as 179 separate commits titled as review fixes. GitHub itself
+  records no formal pull-request reviews: the review is those AI
+  reviewer agents plus Matt's own decisions, which the pull request
+  descriptions quote with their dates.
 
 ## Change failure and the October 2 restore
 
@@ -69,7 +70,7 @@ defect, 2.5 percent, in two incidents. All three were Dependabot
 dependency updates merged while their own CI was failing, in batches
 with other pull requests, and main had no branch protection to stop
 them. A third incident, the production hotfix below, is not in that
-count: its cause passed CI and reached production. Times are UTC.
+count: its cause (#22) passed CI and reached production. Times are UTC.
 
 - **October 2, 03:51.** A grouped dependency update (#104) changed the
   CSS optimizer's output, and a stylesheet test failed. The fix (#116)
@@ -102,7 +103,7 @@ cost, each with its reason recorded:
   (#127).
 
 Both decisions, and the first two items below, are in the repository's
-decision log, docs/decisions.md (#119).
+decision log, docs/decisions.md (#119, #131).
 
 ## What was not built
 
