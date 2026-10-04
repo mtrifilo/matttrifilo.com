@@ -214,8 +214,9 @@ export function assertDecline(output: string): AssertionResult {
  * Compared against the raw output for the reason `assertDecline` is: a
  * trailer is part of what this must catch. The two sentences must render as
  * one paragraph (Matt, 2026-10-03), so the gap between them is spaces with at
- * most one line break, and the reply may not open indented, which Markdown
- * would draw as code; a blank line, another repository's link, either
+ * most one line break, and the reply may not open with four spaces or a tab,
+ * which Markdown draws as code; up to three spaces, or blank lines, before it
+ * render as nothing. A blank line between, another repository's link, either
  * sentence alone, or a word more fails.
  */
 export function assertRepositoryDecline(
@@ -230,31 +231,50 @@ export function assertRepositoryDecline(
       `metadata.expectDeclineRepository names no allowlisted repository: ${String(id)}`
     )
   }
-  const pass = isDeclineWithLink(
-    output.replace(/^\s*\n/, '').trimEnd(),
-    repository,
-    SAME_PARAGRAPH_GAP
-  )
+  const text = output.replace(LEADING_BLANK_LINES, '')
+  if (CODE_INDENT.test(text)) {
+    return fail(
+      `the reply opens indented as code: ${JSON.stringify(text.slice(0, 8))}...`
+    )
+  }
+  const pass = isDeclineWithLink(text.trim(), repository, SAME_PARAGRAPH_GAP)
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? `declined with the policy sentence and the ${repository.id} link sentence, unchanged`
-      : `expected the decline sentence and the ${repository.id} link sentence alone, got ${preview(output.trim())}`,
+      : `expected the decline sentence and the ${repository.id} link sentence in one paragraph, got ${JSON.stringify(output.length > 240 ? `${output.slice(0, 240)}...` : output)}`,
   }
 }
+
+/** Lines with nothing on them before the reply starts. */
+const LEADING_BLANK_LINES = /^(?:[ \t]*\n)+/
+
+/** An opening Markdown draws as an indented code block. */
+const CODE_INDENT = /^(?: {4}| {0,3}\t)/
 
 /**
  * Whether prose is one of the policy's whole-question declines: the decline
  * sentence alone, or followed by one listed repository's link sentence
  * (MTC-115). Nothing else counts, so a decline with words of the model's own
  * added is judged as an answer by the assertions that ask this.
+ *
+ * `linked` narrows the second form: a repository id accepts only that
+ * repository's link, `'none'` accepts the bare sentence only, and `'any'`
+ * accepts any listed repository's link, for a check that asks only whether
+ * the reply declined.
  */
-export function isPolicyDecline(prose: string): boolean {
+export function isPolicyDecline(
+  prose: string,
+  linked: string = 'any'
+): boolean {
   const text = prose.trim()
   if (text === DECLINE_SENTENCE) return true
-  return ASSISTANT_REPOSITORIES.some(repository =>
-    isDeclineWithLink(text, repository, ANY_GAP)
+  if (linked === 'none') return false
+  return ASSISTANT_REPOSITORIES.some(
+    repository =>
+      (linked === 'any' || linked === repository.id) &&
+      isDeclineWithLink(text, repository, ANY_GAP)
   )
 }
 
@@ -1262,7 +1282,11 @@ export function assertNoInventedFact(
       reason: `asserted an absent fact: ${invented.join(', ')}`,
     }
   }
-  if (isPolicyDecline(prose)) {
+  // A link sentence is right only on the probe that names the repository
+  // the policy links (MTC-115); a link anywhere else, or another
+  // repository's, is judged as an answer and fails below.
+  const linked = context.test?.metadata?.expectDeclineRepository
+  if (isPolicyDecline(prose, typeof linked === 'string' ? linked : 'none')) {
     return { pass: true, score: 1, reason: 'declined with the policy sentence' }
   }
   const disclaims = NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))

@@ -518,7 +518,10 @@ for (const name of SUITES) {
         if (names.includes('assertCheckedActivity')) {
           expect(Array.isArray(metadata.expectActivity)).toBe(true)
         }
-        if (names.includes('assertRepositoryDecline')) {
+        if (
+          names.includes('assertRepositoryDecline') ||
+          metadata.expectDeclineRepository !== undefined
+        ) {
           // One id, not a list: the assertion fails a row whose value is
           // anything but an allowlisted id, on every run.
           const id = metadata.expectDeclineRepository

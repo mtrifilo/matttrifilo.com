@@ -235,15 +235,15 @@ describe('assertRepositoryDecline (MTC-115)', () => {
   const decant = ctx({ expectDeclineRepository: 'decant' })
 
   test('passes on the decline sentence and the named link sentence in one paragraph', () => {
-    expect(assertRepositoryDecline(DECLINE_WITH_DECANT_LINK, decant).pass).toBe(
-      true
-    )
-    expect(
-      assertRepositoryDecline(
-        `\n${DECLINE_SENTENCE}\n${DECANT_LINK}\n\n`,
-        decant
-      ).pass
-    ).toBe(true)
+    for (const output of [
+      DECLINE_WITH_DECANT_LINK,
+      `\n${DECLINE_SENTENCE}\n${DECANT_LINK}\n\n`,
+      // Up to three spaces before a paragraph render as nothing.
+      ` ${DECLINE_WITH_DECANT_LINK}`,
+      `\n   ${DECLINE_WITH_DECANT_LINK}`,
+    ]) {
+      expect(assertRepositoryDecline(output, decant).pass).toBe(true)
+    }
   })
 
   test('fails when Markdown would split the two sentences or draw one as code', () => {
@@ -255,6 +255,8 @@ describe('assertRepositoryDecline (MTC-115)', () => {
       `${DECLINE_SENTENCE}\n\n${DECANT_LINK}`,
       `${DECLINE_SENTENCE}\n\n\n\n\t ${DECANT_LINK}`,
       `    ${DECLINE_WITH_DECANT_LINK}`,
+      `\t${DECLINE_WITH_DECANT_LINK}`,
+      `\n  \t${DECLINE_WITH_DECANT_LINK}`,
     ]) {
       expect(assertRepositoryDecline(output, decant).pass).toBe(false)
     }
@@ -318,6 +320,16 @@ describe('isPolicyDecline (MTC-115)', () => {
         `${DECLINE_SENTENCE}\n${repositoryDeclineSentence(listed('matttrifilo.com'))}`
       )
     ).toBe(true)
+  })
+
+  test('narrows the link to one repository, or to none', () => {
+    expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'decant')).toBe(true)
+    expect(
+      isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'psychic-homily-web')
+    ).toBe(false)
+    expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'none')).toBe(false)
+    expect(isPolicyDecline(DECLINE_SENTENCE, 'none')).toBe(true)
+    expect(isPolicyDecline(DECLINE_SENTENCE, 'decant')).toBe(true)
   })
 
   test('is not a decline with words of its own, or an unlisted link', () => {
@@ -1206,16 +1218,32 @@ describe('assertNoInventedFact', () => {
     ).toBe(true)
   })
 
-  test("the decline with a listed repository's link sentence passes (MTC-115)", () => {
+  test("the decline with the named repository's link sentence passes (MTC-115)", () => {
     // The groundedness probe on decant's stars is a listed-repository
     // question the documents do not answer, so this is the reply the policy
-    // now asks for there.
+    // asks for there, and only there.
     expect(
       assertNoInventedFact(
         DECLINE_WITH_DECANT_LINK,
-        ctx({ forbidden: ['currently has'] })
+        ctx({ forbidden: ['currently has'], expectDeclineRepository: 'decant' })
       ).pass
     ).toBe(true)
+  })
+
+  test('a link sentence where none belongs, or the wrong one, fails', () => {
+    const phLink = `${DECLINE_SENTENCE} ${repositoryDeclineSentence(listed('psychic-homily-web'))}`
+    expect(
+      assertNoInventedFact(
+        DECLINE_WITH_DECANT_LINK,
+        ctx({ forbidden: ['Netflix'] })
+      ).pass
+    ).toBe(false)
+    expect(
+      assertNoInventedFact(
+        phLink,
+        ctx({ forbidden: ['currently has'], expectDeclineRepository: 'decant' })
+      ).pass
+    ).toBe(false)
   })
 
   test('saying the material does not cover it passes', () => {
