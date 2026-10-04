@@ -2433,7 +2433,7 @@
 # list of global venues"; "information and socials for each of the music
 # venues, artists, and record labels"; "sync shows with their own calendars";
 # "a visualized knowledge graph of similar artists"; "An atlas feature";
-# "The radio page features WFMU and KEXP live and archive playlists";
+# "The radio page features WFMU, KEXP, and NTS live and archive playlists";
 # "create their own show lists, follow artists and venues, and get alerts for
 # new shows". The citation trio fails a decline: assertCites fails an answer
 # whose prose carries the decline sentence.
@@ -2478,8 +2478,9 @@
             global venues; information and socials for venues, artists and
             record labels; syncing shows with a visitor's own calendar; a
             visualized knowledge graph of similar artists; an atlas that finds
-            venues on an interactive map; a radio page with WFMU and KEXP live
-            and archive playlists whose played artists link to their Psychic
+            venues on an interactive map; a radio page with WFMU, KEXP and NTS
+            live and archive playlists (an answer may name any or all three)
+            whose played artists link to their Psychic
             Homily pages and to releases on Bandcamp and Spotify; or, for
             logged-in users, their own show lists, follows of artists and
             venues, and alerts for new shows. It fails if it declines, if it
@@ -2487,10 +2488,7 @@
             current something the document says was removed or closed
             unmerged (the Verified Attendee badge, suggest a match on radio
             playlists, the expanded tag categories, the legacy venue AI
-            pipeline). The document names an NTS playlist provider only as
-            work delivered in April 2026, so the answer may mention it as
-            built but fails if it says NTS playlists are on the radio page
-            today. It must not present an inferred characterization as a
+            pipeline). It must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *p2
