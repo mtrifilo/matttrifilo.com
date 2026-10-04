@@ -2426,6 +2426,74 @@
         - type: llm-rubric
           value: *p1
 
+# Matt's own question to the live assistant on 2026-10-03, word for word; it
+# declined then, when the corpus held two sentences on the project (MTC-114).
+# psychic-homily, "What the site does for a visitor" (Matt's draft of
+# 2026-10-04): "show lists for venues all over the US, along with a growing
+# list of global venues"; "information and socials for each of the music
+# venues, artists, and record labels"; "sync shows with their own calendars";
+# "a visualized knowledge graph of similar artists"; "An atlas feature";
+# "The radio page features WFMU and KEXP live and archive playlists";
+# "create their own show lists, follow artists and venues, and get alerts for
+# new shows". The citation trio fails a decline: assertCites fails an answer
+# whose prose carries the decline sentence.
+# Reads: psychic-homily only; no other document describes what the site does.
+- description: "golden: Matt's own question on Psychic Homily's current features"
+  vars:
+    question: What features does Psychic Homily have currently?
+  metadata:
+    suite: golden
+    expectReads: [psychic-homily]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertNoPolicyLeak
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: icontains-any
+      value:
+        - knowledge graph
+        - atlas
+        - radio
+        - show lists
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &p2 >-
+            The answer is a third-person briefing on what Psychic Homily does
+            for a visitor, and names at least three features the document
+            states: show lists for venues across the US and a growing list of
+            global venues; information and socials for venues, artists and
+            record labels; syncing shows with a visitor's own calendar; a
+            visualized knowledge graph of similar artists; an atlas that finds
+            venues on an interactive map; a radio page with WFMU and KEXP live
+            and archive playlists whose played artists link to their Psychic
+            Homily pages and to releases on Bandcamp and Spotify; or, for
+            logged-in users, their own show lists, follows of artists and
+            venues, and alerts for new shows. It fails if it declines, if it
+            names a feature the document does not state, or if it presents as
+            current something the document says was removed or closed
+            unmerged (the Verified Attendee badge, suggest a match on radio
+            playlists, the expanded tag categories, the legacy venue AI
+            pipeline). It must not present an inferred characterization as a
+            documented one.
+        - type: llm-rubric
+          value: *p2
+        - type: llm-rubric
+          value: *p2
+
 # resume, Recognition: the Thryv Accelerator Award (March 2026), the Thryv
 # Emerging Leaders Program (2025), and the Keap Better Together Award
 # (December 2019). recognition-and-programs has the first two, with what each
