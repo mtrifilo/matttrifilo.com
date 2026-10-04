@@ -2365,12 +2365,16 @@
         - type: llm-rubric
           value: *r56
 
-# psychic-homily, "What Matt delivered in 2026": "1,800 pull requests that
-# Matt authored were merged"; "137 of September's 138 (99 percent)"; "One
+# psychic-homily, "What Matt delivered in 2026": "1,800 pull requests opened
+# from Matt's GitHub account were merged"; "137 of September's 138 (99
+# percent)"; "One
 # revert in 1,800 merges: #1325"; "passed 84.4 percent of the time"; the
 # decisions under "What he chose not to build, or removed" (tag categories,
 # the Verified Attendee badge, the unused venue AI pipeline, suggest a match);
 # the costs at the end of "The agent workflow".
+# The question names the year rather than "this year" so the golden stays
+# true after 2026 ends; "What has Matt shipped recently on psychic homily?"
+# below is the recency question, answered from the activity check.
 # Reads: psychic-homily only; no other document covers Psychic Homily's 2026 delivery (the résumé and open-source give it one line each).
 - description: 'golden: what Matt built on Psychic Homily in 2026'
   vars:
@@ -2401,7 +2405,7 @@
           value: &p1 >-
             The answer says what Matt delivered on Psychic Homily in 2026 from
             the document, and gives at least two of these: the 1,800 merged
-            pull requests he authored, stated next to a figure that qualifies
+            pull requests from his account, stated next to a figure that qualifies
             the count (the one revert, the review and verification sections
             in the pull request bodies, adversarial review in 137 of
             September's 138, the 84.4 percent CI pass rate, or the test-count
@@ -4815,7 +4819,10 @@
 # last push would satisfy it, and at least one document carries the current
 # month. Treat a green row here as "the answer is dated and the dating is
 # consistent with GitHub", not as "the answer came from GitHub"; the thing
-# that actually establishes the latter is reading one.
+# that actually establishes the latter is reading one. The psychic-homily
+# document dates Psychic Homily work by month through October 2026, so on
+# this question a read of it can satisfy both date checks by itself, and no
+# assertion fails a run for reading it.
 - description: 'golden: what shipped recently on psychic homily'
   vars:
     question: What has Matt shipped recently on psychic homily?

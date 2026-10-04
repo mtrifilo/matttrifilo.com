@@ -1,7 +1,7 @@
 ---
 id: psychic-homily
 title: Psychic Homily, Matt's music site, and what he delivered on it in 2026
-summary: What Psychic Homily (psychichomily.com) is, its stack and hosting, and what Matt delivered on it in 2026, with the pull requests behind each figure.
+summary: What Psychic Homily (psychichomily.com) is, its stack and hosting, and what Matt delivered on it in 2026, citing pull requests and public CI records.
 tags: [side-projects, psychic-homily, music, next.js, go, ai-agents, code-review]
 updated: 2026-10-03
 ---
@@ -43,16 +43,18 @@ this comment, so the model never reads it.
 
 ## What Matt delivered in 2026
 
-Between January 1 and October 3, 2026, 1,800 pull requests that Matt
-authored were merged into the repository. He builds with AI coding
-agents working under rules written into the repository's agent skills
-(#526, #907). The figures that qualify that count, the decisions not to
-build, the product itself and the agent workflow follow, each with the
-pull requests behind it.
+Between January 1 and October 3, 2026, 1,800 pull requests opened from
+Matt's GitHub account were merged into the repository. He builds with AI
+coding agents working under rules written into the repository's agent
+skills (#526, #907). The figures that qualify that count, the decisions
+not to build, the product itself and the agent workflow follow. Counts
+and percentages come from the repository's public pull request and CI
+records; a specific change is cited by its pull request number.
 
 ### Review and quality under the volume
 
-- Merges peaked at 348 in May 2026 and fell to 138 in September, while
+- Merges of his pull requests peaked at 348 in May 2026 and fell to 138
+  in September, while
   an adversarial review section in the pull request body went from none
   before May to 137 of September's 138 (99 percent). The two moved
   together; the record does not establish that one caused the other.
@@ -78,8 +80,8 @@ pull requests behind it.
 ### What he chose not to build, or removed
 
 - Tag categories: two pull requests expanding tag categories from three
-  to eight were closed unmerged in April 2026 (#307, #333). Matt's
-  closing comments say several of the proposed categories were
+  to eight were closed unmerged in April 2026 (#307, #333). The closing
+  comments say several of the proposed categories were
   speculative, with no prior art behind them, and that the five new ones
   were invented by the agent without design input and need explicit
   definitions first.
@@ -97,8 +99,8 @@ pull requests behind it.
 
 When 2026 began, the site was a static Hugo build hosted on Netlify,
 documenting music releases and shows from Arizona; a Go back end and a
-new front end had been started beside it in the same repository. In 2026 Matt rebuilt
-it as a Next.js and Go site:
+new front end had been started beside it in the same repository. In
+2026 Matt rebuilt it as a Next.js and Go site:
 
 - Release and festival services and their API routes (#20, #37, March
   2026).
@@ -114,13 +116,15 @@ it as a Next.js and Go site:
 ### The agent workflow
 
 - Parallel agent sessions run in isolated git worktrees, dispatched by a
-  skill (#526, May 2026), each worktree with its own isolated stack
-  (#569, May 2026).
+  skill (#526, May 2026). Each worktree gets a stack mode chosen for its
+  change: no local stack, a shared one, or its own database and back end
+  when the change needs them (#569, May 2026).
 - That skill carries a written rule: "Agents never merge their own PRs.
   PR creation is the agent's last step; merging is the user's." (#526)
-- Before a pull request opens, a panel of fresh sub-agents reviews it
-  adversarially, from the Saboteur, Future-Maintainer, Security and
-  Completeness lenses (#907, May 2026).
+- Adversarial review before a pull request opens was wired into both
+  agent workflows in May 2026 (#907). By September each review round ran
+  as a panel of fresh sub-agents with lenses such as Saboteur,
+  Future-Maintainer, Security and Completeness (#2173).
 - A decision Matt makes as the owner during the work can be recorded in
   the pull request body, as in the Owner decisions section of #2173.
 
