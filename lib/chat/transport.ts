@@ -63,7 +63,7 @@ export interface ChatFetchOptions {
 /**
  * The fetch the chat transport uses. Everything but the two cases above
  * passes through untouched, the original `Response` object included, so
- * streaming is unaffected; the caller's abort signal is honoured throughout.
+ * streaming is unaffected; the caller's abort signal is honored throughout.
  *
  * Returned as the platform's `fetch` type because that is what the AI SDK's
  * transport accepts. Node's version of that type carries a `preconnect`
