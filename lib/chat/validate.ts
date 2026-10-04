@@ -108,16 +108,16 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  *
  * A design sum, not a measurement, says 84,000 fits every conversation a
  * visitor can have with ordinary answers: KNOWLEDGE_INDEX_TOKEN_CEILING caps
- * the index at 8,000, the policy is ~3,456, the repository list ~236,
+ * the index at 8,000, the policy is ~3,482, the repository list ~236,
  * CHAT_MAX_TURNS questions at CHAT_MAX_MESSAGE_CHARS ~3,000, and as many
- * answers at CHAT_MAX_OUTPUT_TOKENS ~65,536: ~80,228 in all, ~3,772 under the
+ * answers at CHAT_MAX_OUTPUT_TOKENS ~65,536: ~80,254 in all, ~3,746 under the
  * cap. Matt set the cap at 84,000 for that margin (2026-10-03, MTC-115).
  * "A conversation of full-length answers still fits" in validate.test.ts
  * pins that sum, and it is the test that should fail if the policy or the
  * index ceiling grows past the margin. With the real index (~2,807) the same
- * body is ~75,035. That sum is about the door only. By the per-call count
- * the same body is ~80,780 with the index at its ceiling, which leaves
- * ~3,220 for reads, and ~75,586 with the real index, which leaves ~8,414 for
+ * body is ~75,061. That sum is about the door only. By the per-call count
+ * the same body is ~80,806 with the index at its ceiling, which leaves
+ * ~3,194 for reads, and ~75,612 with the real index, which leaves ~8,388 for
  * reads against the 20,000 read budget. Figures by estimateTokens and
  * estimateCallInputTokens, 2026-10-03.
  *

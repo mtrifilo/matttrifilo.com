@@ -47,9 +47,10 @@ export const SOURCES_TRAILER_PREFIX = 'Sources: '
 export const FOLLOW_UPS_TRAILER_PREFIX = 'Follow-ups:'
 
 /**
- * The one sentence the assistant is allowed to decline with. The policy
- * quotes it verbatim, and prompt.ts re-exports it so the policy prose reads
- * from this constant.
+ * The sentence every decline is or begins with: a decline about a listed
+ * repository adds that repository's link sentence after it (MTC-115). The
+ * policy quotes it verbatim, and prompt.ts re-exports it so the policy prose
+ * reads from this constant.
  *
  * It lives here for the reason the trailer prefixes do: the browser is the
  * other end of it. The page counts a decline (MTC-35) by recognizing this

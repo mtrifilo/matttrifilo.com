@@ -212,10 +212,11 @@ export function assertDecline(output: string): AssertionResult {
  * `metadata.expectDeclineRepository`, and nothing more.
  *
  * Compared against the raw output for the reason `assertDecline` is: a
- * trailer is part of what this must catch. Any whitespace between the two
- * sentences passes, since a line break there changes nothing a visitor is
- * told; another repository's link, either sentence alone, or a word more
- * fails.
+ * trailer is part of what this must catch. The two sentences must render as
+ * one paragraph (Matt, 2026-10-03), so the gap between them is spaces with at
+ * most one line break, and the reply may not open indented, which Markdown
+ * would draw as code; a blank line, another repository's link, either
+ * sentence alone, or a word more fails.
  */
 export function assertRepositoryDecline(
   output: string,
@@ -229,7 +230,11 @@ export function assertRepositoryDecline(
       `metadata.expectDeclineRepository names no allowlisted repository: ${String(id)}`
     )
   }
-  const pass = isDeclineWithLink(output.trim(), repository)
+  const pass = isDeclineWithLink(
+    output.replace(/^\s*\n/, '').trimEnd(),
+    repository,
+    SAME_PARAGRAPH_GAP
+  )
   return {
     pass,
     score: pass ? 1 : 0,
@@ -249,24 +254,30 @@ export function isPolicyDecline(prose: string): boolean {
   const text = prose.trim()
   if (text === DECLINE_SENTENCE) return true
   return ASSISTANT_REPOSITORIES.some(repository =>
-    isDeclineWithLink(text, repository)
+    isDeclineWithLink(text, repository, ANY_GAP)
   )
 }
 
+/** Spaces or tabs with at most one line break: Markdown keeps one paragraph. */
+const SAME_PARAGRAPH_GAP = /^[ \t]*\n?[ \t]*$/
+
+/** Any whitespace at all, for judging whether a reply declined. */
+const ANY_GAP = /^\s*$/
+
 /**
- * The decline sentence, whitespace, and the repository's link sentence, with
- * nothing before, between or after them. Only the gap between the two
- * sentences may vary; each sentence must arrive exactly as the code renders
- * it.
+ * The decline sentence, a gap `gap` accepts, and the repository's link
+ * sentence, with nothing before, between or after them. Only the gap may
+ * vary; each sentence must arrive exactly as the code renders it.
  */
 function isDeclineWithLink(
   text: string,
-  repository: AssistantRepository
+  repository: AssistantRepository,
+  gap: RegExp
 ): boolean {
   const link = repositoryDeclineSentence(repository)
   if (!text.startsWith(DECLINE_SENTENCE) || !text.endsWith(link)) return false
   const between = text.slice(DECLINE_SENTENCE.length, text.length - link.length)
-  return between.length > 0 && between.trim().length === 0
+  return between.length > 0 && gap.test(between)
 }
 
 /**

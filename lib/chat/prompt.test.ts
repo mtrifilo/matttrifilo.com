@@ -184,7 +184,7 @@ describe('questions with several parts (MTC-112)', () => {
 
   test('keeps the whole-question decline for a question with no answerable part', () => {
     expect(SYSTEM_PROMPT).toContain(
-      `If the documents you read answer no part of the question, reply with exactly this sentence, alone, and stop:\n${DECLINE_SENTENCE}`
+      `If the documents you read answer no part of the question, reply with exactly this sentence and stop, adding only the link sentence the repository rule below calls for:\n${DECLINE_SENTENCE}`
     )
     expect(SYSTEM_PROMPT).toContain(
       'for a question whose every part is one of these'
@@ -435,7 +435,7 @@ describe('a decline about a listed repository (MTC-115)', () => {
     // repository on the list, or the model is told to copy a line that is
     // not there.
     expect(SYSTEM_PROMPT).toContain(
-      '(decant, Psychic Homily for psychic-homily-web, or this site or this assistant for matttrifilo.com)'
+      '(decant, Psychic Homily for psychic-homily-web, or this site or this assistant for matttrifilo.com; such a question is about his professional work)'
     )
     expect(ASSISTANT_REPOSITORIES.map(repository => repository.id)).toEqual([
       'decant',

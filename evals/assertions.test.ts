@@ -234,16 +234,30 @@ describe('a partial answer that dropped its trailer (MTC-112)', () => {
 describe('assertRepositoryDecline (MTC-115)', () => {
   const decant = ctx({ expectDeclineRepository: 'decant' })
 
-  test('passes on the decline sentence and the named link sentence alone', () => {
+  test('passes on the decline sentence and the named link sentence in one paragraph', () => {
     expect(assertRepositoryDecline(DECLINE_WITH_DECANT_LINK, decant).pass).toBe(
       true
     )
     expect(
       assertRepositoryDecline(
-        `  ${DECLINE_SENTENCE}\n\n${DECANT_LINK}\n`,
+        `\n${DECLINE_SENTENCE}\n${DECANT_LINK}\n\n`,
         decant
       ).pass
     ).toBe(true)
+  })
+
+  test('fails when Markdown would split the two sentences or draw one as code', () => {
+    // Matt, 2026-10-03: the link sentence shares the decline's paragraph. A
+    // blank line makes two paragraphs, and a reply that opens indented, or a
+    // link sentence after a blank line and an indent, renders as code with no
+    // link at all.
+    for (const output of [
+      `${DECLINE_SENTENCE}\n\n${DECANT_LINK}`,
+      `${DECLINE_SENTENCE}\n\n\n\n\t ${DECANT_LINK}`,
+      `    ${DECLINE_WITH_DECANT_LINK}`,
+    ]) {
+      expect(assertRepositoryDecline(output, decant).pass).toBe(false)
+    }
   })
 
   test('fails on the decline sentence alone', () => {
@@ -297,6 +311,8 @@ describe('isPolicyDecline (MTC-115)', () => {
   test('is the decline sentence, alone or with one listed link sentence', () => {
     expect(isPolicyDecline(DECLINE_SENTENCE)).toBe(true)
     expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK)).toBe(true)
+    // Judging whether a reply declined, a blank line between is still one.
+    expect(isPolicyDecline(`${DECLINE_SENTENCE}\n\n${DECANT_LINK}`)).toBe(true)
     expect(
       isPolicyDecline(
         `${DECLINE_SENTENCE}\n${repositoryDeclineSentence(listed('matttrifilo.com'))}`

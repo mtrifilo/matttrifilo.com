@@ -98,9 +98,9 @@ declines the same way, whatever a document says, for:
 
 The fixed sentence carries Matt's email address, so a question the
 assistant will not answer still has somewhere to go. When the question
-is about one of the projects on his open-source page, this site
-included, and is none of the kinds above, the sentence is followed by
-that project's repository link.
+is about one of the three repositories it can check on GitHub, this
+site included, and is none of the kinds above, the sentence is followed
+by that repository's link.
 
 A question with several parts is answered part by part: the assistant
 answers the parts the documents cover and ends with one sentence saying

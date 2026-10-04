@@ -765,8 +765,9 @@ const FORCED_ANSWER_TEXT_ID = 'forced-step-answer'
 /**
  * The proposals on a finished answer, or none.
  *
- * A decline is the one sentence alone, by policy, so a decline that carries a
- * trailer is a model ignoring the rule rather than an answer offering more:
+ * A decline is the decline sentence, alone or followed by a repository's
+ * link sentence, by policy, so a decline that carries a trailer is a model
+ * ignoring the rule rather than an answer offering more:
  * the questions are dropped instead of being shown under a sentence that just
  * said there was nothing to say.
  */
