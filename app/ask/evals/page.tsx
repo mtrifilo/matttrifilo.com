@@ -52,7 +52,7 @@ export function generateMetadata(): Metadata {
   return {
     title: ASSISTANT_EVALS_TITLE,
     description:
-      "Published results from the suites that check Matt's Career Assistant for accuracy, refusals, injection resistance and groundedness before a change ships.",
+      "Published results from the scheduled runs that check Matt's Career Assistant for accuracy, refusals, injection resistance and groundedness.",
     alternates: { canonical: '/ask/evals', types: FEED_ALTERNATE_TYPES },
   }
 }
