@@ -105,13 +105,14 @@ interface MarkdownNode {
   type: string
   value?: string
   children?: MarkdownNode[]
-  position?: { start: { offset?: number } }
+  position?: { start: { offset?: number }; end: { offset?: number } }
 }
 
 /**
- * Inline content: what sits inside one paragraph, heading or table cell.
- * Entering any other node starts a new line of the source, so whatever came
- * before it was followed by a line break.
+ * Inline content, when it sits in one of `INLINE_PARENTS` or in other inline
+ * content. Entering anything else (a paragraph, a list item, an HTML block
+ * inside a list item, which mdast also types `html`) starts a new line of the
+ * source, so whatever came before it was followed by a line break.
  */
 const PHRASING = new Set([
   'break',
@@ -127,6 +128,27 @@ const PHRASING = new Set([
   'strong',
   'text',
 ])
+const INLINE_PARENTS = new Set(['paragraph', 'heading', 'tableCell'])
+
+function isInline(node: MarkdownNode, parent?: MarkdownNode): boolean {
+  if (!PHRASING.has(node.type) || !parent) return false
+  return INLINE_PARENTS.has(parent.type) || PHRASING.has(parent.type)
+}
+
+/**
+ * Whether the node's own source holds whitespace. Read from the source where
+ * the node has a position, because the decoded value can differ: `&ensp;`
+ * decodes to a space but does not end a bare URL, which takes it as text.
+ */
+function holdsWhitespace(node: MarkdownNode, source: string): boolean {
+  const start = node.position?.start.offset
+  const end = node.position?.end.offset
+  const raw =
+    start !== undefined && end !== undefined
+      ? source.slice(start, end)
+      : node.value
+  return typeof raw === 'string' && /\s/.test(raw)
+}
 
 /**
  * Unwraps every bare link in the block's last word into its own text.
@@ -141,9 +163,9 @@ function holdBareLinksInLastWord() {
     const held: { parent: MarkdownNode; link: MarkdownNode }[] = []
     const visit = (node: MarkdownNode, parent?: MarkdownNode) => {
       if (
-        !PHRASING.has(node.type) ||
+        !isInline(node, parent) ||
         node.type === 'break' ||
-        (typeof node.value === 'string' && /\s/.test(node.value))
+        (node.value !== undefined && holdsWhitespace(node, source))
       ) {
         held.length = 0
       }

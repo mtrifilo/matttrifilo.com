@@ -78,9 +78,19 @@ export const MessageContent = ({
   </div>
 );
 
+// Owned here. The last five decide which text Streamdown splits into blocks,
+// and lib/unfinished-address.tsx counts those blocks itself: a caller that
+// set one would give its hold to the wrong block.
 export type MessageResponseProps = Omit<
   ComponentProps<typeof Streamdown>,
-  "linkSafety" | "remend" | "BlockComponent"
+  | "linkSafety"
+  | "remend"
+  | "BlockComponent"
+  | "mode"
+  | "parseIncompleteMarkdown"
+  | "parseMarkdownIntoBlocksFn"
+  | "allowedTags"
+  | "literalTagContent"
 >;
 
 // Module scope, so every render hands Streamdown the same objects: its memo

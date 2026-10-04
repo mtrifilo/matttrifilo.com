@@ -75,6 +75,22 @@ describe('while an answer streams', () => {
     ).toEqual(['https://github.com/mtrifilo/decant'])
   })
 
+  test.each([
+    ['a list item', '- See https://x.com/abc\n\n  <div>matt@gmail.com'],
+    ['a block quote', '> See https://x.com/abc\n> <div>matt@gmail.com'],
+  ])(
+    'an address ending a line of %s stays a link while an HTML block below it streams',
+    (_name, markdown) => {
+      expect(linksIn(markdown, true)).toContain('https://x.com/abc')
+    }
+  )
+
+  test('an entity that decodes to a space does not finish the address', () => {
+    expect(
+      linksIn('See https://github.com/mtrifilo/decant&ensp;', true)
+    ).toEqual([])
+  })
+
   test('a Markdown link whose URL has arrived is a link', () => {
     expect(
       linksIn('See [the repository](https://github.com/mtrifilo/decant)', true)
