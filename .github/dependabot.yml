@@ -43,9 +43,11 @@ updates:
       # Dependabot does not see the workflows' bun-version and node-version
       # inputs or the @lhci/cli version in accessibility.yml either.
       - dependency-name: '@types/bun'
-      # TypeScript majors wait for MTC-122. The 7.0 package ships no compiler
-      # API, and typescript-eslint and the tests that parse source with it
-      # (lib/site-copy.test.ts, lib/no-inline-font-size.test.ts and
+      # TypeScript majors wait for MTC-122. The 7.0 package does not export the
+      # JavaScript compiler API (ts.createSourceFile and the rest), only
+      # experimental modules under typescript/unstable, and typescript-eslint
+      # and the tests that parse source with it (lib/site-copy.test.ts,
+      # lib/no-inline-font-size.test.ts and
       # components/layout/skip-link.test.tsx) depend on that API. Minors and
       # patches within the current major still arrive through the group above.
       # Every release past 5.x is a major from here, so 6.x is held back too.
