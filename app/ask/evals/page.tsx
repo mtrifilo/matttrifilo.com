@@ -34,11 +34,13 @@ const HISTORY_LENGTH = 10
  * assistant is a work sample before it is an information channel, so the
  * first paragraph says what is checked and where the checks live rather than
  * selling the idea of testing. It claims nothing about how many runs there
- * are or how often they happen: what reaches this page is what someone
- * published, and the page below says how much that is.
+ * are: what reaches this page is what someone published, and the page below
+ * says how much that is. The cadence it does state is the run budget under
+ * "When they run" in docs/career-assistant-operations.md, so a change to that
+ * budget changes this sentence too.
  */
 const PAGE_INTRO =
-  "Matt's Career Assistant is checked against a fixed set of recorded questions before a change to its instructions, or to the documents it reads, goes live. The suites check whether an answer carries the facts and opened the document they came from, whether it declines what it should decline, whether it holds up against attempts to talk it out of its rules, and whether it names only the documents the server actually read. A run is published here as it was recorded, with the commit it ran against, and the suites themselves are in the public repository."
+  "Matt's Career Assistant is checked against a fixed set of recorded questions in runs scheduled a few times a month; the newest published run is below. The suites check whether an answer carries the facts and opened the document they came from, whether it declines what it should decline, whether it holds up against attempts to talk it out of its rules, and whether it names only the documents the server actually read. A run is published here as it was recorded, with the commit it ran against, and the suites themselves are in the public repository."
 
 const NO_RUN_YET = 'No published run yet.'
 
