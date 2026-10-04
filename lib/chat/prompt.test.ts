@@ -420,21 +420,28 @@ describe('a decline about a listed repository (MTC-115)', () => {
   test('the policy names the rule, its conditions, and the sentence to copy', () => {
     for (const rule of [
       'One decline carries a second sentence.',
-      'When the question names one of the repositories listed after the index, by its id or by the name of its project',
+      'When the question is about a repository listed after the index',
       'the documents answer no part of it, and no part of it is one of the kinds listed above or a part that is never answered',
-      `reply with the decline sentence, then a space, then the sentence after "${REPOSITORY_LINK_LABEL}" on that repository's line of the list, copied exactly, and nothing else.`,
-      'This is the only time the decline sentence is not alone.',
-      'A question about any other project, a question with a part that is never answered, and every other decline get the decline sentence alone.',
+      `reply with the decline sentence, a space, and the sentence after "${REPOSITORY_LINK_LABEL}" on that repository's line, copied exactly, and nothing else.`,
+      'Every other decline, one about an unlisted project included, is the decline sentence alone.',
     ]) {
       expect(SYSTEM_PROMPT).toContain(rule)
     }
   })
 
-  test('the project the rule names as an example is on the list', () => {
+  test('names each listed project the way a visitor asks about it, and only those', () => {
+    // Matt, 2026-10-03: decant and Psychic Homily by name, and this site or
+    // this assistant for matttrifilo.com. Each name has to map to a
+    // repository on the list, or the model is told to copy a line that is
+    // not there.
     expect(SYSTEM_PROMPT).toContain(
-      '(such as Psychic Homily for psychic-homily-web)'
+      '(decant, Psychic Homily for psychic-homily-web, or this site or this assistant for matttrifilo.com)'
     )
-    expect(assistantRepository('psychic-homily-web')).toBeDefined()
+    expect(ASSISTANT_REPOSITORIES.map(repository => repository.id)).toEqual([
+      'decant',
+      'psychic-homily-web',
+      'matttrifilo.com',
+    ])
   })
 
   test('comes after the rules that say which parts are never answered', () => {
