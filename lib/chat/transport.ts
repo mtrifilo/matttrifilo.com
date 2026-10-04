@@ -13,9 +13,12 @@ import type { ChatErrorBody } from './validate'
  * understands:
  *
  * - The Vercel WAF rate limit answers a 429 at the edge with its own body,
- *   before the function runs. The AI SDK's transport keeps only a
- *   response's text, not its status, so without help that 429 would render
- *   as the generic "something went wrong" instead of the rate-limit notice.
+ *   before the function runs. The AI SDK's transport rejects it with an
+ *   `APICallError` that carries the status as `statusCode` and the body as
+ *   its message, but the UI reads only the message (`toChatErrorView` in
+ *   answer.ts), the one place the route's refusals and an error inside an
+ *   open stream both arrive. Without help that 429 would render as the
+ *   generic "something went wrong" instead of the rate-limit notice.
  * - BotID patches `window.fetch` to run its challenge before a protected
  *   request. If the challenge script fails to load, a second attempt in the
  *   same tab can wait on it forever, and `useChat` would spin with no
