@@ -2561,6 +2561,47 @@ describe('text streams as it is written, and a call withdraws it (MTC-101)', () 
     expect(lineWhere(true)).toMatchObject({ textRetractions: 1 })
   })
 
+  test('a visitor who stops after a finished step gets only the abort line', async () => {
+    const held = heldStep(
+      [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: '1' },
+        { type: 'text-delta', id: '1', delta: LEAD },
+      ],
+      [{ type: 'text-end', id: '1' }, finishOn('stop')]
+    )
+    const aborter = new AbortController()
+    const stream = incrementally(
+      await ask(
+        modelOf(readsAfterSaying(NARRATION, 'resume'), held.step),
+        aborter.signal
+      )
+    )
+
+    await stream.until(body => body.includes(LEAD))
+    aborter.abort()
+    held.release()
+    await stream.rest()
+
+    // The read step finished and wrote its own step line, yet the request's
+    // only other line is the abort: no failure line, and no `[chat]`,
+    // `[chat] truncated` or `[chat] incomplete` completion line beside it.
+    // A stopped request is counted once, as an abort, and never among the
+    // visitors who were shown the incomplete notice.
+    expect(logged.filter(args => args[0] === '[chat] step')).toHaveLength(1)
+    const requestLines = logged.filter(
+      args =>
+        typeof args[0] === 'string' &&
+        args[0].startsWith('[chat]') &&
+        args[0] !== '[chat] step'
+    )
+    expect(requestLines).toHaveLength(1)
+    expect(requestLines[0]).toEqual([
+      '[chat]',
+      expect.objectContaining({ finishReason: 'abort', aborted: true }),
+    ])
+  })
+
   describe('through the real Vertex provider', () => {
     /** One Gemini streaming event carrying `parts`, as Vertex sends it. */
     const vertexEvent = (parts: object[], last: boolean) =>
