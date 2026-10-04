@@ -30,9 +30,9 @@ updates:
       # the weekly run opens no new major pull requests.
       #
       # CI does not run the evals. A pull request that bumps ai or
-      # @ai-sdk/google-vertex needs a local `bun run evals`, with its table
-      # pasted into the pull request, before it is merged
-      # (docs/career-assistant-operations.md, "Eval suites", "When they run").
+      # @ai-sdk/google-vertex merges on its deterministic gates, and the next
+      # scheduled eval run covers it (docs/career-assistant-operations.md,
+      # "Eval suites", "When they run").
       minor-and-patch:
         patterns: ['*']
         update-types: ['minor', 'patch']
@@ -43,6 +43,14 @@ updates:
       # Dependabot does not see the workflows' bun-version and node-version
       # inputs or the @lhci/cli version in accessibility.yml either.
       - dependency-name: '@types/bun'
+      # TypeScript majors wait for MTC-122. The 7.0 package ships no compiler
+      # API, and typescript-eslint and the tests that parse source with it
+      # (lib/site-copy.test.ts, lib/no-inline-font-size.test.ts and
+      # components/layout/skip-link.test.tsx) depend on that API. Minors and
+      # patches within the current major still arrive through the group above.
+      # Every release past 5.x is a major from here, so 6.x is held back too.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
 
   # Each workflow pins an action to a commit SHA with its version in a comment
   # on the same line. Dependabot moves the SHA and rewrites that comment.
