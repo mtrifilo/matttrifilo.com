@@ -2319,13 +2319,16 @@
 # open-source: "a website to document and amplify new music releases, shows,
 # and cultural events from Arizona musicians and beyond."; resume:
 # "production site for Arizona music releases and shows, built solo in
-# Next.js/React and Go."
+# Next.js/React and Go."; psychic-homily: both of those lines in its first
+# sentence, then "Stack and hosting" (Next.js 16, React 19, Go, PostgreSQL;
+# the front end on Vercel and the back end on Railway).
+# Reads any of: open-source, resume or psychic-homily; each says what the site is.
 - description: 'golden: Psychic Homily and its stack'
   vars:
     question: What is Psychic Homily, and what is it built with?
   metadata:
     suite: golden
-    expectReadsAny: [open-source, resume]
+    expectReadsAny: [open-source, resume, psychic-homily]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2348,17 +2351,76 @@
             The answer says Psychic Homily is Matt's site documenting new
             music releases, shows and cultural events from Arizona musicians.
             The stack and the fact that he built it solo are in the résumé
-            and not in the open-source document, so an answer grounded in
-            either one passes: if it names the stack it says Next.js or React
-            and Go, as the résumé does, and it states no star count, primary
-            language or last-push date, which the published material
-            deliberately omits. It is written about Matt in the third person,
-            and it must not present an inferred characterization as a
-            documented one.
+            and in the Psychic Homily document, not in the open-source
+            document, so an answer grounded in any one of them passes: if it
+            names the stack it says Next.js or React and Go, as the résumé
+            does, and it may add what the Psychic Homily document lists, such
+            as PostgreSQL, the front end on Vercel and the back end on
+            Railway. It states no star count, primary language or last-push
+            date, which the published material deliberately omits. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
         - type: llm-rubric
           value: *r56
         - type: llm-rubric
           value: *r56
+
+# psychic-homily, "What Matt delivered in 2026": "1,800 pull requests that
+# Matt authored were merged"; "137 of September's 138 (99 percent)"; "One
+# revert in 1,800 merges: #1325"; "passed 84.4 percent of the time"; the
+# decisions under "What he chose not to build, or removed" (tag categories,
+# the Verified Attendee badge, the unused venue AI pipeline, suggest a match);
+# the costs at the end of "The agent workflow".
+# Reads: psychic-homily only; no other document covers Psychic Homily's 2026 delivery (the résumé and open-source give it one line each).
+- description: 'golden: what Matt built on Psychic Homily in 2026'
+  vars:
+    question: What did Matt build on Psychic Homily in 2026?
+  metadata:
+    suite: golden
+    expectReads: [psychic-homily]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '1,800'
+        - adversarial review
+        - revert
+        - Verified Attendee
+        - knowledge graph
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &p1 >-
+            The answer says what Matt delivered on Psychic Homily in 2026 from
+            the document, and gives at least two of these: the 1,800 merged
+            pull requests he authored, stated next to a figure that qualifies
+            the count (the one revert, the review and verification sections
+            in the pull request bodies, adversarial review in 137 of
+            September's 138, the 84.4 percent CI pass rate, or the test-count
+            growth); a decision not to build or to remove something (the tag
+            categories, the Verified Attendee badge, the unused venue AI
+            pipeline, or suggest a match), with its reason; the rebuild from
+            a Hugo site into a Next.js and Go site, with a dated milestone; or
+            the agent workflow (isolated worktrees, the written rule that
+            agents never merge their own pull requests, adversarial review by
+            fresh sub-agents). It does not claim Matt personally reviewed or
+            merged every change, and it states no production launch date,
+            lines of code, release count or cost, and does not present the
+            median time from opening to merging as delivery speed. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *p1
+        - type: llm-rubric
+          value: *p1
 
 # resume, Recognition: the Thryv Accelerator Award (March 2026), the Thryv
 # Emerging Leaders Program (2025), and the Keap Better Together Award
