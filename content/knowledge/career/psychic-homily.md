@@ -48,8 +48,9 @@ Matt's GitHub account were merged into the repository. He builds with AI
 coding agents working under rules written into the repository's agent
 skills (#526, #907). The figures that qualify that count, the decisions
 not to build, the product itself and the agent workflow follow. Counts
-and percentages come from the repository's public pull request and CI
-records; a specific change is cited by its pull request number.
+and percentages come from the repository's public pull request, CI and
+issue records, and the test counts from its code; a specific change is
+cited by its pull request number.
 
 ### Review and quality under the volume
 
@@ -122,9 +123,10 @@ new front end had been started beside it in the same repository. In
 - That skill carries a written rule: "Agents never merge their own PRs.
   PR creation is the agent's last step; merging is the user's." (#526)
 - Adversarial review before a pull request opens was wired into both
-  agent workflows in May 2026 (#907). By September each review round ran
-  as a panel of fresh sub-agents with lenses such as Saboteur,
-  Future-Maintainer, Security and Completeness (#2173).
+  agent workflows in May 2026 (#907). By September its depth was set by
+  a tier for each change, from an inline check on a small change to a
+  panel of fresh sub-agents with the Saboteur, Future-Maintainer,
+  Security and Completeness lenses (#2021, September 2026).
 - A decision Matt makes as the owner during the work can be recorded in
   the pull request body, as in the Owner decisions section of #2173.
 

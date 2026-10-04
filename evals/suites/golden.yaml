@@ -4820,9 +4820,10 @@
 # month. Treat a green row here as "the answer is dated and the dating is
 # consistent with GitHub", not as "the answer came from GitHub"; the thing
 # that actually establishes the latter is reading one. The psychic-homily
-# document dates Psychic Homily work by month through October 2026, so on
-# this question a read of it can satisfy both date checks by itself, and no
-# assertion fails a run for reading it.
+# document dates Psychic Homily work by month through September 2026, so on
+# this question a read of it can supply the month assertDatesFromActivity
+# matches once any activity was fetched, and no assertion fails a run for
+# reading it.
 - description: 'golden: what shipped recently on psychic homily'
   vars:
     question: What has Matt shipped recently on psychic homily?
