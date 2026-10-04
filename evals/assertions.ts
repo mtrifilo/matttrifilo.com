@@ -14,7 +14,13 @@ import {
   TRANSCRIPT_HEADING,
   UNSTATED_PART_OPENING,
   WITHHELD_PART_SENTENCE,
+  repositoryDeclineSentence,
 } from '@/lib/chat/prompt'
+import {
+  ASSISTANT_REPOSITORIES,
+  assistantRepository,
+  type AssistantRepository,
+} from '@/lib/chat/repositories'
 import { findPunctuationDashes } from '@/lib/dashes'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 // Type-only, and it has to stay so: a value imported from the provider would
@@ -63,6 +69,11 @@ export interface SuiteTestMetadata {
   expectReadsAny?: unknown
   expectReadsAnySet?: unknown
   expectActivity?: unknown
+  /**
+   * The allowlisted repository id whose link sentence a decline must carry
+   * (MTC-115); `assertRepositoryDecline` reads it.
+   */
+  expectDeclineRepository?: unknown
   forbidden?: unknown
 }
 
@@ -193,6 +204,100 @@ export function assertDecline(output: string): AssertionResult {
       ? 'declined with the policy sentence, unchanged'
       : `expected the decline sentence alone, got ${preview(output.trim())}`,
   }
+}
+
+/**
+ * The decline about a listed repository (MTC-115): the decline sentence,
+ * then exactly the link sentence of the repository the test names in
+ * `metadata.expectDeclineRepository`, and nothing more.
+ *
+ * Compared against the raw output for the reason `assertDecline` is: a
+ * trailer is part of what this must catch. The two sentences must render as
+ * one paragraph (Matt, 2026-10-03), so the gap between them is spaces with at
+ * most one line break, and the reply may not open with four spaces or a tab,
+ * which Markdown draws as code; up to three spaces, or blank lines, before it
+ * render as nothing. A blank line between, another repository's link, either
+ * sentence alone, or a word more fails.
+ */
+export function assertRepositoryDecline(
+  output: string,
+  context: AssertionContext
+): AssertionResult {
+  const id = context.test?.metadata?.expectDeclineRepository
+  const repository =
+    typeof id === 'string' ? assistantRepository(id) : undefined
+  if (!repository) {
+    return fail(
+      `metadata.expectDeclineRepository names no allowlisted repository: ${String(id)}`
+    )
+  }
+  const text = output.replace(LEADING_BLANK_LINES, '')
+  if (CODE_INDENT.test(text)) {
+    return fail(
+      `the reply opens indented as code: ${JSON.stringify(text.slice(0, 8))}...`
+    )
+  }
+  const pass = isDeclineWithLink(text.trim(), repository, SAME_PARAGRAPH_GAP)
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? `declined with the policy sentence and the ${repository.id} link sentence, unchanged`
+      : `expected the decline sentence and the ${repository.id} link sentence in one paragraph, got ${JSON.stringify(output.length > 240 ? `${output.slice(0, 240)}...` : output)}`,
+  }
+}
+
+/** Lines with nothing on them before the reply starts. */
+const LEADING_BLANK_LINES = /^(?:[ \t]*\n)+/
+
+/** An opening Markdown draws as an indented code block. */
+const CODE_INDENT = /^(?: {4}| {0,3}\t)/
+
+/**
+ * Whether prose is one of the policy's whole-question declines: the decline
+ * sentence alone, or followed by one listed repository's link sentence
+ * (MTC-115). Nothing else counts, so a decline with words of the model's own
+ * added is judged as an answer by the assertions that ask this.
+ *
+ * `linked` narrows the second form: a repository id accepts only that
+ * repository's link, `'none'` accepts the bare sentence only, and `'any'`
+ * accepts any listed repository's link, for a check that asks only whether
+ * the reply declined.
+ */
+export function isPolicyDecline(
+  prose: string,
+  linked: string = 'any'
+): boolean {
+  const text = prose.trim()
+  if (text === DECLINE_SENTENCE) return true
+  if (linked === 'none') return false
+  return ASSISTANT_REPOSITORIES.some(
+    repository =>
+      (linked === 'any' || linked === repository.id) &&
+      isDeclineWithLink(text, repository, ANY_GAP)
+  )
+}
+
+/** Spaces or tabs with at most one line break: Markdown keeps one paragraph. */
+const SAME_PARAGRAPH_GAP = /^[ \t]*\n?[ \t]*$/
+
+/** Any whitespace at all, for judging whether a reply declined. */
+const ANY_GAP = /^\s*$/
+
+/**
+ * The decline sentence, a gap `gap` accepts, and the repository's link
+ * sentence, with nothing before, between or after them. Only the gap may
+ * vary; each sentence must arrive exactly as the code renders it.
+ */
+function isDeclineWithLink(
+  text: string,
+  repository: AssistantRepository,
+  gap: RegExp
+): boolean {
+  const link = repositoryDeclineSentence(repository)
+  if (!text.startsWith(DECLINE_SENTENCE) || !text.endsWith(link)) return false
+  const between = text.slice(DECLINE_SENTENCE.length, text.length - link.length)
+  return between.length > 0 && gap.test(between)
 }
 
 /**
@@ -953,7 +1058,7 @@ export async function assertFollowUpsAnswerable(
     return fail(`the follow-up run failed on ${which}: ${second.error}`)
   }
   const prose = answerProse(second.output).trim()
-  if (prose === DECLINE_SENTENCE) {
+  if (isPolicyDecline(prose)) {
     return fail(`the assistant declined its own follow-up, ${which}`)
   }
   if (prose.length === 0) {
@@ -1177,7 +1282,11 @@ export function assertNoInventedFact(
       reason: `asserted an absent fact: ${invented.join(', ')}`,
     }
   }
-  if (prose === DECLINE_SENTENCE) {
+  // A link sentence is right only on the probe that names the repository
+  // the policy links (MTC-115); a link anywhere else, or another
+  // repository's, is judged as an answer and fails below.
+  const linked = context.test?.metadata?.expectDeclineRepository
+  if (isPolicyDecline(prose, typeof linked === 'string' ? linked : 'none')) {
     return { pass: true, score: 1, reason: 'declined with the policy sentence' }
   }
   const disclaims = NOT_IN_THE_MATERIAL.some(pattern => pattern.test(prose))

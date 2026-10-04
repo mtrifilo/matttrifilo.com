@@ -23,6 +23,8 @@ import {
   type AnswerMessage,
   type AnswerView,
 } from './answer'
+import { repositoryDeclineSentence } from './prompt'
+import { ASSISTANT_REPOSITORIES } from './repositories'
 import { CHAT_ERROR_MESSAGE, chatErrorBody } from './validate'
 
 const textPart = (text: string) => ({ type: 'text', text })
@@ -57,6 +59,17 @@ describe('isDecline (MTC-35)', () => {
     expect(isDecline(DECLINE_SENTENCE)).toBe(true)
     expect(isDecline(`  ${DECLINE_SENTENCE}\n`)).toBe(true)
     expect(isDecline(`Sorry. ${DECLINE_SENTENCE}`)).toBe(true)
+  })
+
+  test("is the sentence followed by a listed repository's link sentence (MTC-115)", () => {
+    // The refusal event, the dropped follow-ups and the citation checks all
+    // ask this, so the two-sentence decline has to stay one.
+    for (const repository of ASSISTANT_REPOSITORIES) {
+      const link = repositoryDeclineSentence(repository)
+      expect(isDecline(`${DECLINE_SENTENCE} ${link}`)).toBe(true)
+      expect(isDecline(`${DECLINE_SENTENCE}\n\n${link}`)).toBe(true)
+      expect(isDecline(link)).toBe(false)
+    }
   })
 
   test('is not part of the sentence, a rewording, or an answer', () => {

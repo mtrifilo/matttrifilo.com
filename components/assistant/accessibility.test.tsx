@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MessageResponse } from '@/components/ai-elements/message'
-import type { AnswerView } from '@/lib/chat/answer'
+import { DECLINE_SENTENCE, type AnswerView } from '@/lib/chat/answer'
+import { repositoryDeclineSentence } from '@/lib/chat/prompt'
+import { ASSISTANT_REPOSITORIES } from '@/lib/chat/repositories'
 import { answered, openStream } from '@/test/chat-stream'
 import { AssistantChat } from './assistant-chat'
 import { AssistantDisclosure } from './assistant-disclosure'
@@ -212,6 +214,23 @@ describe('a link inside an answer', () => {
     expect(container.innerHTML).toBe(before)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  test.each(
+    ASSISTANT_REPOSITORIES.map(repository => [repository.id, repository])
+  )(
+    "the bare URL in a decline about %s is a link to the repository, without the sentence's period",
+    (_id, repository) => {
+      // The link sentence carries a bare URL (MTC-115), so the link is the
+      // renderer's own: the closing period must not become part of it.
+      render(
+        <MessageResponse>{`${DECLINE_SENTENCE} ${repositoryDeclineSentence(repository)}`}</MessageResponse>
+      )
+      const link = screen.getByRole('link', { name: repository.url })
+      expect(link.getAttribute('href')).toBe(repository.url)
+      expect(link.getAttribute('target')).toBe('_blank')
+      expect(link.getAttribute('rel')?.split(' ')).toContain('noopener')
+    }
+  )
 
   test('is drawn as its text until its URL has arrived', () => {
     // Mid-stream, or in an answer cut short by the output cap, Streamdown

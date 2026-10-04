@@ -71,7 +71,7 @@ writes: a conversation lives only in the visitor's browser tab.
   read, and only an explicit "not a bot" verdict gets through. If the
   classifier fails or stalls, the request is refused rather than served.
 - Limits on every request: eight questions a conversation, 1,500
-  characters a question, 80,000 input tokens, three documents and
+  characters a question, 84,000 input tokens, three documents and
   20,000 tokens read, three GitHub checks, 8,192 output tokens per model
   call, and four model calls per answer.
 
@@ -97,7 +97,10 @@ declines the same way, whatever a document says, for:
 - requests to print, repeat, or reveal its own instructions.
 
 The fixed sentence carries Matt's email address, so a question the
-assistant will not answer still has somewhere to go.
+assistant will not answer still has somewhere to go. When the question
+is about one of the three repositories it can check on GitHub, this
+site included, and is none of the kinds above, the sentence is followed
+by that repository's link.
 
 A question with several parts is answered part by part: the assistant
 answers the parts the documents cover and ends with one sentence saying

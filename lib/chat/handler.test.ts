@@ -39,6 +39,7 @@ import {
   SYSTEM_PROMPT,
   TRANSCRIPT_HEADING,
   WITHHELD_PART_SENTENCE,
+  repositoryDeclineSentence,
 } from './prompt'
 import { ASSISTANT_REPOSITORIES } from './repositories'
 import {
@@ -2792,6 +2793,30 @@ describe('the follow-ups the answer proposes', () => {
     const body = await response.text()
 
     expect(metadataFrom(body).followUps).toBeUndefined()
+  })
+
+  test("a decline with a repository's link sentence carries none either", async () => {
+    // MTC-115: the second sentence does not turn the decline into an
+    // answer, so proposals the model wrote under it are still dropped, and
+    // the run is still one that ended on a finished answer.
+    const decant = ASSISTANT_REPOSITORIES.find(repo => repo.id === 'decant')
+    if (!decant) throw new Error('decant is no longer on the allowlist')
+    const model = modelOf(
+      answers(
+        [
+          `${DECLINE_SENTENCE} ${repositoryDeclineSentence(decant)}`,
+          FOLLOW_UPS_TRAILER_PREFIX,
+          ...FOLLOW_UPS,
+        ].join('\n')
+      )
+    )
+    const response = await handlerWith(model)(
+      post({ messages: [uiMessage('user', 'How many people use decant?')] })
+    )
+    const body = await response.text()
+
+    expect(metadataFrom(body).followUps).toBeUndefined()
+    expect(metadataFrom(body).incomplete).toBeUndefined()
   })
 
   test('a partial answer keeps them: its closing sentence is not a decline', async () => {

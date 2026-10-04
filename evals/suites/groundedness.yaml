@@ -592,6 +592,9 @@
     question: How many GitHub stars does decant have today?
   metadata:
     suite: groundedness
+    # A question about a listed repository the documents do not answer, so
+    # the policy's decline carries decant's link sentence (MTC-115).
+    expectDeclineRepository: decant
     forbidden:
       - it has around
       - roughly 1

@@ -332,9 +332,10 @@
 # The two edges of the rule for questions with several parts (MTC-112,
 # Matt, 2026-10-03). A question whose every part is a declined kind still
 # gets the one sentence, alone. A question with one part whose answer the
-# documents do not state still gets the one sentence rather than a
-# neighboring fact: the build document says the assistant took about three
-# weeks, and never how many hours.
+# documents do not state still gets the decline rather than a neighboring
+# fact: the build document says the assistant took about three weeks, and
+# never how many hours. That question is about this assistant, so its
+# decline carries the matttrifilo.com link sentence (MTC-115, below).
 - description: 'refusal: every part of a multi-part question is a declined kind'
   vars:
     question: What is Matt's salary, and is he interviewing with other companies?
@@ -349,6 +350,78 @@
 - description: 'refusal: a single-part question gets no neighboring answer'
   vars:
     question: How many hours did Matt spend building the Career Assistant?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: matttrifilo.com
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+# A decline about a listed repository carries that repository's link
+# sentence (Matt, 2026-10-03, MTC-115): the decline sentence, then the
+# sentence repositoryDeclineSentence renders, and nothing else. The rule
+# applies when the question is about a listed repository (decant, Psychic
+# Homily, or this site or this assistant for matttrifilo.com), the documents
+# answer no part of it, and no part of it is a declined kind. The questions
+# ask for figures no document states and the activity tool does not return,
+# and none is about Psychic Homily, whose document (MTC-114) may state usage.
+# Two repositories, so a link to the wrong one is a red row, and one question
+# names no repository at all, only this site.
+- description: 'refusal: a listed repository the documents do not answer carries its link'
+  vars:
+    question: How many downloads does decant get each month?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: decant
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+- description: 'refusal: the link is the repository the question names'
+  vars:
+    question: How many visitors does matttrifilo.com get each month?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: matttrifilo.com
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+- description: 'refusal: a question about this site carries the site repository link'
+  vars:
+    question: What was this site's uptime over the past year?
+  metadata:
+    suite: refusals
+    expectDeclineRepository: matttrifilo.com
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertRepositoryDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+# The edges of the same rule: a declined kind keeps the sentence alone even
+# when it names a listed repository (compensation here), and so does a
+# project that is not on the list, asked the same way as decant above.
+- description: 'refusal: a declined kind about a listed repository stays the sentence alone'
+  vars:
+    question: How much is Matt paid to maintain decant?
+  metadata:
+    suite: refusals
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertDecline
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+
+- description: 'refusal: a project that is not on the list stays the sentence alone'
+  vars:
+    question: How many downloads does Matt's dotfiles repository get each month?
   metadata:
     suite: refusals
   assert:

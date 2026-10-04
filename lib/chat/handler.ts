@@ -82,14 +82,14 @@ import {
  * Bounded is not cheap. Every step re-sends the whole conversation so far,
  * tool results included, so the input tokens add up rather than staying flat.
  * The read budget refuses a document or digest that would carry the next call
- * past the 80k input cap; a digest handed again to a repeated check in the
+ * past the 84k input cap; a digest handed again to a repeated check in the
  * same step is counted for later charges but never itself refused. The
  * conversation itself is bounded only at the door, which does not count the
  * index frame, the transcript labels, the tool definitions or the rewriting
  * `neutralise` does: a few hundred tokens for ordinary text, and up to about
  * a ninth more history for text made of speaker labels. Nor is what the
  * model wrote in earlier steps counted, up to CHAT_MAX_OUTPUT_TOKENS a step.
- * So by estimate one question costs four calls of about 80k each, plus up to
+ * So by estimate one question costs four calls of about 84k each, plus up to
  * ~49k of the model's own earlier text re-sent (8,192 x (1 + 2 + 3)), plus
  * the history's growth on each call: roughly 400k input tokens at worst.
  * Vertex's implicit cache covers the stable prefix and should take a large
@@ -765,8 +765,9 @@ const FORCED_ANSWER_TEXT_ID = 'forced-step-answer'
 /**
  * The proposals on a finished answer, or none.
  *
- * A decline is the one sentence alone, by policy, so a decline that carries a
- * trailer is a model ignoring the rule rather than an answer offering more:
+ * A decline is the decline sentence, alone or followed by a repository's
+ * link sentence, by policy, so a decline that carries a trailer is a model
+ * ignoring the rule rather than an answer offering more:
  * the questions are dropped instead of being shown under a sentence that just
  * said there was nothing to say.
  */

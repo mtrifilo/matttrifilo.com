@@ -15,6 +15,7 @@ import {
   READ_DOCUMENT_TOOL_NAME,
   RECENT_ACTIVITY_TOOL_NAME,
   REPOSITORY_BLOCK,
+  REPOSITORY_LINK_LABEL,
   REPOSITORY_LIST_HEADING,
   SOURCES_TRAILER_PREFIX,
   SYSTEM_PROMPT,
@@ -22,9 +23,10 @@ import {
   UNSTATED_PART_OPENING,
   WITHHELD_PART_SENTENCE,
   buildMessages,
+  repositoryDeclineSentence,
   type ChatTurn,
 } from './prompt'
-import { ASSISTANT_REPOSITORIES } from './repositories'
+import { ASSISTANT_REPOSITORIES, assistantRepository } from './repositories'
 
 const index: KnowledgeIndex = {
   entries: [
@@ -182,7 +184,7 @@ describe('questions with several parts (MTC-112)', () => {
 
   test('keeps the whole-question decline for a question with no answerable part', () => {
     expect(SYSTEM_PROMPT).toContain(
-      `If the documents you read answer no part of the question, reply with exactly this sentence, alone, and stop:\n${DECLINE_SENTENCE}`
+      `If the documents you read answer no part of the question, reply with exactly this sentence and stop, adding only the link sentence the repository rule below calls for:\n${DECLINE_SENTENCE}`
     )
     expect(SYSTEM_PROMPT).toContain(
       'for a question whose every part is one of these'
@@ -387,6 +389,90 @@ describe('the activity policy', () => {
   })
 })
 
+describe('a decline about a listed repository (MTC-115)', () => {
+  const decant = assistantRepository('decant')
+
+  test('the link sentence is the proposed wording, written out', () => {
+    // Every other check reads the function; this one fails a merge that
+    // kept an older wording. The wording is Matt's to change.
+    expect(decant).toBeDefined()
+    if (!decant) return
+    expect(repositoryDeclineSentence(decant)).toBe(
+      'The code is public at https://github.com/mtrifilo/decant.'
+    )
+  })
+
+  test('the link sentence is never mistaken for the decline, and the pair still is one', () => {
+    // isDecline keys the refusal event, the dropped follow-ups and the
+    // citation checks on the decline sentence, so the link sentence must
+    // share none of it, and the two together must still read as a decline.
+    for (const repository of ASSISTANT_REPOSITORIES) {
+      const link = repositoryDeclineSentence(repository)
+      for (const sentence of DECLINE_SENTENCE.split(/(?<=\.)\s+/)) {
+        expect(link).not.toContain(sentence)
+      }
+      expect(DECLINE_SENTENCE).not.toContain(link)
+      expect(isDecline(link)).toBe(false)
+      expect(isDecline(`${DECLINE_SENTENCE} ${link}`)).toBe(true)
+    }
+  })
+
+  test('the policy names the rule, its conditions, and the sentence to copy', () => {
+    for (const rule of [
+      'One decline carries a second sentence.',
+      'When the question is about a repository listed after the index',
+      'the documents answer no part of it, and no part of it is one of the kinds listed above or a part that is never answered',
+      `reply with the decline sentence, a space, and the sentence after "${REPOSITORY_LINK_LABEL}" on that repository's line, copied exactly, and nothing else.`,
+      'Every other decline, one about an unlisted project included, is the decline sentence alone.',
+    ]) {
+      expect(SYSTEM_PROMPT).toContain(rule)
+    }
+  })
+
+  test('names each listed project the way a visitor asks about it, and only those', () => {
+    // Matt, 2026-10-03: decant and Psychic Homily by name, and this site or
+    // this assistant for matttrifilo.com. Each name has to map to a
+    // repository on the list, or the model is told to copy a line that is
+    // not there.
+    expect(SYSTEM_PROMPT).toContain(
+      '(decant, Psychic Homily for psychic-homily-web, or this site or this assistant for matttrifilo.com; such a question is about his professional work)'
+    )
+    expect(ASSISTANT_REPOSITORIES.map(repository => repository.id)).toEqual([
+      'decant',
+      'psychic-homily-web',
+      'matttrifilo.com',
+    ])
+  })
+
+  test('comes after the rules that say which parts are never answered', () => {
+    // "a part that is never answered" only means those parts if their rule
+    // comes first, and the rule has to land before the one that keeps both
+    // trailers off a decline.
+    const at = SYSTEM_PROMPT.indexOf('One decline carries a second sentence.')
+    expect(at).toBeGreaterThan(
+      SYSTEM_PROMPT.indexOf('is never answered as a part')
+    )
+    expect(at).toBeLessThan(
+      SYSTEM_PROMPT.indexOf('A decline is a complete answer.')
+    )
+  })
+
+  test('allows the link sentence and nothing else beside a decline', () => {
+    expect(SYSTEM_PROMPT).toContain(
+      "do not offer any alternative but a repository's link sentence where the rule above calls for it"
+    )
+    expect(SYSTEM_PROMPT).toContain(
+      "A decline stays the decline sentence, alone or followed by a repository's link sentence as WHEN TO DECLINE says. Do not turn a decline into a briefing."
+    )
+  })
+
+  test('keeps every URL out of the policy itself', () => {
+    // The URLs ride in the repository list, rendered from the curated
+    // slugs; the policy only points at them.
+    expect(SYSTEM_PROMPT).not.toMatch(/https?:\/\//)
+  })
+})
+
 describe('the repository list', () => {
   test('names every allowlisted repository, and only those', () => {
     for (const repository of ASSISTANT_REPOSITORIES) {
@@ -397,12 +483,32 @@ describe('the repository list', () => {
     expect(ids).toHaveLength(ASSISTANT_REPOSITORIES.length)
   })
 
-  test('shows an id, never an owner, a slug, or a URL', () => {
-    // What the model can name is what it can ask for, so the list holds
-    // nothing that looks like a path to somewhere else.
-    expect(REPOSITORY_BLOCK).not.toContain('https://')
-    expect(REPOSITORY_BLOCK).not.toContain('mtrifilo/')
+  test('shows a URL only inside the link sentence on its own line', () => {
+    // The model is handed a URL for one purpose, the sentence a decline
+    // about the repository ends with (MTC-115). Anywhere else, a path in the
+    // list would read as something to fetch or to pass back as an id.
+    const lines = REPOSITORY_BLOCK.split('\n').filter(line =>
+      line.startsWith('[')
+    )
+    expect(lines).toEqual(
+      ASSISTANT_REPOSITORIES.map(
+        repository =>
+          `[${repository.id}] ${repository.description} ${REPOSITORY_LINK_LABEL} ${repositoryDeclineSentence(repository)}`
+      )
+    )
+    const urls = [...REPOSITORY_BLOCK.matchAll(/https?:\/\/\S+/g)].map(
+      match => match[0]
+    )
+    expect(urls).toEqual(
+      ASSISTANT_REPOSITORIES.map(repository => `${repository.url}.`)
+    )
     expect(REPOSITORY_BLOCK).not.toContain('api.github.com')
+  })
+
+  test('says what the link sentence is for', () => {
+    expect(REPOSITORY_BLOCK).toContain(
+      "Each line ends with that repository's link sentence, which you use only as WHEN TO DECLINE says."
+    )
   })
 
   test('says the list is the whole of what may be checked', () => {

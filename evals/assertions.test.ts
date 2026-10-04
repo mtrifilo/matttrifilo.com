@@ -12,7 +12,9 @@ import {
   SYSTEM_PROMPT,
   UNSTATED_PART_OPENING,
   WITHHELD_PART_SENTENCE,
+  repositoryDeclineSentence,
 } from '@/lib/chat/prompt'
+import { assistantRepository } from '@/lib/chat/repositories'
 import { loadKnowledgeIndex } from '@/lib/knowledge'
 import {
   POLICY_PHRASES,
@@ -34,6 +36,8 @@ import {
   assertNoScreenshotRelease,
   assertNoTicketKeys,
   assertPartialAnswerWithholds,
+  assertRepositoryDecline,
+  isPolicyDecline,
   assertReadsAnyOf,
   assertReadsAnySet,
   assertReadsExpected,
@@ -77,6 +81,15 @@ describe('POLICY_PHRASES', () => {
   })
 })
 
+/** The listed repositories the MTC-115 tests below decline about. */
+function listed(id: string) {
+  const repository = assistantRepository(id)
+  if (!repository) throw new Error(`${id} is no longer on the allowlist`)
+  return repository
+}
+const DECANT_LINK = repositoryDeclineSentence(listed('decant'))
+const DECLINE_WITH_DECANT_LINK = `${DECLINE_SENTENCE} ${DECANT_LINK}`
+
 describe('assertDecline', () => {
   test('passes on the sentence alone, trailer or no trailer', () => {
     expect(assertDecline(DECLINE_SENTENCE).pass).toBe(true)
@@ -97,6 +110,12 @@ describe('assertDecline', () => {
 
   test('fails on an answer that is not a decline', () => {
     expect(assertDecline('He earns a lot.').pass).toBe(false)
+  })
+
+  test("fails on a decline that carries a repository's link sentence", () => {
+    // The sensitive and unlisted cases (MTC-115) rest on this: a link added
+    // where the policy keeps the sentence alone is a red row.
+    expect(assertDecline(DECLINE_WITH_DECANT_LINK).pass).toBe(false)
   })
 })
 
@@ -209,6 +228,119 @@ describe('a partial answer that dropped its trailer (MTC-112)', () => {
     })
     expect(result.pass).toBe(true)
     expect(result.reason).toContain('warning')
+  })
+})
+
+describe('assertRepositoryDecline (MTC-115)', () => {
+  const decant = ctx({ expectDeclineRepository: 'decant' })
+
+  test('passes on the decline sentence and the named link sentence in one paragraph', () => {
+    for (const output of [
+      DECLINE_WITH_DECANT_LINK,
+      `\n${DECLINE_SENTENCE}\n${DECANT_LINK}\n\n`,
+      // Up to three spaces before a paragraph render as nothing.
+      ` ${DECLINE_WITH_DECANT_LINK}`,
+      `\n   ${DECLINE_WITH_DECANT_LINK}`,
+    ]) {
+      expect(assertRepositoryDecline(output, decant).pass).toBe(true)
+    }
+  })
+
+  test('fails when Markdown would split the two sentences or draw one as code', () => {
+    // Matt, 2026-10-03: the link sentence shares the decline's paragraph. A
+    // blank line makes two paragraphs, and a reply that opens indented, or a
+    // link sentence after a blank line and an indent, renders as code with no
+    // link at all.
+    for (const output of [
+      `${DECLINE_SENTENCE}\n\n${DECANT_LINK}`,
+      `${DECLINE_SENTENCE}\n\n\n\n\t ${DECANT_LINK}`,
+      `    ${DECLINE_WITH_DECANT_LINK}`,
+      `\t${DECLINE_WITH_DECANT_LINK}`,
+      `\n  \t${DECLINE_WITH_DECANT_LINK}`,
+    ]) {
+      expect(assertRepositoryDecline(output, decant).pass).toBe(false)
+    }
+  })
+
+  test('fails on the decline sentence alone', () => {
+    const result = assertRepositoryDecline(DECLINE_SENTENCE, decant)
+    expect(result.pass).toBe(false)
+    expect(result.reason).toContain('decant link sentence')
+  })
+
+  test('fails on the link sentence alone, or the two run together', () => {
+    expect(assertRepositoryDecline(DECANT_LINK, decant).pass).toBe(false)
+    expect(
+      assertRepositoryDecline(`${DECLINE_SENTENCE}${DECANT_LINK}`, decant).pass
+    ).toBe(false)
+  })
+
+  test("fails on another repository's link sentence", () => {
+    const other = `${DECLINE_SENTENCE} ${repositoryDeclineSentence(listed('psychic-homily-web'))}`
+    expect(assertRepositoryDecline(other, decant).pass).toBe(false)
+  })
+
+  test('fails on a trailer, a follow-ups block, or a word more', () => {
+    for (const output of [
+      `${DECLINE_WITH_DECANT_LINK}\n\nSources: open-source`,
+      `${DECLINE_WITH_DECANT_LINK}\nFollow-ups:\nWhat is decant?`,
+      `${DECLINE_WITH_DECANT_LINK} Take a look!`,
+      `Sorry. ${DECLINE_WITH_DECANT_LINK}`,
+      `${DECLINE_SENTENCE} The code is public at https://github.com/mtrifilo/decant`,
+    ]) {
+      expect(assertRepositoryDecline(output, decant).pass).toBe(false)
+    }
+  })
+
+  test('fails, and says why, when the test names no allowlisted repository', () => {
+    for (const metadata of [
+      {},
+      { expectDeclineRepository: 'dotfiles' },
+      { expectDeclineRepository: 'mtrifilo/decant' },
+      { expectDeclineRepository: ['decant'] },
+    ]) {
+      const result = assertRepositoryDecline(
+        DECLINE_WITH_DECANT_LINK,
+        ctx(metadata)
+      )
+      expect(result.pass).toBe(false)
+      expect(result.reason).toContain('expectDeclineRepository')
+    }
+  })
+})
+
+describe('isPolicyDecline (MTC-115)', () => {
+  test('is the decline sentence, alone or with one listed link sentence', () => {
+    expect(isPolicyDecline(DECLINE_SENTENCE)).toBe(true)
+    expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK)).toBe(true)
+    // Judging whether a reply declined, a blank line between is still one.
+    expect(isPolicyDecline(`${DECLINE_SENTENCE}\n\n${DECANT_LINK}`)).toBe(true)
+    expect(
+      isPolicyDecline(
+        `${DECLINE_SENTENCE}\n${repositoryDeclineSentence(listed('matttrifilo.com'))}`
+      )
+    ).toBe(true)
+  })
+
+  test('narrows the link to one repository, or to none', () => {
+    expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'decant')).toBe(true)
+    expect(
+      isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'psychic-homily-web')
+    ).toBe(false)
+    expect(isPolicyDecline(DECLINE_WITH_DECANT_LINK, 'none')).toBe(false)
+    expect(isPolicyDecline(DECLINE_SENTENCE, 'none')).toBe(true)
+    expect(isPolicyDecline(DECLINE_SENTENCE, 'decant')).toBe(true)
+  })
+
+  test('is not a decline with words of its own, or an unlisted link', () => {
+    expect(isPolicyDecline(`${DECLINE_SENTENCE} Sorry!`)).toBe(false)
+    expect(
+      isPolicyDecline(
+        `${DECLINE_SENTENCE} The code is public at https://github.com/mtrifilo/dotfiles.`
+      )
+    ).toBe(false)
+    expect(isPolicyDecline(DECANT_LINK)).toBe(false)
+    expect(isPolicyDecline('')).toBe(false)
   })
 })
 
@@ -1084,6 +1216,34 @@ describe('assertNoInventedFact', () => {
       assertNoInventedFact(DECLINE_SENTENCE, ctx({ forbidden: ['Netflix'] }))
         .pass
     ).toBe(true)
+  })
+
+  test("the decline with the named repository's link sentence passes (MTC-115)", () => {
+    // The groundedness probe on decant's stars is a listed-repository
+    // question the documents do not answer, so this is the reply the policy
+    // asks for there, and only there.
+    expect(
+      assertNoInventedFact(
+        DECLINE_WITH_DECANT_LINK,
+        ctx({ forbidden: ['currently has'], expectDeclineRepository: 'decant' })
+      ).pass
+    ).toBe(true)
+  })
+
+  test('a link sentence where none belongs, or the wrong one, fails', () => {
+    const phLink = `${DECLINE_SENTENCE} ${repositoryDeclineSentence(listed('psychic-homily-web'))}`
+    expect(
+      assertNoInventedFact(
+        DECLINE_WITH_DECANT_LINK,
+        ctx({ forbidden: ['Netflix'] })
+      ).pass
+    ).toBe(false)
+    expect(
+      assertNoInventedFact(
+        phLink,
+        ctx({ forbidden: ['currently has'], expectDeclineRepository: 'decant' })
+      ).pass
+    ).toBe(false)
   })
 
   test('saying the material does not cover it passes', () => {
