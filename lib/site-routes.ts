@@ -85,7 +85,7 @@ export const siteRoutes: readonly SiteRoute[] = [
     assistant: true,
     hideFromNav: true,
     needsPublishedEvalRun: true,
-    contentUpdated: '2026-09-22',
+    contentUpdated: '2026-10-04',
     lists: 'evalRuns',
   },
   {
