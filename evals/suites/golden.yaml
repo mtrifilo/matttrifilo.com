@@ -2319,13 +2319,16 @@
 # open-source: "a website to document and amplify new music releases, shows,
 # and cultural events from Arizona musicians and beyond."; resume:
 # "production site for Arizona music releases and shows, built solo in
-# Next.js/React and Go."
+# Next.js/React and Go."; psychic-homily: both of those lines in its first
+# sentence, then "Stack and hosting" (Next.js 16, React 19, Go, PostgreSQL;
+# the front end on Vercel and the back end on Railway).
+# Reads any of: open-source, resume or psychic-homily; each says what the site is.
 - description: 'golden: Psychic Homily and its stack'
   vars:
     question: What is Psychic Homily, and what is it built with?
   metadata:
     suite: golden
-    expectReadsAny: [open-source, resume]
+    expectReadsAny: [open-source, resume, psychic-homily]
   assert:
     - type: javascript
       value: file://assertions.ts:assertThirdPerson
@@ -2348,17 +2351,149 @@
             The answer says Psychic Homily is Matt's site documenting new
             music releases, shows and cultural events from Arizona musicians.
             The stack and the fact that he built it solo are in the résumé
-            and not in the open-source document, so an answer grounded in
-            either one passes: if it names the stack it says Next.js or React
-            and Go, as the résumé does, and it states no star count, primary
-            language or last-push date, which the published material
-            deliberately omits. It is written about Matt in the third person,
-            and it must not present an inferred characterization as a
+            and in the Psychic Homily document, not in the open-source
+            document, so an answer grounded in any one of them passes: if it
+            names the stack it says Next.js or React and Go, as the résumé
+            does, and it may add what the Psychic Homily document lists, such
+            as PostgreSQL, the front end on Vercel and the back end on
+            Railway. It states no star count, primary language or last-push
+            date, which the published material deliberately omits. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *r56
+        - type: llm-rubric
+          value: *r56
+
+# psychic-homily, "What Matt delivered in 2026": "1,800 pull requests opened
+# from Matt's GitHub account were merged"; "137 of September's 138 (99
+# percent)"; "One
+# revert in 1,800 merges: #1325"; "passed 84.4 percent of the time"; the
+# decisions under "What he chose not to build, or removed" (tag categories,
+# the Verified Attendee badge, the unused venue AI pipeline, suggest a match);
+# the costs at the end of "The agent workflow".
+# The question names the year rather than "this year" so the golden stays
+# true after 2026 ends; "What has Matt shipped recently on psychic homily?"
+# below is the recency question, answered from the activity check.
+# Reads: psychic-homily only; no other document covers Psychic Homily's 2026 delivery (the résumé and open-source give it one line each).
+- description: 'golden: what Matt built on Psychic Homily in 2026'
+  vars:
+    question: What did Matt build on Psychic Homily in 2026?
+  metadata:
+    suite: golden
+    expectReads: [psychic-homily]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: icontains-any
+      value:
+        - '1,800'
+        - adversarial review
+        - revert
+        - Verified Attendee
+        - knowledge graph
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &p1 >-
+            The answer says what Matt delivered on Psychic Homily in 2026 from
+            the document, and gives at least two of these: the 1,800 merged
+            pull requests from his account, stated next to a figure that qualifies
+            the count (the one revert, the review and verification sections
+            in the pull request bodies, adversarial review in 137 of
+            September's 138, the 84.4 percent CI pass rate, or the test-count
+            growth); a decision not to build or to remove something (the tag
+            categories, the Verified Attendee badge, the unused venue AI
+            pipeline, or suggest a match), with its reason; the rebuild from
+            a Hugo site into a Next.js and Go site, with a dated milestone; or
+            the agent workflow (isolated worktrees, the written rule that
+            agents never merge their own pull requests, adversarial review by
+            fresh sub-agents). It does not claim Matt personally reviewed or
+            merged every change, and it states no production launch date,
+            lines of code, release count or cost, and does not present the
+            median time from opening to merging as delivery speed. It is
+            written about Matt in the third person, and it must not present
+            an inferred characterization as a documented one.
+        - type: llm-rubric
+          value: *p1
+        - type: llm-rubric
+          value: *p1
+
+# Matt's own question to the live assistant on 2026-10-03, word for word; it
+# declined then, when the corpus held two sentences on the project (MTC-114).
+# psychic-homily, "What the site does for a visitor" (Matt's draft of
+# 2026-10-04): "show lists for venues all over the US, along with a growing
+# list of global venues"; "information and socials for each of the music
+# venues, artists, and record labels"; "sync shows with their own calendars";
+# "a visualized knowledge graph of similar artists"; "An atlas feature";
+# "The radio page features WFMU, KEXP, and NTS live and archive playlists";
+# "create their own show lists, follow artists and venues, and get alerts for
+# new shows". The citation trio fails a decline: assertCites fails an answer
+# whose prose carries the decline sentence.
+# Reads: psychic-homily; no other document lists the site's features (open-source and resume describe it in one line each, so a run may also read them).
+- description: "golden: Matt's own question on Psychic Homily's current features"
+  vars:
+    question: What features does Psychic Homily have currently?
+  metadata:
+    suite: golden
+    expectReads: [psychic-homily]
+  assert:
+    - type: javascript
+      value: file://assertions.ts:assertThirdPerson
+    - type: javascript
+      value: file://assertions.ts:assertNoNarration
+    - type: javascript
+      value: file://assertions.ts:assertReadsExpected
+    - type: javascript
+      value: file://assertions.ts:assertReadsWithinIndex
+    - type: javascript
+      value: file://assertions.ts:assertNoPolicyLeak
+    - type: javascript
+      value: file://assertions.ts:assertCites
+    - type: javascript
+      value: file://assertions.ts:assertCitesOnlyWhatItRead
+    - type: javascript
+      value: file://assertions.ts:assertAnswered
+    - type: icontains-any
+      value:
+        - knowledge graph
+        - atlas
+        - radio
+        - show lists
+    - type: assert-set
+      threshold: 0.6
+      assert:
+        - type: llm-rubric
+          value: &p2 >-
+            The answer is a third-person briefing on what Psychic Homily does
+            for a visitor, and names at least three features the document
+            states: show lists for venues across the US and a growing list of
+            global venues; information and socials for venues, artists and
+            record labels; syncing shows with a visitor's own calendar; a
+            visualized knowledge graph of similar artists; an atlas that finds
+            venues on an interactive map; a radio page with WFMU, KEXP and NTS
+            live and archive playlists (an answer may name any or all three)
+            whose played artists link to their Psychic
+            Homily pages and to releases on Bandcamp and Spotify; or, for
+            logged-in users, their own show lists, follows of artists and
+            venues, and alerts for new shows. It fails if it declines, if it
+            names a feature the document does not state, or if it presents as
+            current something the document says was removed or closed
+            unmerged (the Verified Attendee badge, suggest a match on radio
+            playlists, the expanded tag categories, the legacy venue AI
+            pipeline). It must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
-          value: *r56
+          value: *p2
         - type: llm-rubric
-          value: *r56
+          value: *p2
 
 # resume, Recognition: the Thryv Accelerator Award (March 2026), the Thryv
 # Emerging Leaders Program (2025), and the Keap Better Together Award
@@ -4753,7 +4888,11 @@
 # last push would satisfy it, and at least one document carries the current
 # month. Treat a green row here as "the answer is dated and the dating is
 # consistent with GitHub", not as "the answer came from GitHub"; the thing
-# that actually establishes the latter is reading one.
+# that actually establishes the latter is reading one. The psychic-homily
+# document dates Psychic Homily work by month through September 2026, so on
+# this question a read of it can supply the month assertDatesFromActivity
+# matches once any activity was fetched, and no assertion fails a run for
+# reading it.
 - description: 'golden: what shipped recently on psychic homily'
   vars:
     question: What has Matt shipped recently on psychic homily?
