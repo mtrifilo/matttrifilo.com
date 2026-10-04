@@ -1,67 +1,79 @@
 ---
 id: matttrifilo-com-delivery-2026
 title: What Matt delivered on matttrifilo.com in 2026
-summary: The 2026 delivery record of matttrifilo.com: what shipped, the test, eval and change-failure figures beside it, eval cost decisions, and what was not built.
+summary: The 2026 delivery record of matttrifilo.com: the Career Assistant launch, its eval, test and change-failure figures, eval cost choices, and what was not built.
 tags: [ai, delivery, quality, evals, incidents, cost]
 updated: 2026-10-03
 ---
 
 # What Matt delivered on matttrifilo.com in 2026
 
-In 2026 Matt shipped Matt's Career Assistant on matttrifilo.com, from a
-research spike on September 13 to a live launch on October 3, in about
-three weeks, built with AI coding agents under his direction. This
-document gives the quality record that goes with that pace, all of it
-public: eval records that publish failures as well as passes, a test
-suite built from none, and the change failures with their causes and
+In 2026 Matt shipped Matt's Career Assistant on matttrifilo.com, built
+with AI coding agents under his direction, from research spike to launch
+in about three weeks; the document "How Matt built the Career Assistant
+on his site" gives the dates and how the assistant works (its model, the
+documents it reads, its protection layers and its eval suites), and none
+of that is repeated here. The launch pull request is #128. This document
+gives the quality record that goes with that pace, all of it public:
+eval records, a test suite built from none, claims corrected against
+Matt's own account, and the change failures with their causes and
 restore times. Numbers in parentheses are pull requests in his public
-repository, https://github.com/mtrifilo/matttrifilo.com. How the
-assistant works (its model, the documents it reads, its protection
-layers and its eval suites) is in the document "How Matt built the
-Career Assistant on his site" and is not repeated here.
+repository, https://github.com/mtrifilo/matttrifilo.com.
 
 ## Quality evidence a reader can open
 
-- **Eval records.** Every eval record published in the repository from
-  September 28 to October 3, 2026 passed between 95 and 98 percent of its
-  tests, while the suite grew from 171 tests to 188. The refusal and
-  prompt-injection suites passed every test in every one of those
-  records. Each record states how many tests passed out of how many, so
-  the failures are published with the passes, at matttrifilo.com/ask/evals.
+- **Eval records.** The eval records published in the repository from
+  September 28 to October 3, 2026 passed between 95 and 98 percent of
+  their tests, while the suite grew from 171 tests to 188. The
+  publishing step refuses a run that passes under 95 percent of its
+  tests or under 90 percent of any one suite, so that range describes
+  the runs that cleared the bar, not every run made. The refusal and
+  prompt-injection suites passed every test in every published record.
+  Each record states how many tests passed out of how many, so the
+  failed tests within a run are published with the passes, at
+  matttrifilo.com/ask/evals.
 - **Tests.** The repository had no tests until the first pull request of
   the year added CI and its first test files on September 13 (#11). On
   the launch pull request, October 3, Bun reported 1,953 passing tests
   (#128). Along the way came accessibility checks with axe and Lighthouse
   in CI (#81) and browser checks in Chromium and WebKit at phone and
   desktop widths (#80).
+- **Claims held to Matt's own account.** When an answer or a document
+  credited him with more than he did, the corpus was corrected to his
+  account: OpenAI's Symphony harness is something he adapted, not built
+  (#46, #55), and a 2019 decomposition project is one he contributed to,
+  not led (#64).
 - **Green at merge.** Of the 121 pull requests merged in 2026, 117 had a
   passing CI run on their final commit when they merged. The four that
   did not are three Dependabot dependency updates (#104, #107, #108),
   described below, and one (#114) whose only failure was the break one of
   those updates had already put on main.
-- **Review.** 115 of Matt's 116 pull requests carry an adversarial-review
-  section: fresh AI reviewer agents attack the change before its pull
-  request opens, and the section records what they found and what was
-  fixed. The other five of the 121 are Dependabot's. The exception is a
-  one-line change to the résumé's index summary (#37), and the production hotfix below records
-  that it merged before its review, at Matt's direction. The fixes those
-  reviews prompted landed as 179 separate commits titled as review fixes.
-  GitHub itself records no formal pull-request reviews: the review is
-  those AI reviewer agents plus Matt's own decisions, which the pull
-  request descriptions quote with their dates.
+- **Review.** 115 of Matt's 116 pull requests carry an
+  adversarial-review section: fresh AI reviewer agents attack the change
+  before its pull request opens, and the section records what they found
+  and what was fixed. The other five of the 121 are Dependabot's. The
+  one without that section is a one-line change to the résumé's index
+  summary (#37), which records a privacy review in its verification
+  instead. The production hotfix below (#29) has the section, and it
+  records that the hotfix merged before its review, at Matt's direction.
+  The fixes those reviews prompted landed as 179 separate commits titled
+  as review fixes. GitHub itself records no formal pull-request reviews:
+  the review is those AI reviewer agents plus Matt's own decisions,
+  which the pull request descriptions quote with their dates.
 
 ## Change failure and the October 2 restore
 
-Of the 120 pull requests merged into main in 2026, three broke it with a
-real defect, 2.5 percent, in two incidents. All three were Dependabot
+Of the 120 pull requests merged into main in 2026 (one more, #85, merged
+into a feature branch), three broke main's build and tests with a real
+defect, 2.5 percent, in two incidents. All three were Dependabot
 dependency updates merged while their own CI was failing, in batches
 with other pull requests, and main had no branch protection to stop
-them. Times are UTC.
+them. A third incident, the production hotfix below, is not in that
+count: its cause passed CI and reached production. Times are UTC.
 
-- **October 2, 03:51.** A grouped dependency update (#104) changed how
-  the CSS optimizer writes one rule, and a stylesheet test failed. A pull
-  request already open for the same group was repurposed to fix the test
-  (#116), and main was green again 12 hours 16 minutes after the break.
+- **October 2, 03:51.** A grouped dependency update (#104) changed the
+  CSS optimizer's output, and a stylesheet test failed. The fix (#116)
+  had main green again 12 hours 16 minutes after the break.
 - **October 2, 16:06.** ESLint 10 (#108) and TypeScript 7 (#107) merged
   together, although an evaluation the day before had deferred TypeScript
   7. Lint crashed, type checking failed, and tests failed. The restore
@@ -74,10 +86,8 @@ them. Times are UTC.
 - **Production hotfix, September 16.** The chat interface reached
   production while the assistant was switched off there, so the live
   site showed an assistant that refused every question. The fix (#29)
-  quotes Matt's instruction, "Hide this from Production immediately." It
-  merged about six minutes after that instruction if the 08:17 the pull
-  request gives for it is UTC minus seven; the pull request names no time
-  zone.
+  quotes Matt's instruction, "Hide this from Production immediately,"
+  and merged the same day.
 
 ## Cost discipline in the eval loop
 
@@ -91,7 +101,8 @@ cost, each with its reason recorded:
   on its deterministic tests, and the next scheduled run covers it
   (#127).
 
-Both decisions are in the repository's decision log, docs/decisions.md.
+Both decisions, and the first two items below, are in the repository's
+decision log, docs/decisions.md (#119).
 
 ## What was not built
 
@@ -108,7 +119,7 @@ Both decisions are in the repository's decision log, docs/decisions.md.
   chips that linked to those pages went with them; the list of documents
   the assistant read, shown above each answer, became the record of what
   it used.
-- **The chat was not code-split.** Of the Lighthouse opportunities for
-  the assistant's page on a phone, Matt chose on September 30, 2026 not to
-  take the unused-JavaScript split (#92). The pull request records the
-  choice, not the reason.
+- **The chat was not code-split.** Matt took other Lighthouse
+  opportunities for the assistant's page on a phone on September 30,
+  2026, but not the unused-JavaScript split (#92). The pull request
+  records the choice, not the reason.

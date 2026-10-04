@@ -4944,11 +4944,12 @@
 
 # --- begin MTC-121: the 2026 delivery record of matttrifilo.com ---
 # Reads matttrifilo-com-delivery-2026, the one document that gives the site's
-# 2026 delivery figures. The phrase check takes any figure only that document
-# states; the rubric holds the answer to the figures it gives and fails the
-# claims it does not make (formal review on every change, a lead time or a
-# deploy count, a gate added after the breaks, a pull-request count with no
-# quality figure beside it).
+# 2026 delivery figures. The phrase check takes figures that document gives,
+# in the forms an answer may write them; "Dependabot", "1,953" and "171" are
+# in no other document. The rubric holds the answer to the figures it gives
+# and fails the claims it does not make (formal review on every change, a
+# lead time or a deploy count, a gate added after the breaks, a pull-request
+# count with no quality figure beside it, a pass-rate range read as every run).
 - description: 'golden: what Matt shipped on his own site in 2026'
   vars:
     question: What did Matt ship on his own site in 2026?
@@ -4968,8 +4969,10 @@
       value:
         - Dependabot
         - '1,953'
-        - '2.5'
         - '171'
+        - 2.5 percent
+        - 2.5%
+        - 117 had
         - 117 of
     - type: assert-set
       threshold: 0.6
@@ -4978,25 +4981,32 @@
           value: &a4 >-
             The answer says that in 2026 Matt shipped his Career Assistant on
             matttrifilo.com, built with AI coding agents, and gives at least
-            two of these documented figures with what each measures: eval
-            records passing between 95 and 98 percent of their tests while the
-            suite grew from 171 to 188, with the refusal and prompt-injection
-            suites passing every test; no tests before September 13 and 1,953
-            passing on the launch pull request; 117 of the 121 pull requests
-            merged in 2026 passing CI at merge; three of 120 merges to main,
-            2.5 percent, breaking it in two incidents, both from Dependabot
-            updates merged with failing CI, with main green again about 2
-            hours and 12 hours 16 minutes after the breaks; the two dated
-            decisions that cut how often the evals run to save cost. It fails
-            if it says every change had a human or formal pull-request review,
-            since the document says GitHub records none and the review is AI
-            reviewer agents plus Matt's dated decisions. It fails if it states
-            a lead time, a deploy count or a lines-of-code figure, which the
-            document does not give, or says branch protection or another gate
-            was added after the breaks, which the document does not state. It
-            fails if it gives a count of pull requests with no quality figure
-            beside it. It is written about Matt in the third person, and it
-            must not present an inferred characterization as a documented one.
+            two of these documented figures with what each measures: published
+            eval records passing between 95 and 98 percent of their tests while
+            the suite grew from 171 to 188, with the refusal and
+            prompt-injection suites passing every test; no tests before
+            September 13 and 1,953 passing on the launch pull request; 117 of
+            the 121 pull requests merged in 2026 passing CI at merge; 115 of
+            Matt's 116 pull requests carrying an adversarial-review section;
+            three of 120 merges to main, 2.5 percent, breaking it in two
+            incidents, both from Dependabot updates merged with failing CI,
+            with main green again about 2 hours and 12 hours 16 minutes after
+            the breaks; the two dated decisions that cut how often the evals
+            run to save cost. Mentioning the corrections that held the
+            documents to Matt's own account (adapted, not built; contributed,
+            not led) or the production hotfix is fine. It fails if it says
+            every run Matt made passed 95 percent or more, since the document
+            says the range covers only runs that cleared the publishing bar.
+            It fails if it says every change had a human or formal
+            pull-request review, since the document says GitHub records none
+            and the review is AI reviewer agents plus Matt's dated decisions.
+            It fails if it states a lead time, a deploy count or a
+            lines-of-code figure, which the document does not give, or says
+            branch protection or another gate was added after the breaks,
+            which the document does not state. It fails if it gives a count of
+            pull requests with no quality figure beside it. It is written about
+            Matt in the third person, and it must not present an inferred
+            characterization as a documented one.
         - type: llm-rubric
           value: *a4
         - type: llm-rubric
