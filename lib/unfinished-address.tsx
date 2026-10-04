@@ -1,4 +1,8 @@
-import { defaultRemarkPlugins, type StreamdownProps } from 'streamdown'
+'use client'
+
+import { createContext, useContext } from 'react'
+import remend, { type RemendOptions } from 'remend'
+import { Block, parseMarkdownIntoBlocks, type BlockProps } from 'streamdown'
 
 /**
  * While an answer streams, a bare URL or email address in its last word is
@@ -14,36 +18,69 @@ import { defaultRemarkPlugins, type StreamdownProps } from 'streamdown'
  * an address followed by punctuation becomes a link with the whitespace after
  * the punctuation, usually the next chunk, rather than with the punctuation.
  *
- * A finished answer is rendered with Streamdown's own plugins, untouched, so
- * the final render is the same with or without this.
+ * Streamdown renders an answer as a list of blocks, each parsed on its own.
+ * Only the last of them can hold the unfinished word, so only that block is
+ * given the plugin below: an earlier block keeps its links, and keeps
+ * Streamdown's memo, however the last one changes. A finished answer gives
+ * the plugin to no block, so its render is Streamdown's own.
  */
-
-type RemarkPlugins = NonNullable<StreamdownProps['remarkPlugins']>
 
 /**
- * The remark plugins for an answer: Streamdown's own (`undefined`), unless
- * the answer is still streaming and its last word may be an address still
- * being written.
+ * Which of Streamdown's blocks holds the answer's unfinished last word, or -1
+ * when none does: the answer has ended, it ends with whitespace, or its last
+ * word cannot be an address.
  *
- * The plugin's options carry that word, so they change with every chunk
- * while it is being written, and Streamdown then re-renders each block of
- * the answer rather than only the last. That is why the default is returned
- * whenever no address can be in play: for most of an answer, nothing changes.
+ * The blocks are counted the way Streamdown counts them, from the text after
+ * `remend` has completed or removed its unfinished Markdown, with the options
+ * the renderer hands Streamdown. `remend` is pinned to the version Streamdown
+ * pins (lib/unfinished-address.test.tsx fails when the two drift), because a
+ * different count would give the plugin to the wrong block.
  */
-export function remarkPluginsFor(
+export function unfinishedAddressBlock(
   text: string,
-  { streaming }: { streaming: boolean }
-): RemarkPlugins | undefined {
-  if (!streaming) return undefined
-  const word = lastWord(text)
-  if (!ADDRESS_MARK.test(word)) return undefined
-  return [
-    ...STREAMDOWN_REMARK_PLUGINS,
-    [holdBareLinksInLastWord, { lastWord: word }],
-  ]
+  {
+    streaming,
+    remendOptions,
+  }: { streaming: boolean; remendOptions: RemendOptions }
+): number {
+  if (!streaming || !ADDRESS_MARK.test(lastWord(text))) return -1
+  return parseMarkdownIntoBlocks(remend(text, remendOptions)).length - 1
 }
 
-const STREAMDOWN_REMARK_PLUGINS = Object.values(defaultRemarkPlugins)
+/** The index `unfinishedAddressBlock` chose for the answer being rendered. */
+export const UnfinishedAddressBlock = createContext(-1)
+
+/**
+ * Streamdown's own block, given the plugin when it is the block
+ * `UnfinishedAddressBlock` names. Passed to Streamdown as `BlockComponent`.
+ */
+export function BlockHoldingUnfinishedAddress(props: BlockProps) {
+  const held = useContext(UnfinishedAddressBlock)
+  if (props.index !== held) return <Block {...props} />
+  return (
+    <Block {...props} remarkPlugins={withHoldPlugin(props.remarkPlugins)} />
+  )
+}
+
+type RemarkPlugins = NonNullable<BlockProps['remarkPlugins']>
+
+const NO_PLUGINS: RemarkPlugins = []
+const holding = new WeakMap<RemarkPlugins, RemarkPlugins>()
+
+/**
+ * The block's plugins with the hold added, the same array for the same
+ * plugins: Streamdown's block memo and its processor cache both key on it, so
+ * a new array per chunk would re-parse and rebuild for nothing.
+ */
+function withHoldPlugin(plugins: BlockProps['remarkPlugins']): RemarkPlugins {
+  const base = plugins ?? NO_PLUGINS
+  let held = holding.get(base)
+  if (!held) {
+    held = [...base, holdBareLinksInLastWord]
+    holding.set(base, held)
+  }
+  return held
+}
 
 /**
  * Every bare link GFM recognizes contains one of these: an email address its
@@ -94,26 +131,13 @@ const PHRASING = new Set([
 /**
  * Unwraps every bare link in the block's last word into its own text.
  *
- * Streamdown parses an answer one block at a time and runs the same plugins
- * on each, so a block has to establish that it is the one being written:
- * its last word must begin with the answer's (Streamdown may append markers
- * that close an unfinished `**` or backtick). An earlier block that happens
- * to end with the same word is held too, until the next chunk; that errs
- * toward text, never toward a wrong link.
- *
  * A bare link is any link not written as `[text](url)` or `<url>`: GFM makes
  * those from the text itself, some during parsing (with a position) and some
  * in a pass over the parsed text (without one).
  */
-function holdBareLinksInLastWord({
-  lastWord: answerWord,
-}: {
-  lastWord: string
-}) {
+function holdBareLinksInLastWord() {
   return (tree: MarkdownNode, file: { value?: unknown }) => {
     const source = String(file.value ?? '')
-    if (!lastWord(source).startsWith(answerWord)) return
-
     const held: { parent: MarkdownNode; link: MarkdownNode }[] = []
     const visit = (node: MarkdownNode, parent?: MarkdownNode) => {
       if (

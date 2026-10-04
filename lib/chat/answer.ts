@@ -95,6 +95,13 @@ export interface AnswerView {
   /** The answer, with both of the policy's trailers removed. */
   text: string
   /**
+   * The stream already holds more after `text`: a trailer, or a line held
+   * back while it may still become one. Either begins on a new line, so the
+   * last word of `text` is finished even while the run is open, and the
+   * transcript need not hold a bare address in it as text (MTC-117).
+   */
+  streamedPastText: boolean
+  /**
    * Questions the model proposed for the next turn, already validated
    * (MTC-41). Empty whenever there is no row to show: a decline, a run that
    * did not finish, or proposals that were all malformed.
@@ -163,6 +170,10 @@ export function toAnswerView(message: AnswerMessage): AnswerView {
   )
   return {
     text,
+    // Every step above keeps a prefix of the joined text and trims where it
+    // cuts, so what follows `text` opens with the whitespace that was cut.
+    streamedPastText:
+      joined.startsWith(text) && /^\s/.test(joined.slice(text.length)),
     // Validated again on the way in. The server is the gate, but these
     // strings are model output about to be rendered as buttons, and the one
     // place that decides what a well-formed proposal is should be the one

@@ -5,7 +5,11 @@ import type { UIMessage } from "ai";
 import type { HTMLAttributes, ComponentProps } from "react";
 import { memo } from "react";
 import { Streamdown } from "streamdown";
-import { remarkPluginsFor } from "@/lib/unfinished-address";
+import {
+  BlockHoldingUnfinishedAddress,
+  UnfinishedAddressBlock,
+  unfinishedAddressBlock,
+} from "@/lib/unfinished-address";
 
 /**
  * Vercel AI Elements `message`, trimmed to what this site uses (MTC-33).
@@ -23,8 +27,10 @@ import { remarkPluginsFor } from "@/lib/unfinished-address";
  * answer opens directly, in a new tab (Matt, 2026-09-30, MTC-102). A link
  * whose URL has not arrived, while it streams or in an answer cut short, is
  * drawn as its text: without the check Streamdown would render it as a live
- * link to a placeholder URL. A bare URL or email address is held as text the
- * same way until the last of it has arrived (lib/unfinished-address.ts).
+ * link to a placeholder URL. A bare URL or email address is held as text
+ * while the answer streams, until the last of it has arrived
+ * (lib/unfinished-address.tsx); once the answer has ended, stopped or cut
+ * short included, Streamdown links it as it stands.
  */
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -74,7 +80,7 @@ export const MessageContent = ({
 
 export type MessageResponseProps = Omit<
   ComponentProps<typeof Streamdown>,
-  "linkSafety" | "remend" | "remarkPlugins"
+  "linkSafety" | "remend" | "BlockComponent"
 >;
 
 // Module scope, so every render hands Streamdown the same objects: its memo
@@ -87,29 +93,32 @@ const UNFINISHED_LINK_AS_TEXT = { linkMode: "text-only" } as const;
  * Markdown the model emits is paragraphs and bullets, and those are the only
  * two things that need rhythm.
  *
- * `isAnimating` is what tells the answer it is still arriving. It has to be
- * that prop: Streamdown's memo ignores `remarkPlugins`, so when the stream
- * ends and only the plugins change, it is the change in `isAnimating` that
- * makes the last word's address a link. Streamdown also uses it to disable
- * its code-block and table copy and download buttons until the answer is
- * whole.
+ * `isAnimating` is what tells the answer it is still arriving, and so whether
+ * a bare address in its last word is held as text. Streamdown also uses it to
+ * disable its code-block and table copy and download buttons until the
+ * answer is whole.
  */
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
-    <Streamdown
-      className={cn(
-        "space-y-4 [&_li]:my-1 [&_ol]:pl-1 [&_strong]:font-semibold [&_ul]:pl-1",
-        "[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-primary",
-        "[&_[data-streamdown=link]:focus-visible]:outline-2 [&_[data-streamdown=link]:focus-visible]:outline-offset-2 [&_[data-streamdown=link]:focus-visible]:outline-ring",
-        className
-      )}
-      {...props}
-      linkSafety={LINK_CHECK_OFF}
-      remarkPlugins={remarkPluginsFor(props.children ?? "", {
+    <UnfinishedAddressBlock.Provider
+      value={unfinishedAddressBlock(props.children ?? "", {
         streaming: props.isAnimating === true,
+        remendOptions: UNFINISHED_LINK_AS_TEXT,
       })}
-      remend={UNFINISHED_LINK_AS_TEXT}
-    />
+    >
+      <Streamdown
+        className={cn(
+          "space-y-4 [&_li]:my-1 [&_ol]:pl-1 [&_strong]:font-semibold [&_ul]:pl-1",
+          "[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-primary",
+          "[&_[data-streamdown=link]:focus-visible]:outline-2 [&_[data-streamdown=link]:focus-visible]:outline-offset-2 [&_[data-streamdown=link]:focus-visible]:outline-ring",
+          className
+        )}
+        {...props}
+        BlockComponent={BlockHoldingUnfinishedAddress}
+        linkSafety={LINK_CHECK_OFF}
+        remend={UNFINISHED_LINK_AS_TEXT}
+      />
+    </UnfinishedAddressBlock.Provider>
   ),
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&

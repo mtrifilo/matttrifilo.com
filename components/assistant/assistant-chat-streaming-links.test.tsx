@@ -107,6 +107,37 @@ describe('a bare address streamed into an answer', () => {
     }
   )
 
+  test('stays a link, once finished, while the trailers after it stream', async () => {
+    // The trailers are taken off the answer's text, so the address ends the
+    // text again while they arrive; it is finished all the same.
+    const stream = await streamingAnswer()
+    await sendText(stream, `You can reach him at ${EMAIL}.\n\n`)
+    await waitFor(() => expect(answerLinks()).toEqual([`mailto:${EMAIL}`]))
+
+    const seen: string[][] = []
+    const observer = new MutationObserver(() => seen.push(answerLinks()))
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    })
+    for (const delta of [
+      'S',
+      'ources: contact',
+      '\nFollow-u',
+      'ps:\nHow does he run his team?',
+    ]) {
+      await send(stream, { type: 'text-delta', id: 't', delta })
+    }
+    await endRun(stream)
+    observer.disconnect()
+
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.filter(links => links.length !== 1)).toEqual([])
+    expect(answerLinks()).toEqual([`mailto:${EMAIL}`])
+  })
+
   test('is not a link when the stream stops on a period inside it', async () => {
     // GFM leaves a trailing period out of a bare URL, so this chunk alone
     // would link https://github.com/mtrifilo/matttrifilo, which is not the

@@ -68,6 +68,7 @@ const transport = new DefaultChatTransport<ChatUIMessage>({
  */
 const EMPTY_VIEW: AnswerView = {
   text: '',
+  streamedPastText: false,
   followUps: [],
   truncated: false,
   incomplete: false,

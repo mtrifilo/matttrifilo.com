@@ -65,7 +65,9 @@ export function AssistantAnswer({
           answer written without a read and every refusal. */}
       <AssistantProgress elapsedMs={elapsedMs} pending={pending} view={view} />
       {hasText ? (
-        <MessageResponse isAnimating={pending}>{view.text}</MessageResponse>
+        <MessageResponse isAnimating={pending && !view.streamedPastText}>
+          {view.text}
+        </MessageResponse>
       ) : null}
 
       {notice === 'truncated' && <TruncatedNotice />}

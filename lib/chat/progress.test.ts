@@ -31,6 +31,7 @@ function viewWith(
 ): AnswerView {
   return {
     text,
+    streamedPastText: false,
     followUps: [],
     truncated: flags.truncated ?? false,
     incomplete: flags.incomplete ?? false,
