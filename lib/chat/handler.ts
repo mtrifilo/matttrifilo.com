@@ -447,8 +447,8 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         },
         onAbort() {
           // The SDK records a step's usage only when the step finishes, so
-          // the step a stop cuts short has none to report. A step that
-          // finished before the stop already wrote its tokens on its own
+          // the step a stop cuts short has none to report. A step the SDK
+          // saw finish before the stop already wrote its tokens on its own
           // `[chat] step` line. Log the fact, the reads that did happen, and
           // the duration, nothing invented.
           console.info('[chat]', {
