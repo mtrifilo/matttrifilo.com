@@ -1,9 +1,9 @@
 ---
 id: psychic-homily
 title: Psychic Homily, Matt's music site, and what he delivered on it in 2026
-summary: What Psychic Homily (psychichomily.com) is, its stack and hosting, and what Matt delivered on it in 2026, citing pull requests and public CI records.
+summary: What Psychic Homily (psychichomily.com) is and does for music fans, why Matt built it, its stack and hosting, and what he delivered on it in 2026.
 tags: [side-projects, psychic-homily, music, next.js, go, ai-agents, code-review]
-updated: 2026-10-03
+updated: 2026-10-04
 ---
 
 # Psychic Homily
@@ -17,17 +17,23 @@ Pull request numbers below (#N) refer to his public repository,
 mtrifilo/psychic-homily-web on GitHub. Figures cover January 1 to
 October 3, 2026, and months are the month a pull request merged, in UTC.
 
-<!--
-PLACEHOLDER for Matt's draft (MTC-114): what the site does for a visitor,
-and its features. Nothing is written here until his draft lands. The build
-strips this comment, so the model never reads it.
--->
+## Why Matt built it
 
-<!--
-PLACEHOLDER for Matt's draft (MTC-114): who the site is for, and why he
-built it. Nothing is written here until his draft lands. The build strips
-this comment, so the model never reads it.
--->
+Psychic Homily's ethos is to help music fans never miss a show again, and discover new music and artists naturally through live music, record labels, freeform radio, and similarities between artists, labels, and venues that arise in the data.
+
+This came from the idea of traveling to a new city, and wanting to see a concert that night. How would you find music venues and show calendars in the new city? Where would you start? What if there are small independent venues not listed in the local newspaper's events pages? What if there was one website where you could discover all different types of music venues all over the world booking artists you'd love, without having to research each city? What if you were curious about other new bands performing at your favorite venues, to discover new shows to attend, or artists to listen to? What if this was all connected to freeform radio playlists, where you can go from discovering a great new artist on the radio to seeing that they'll be in town next month within seconds?
+
+## What the site does for a visitor
+
+The website features show lists for venues all over the US, along with a growing list of global venues. Visitors can also look up information and socials for each of the music venues, artists, and record labels available in the data, and sync shows with their own calendars. As more shows are discovered, more artists, venues, and releases get discovered as well.
+
+As part of music discovery, visitors can view a visualized knowledge graph of similar artists to explore new genres and music sub-cultures that they would love to dive into for new music. They can go as wide or deep as they'd like.
+
+An atlas feature allows users to find venues anywhere in the world on an interactive map, and find show lists and releases to hear based on geography.
+
+The radio page features WFMU and KEXP live and archive playlists to start with, linking played artists with their Psychic Homily pages so that visitors and users can see which shows are coming up, or listen to more releases available on Bandcamp and Spotify. This is powerful for music discovery, because you might hear a great new song that captures you, and before it's over, you can learn more about the artist, their label, their other releases, and see if they're playing a show nearby soon.
+
+For logged in users, they can create their own show lists, follow artists and venues, and get alerts for new shows.
 
 ## Stack and hosting
 
