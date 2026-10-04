@@ -33,6 +33,7 @@ function finishedView(
 ): AnswerView {
   return {
     text: 'An answer drawn from those documents.',
+    streamedPastText: false,
     followUps: [],
     truncated: false,
     incomplete: false,

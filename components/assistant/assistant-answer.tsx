@@ -26,7 +26,10 @@ import { FOLLOW_UPS_LABEL } from './copy'
 
 export interface AssistantAnswerProps {
   view: AnswerView
-  /** True between sending and the first token: nothing to show but the wait. */
+  /**
+   * True from sending until the run ends: nothing to show but the wait
+   * before the first token, and an answer still arriving after it.
+   */
   pending: boolean
   /**
    * Milliseconds since the question was sent, for the progress timer. One
@@ -61,7 +64,11 @@ export function AssistantAnswer({
       {/* Renders nothing when the run narrated nothing, which is every
           answer written without a read and every refusal. */}
       <AssistantProgress elapsedMs={elapsedMs} pending={pending} view={view} />
-      {hasText ? <MessageResponse>{view.text}</MessageResponse> : null}
+      {hasText ? (
+        <MessageResponse isAnimating={pending && !view.streamedPastText}>
+          {view.text}
+        </MessageResponse>
+      ) : null}
 
       {notice === 'truncated' && <TruncatedNotice />}
       {notice === 'incomplete' && <IncompleteNotice />}

@@ -1201,6 +1201,7 @@ describe('checking GitHub', () => {
     const totalsOf = (progress: ChatProgress | undefined) =>
       progressTotals({
         text: ANSWER,
+        streamedPastText: false,
         followUps: [],
         truncated: false,
         incomplete: false,

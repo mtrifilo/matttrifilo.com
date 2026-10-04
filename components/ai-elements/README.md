@@ -18,4 +18,6 @@ branch selector, no transcript download, no `role="log"` (it re-announces
 every streamed token), no collapsible citations, no horizontal scroll area,
 no search-result chips or images on the chain of thought, and none of the
 `@streamdown/*` plugins, and no Streamdown link check (a link in an answer
-opens directly, in a new tab).
+opens directly, in a new tab). One addition: while an answer streams, a bare
+URL or email address in its last word is held as text until the word is
+finished (`lib/unfinished-address.tsx`, MTC-117).

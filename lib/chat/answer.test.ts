@@ -251,6 +251,7 @@ describe('the marker the policy and the parser share', () => {
 describe('showsFollowUps', () => {
   const answered = (overrides: Partial<AnswerView> = {}): AnswerView => ({
     text: 'He led the platform migration.',
+    streamedPastText: false,
     followUps: ['What does his team own?'],
     truncated: false,
     incomplete: false,
@@ -490,6 +491,7 @@ describe('toAnswerView follow-ups', () => {
 describe('noticeFor', () => {
   const view = (overrides: Partial<AnswerView>): AnswerView => ({
     text: 'He led the platform migration.',
+    streamedPastText: false,
     followUps: [],
     truncated: false,
     incomplete: false,
@@ -550,6 +552,7 @@ describe('toAnswerView', () => {
     )
     expect(view).toEqual({
       text: 'Matt shipped it.',
+      streamedPastText: true,
       followUps: [],
       truncated: false,
       incomplete: false,
@@ -579,6 +582,7 @@ describe('toAnswerView', () => {
     const view = toAnswerView(answer([], { incomplete: true }))
     expect(view).toEqual({
       text: '',
+      streamedPastText: false,
       followUps: [],
       truncated: false,
       incomplete: true,
@@ -703,11 +707,26 @@ describe('toAnswerView while the text streams (MTC-101)', () => {
     // A finished answer is judged by the trailer rules alone.
     expect(view('He led it.\n\nSo', 'done').text).toBe('He led it.\n\nSo')
   })
+
+  test('says when the stream already holds more after the text (MTC-117)', () => {
+    const email = 'Email him at matt.trifilo@gmail.com.'
+    expect(view(email, 'streaming').streamedPastText).toBe(false)
+    expect(view(`${email} He`, 'streaming').streamedPastText).toBe(false)
+    expect(view(`${email}\n\nSour`, 'streaming').streamedPastText).toBe(true)
+    expect(
+      view(`${email}\n\nSources: contact`, 'streaming').streamedPastText
+    ).toBe(true)
+    expect(
+      view(`${email}\nSources: contact\nFollow-ups:\nWhat`, 'streaming')
+        .streamedPastText
+    ).toBe(true)
+  })
 })
 
 describe('saysNothingYet (MTC-101)', () => {
   const empty: AnswerView = {
     text: '',
+    streamedPastText: false,
     followUps: [],
     truncated: false,
     incomplete: false,

@@ -38,6 +38,7 @@ describe('the progress rows', () => {
     const headings = ['Summary', 'Experience']
     const view: AnswerView = {
       text: 'An answer.',
+      streamedPastText: false,
       followUps: [],
       truncated: false,
       incomplete: false,
