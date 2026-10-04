@@ -2437,7 +2437,7 @@
 # "create their own show lists, follow artists and venues, and get alerts for
 # new shows". The citation trio fails a decline: assertCites fails an answer
 # whose prose carries the decline sentence.
-# Reads: psychic-homily only; no other document describes what the site does.
+# Reads: psychic-homily; no other document lists the site's features (open-source and resume describe it in one line each, so a run may also read them).
 - description: "golden: Matt's own question on Psychic Homily's current features"
   vars:
     question: What features does Psychic Homily have currently?
@@ -2487,7 +2487,10 @@
             current something the document says was removed or closed
             unmerged (the Verified Attendee badge, suggest a match on radio
             playlists, the expanded tag categories, the legacy venue AI
-            pipeline). It must not present an inferred characterization as a
+            pipeline). The document names an NTS playlist provider only as
+            work delivered in April 2026, so the answer may mention it as
+            built but fails if it says NTS playlists are on the radio page
+            today. It must not present an inferred characterization as a
             documented one.
         - type: llm-rubric
           value: *p2
