@@ -71,7 +71,7 @@ writes: a conversation lives only in the visitor's browser tab.
   read, and only an explicit "not a bot" verdict gets through. If the
   classifier fails or stalls, the request is refused rather than served.
 - Limits on every request: eight questions a conversation, 1,500
-  characters a question, 80,000 input tokens, three documents and
+  characters a question, 84,000 input tokens, three documents and
   20,000 tokens read, three GitHub checks, 8,192 output tokens per model
   call, and four model calls per answer.
 

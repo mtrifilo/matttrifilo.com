@@ -106,18 +106,20 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * `neutralise`'s rewriting: a few hundred tokens for ordinary text, and up to about a ninth more history for text made of speaker labels), and what the model
  * wrote in earlier steps.
  *
- * A design sum, not a measurement, says 80,000 fits every conversation a
+ * A design sum, not a measurement, says 84,000 fits every conversation a
  * visitor can have with ordinary answers: KNOWLEDGE_INDEX_TOKEN_CEILING caps
- * the index at 8,000, the policy is ~2,858, the repository list ~152,
+ * the index at 8,000, the policy is ~3,456, the repository list ~236,
  * CHAT_MAX_TURNS questions at CHAT_MAX_MESSAGE_CHARS ~3,000, and as many
- * answers at CHAT_MAX_OUTPUT_TOKENS ~65,536: ~79,546 in all. "A conversation
- * of full-length answers still fits" in validate.test.ts pins that sum, and
- * it is the test that should fail if the policy or the index ceiling grows
- * past the margin. With the real index (~2,728) the same body is ~74,274.
- * That sum is about the door only. By the per-call count the same body is
- * ~80,097 with the index at its ceiling, so no read fits, and ~74,825 with
- * the real index, which leaves ~5,175 for reads against the 20,000 read
- * budget. Figures by estimateTokens, 2026-10-01.
+ * answers at CHAT_MAX_OUTPUT_TOKENS ~65,536: ~80,228 in all, ~3,772 under the
+ * cap. Matt set the cap at 84,000 for that margin (2026-10-03, MTC-115).
+ * "A conversation of full-length answers still fits" in validate.test.ts
+ * pins that sum, and it is the test that should fail if the policy or the
+ * index ceiling grows past the margin. With the real index (~2,807) the same
+ * body is ~75,035. That sum is about the door only. By the per-call count
+ * the same body is ~80,780 with the index at its ceiling, which leaves
+ * ~3,220 for reads, and ~75,586 with the real index, which leaves ~8,414 for
+ * reads against the 20,000 read budget. Figures by estimateTokens and
+ * estimateCallInputTokens, 2026-10-03.
  *
  * Real calls sit far below it. Measured by Vertex's own counts over 889
  * model calls in two full eval runs (MTC-107, 2026-09-30, the MTC-103 and
@@ -132,7 +134,7 @@ export const CHAT_MAX_ANSWER_CHARS = CHAT_MAX_OUTPUT_TOKENS * CHAT_MAX_STEPS * 4
  * `budget_exceeded`, whose copy and reset control already say the right
  * thing; the test that pins it is beside the one above.
  */
-export const CHAT_MAX_INPUT_TOKENS = 80_000
+export const CHAT_MAX_INPUT_TOKENS = 84_000
 
 /**
  * Left low in case a future model honours sampling. Gemini 3.x ignores
